@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning Attentive Neural Processes for Planning with Pushing Actions - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Learning Attentive Neural Processes for Planning with Pushing Actions</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2504.17924" target="_blank" rel="noreferrer">2504.17924</a></span>
+        <span>作者: Jain, Atharv, Shaw, Seiji, Roy, Nicholas</span>
+        <span>日期: 2025/04/24</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人非结构化环境操作中，规划需考虑不确定性。对于桌面推块任务，物体的某些物理属性（如质心）无法直接观测，必须通过交互来推断。主流方法是将此问题建模为部分可观察马尔可夫决策过程，并使用粒子滤波器等贝叶斯状态估计技术来更新对隐藏状态的信念，进而结合蒙特卡洛树搜索（如PFT-DPW）进行规划。然而，这种方法存在两个关键局限性：第一，训练用于更新粒子滤波器的观测模型，需要事先知晓决定系统动力学的相关物理属性是什么；第二，使用粒子表示信念时，信念更新的计算成本随粒子数量线性增长，在规划长时程序列时变得非常昂贵。</p>
+<p>本文针对这些痛点，提出了一种新视角：不显式指定或建模具体的物理属性，而是通过一个注意力神经过程，从交互历史中学习一个关于相关物理属性的隐式表示。核心思路是设计一个名为“推块神经过程”的编码器-解码器模型，联合学习从历史中推断隐参数以及基于隐参数预测动作结果，并用该神经过程替代传统粒子滤波器，集成到规划器中，以实现更高效的信念维护和更优的规划。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文方法的核心是推块神经过程模型及其与规划器的集成。整体框架是一个编码器-解码器架构的注意力神经过程，用于解决POMDP中的状态估计与预测问题。</p>
+<p><img src="https://arxiv.org/html/2504.17924v3/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：推块神经过程架构及其在NPT-DPW规划器中的使用流程。右侧描绘了在动作和结果上的搜索树。规划时，将已观察到的结果历史 <code>h</code> 输入编码器 <code>q_ϕ</code>，得到隐参数 <code>z</code> 的分布，采样得到 <code>z</code> 后，将其与新动作 <code>a</code> 一起输入解码器，得到结果 <code>o</code> 的分布，采样作为该动作的可能结果，用于扩展搜索树。</p>
+</blockquote>
+<p><strong>推块神经过程</strong>：模型处理的数据集为动作-结果对序列 <code>D_t = {(a1, o1), ..., (a_t, o_t)}</code>。</p>
+<ol>
+<li><strong>编码器（推断网络）</strong>：参数为 <code>ϕ</code>，以可观测物体属性 <code>x</code>（如几何形状）和历史 <code>D_t</code> 为输入，输出隐物理参数 <code>z</code> 的近似后验分布 <code>q_ϕ(z|x, D_t)</code>。该分布是一个多元高斯分布（均值和协方差）。模型不预设 <code>z</code> 的物理意义（实验中设为5维，尽管真实质心是2维），旨在自动学习对推块有用的信息表示。</li>
+<li><strong>解码器（预测网络）</strong>：参数为 <code>θ</code>，以从编码器采样的隐参数 <code>z</code>、可观测属性 <code>x</code> 和新动作 <code>a</code> 为输入，输出推块后物体位姿 <code>o</code> 的分布 <code>p_θ(o|a, x, z)</code>。</li>
+</ol>
+<p>训练时，优化证据下界损失函数：<code>𝔼[log p_θ(o|x,a,z) - D_KL(q_ϕ(z|D_T) || q_ϕ(z|D_t))]</code>。其中，<code>D_T</code> 是物体的完整交互数据集，<code>D_t</code> 是其子集。该目标鼓励准确预测结果，同时约束基于完整历史和部分历史推断的隐分布尽可能接近，以防止过拟合。</p>
+<p><strong>NPT-DPW规划器</strong>：该规划器是对PFT-DPW的扩展，关键创新是用PNP替代了其中的粒子滤波器。</p>
+<ul>
+<li><strong>信念维护</strong>：在树搜索的每个节点，规划器维护一个动作-结果历史 <code>h</code>。将此历史输入PNP编码器，即可得到当前对隐物理参数的信念分布（以高斯分布表示），无需维护大量粒子。</li>
+<li><strong>动作扩展与结果采样</strong>：动作采样策略与原PFT-DPW相同（使用渐进拓宽）。对于选定的动作，从编码器输出的分布中采样一个 <code>z</code>，然后将其与动作输入PNP解码器，得到结果分布，再从中采样一个结果 <code>o</code>，用于扩展搜索树。</li>
+<li><strong>计算效率</strong>：PNP的计算复杂度为 <code>O(h^2)</code>（源于自注意力机制），其中 <code>h</code> 是历史长度。而PFT-DPW的粒子更新复杂度为 <code>O(n)</code>，<code>n</code> 是粒子数。在实践中 <code>h &lt;&lt; n</code>，因此NPT-DPW在固定计算预算下能进行更深的树搜索。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2504.17924v3/x2.png" alt="推块动作示意"></p>
+<blockquote>
+<p><strong>图2</strong>：推块动作示意图。动作 <code>a</code> 由推块角度 <code>θ</code> 和速度向量 <code>v</code> 参数化。质心 <code>z</code>（用⊕表示）无法直接观测。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在PyBullet仿真中进行，使用三种不同几何形状的桌面（空白平面、直线窄道、曲线窄道）作为测试场景，以评估规划器在简单导航和需信息收集的约束路径下的性能。物体为长方体，其质心在凸包内均匀采样，是唯一的隐藏物理属性。奖励函数惩罚与目标的距离，并大幅惩罚物体掉落或奖励到达目标。</p>
+<p><strong>对比方法</strong>：基线方法为PFT-DPW，并测试了其使用10、30、100个粒子时的性能。本文方法为NPT-DPW。评估时，固定每步动作允许的计划时间（从0.5秒到10秒），运行多次试验，记录30步后物体距目标的百分比进度（若中途掉落或到达则提前停止）。</p>
+<p><img src="https://arxiv.org/html/2504.17924v3/x3.png" alt="三种实验场景"></p>
+<blockquote>
+<p><strong>图3</strong>：实验使用的三种推块桌面几何形状。矩形为起始位置，星形为目标位置。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2504.17924v3/x4.png" alt="主要性能对比结果"></p>
+<blockquote>
+<p><strong>图4</strong>：NPT-DPW与不同粒子数PFT-DPW的性能对比，横轴为每步计划时间，纵轴为向目标前进的平均百分比。结果显示，当计划时间≥1秒时，NPT-DPW性能显著优于所有粒子配置的PFT-DPW，平均能推进到离目标两倍近的位置，且更少发生掉落（图中低百分比点）。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>规划性能</strong>：如图4所示，在计划时间大于等于1秒的所有情况下，NPT-DPW的性能均优于PFT-DPW。例如，在多个场景和时间点上，NPT-DPW实现的平均进度百分比更高。这表明PNP学习到的隐空间为规划提供了更有效且紧凑的信念表示。</li>
+<li><strong>计算效率</strong>：表I显示，在相同的规划时间内，NPT-DPW能够执行的模拟（树搜索迭代）次数远高于PFT-DPW（即使后者仅使用10个粒子）。这验证了其计算复杂度优势，使其能在预算内进行更深入的搜索。</li>
+<li><strong>隐空间有效性</strong>：图6表明，随着提供给PNP编码器的历史交互（上下文推块）次数增加，模型对下一次推块结果的预测误差（与真实结果的位移距离）显著下降。这证明PNP的隐空间确实学习到了与质心相关的有效表示。</li>
+<li><strong>消融分析</strong>：实验对比了PFT-DPW不同粒子数的影响。结果显示，增加粒子数（从10到100）并未带来显著的性能提升，反而因计算负担增加限制了搜索深度。这表明对于此类推块问题，少量粒子可能已能捕捉主要不确定性，而PNP的隐表示则提供了更高效的参数化方式。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2504.17924v3/extracted/6584704/finalimage2.png" alt="示例规划路径"></p>
+<blockquote>
+<p><strong>图5</strong>：NPT-DPW在“环形”地图上生成并执行的规划示例。初始阶段在角落的推块动作显示了智能规划的特征：在向目标移动前，先执行动作以了解更多关于物体的信息。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2504.17924v3/extracted/6584704/lain3.png" alt="预测误差随历史增长而下降"></p>
+<blockquote>
+<p><strong>图6</strong>：PNP的预测误差（预测位移与真实位移的距离）随上下文推块数量（历史交互次数）增加而降低。误差条表示均值周围一个标准误的区间。这证明模型利用历史改进了对物理属性的估计。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>推块神经过程</strong>，一种基于注意力神经过程的模型，能够从交互历史中联合推断未知物理属性的隐表示并预测动作结果，且<strong>无需事先指定哪些物理属性相关</strong>。</li>
+<li>设计了<strong>NPT-DPW规划器</strong>，将PNP集成到蒙特卡洛树搜索框架中，用神经网络表示的信念替代粒子滤波器，<strong>显著降低了信念更新的计算成本</strong>，从而在固定计算预算下实现更深的树搜索和更优的规划性能。</li>
+<li>通过仿真实验验证了方法的有效性，证明NPT-DPW在复杂推块场景中能生成性能更好、失败率更低的计划，且PNP的隐空间能够有效编码物体的真实物理属性（如质心）。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，当每步规划时间非常有限（如0.5秒）时，NPT-DPW的优势不明显，表明方法仍需一定的计算时间来发挥其性能。此外，实验集中于质心这一特定隐藏属性，在更复杂的未知物理动力学场景中的普适性有待进一步验证。</p>
+<p><strong>对后续研究的启示</strong>：本文展示了利用神经过程学习隐表示来解决POMDP规划问题的潜力。这种方法可扩展到更丰富的物理属性集和更复杂的机器人操作任务。未来工作可以探索更具表现力的隐空间学习架构，以及如何将此类方法更好地迁移到真实机器人平台，提升在未知环境中的泛化能力和鲁棒性。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文研究机器人在未知物体物理属性（如质心）的情况下，通过推动动作序列将物体规划至目标位姿的问题。针对部分可观测马尔可夫决策过程，提出学习**注意力神经过程**，以动作历史为输入，在隐空间推断物理属性，替代传统粒子滤波器的信念更新。规划时，将该模型与**双渐进扩展采样策略**结合，形成**神经过程树与双渐进扩展**方法。仿真结果表明，该方法比基于监督训练观测模型的传统粒子滤波方法**能更快生成性能更优的规划方案**，在复杂推动场景中表现更佳。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2504.17924" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

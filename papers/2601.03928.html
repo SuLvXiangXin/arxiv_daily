@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FocusUI: Efficient UI Grounding via Position-Preserving Visual Token Selection - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Computer Vision and Pattern Recognition (cs.CV)</span>
+      <h1>FocusUI: Efficient UI Grounding via Position-Preserving Visual Token Selection</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.03928" target="_blank" rel="noreferrer">2601.03928</a></span>
+        <span>作者: Ouyang, Mingyu, Lin, Kevin Qinghong, Shou, Mike Zheng, Ng, Hwee Tou</span>
+        <span>日期: 2026/01/07</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉语言模型（VLMs）在用户界面（UI）视觉定位任务中表现出色，这主要得益于其处理高分辨率截图的能力。主流方法直接将高分辨率UI截图（如2K或4K）令牌化为数千个视觉令牌（例如，2K分辨率下约4700个），这些令牌在输入序列中占比极高（≥85.4%），导致巨大的计算开销和注意力稀释。然而，人类在与UI交互时通常只关注感兴趣的区域，这表明现有方法在处理效率方面存在不足。</p>
+<p>本文针对UI定位任务中的两个具体痛点：1) 由高分辨率截图带来的极端令牌冗余和计算负担；2) 通用的视觉令牌剪枝方法会破坏序列的位置连续性，导致在需要精确定位的UI任务上性能急剧下降。论文提出了高效UI定位这一新视角，其核心思路是训练一个轻量级的查询引导显著性打分器，选择与指令最相关的视觉令牌，同时引入一种新颖的PosPad策略，在压缩序列时保持位置连续性，从而在显著减少视觉令牌数量的同时维持高定位精度。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>FocusUI框架旨在高效地选择与指令相关的视觉令牌，同时保持位置连续性以支持精确定位。整体流程如论文图2所示：输入为高分辨率截图和文本指令；首先构建每个图像补丁的显著性监督信号；然后通过一个轻量级的查询引导显著性打分器预测每个补丁的显著性分数，并据此选择排名靠前的补丁；最后，对选中的视觉令牌序列应用PosPad变换以保持位置信息，再将处理后的紧凑序列输入到VLM的语言模型解码器中，执行坐标无关的UI定位。</p>
+<p><img src="https://arxiv.org/html/2601.03928v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：FocusUI整体框架概览。(a) 展示了如何构建指令到补丁的显著性分数。(b) 查询引导的显著性打分器与令牌选择过程。(c) 展示了如何在整个UI定位框架中应用PosPad来处理被丢弃的令牌序列，以保持位置连续性。为清晰起见，序列中的系统提示已被省略。</p>
+</blockquote>
+<p><strong>核心模块一：指令到补丁显著性分数的构建</strong><br>为了指导模型选择相关令牌，需要为每个图像补丁生成密集的监督信号。该信号融合了两个互补部分：</p>
+<ol>
+<li><strong>边界框显著性分数（S_bbox）</strong>：根据真实标注的边界框计算。将图像划分为Gh×Gw的网格，每个网格单元（补丁）的分数为其与真实边界框的交并面积归一化值。这使得完全在框内的补丁得分为1，完全在外的为0，在边界处分数衰减。</li>
+<li><strong>UI图显著性分数（S_uig）</strong>：一种与指令和标注无关的、基于规则的方法，用于抑制大面积同质区域（如空白背景）。算法将每个补丁视为图节点，使用并查集算法连接RGB空间ℓ2距离小于阈值τ的相邻补丁，形成连通分量。每个分量的权重wu与其大小nu（补丁数量）成反比，即wu = (max{1, ln(nu+1)})⁻¹。同质区域越大，权重越低。</li>
+</ol>
+<p>最终，通过加权求和得到融合的指令到补丁显著性监督分数：<code>S_Ins2Patch = λ * S_bbox + (1-λ) * S_uig</code>，其中λ为超参数，实验中设为0.8。</p>
+<p><img src="https://arxiv.org/html/2601.03928v1/x3.png" alt="显著性分数构建示例"></p>
+<blockquote>
+<p><strong>图3</strong>：构建指令到补丁显著性分数的示例。(a) 带有真实边界框的截图。(b) 边界框显著性分数S_bbox。(c) 并查集结果（连通分量）。(d) 每个连通分量的大小nu。(e) UI图显著性分数S_uig。(f) 融合后的监督信号S_Ins2Patch。更亮的区域代表正样本补丁，更暗的区域代表负样本补丁。</p>
+</blockquote>
+<p><strong>核心模块二：轻量级查询引导显著性打分器</strong><br>该模块用于在推理时预测每个补丁的显著性。它接收来自VLM视觉编码器的补丁嵌入{vi}和来自语言模型的指令文本嵌入{ej}。首先通过一个自注意力层分别增强两种模态的特征，然后进行tanh约束和ℓ2归一化。接着计算补丁-文本的相似度矩阵P，并通过在文本维度上平均池化得到每个补丁的显著性预测分数si。该打分器使用KL散度损失<code>L_Ins2Patch</code>进行训练，使其预测的分数分布与前述融合监督信号S_Ins2Patch的分布对齐。</p>
+<p><strong>核心模块三：位置保持（PosPad）策略</strong><br>这是本方法的关键创新点，旨在解决直接丢弃令牌导致的位置信息丢失问题。具体步骤为：</p>
+<ol>
+<li><strong>令牌选择</strong>：根据预测的显著性分数{si}，按照预设的保留比例r选择排名前K的补丁索引集合K，其余索引构成丢弃集合D。</li>
+<li><strong>序列变换</strong>：将丢弃索引集合D按照其在原始1D序列中的顺序，划分为若干个最大的连续序列（段）R1, …, RU。对于每个连续丢弃段Ru，仅保留其最后一个索引ru_end，并在该位置放置一个可学习的特殊标记<code>&lt;pos_pad&gt;</code>，同时丢弃该段内所有其他索引的令牌。最终保留的索引集合S = K ∪ {ru_end}。这样，每个被丢弃的连续段在序列中仍保留了一个“位置占位符”，继承了该段末尾的位置编码信息，从而维持了序列的位置连续性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2601.03928v1/x4.png" alt="PosPad策略示意图"></p>
+<blockquote>
+<p><strong>图4</strong>：PosPad序列变换示意图，通过一个2×3补丁的图像及其1D序列的例子说明。策略(d)展示了将每个连续丢弃的视觉令牌序列替换为一个放置在该序列最后一个索引处的可学习<code>&lt;pos_pad&gt;</code>标记。</p>
+</blockquote>
+<p><strong>与现有方法的创新点</strong>：1) 提出了专门针对UI定位任务的令牌选择方法，而非通用的视觉令牌剪枝；2) 使用融合了指令相关性和UI结构先验的密集监督来训练显著性预测器；3) 独创的PosPad策略有效解决了因令牌丢弃造成的位置连续性破坏问题，这是精度得以维持的关键。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：论文在四个UI定位基准测试上进行了评估：ScreenSpot-V2、ScreenSpot-Pro、OS-World-G和UI-Vision。以Qwen2.5-VL和Qwen3-VL为基础模型，训练了FocusUI-3B、FocusUI-7B等变体。对比的基线方法包括Operator、OS-Atlas、Aguvis、Tong-UI、UGround、UI-TARS、GUI-Actor、Jedi以及原始的Qwen-VL模型。</p>
+<p><strong>关键定量结果</strong>：<br>在ScreenSpot-V2和ScreenSpot-Pro基准上（表1），FocusUI-7B在100%令牌保留率下，在ScreenSpot-Pro的Avg指标上达到48.3%，超过了最佳基线GUI-Actor-7B的44.6%，性能提升3.7%。更重要的是，即使在仅保留30%视觉令牌（r=30%）的激进设置下，FocusUI-7B的性能仅下降至45.1%（下降3.2%），同时实现了高达1.44倍的推理加速和17%的峰值GPU内存降低。FocusUI-3B也显示出类似的优越的精度-效率权衡。</p>
+<p><img src="https://arxiv.org/html/2601.03928v1/x5.png" alt="ScreenSpot结果表"></p>
+<blockquote>
+<p><strong>表1</strong>：在ScreenSpot-V2和ScreenSpot-Pro基准上的性能对比。FocusUI在不同保留率（r=100%, 50%, 30%）下均保持高性能，甚至在低保留率时性能下降很小，同时显著优于多个基线模型。</p>
+</blockquote>
+<p>在OS-World-G基准上（表2），FocusUI-3B在50%保留率下取得了54.6%的平均准确率，优于同等规模的GUI-Actor-3B（50.5%）和Jedi-3B（50.9%）。</p>
+<p><img src="https://arxiv.org/html/2601.03928v1/x6.png" alt="OS-World-G结果表"></p>
+<blockquote>
+<p><strong>表2</strong>：在OS-World-G基准上的性能对比。FocusUI-3B在中等保留率下取得了最佳性能。</p>
+</blockquote>
+<p>在UI-Vision基准上（表3），FocusUI-7B在100%保留率下达到24.9%的平均准确率，与最强的基线Jedi-7B（24.8%）相当，并在降低保留率时性能保持稳定。</p>
+<p><img src="https://arxiv.org/html/2601.03928v1/x7.png" alt="UI-Vision结果表"></p>
+<blockquote>
+<p><strong>表3</strong>：在UI-Vision基准上的性能对比。FocusUI在不同模型规模和保留率下均展现出竞争力。</p>
+</blockquote>
+<p><strong>消融实验与分析</strong>：<br>论文进行了详尽的消融研究，验证了各个组件的贡献。关键发现包括：</p>
+<ol>
+<li><strong>PosPad的有效性</strong>：与直接丢弃或简单填充等策略相比，PosPad策略在低保留率下能显著减轻性能下降，是维持精度的关键。</li>
+<li><strong>监督信号融合的必要性</strong>：同时使用边界框监督（S_bbox）和UI图先验（S_uig）比单独使用任何一种都能带来更好的性能。</li>
+<li><strong>不同保留率下的性能</strong>：如图6所示，随着视觉令牌保留比例从100%下降到10%，FocusUI的性能下降非常平缓，而基线方法（如GUI-Actor结合通用剪枝）则出现急剧下降，这凸显了FocusUI在高效设定下的鲁棒性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2601.03928v1/x11.png" alt="不同保留率性能曲线"></p>
+<blockquote>
+<p><strong>图6</strong>：在ScreenSpot-Pro基准上，不同视觉令牌保留比例下的性能变化。FocusUI（橙色线）的性能下降曲线远比其他通用剪枝方法（蓝色、绿色线）平缓，证明了其位置保持策略的有效性。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) <strong>开创了高效UI定位任务</strong>，系统分析了该任务的特点与挑战（令牌冗余和位置敏感性）；2) <strong>提出了指令到补丁的令牌选择方法</strong>，通过融合边界框重叠和UI图先验的密集监督，训练一个轻量级打分器来筛选相关视觉令牌；3) <strong>引入了位置保持（PosPad）策略</strong>，通过将连续丢弃的令牌序列压缩为位置标记，有效解决了通用剪枝方法导致的位置信息丢失和性能崩塌问题；4) <strong>实现了实际集成并取得了优异结果</strong>，在多个基准上超越了专用UI基线，并在大幅提升效率的同时保持了高精度。</p>
+<p>论文自身提到的局限性在于，该方法依赖于基础VLM的架构，特别是使用了Multimodal Rotary Position Embedding (M-RoPE) 进行位置编码。PosPad策略与此类位置编码机制配合良好，但在其他可能的位置编码方案上可能需要调整。</p>
+<p>这项研究对后续工作的启示包括：1) <strong>任务特定的高效化设计</strong>：针对不同视觉语言任务（如目标检测、视觉问答）的特性设计专用的令牌选择或压缩机制可能比通用方法更有效；2) <strong>动态与自适应选择</strong>：可以探索更动态的令牌保留比例或选择策略，使其根据输入内容和复杂度自适应调整；3) <strong>架构协同设计</strong>：未来可以探索对位置扰动更鲁棒的VLM架构，或者将类似FocusUI的筛选机制更深度地集成到模型设计中，以进一步提升端到端效率。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出FocusUI框架，解决UI视觉接地任务中高分辨率截图产生大量视觉令牌导致计算开销大、注意力稀释的核心问题。关键技术包括：通过融合指令条件和基于规则的UI图分数选择指令相关补丁以消除冗余令牌，以及引入PosPad策略将连续丢弃的令牌压缩为特殊标记以保持位置连续性。实验表明，在ScreenSpot-Pro基准上，FocusUI-7B性能比GUI-Actor-7B提升3.7%；即使仅保留30%视觉令牌，性能仅下降3.2%，推理速度提高1.44倍，峰值GPU内存降低17%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.03928" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

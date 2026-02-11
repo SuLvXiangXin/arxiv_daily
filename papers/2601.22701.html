@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Best-of-Q: Improving VLM agents with Q-function Action Ranking at Inference - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Artificial Intelligence (cs.AI)</span>
+      <h1>Best-of-Q: Improving VLM agents with Q-function Action Ranking at Inference</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.22701" target="_blank" rel="noreferrer">2601.22701</a></span>
+        <span>作者: Biré, Emilien, Santos, María, Yuan, Kai</span>
+        <span>日期: 2026/01/30</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于视觉语言模型（VLM）的智能体已成为在网页、操作系统等数字环境中自主操作的有力工具。主流方法通常将VLM作为端到端策略，直接根据多模态状态（如截图、指令）生成动作。然而，这些模型难以适应快速变化的环境（如网页），而通过微调来缓解这一问题又需要耗费巨大的模型训练和数据收集成本。现有的改进方法主要分为两类：一是基于训练的改进，如在线/离线强化学习（RL）或大规模模仿学习（IL），它们要么需要昂贵的在线交互，要么依赖大量高质量专家轨迹数据，并且都需要对庞大的VLM参数进行迭代微调，计算开销巨大；二是推理时决策增强，例如使用搜索算法或让大语言模型（LLM）自我批评，这些方法可能引入高延迟或依赖模型自身的、不稳定的价值判断能力。</p>
+<p>本文针对“提升VLM智能体性能必须进行昂贵的策略重训练”这一具体痛点，提出了一个新颖的视角：将VLM在推理时的角色进行解耦。核心思路是：保持VLM策略冻结，将其用作一个高容量的动作提议器，生成一组候选动作；然后，使用一个轻量级的、离线训练的Q函数对这些候选动作进行重新排序（reranking），并执行估计价值最高的动作，从而在无需策略重训练的情况下实现即时策略改进。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Best-of-Q方法的整体框架（Pipeline）清晰地将智能体的逻辑解耦为两个部分：1）一个冻结的、高容量的VLM，作为动作提议器；2）一个轻量级的、离线训练的Q函数，作为动作选择器。对于给定的多模态状态（任务指令、历史、当前截图），VLM被提示生成N个（论文中N=3）候选动作。随后，这些候选动作与状态信息一起，通过一个固定的VLM编码器转换为嵌入向量，再输入到一个多层感知机（MLP）中，该MLP输出每个动作的Q值（即预期未来累积回报）。最后，智能体执行Q值最高的动作。</p>
+<p><img src="https://arxiv.org/html/2601.22701v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：Best-of-Q智能体的结构。多模态状态输入到VLM策略中，VLM被提示给出N个动作候选。一个冻结的VLM将原始状态信息和这些动作候选分别处理成嵌入向量。这些固定大小的向量被拼接后输入一个轻量级MLP，MLP输出用于在推理时对候选动作进行重排序的Q值。</p>
+</blockquote>
+<p>核心模块包括：</p>
+<ol>
+<li><strong>冻结的VLM特征提取器</strong>：用于将状态和候选动作编码为固定维度的嵌入。这部分参数在Q函数训练和推理时均保持不变。</li>
+<li><strong>轻量级Q函数（MLP）</strong>：这是唯一需要训练的部分。它接收拼接后的状态和动作嵌入，输出标量Q值。其参数量极小（约1100万），远小于VLM本身。</li>
+</ol>
+<p>方法的技术细节和创新点体现在Q函数的训练方式上。论文采用<strong>隐式Q学习（Implicit Q-Learning, IQL）</strong> 算法在静态离线数据集上进行训练。IQL的关键优势在于其稳定性，它通过期望回归（expectile regression）学习一个状态价值函数V(s)，并以此作为稳定目标来更新Q函数，而无需查询分布外（OOD）的动作，从而避免了离线RL中常见的分布偏移问题。损失函数包括状态价值损失（公式3）和Q函数损失（公式4）。</p>
+<p>与现有方法相比，本文的核心创新点在于<strong>将离线训练的Q函数直接应用于推理时的动作重排序</strong>。这与类似工作（如DigiQ）形成鲜明对比，后者虽然也学习Q函数，但目的是用它重新标注数据以供后续的策略微调。Best-of-Q完全绕过了VLM的微调步骤，通过解耦提议和选择机制，实现了低成本、高效率的即时性能提升。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<ul>
+<li><strong>实验平台与数据集</strong>：在<strong>WebVoyager</strong>基准测试上进行评估。由于原始任务因网站变化而过时，使用了由SOTA保持者修补后的<strong>590个任务</strong>，涵盖15个不同领域。</li>
+<li><strong>对比基线</strong>：<ul>
+<li><strong>标准提示（Prompting）</strong>：VLM每次只生成一个动作。</li>
+<li><strong>随机动作（Random Action）</strong>：VLM生成N个候选动作，然后随机选择一个执行（即ε-greedy策略，ε=1）。</li>
+</ul>
+</li>
+<li><strong>关键实验结果</strong>：如表2所示，Best-of-Q方法显著提升了所有VLM基线的性能。<ul>
+<li>对于开源模型<strong>Qwen2.5-VL-7B</strong>，成功率从<strong>38.8%</strong> 提升至**55.7%**（相对提升43%）。</li>
+<li>对于更强的<strong>Qwen2.5-VL-72B</strong>，成功率从<strong>69.1%</strong> 提升至**76.6%**，且平均成功步骤数从9.4减少到8.8。</li>
+<li>对于专有模型<strong>GPT-4.1</strong>，成功率也从<strong>82.4%</strong> 提升至**88.8%**。</li>
+<li>随机动作基线性能下降（如GPT-4.1降至72.1%），证明性能提升源于智能化的Q函数选择，而非单纯增加候选动作数量。</li>
+</ul>
+</li>
+</ul>
+<p><img src="https://arxiv.org/html/2601.22701v1/images/cost-perf-plot.png" alt="成本性能帕累托图"></p>
+<blockquote>
+<p><strong>图2</strong>：智能体性能与每次基准测试运行成本的帕累托图。Best-of-Q（实心圆点）在相同的VLM骨干下，相比标准提示基线（空心圆点）实现了更高的成功率和更低的成本。使用更大VLM作为选择器（三角形）的方法成本更高但性能不及Best-of-Q。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.22701v1/images/proposal.png" alt="失败模式分析"></p>
+<blockquote>
+<p><strong>图3</strong>：在谷歌航班复杂任务上的步骤级失败原因分析。50.3%的失败步骤是由于基础VLM（Qwen2.5-VL-7B）根本未提出正确的“黄金”动作；在正确动作被提出的情况下，Q函数成功选中它的比例为13.6%，未能选中的比例为36.2%。这表明主要瓶颈是VLM的提议能力。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.22701v1/images/sample-efficiency-7B.png" alt="样本效率（7B）"></p>
+<blockquote>
+<p><strong>图4（a）</strong>：基于Qwen2.5-VL-7B的Best-of-Q智能体性能随训练轨迹数量增加的变化。蓝线为基线。仅用少量轨迹训练后，性能即显著超越基线，并随数据量增加持续提升，表现出良好的样本效率。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.22701v1/images/sample-efficiency-72B.png" alt="样本效率（72B）"></p>
+<blockquote>
+<p><strong>图4（b）</strong>：基于Qwen2.5-VL-72B的Best-of-Q智能体样本效率曲线。性能同样迅速超越高基线，但提升幅度相对较小，因为基础策略本身已很强。</p>
+</blockquote>
+<ul>
+<li><strong>消融实验总结</strong>：<ol>
+<li><strong>Q函数的重要性</strong>：使用另一个VLM（如GPT-4.1或Qwen2.5-72B）直接作为选择器（见表3），虽然也能提升性能，但成本更高且效果不及Best-of-Q的专用Q函数。</li>
+<li><strong>候选动作数量（N）的影响</strong>：实验表明N=3是一个较好的权衡点，继续增加N带来的收益递减。</li>
+<li><strong>与专业微调模型的对比</strong>：Best-of-Q（55.7%）与经过多阶段专家数据微调的专业模型Holo1-7B（59.2%）性能接近，但前者训练成本极低，展现了优越的性价比。</li>
+</ol>
+</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li>提出了一种新颖的框架，通过解耦策略生成与基于价值的动作选择，实现了对预训练VLM智能体的性能提升，同时避免了昂贵的VLM微调。</li>
+<li>引入了由离线训练Q函数引导的<strong>推理时Best-of-N重排序机制</strong>，直接纠正基础VLM策略的次优决策。</li>
+<li>在WebVoyager基准上进行了广泛的实证评估，证明该方法能显著、通用地提升不同规模VLM智能体的成功率，并具有优异的成本效益和样本效率。</li>
+</ol>
+<p>论文自身明确指出了方法的局限性：智能体的最终性能受限于<strong>基础VLM的提议能力</strong>。如果正确的动作从未出现在候选列表中，再完美的Q函数也无法选择它（如图3所示，50.3%的失败源于此）。此外，Q函数本身也存在不完美之处。</p>
+<p>这项工作对后续研究的重要启示在于，为提升大模型智能体性能提供了一条高效、低成本的路径。它表明，与其耗费巨资反复微调整个大模型，不如<strong>投资于一个轻量级、专门化的价值评估模块</strong>，并在推理时将其与冻结的大模型协同使用。未来的工作可以探索如何进一步改善VLM的提议多样性，或者结合更强大的价值估计方法来突破当前由提议能力设定的性能上限。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉语言模型（VLM）代理在快速变化的数字环境（如网页）中适应性差、传统微调方法成本高昂的问题，提出了一种无需重新训练策略的推理时增强方法Best-of-Q。其核心是将VLM作为冻结的动作生成器，产生候选动作，再通过一个离线训练的轻量级Q函数对这些动作进行重排序，选择估计价值最高的动作执行，从而在推理时即时提升策略性能。在WebVoyager基准测试中，该方法显著提升了代理成功率，例如将Qwen2.5-VL-7B代理的成功率从38.8%提升至55.7%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.22701" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

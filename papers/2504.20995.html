@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>TesserAct: Learning 4D Embodied World Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Computer Vision and Pattern Recognition (cs.CV)</span>
+      <h1>TesserAct: Learning 4D Embodied World Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2504.20995" target="_blank" rel="noreferrer">2504.20995</a></span>
+        <span>作者: Zhen, Haoyu, Sun, Qiao, Zhang, Hongxin, Li, Junyan, Zhou, Siyuan, Du, Yilun, Gan, Chuang</span>
+        <span>日期: 2025/04/29</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于学习的具身世界模型主要通过2D像素空间（如图像或视频）来模拟环境动态。这类方法存在关键局限性：物理世界本质上是三维的，而2D模型无法完整表示空间关系，缺乏精确的深度和姿态信息，导致机器人系统难以确定物体的确切位置和方向。此外，2D模型可能产生跨时间步长不一致（如物体尺寸和形状变化不真实）的预测，限制了其在数据驱动仿真和鲁棒策略学习中的应用。</p>
+<p>本文针对2D世界模型在空间表示和时间一致性上的不足，提出了学习<strong>4D具身世界模型</strong>（3D空间+时间）的新视角。其核心思路是：提出一种轻量级的4D世界表示方法——预测场景的RGB、深度和法线序列（RGB-DN视频），并设计算法将其重建为高质量、时空一致的4D场景。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>TesserAct方法的整体流程分为三个阶段：1）构建4D具身视频数据集；2）训练/微调模型以生成RGB-DN视频；3）将生成的RGB-DN视频优化重建为4D场景。输入是当前帧的RGB图像（及对应的深度、法线图）和以文本描述的动作指令，输出是预测的未来RGB-DN视频序列，并最终转换为4D场景。</p>
+<p><img src="https://arxiv.org/html/2504.20995v1/extracted/6393578/figures/logo.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：TesserAct 4D具身世界模型概览。模型接收输入图像和文本指令，生成RGB、深度和法线视频，进而重建4D场景并预测动作。该模型不仅在域内数据（右）上表现强劲，还能有效泛化到未见过的场景、新物体（左上）和跨域场景（左下）。</p>
+</blockquote>
+<p><strong>核心模块一：4D具身视频数据集构建</strong>。由于缺乏大规模高质量4D标注数据，论文通过自动标注扩展现有数据集。对于合成数据（RLBench），利用模拟器获取真实深度，并使用DSINE从深度估计法线。对于真实数据（Fractal, Bridge, SomethingSomethingV2），使用RollingDepth估计视频深度，并使用Temporal-Consistent Marigold-LCM估计法线。总计构建了约28.5万条视频数据（见表1）。</p>
+<p><strong>核心模块二：模型架构与训练策略</strong>。直接从头训练RGB-DN视频生成模型数据不足，因此选择在CogVideoX基础上进行微调。</p>
+<p><img src="https://arxiv.org/html/2504.20995v1/x1.png" alt="架构与训练概览"></p>
+<blockquote>
+<p><strong>图2</strong>：TesserAct的架构与训练概览。使用预训练的3D VAE分别编码RGB、深度和法线视频为潜变量。引入三个独立的输入投影器处理各模态的噪声潜变量和条件潜变量。DiT主干网络以它们的和为输入，并接收时间步和文本动作指令作为条件。输出端，RGB噪声预测沿用原设计，而深度和法线预测则新增了一个DNProj模块，其输入融合了DiT的隐藏状态以及一个Conv3D模块处理的特征（该特征由预测的RGB潜变量与各模态输入潜变量拼接而成）。</p>
+</blockquote>
+<p>训练时，对RGB、深度、法线潜变量添加噪声，训练去噪网络ϵ_θ同时预测三种噪声。损失函数如公式(4)所示，旨在最小化预测噪声与真实噪声之间的L2距离。模型权重由CogVideoX初始化，新增模块零初始化，以确保训练初期RGB输出与CogVideoX一致。</p>
+<p><strong>核心模块三：4D场景重建算法</strong>。生成的是相对深度图，需结合法线图进行优化以得到精确的3D几何。算法核心是利用法线提供的表面朝向信息，通过公式(3)的约束优化深度图，该过程被迭代求解为ℒ_s损失。为进一步保证重建4D场景的时空一致性，论文引入了两个新损失：1) **时间一致性损失 (ℒ_tc)**：利用生成帧间的光流，将动态区域（如移动的机械臂）从静态背景中分离，确保背景部分在时间上保持3D结构一致；2) **场景正则化损失 (ℒ_reg)**：鼓励重建的点云表面平滑，避免异常值。</p>
+<p><img src="https://arxiv.org/html/2504.20995v1/x2.png" alt="一致性损失效果"></p>
+<blockquote>
+<p><strong>图3</strong>：一致性和正则化损失对4D场景重建的影响。红色框突出显示了不一致的区域。不使用这些损失会导致时间上的深度不一致（左）和空间上的点云噪声（中），而应用损失后能得到平滑、一致的4D重建结果（右）。</p>
+</blockquote>
+<p><strong>创新点</strong>：1) 提出RGB-DN视频作为学习4D世界模型的紧凑而高效的中间表示；2) 提出了结合深度与法线图优化、并辅以时空一致性损失的高质量4D场景重建算法；3) 构建了一个大规模、多域混合的4D具身视频数据集。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在构建的4D具身视频数据集（RLBench合成域，Fractal、Bridge真实域）上进行训练与评估。使用的主要评估平台涉及4D场景生成质量和下游具身任务规划。</p>
+<p><strong>对比方法</strong>：包括专注于3D生成的<strong>4D Point-E</strong>，以及作为2D视频世界模型基线的<strong>OpenSora</strong>和<strong>CogVideoX</strong>。对于视频生成模型，通过现成的单目深度/法线估计器（MiDaS, Marigold）处理其生成的RGB视频，以获得用于对比的深度、法线和点云。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>4D场景生成质量</strong>：如表2所示，在真实和合成数据上，TesserAct在深度估计（AbsRel, δ1）、法线估计（Mean, Median误差）以及最终点云重建精度（Chamfer L1距离）上均达到最佳或次佳性能，且RGB质量（FVD, SSIM）下降很小。这表明其能生成最精确的3D几何信息。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2504.20995v1/x3.png" alt="4D场景生成结果"></p>
+<blockquote>
+<p><strong>图4</strong>：4D场景生成定性结果。与基线相比，TesserAct生成的点云具有更精确的几何形状和更少的伪影。</p>
+</blockquote>
+<ol start="2">
+<li><p><strong>消融实验</strong>：</p>
+<ul>
+<li><strong>损失函数消融</strong>：如图3和论文所述，移除时间一致性损失ℒ_tc会导致动态物体（如机械臂）在时间上产生重影；移除场景正则化损失ℒ_reg会导致重建点云噪声增多。两者共同作用才能实现高质量的4D重建。</li>
+<li><strong>输入条件消融</strong>：实验表明，同时使用RGB、深度和法线作为条件输入，比仅使用RGB能带来显著的性能提升。</li>
+<li><strong>数据域消融</strong>：混合使用合成与真实数据进行训练，模型在两种域上都能取得良好性能，证明了数据的有效性和方法的泛化能力。</li>
+</ul>
+</li>
+<li><p><strong>下游具身任务评估</strong>：</p>
+<ul>
+<li><strong>动作预测</strong>：在RLBench的10个任务上，使用TesserAct重建的4D场景进行运动规划，其成功率（71.8%）显著高于使用CogVideoX+离线估计（58.2%）和OpenSora+离线估计（31.8%）的方案。</li>
+<li><strong>新视角合成</strong>：TesserAct能够从生成的4D场景中渲染出训练时未见过的相机视角图像，而2D视频模型则无法做到。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2504.20995v1/x4.png" alt="下游任务结果"></p>
+<blockquote>
+<p><strong>图5</strong>：下游任务性能对比。左：在RLBench任务上的运动规划成功率，TesserAct显著优于2D视频世界模型基线。右：新视角合成能力，TesserAct可以从重建的4D场景渲染新视图，而2D模型只能生成固定视角。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了TesserAct，一个通过RGB-DN视频学习4D具身世界模型的新框架，实现了对3D场景时空动态的高保真预测。</li>
+<li>构建了一个大规模、多来源的4D具身视频数据集，并设计了一套从生成视频到高质量、时空一致4D场景的重建算法。</li>
+<li>实验证明，该4D世界模型在场景生成质量和下游具身任务（如动作规划、新视角合成）上的性能均优于传统的2D视频世界模型。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，其4D数据集规模（约28.5万视频）仍远小于用于训练2D视频模型的数十亿规模数据集；方法依赖于一个强大的预训练视频生成模型（CogVideoX）；4D重建优化算法需要额外的计算成本。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>表示学习</strong>：RGB-DN作为一种紧凑的4D表示被证明是有效的，为连接2D视觉与3D几何提供了新思路。</li>
+<li><strong>数据构建</strong>：展示了利用自动标注工具扩展现有数据集以学习3D/4D概念的可行性。</li>
+<li><strong>应用方向</strong>：高质量的4D世界模型为更复杂的具身AI任务（如长视野规划、物理推理、仿真）奠定了基础，未来可探索与具体机器人控制器的更紧密集成。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出TesserAct模型，旨在解决现有2D世界模型缺乏空间一致性、无法精确预测物体深度与姿态的问题。方法核心是学习4D具身世界模型，通过扩展RGB-DN（RGB、深度与法线）视频数据集，训练视频生成模型联合预测每帧的RGB-DN信息，并设计算法将其转换为高质量4D场景。实验表明，该模型能保证时空一致性，支持新颖视角合成，且基于其学习的策略性能显著优于以往的基于视频的世界模型。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2504.20995" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

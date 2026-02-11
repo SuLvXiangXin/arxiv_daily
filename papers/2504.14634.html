@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Latent Representations for Visual Proprioception in Inexpensive Robots - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Latent Representations for Visual Proprioception in Inexpensive Robots</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2504.14634" target="_blank" rel="noreferrer">2504.14634</a></span>
+        <span>作者: Sheikholeslami, Sahara, Bölöni, Ladislau</span>
+        <span>日期: 2025/04/20</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人操作中，获取机器人自身的关节位置（本体感知）至关重要。高质量的工业机器人通常具备精确的内部传感器，但在非结构化环境中运行的低成本机器人往往缺乏可靠的本体感知信息。虽然基于端到端强化学习或模仿学习的策略可以直接从外部观测映射到动作，从而绕开本体感知问题，但实践中，若能结合外部感知与内部本体感知数据，有望提升任务性能。现有视觉本体感知方法通常依赖于多摄像头、标定相机、深度相机、机器人模型、仿真器或迭代优化等技术，这些要求增加了成本和复杂性。</p>
+<p>本文针对低成本机器人缺乏可靠本体感知传感器的痛点，提出了一个极简化的研究视角：仅使用一个固定位置、未标定的单目RGB摄像头，通过快速、单次前向传播的回归架构，从单张图像中估计机器人的配置。其核心思路是探索并比较多种用于生成紧凑潜在表示的技术，并设计一个与之解耦的通用回归器，从而在计算资源、传感器质量和训练数据要求极低的前提下实现可用的视觉本体感知。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架分为两个阶段：首先，一个计算机视觉算法（潜在编码器）从单张观测图像 <code>o</code> 中生成一个紧凑的、专用于本体感知的潜在表示 <code>z_prop</code>；随后，一个多层感知机（MLP）回归器从该潜在表示中提取出机器人配置的估计值 <code>â</code>。这是一个单次前向传播的架构，旨在实现快速推理。</p>
+<p><img src="https://arxiv.org/html/2504.14634v2/x1.png" alt="方法框架"></p>
+<blockquote>
+<p>**图2(a)**：视觉本体感知的整体流程。观测图像 <code>o</code> 经过潜在编码器生成潜在表示 <code>z</code>，随后由本体感知回归器输出估计的机器人配置 <code>â</code>。</p>
+</blockquote>
+<p>核心模块是四种不同的潜在编码器生成方法，它们都旨在输出维度为128或256的 <code>z_prop</code>，而后续的MLP回归器结构（输入层匹配 <code>z</code> 维度，两个64维隐藏层，6维输出层）对所有表示都是通用且需要重新训练的。</p>
+<p><strong>1. 基于卷积变分自编码器（Conv-VAE）的编码器</strong>：使用卷积VAE的无监督方式学习图像表示。训练时，使用机器人在随机位姿下的图像，迫使潜在空间更多地编码机器人姿态信息。推理时，仅保留编码器输出的均值向量 <code>μ(o)</code> 作为潜在表示 <code>z</code>，丢弃采样组件和解码器。</p>
+<p><img src="https://arxiv.org/html/2504.14634v2/x2.png" alt="Conv-VAE编码器"></p>
+<blockquote>
+<p>**图2(b)**：基于卷积VAE的编码器。绿色部分为保留的潜在表示 <code>z_prop</code>，其余部分（解码器、KL散度）仅在训练中使用，推理时丢弃。</p>
+</blockquote>
+<p><strong>2. 基于预训练CNN微调的编码器</strong>：使用在ImageNet上预训练的CNN骨干网络（如VGG-19、ResNet-50）作为特征提取器，生成高维特征 <code>z_feat</code>。为了将其压缩到目标维度（128/256），引入一个MLP降维器。关键创新在于训练方式：使用少量有监督数据（图像-配置对），将“骨干网络+降维器+一个临时回归头”进行端到端微调，其损失是配置估计的回归损失。训练完成后，仅保留骨干网络和降维器作为编码器，临时回归头被丢弃。这促使降维后的瓶颈表示 <code>z_prop</code> 包含足够用于本体感知的信息。</p>
+<p><img src="https://arxiv.org/html/2504.14634v2/x3.png" alt="CNN编码器"></p>
+<blockquote>
+<p>**图2(c)**：基于预训练CNN微调的编码器。通过端到端微调训练降维MLP，使其输出紧凑的 <code>z_prop</code>，辅助回归头在训练后被丢弃。</p>
+</blockquote>
+<p><strong>3. 基于预训练Vision Transformer（ViT）微调的编码器</strong>：思路与CNN骨干网络类似，使用预训练的ViT（如ViT-Base, ViT-Large）作为特征提取器，其后同样连接一个投影架构（全连接层、批归一化、Dropout）将高维特征降至目标维度。训练方式同样是使用有监督数据对“ViT+投影层+临时回归头”进行端到端微调。</p>
+<p><img src="https://arxiv.org/html/2504.14634v2/x4.png" alt="ViT编码器"></p>
+<blockquote>
+<p>**图2(d)**：基于预训练ViT微调的编码器。结构与CNN方案类似，骨干网络换为ViT。</p>
+</blockquote>
+<p><strong>4. 基于未标定基准标记包的编码器</strong>：这是一种混合方法。在机器人手臂上随意粘贴多个ArUco标记。编码过程是：从图像中检测所有ArUco标记，对于每个检测到的标记，将其四个角点的图像坐标（8个值）和一个可见性标志（1个值）拼接起来。对于10个标记，理论上可得到一个90维的向量，然后通过零填充统一到128维。关键点在于这些标记的3D位置是未知且未标定的，系统仅使用其在图像中的2D投影信息作为原始特征。</p>
+<p><img src="https://arxiv.org/html/2504.14634v2/x5.png" alt="标记包编码器"></p>
+<blockquote>
+<p>**图2(e)**：基于未标定基准标记包的编码器。通过ArUco检测算法获取标记角点坐标，直接拼接并填充形成潜在表示。</p>
+</blockquote>
+<p>与现有方法相比，本文的创新点在于系统性地在极简硬件和计算约束下，探索并比较了从经典标记到现代深度学习骨干网络等多种生成紧凑潜在表示的技术路径，并提出了一个与之适配的通用、轻量回归架构。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与数据</strong>：使用Lynxmotion AL5D（一款低成本6自由度机器人），由一个固定位置、未标定的低分辨率RGB摄像头观察。收集了有监督（图像-已知配置对）和无监督（机器人随机位姿图像）数据。</p>
+<p><strong>对比方法</strong>：共实现了九种模型变体进行对比：基于Conv-VAE（潜在维度128和256）、微调VGG-19（128和256）、微调ResNet-50（128和256）、微调ViT-Base（128）、微调ViT-Large（256）以及基于未标定ArUco标记包（128）的编码器。每个编码器都配以单独训练的相同结构的MLP回归器。</p>
+<p><strong>关键实验结果</strong>：<br>配置向量包含6个归一化到[0,1]的分量：夹爪高度(<code>a1</code>)、夹爪距底座距离(<code>a2</code>)、手臂航向(<code>a3</code>)、手腕俯仰角(<code>a4</code>)、手腕旋转角(<code>a5</code>)、夹爪开合状态(<code>a6</code>)。</p>
+<p><img src="https://arxiv.org/html/2504.14634v2/x6.png" alt="误差对比"></p>
+<blockquote>
+<p>**图3(a)**：各模型在不同配置分量上的均方误差（MSE）。显示了估计不同关节的难度差异，以及不同表示在不同分量上的优势。</p>
+</blockquote>
+<ol>
+<li><strong>分量难度</strong>：航向(<code>a3</code>)最容易估计，其次是距离(<code>a2</code>)、高度(<code>a1</code>)和手腕俯仰角(<code>a4</code>)。最困难的是手腕旋转角(<code>a5</code>)和夹爪状态(<code>a6</code>)，后者常因遮挡或出视野而难以判断。</li>
+<li><strong>潜在表示大小的影响</strong>：并非越大越好。对于Conv-VAE，256维表示普遍优于128维；但对于微调后的VGG-19，128维表示反而在多个分量上优于256维。这表明经过适当调整，128维的紧凑表示足以传递本体感知信息。</li>
+<li><strong>不同表示的优势</strong>：<ul>
+<li>ArUco标记在夹爪状态(<code>a6</code>)估计上最好，手腕旋转(<code>a5</code>)上次之，但在其他分量上表现最差。</li>
+<li>ViT-Large和VGG-19 (128) 在除夹爪状态和手腕旋转外的几乎所有分量上都名列前茅。</li>
+<li>VAE表示仅在航向(<code>a3</code>)估计上有竞争力。</li>
+<li>ResNet-50表示仅在夹爪状态(<code>a6</code>)估计上有竞争力，且其估计轨迹噪声很大。</li>
+</ul>
+</li>
+</ol>
+<p><strong>轨迹跟踪结果</strong>：下图展示了各方法在连续轨迹上的跟踪效果（黑色为真实值）。</p>
+<p><img src="https://arxiv.org/html/2504.14634v2/x7.png" alt="VAE跟踪"></p>
+<blockquote>
+<p>**图3(b)**：Conv-VAE表示的跟踪结果。256维（橙色）比128维（蓝色）更稳定，尤其是在航向和手腕俯仰角上。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2504.14634v2/x8.png" alt="VGG跟踪"></p>
+<blockquote>
+<p>**图3(c)**：VGG-19表示的跟踪结果。轨迹相对平滑，噪声小。128维（橙色）表现优于256维（蓝色）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2504.14634v2/x9.png" alt="ResNet跟踪"></p>
+<blockquote>
+<p>**图3(d)**：ResNet-50表示的跟踪结果。轨迹表现出明显的帧间噪声，稳定性差。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2504.14634v2/x10.png" alt="ViT跟踪"></p>
+<blockquote>
+<p>**图3(e)**：ViT表示的跟踪结果。存在类似ResNet但幅度较小的噪声。ViT-Large（橙色）比ViT-Base（蓝色）更准确。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2504.14634v2/x11.png" alt="ArUco跟踪"></p>
+<blockquote>
+<p>**图3(f)**：ArUco标记包表示的跟踪结果。轨迹外观与其他方法差异显著，由于标记检测的断续性，估计值呈阶梯状变化。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：实验本身比较了不同编码器组件，可视作一种架构消融。结果显示：1）潜在表示的质量是性能关键；2）微调后的紧凑表示（128维）可以非常有效；3）不同表示具有互补的特性，例如深度学习模型在整体姿态估计上更优，而简单标记在特定局部状态（如夹爪开合）上更可靠。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了四种适用于视觉本体感知的紧凑潜在表示生成方案，涵盖从自编码器、预训练深度骨干网络微调到传统视觉标记与学习结合的混合方法。</li>
+<li>设计了一个与潜在表示解耦的通用回归架构，该架构可适配不同表示且仅需少量有监督数据重新训练。</li>
+<li>通过系统实验，在极简硬件设置下对比了这些方法，揭示了不同表示在精度、噪声模式和不同配置分量上的优劣特性，为算法选择提供了依据。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，该研究仅评估了从静态图像进行本体感知的准确性，并未在闭环机器人控制任务中测试这些估计值如何影响下游策略的性能。此外，为了追求极简化，放弃了许多能提升性能的常用手段（如多视图、深度信息、机器人模型等）。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>紧凑表示的可行性</strong>：证明了一个设计良好的、低维的专用潜在表示足以从单目图像中提取有用的本体感知信息，这为在边缘设备上部署轻量级感知模块提供了可能。</li>
+<li><strong>表示的特性与选择</strong>：不同编码器在不同方面各有所长，未来的系统可以考虑<strong>混合表示</strong>，例如结合ViT的全局姿态感知能力和ArUco标记对局部状态的精确捕捉。</li>
+<li><strong>微调策略的有效性</strong>：对于预训练模型，针对目标任务的少量数据微调能显著提升其在特定领域的特征提取效率，即使最终表示被大幅压缩。</li>
+<li><strong>新评估维度</strong>：除了精度，表示的<strong>平滑性</strong>和<strong>噪声水平</strong>对下游控制至关重要（如ResNet结果所示），这应成为未来评估视觉本体感知方法的重要指标。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对廉价机器人缺乏精确本体感知能力的问题，研究如何仅通过单个外部摄像头图像，快速估计机器人关节配置（视觉本体感知）。探索了多种潜在表示技术（包括CNN、VAE、ViT及未校准基准标记包）及其微调方法，以适应有限数据。通过在廉价6自由度机器人上的实验，评估了该方法的可实现精度。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2504.14634" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

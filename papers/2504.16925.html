@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Latent Diffusion Planning for Imitation Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Latent Diffusion Planning for Imitation Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2504.16925" target="_blank" rel="noreferrer">2504.16925</a></span>
+        <span>作者: Xie, Amber, Rybkin, Oleh, Sadigh, Dorsa, Finn, Chelsea</span>
+        <span>日期: 2025/04/23</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人模仿学习领域的主流方法，如基于Transformer架构或扩散模型头部的策略（例如Diffusion Policy），依赖于从大规模专家演示数据集中直接学习状态到动作的映射。这些方法虽然性能强大，但其根本限制在于对高质量、带动作标注的专家数据的依赖。然而，收集机器人专家数据通常困难、耗时且昂贵。相比之下，在特定领域内收集次优的（例如失败的策略执行、玩耍数据）或无动作的（仅包含状态序列）数据则容易得多。现有方法无法有效利用这些异构数据源，因为它们直接建模最优动作，而次优数据中的动作可能有害，无动作数据则缺乏动作标签。</p>
+<p>本文针对模仿学习中专家数据稀缺、而次优与无动作数据未被充分利用的具体痛点，提出了一个模块化的新视角：将策略学习分解为<strong>状态规划</strong>和<strong>动作提取</strong>两个独立的部分。通过这种分离，规划器可以仅从状态序列（可包含无动作数据）中学习预测未来，而逆动力学模型则可以从带动作的交互数据（可包含次优数据）中学习。本文的核心思路是：首先学习一个紧凑的图像潜在表示空间，然后在该空间内分别训练一个基于扩散模型的规划器来预测密集的未来状态轨迹，以及一个基于扩散模型的逆动力学模型来从相邻状态中推断动作，从而构建一个能够综合利用异构数据且支持闭环控制的高效模仿学习策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Latent Diffusion Planning (LDP) 的整体流程包含三个顺序训练的部分：1) 学习潜在空间编码器；2) 训练逆动力学模型；3) 训练规划器。在推断时，给定当前观测，规划器先在潜在空间中生成一段未来状态序列（规划），然后逆动力学模型根据该序列中相邻的状态对，逐个推断出执行动作。</p>
+<p><img src="https://arxiv.org/html/2504.16925v1/extracted/6384363/fig/overview.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：Latent Diffusion Planning 方法整体框架。<strong>左侧</strong>：LDP 将控制问题分解为用基于扩散的规划器预测未来状态，以及用基于扩散的逆动力学模型提取动作。这种设计使得能够利用异构数据源进行训练。<strong>右侧</strong>：与 Diffusion Policy 等动作模仿方法不同，LDP 基于预测密集的潜在状态序列以及动作。对这两个目标使用强大的扩散模型使 LDP 具有与最先进模仿学习相媲美的性能。此外，与之前预测子目标的工作不同，LDP 预测密集的时序潜在状态序列，从而实现可扩展的闭环规划。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>潜在空间学习</strong>：采用 β-VAE 目标训练一个变分自编码器，其损失函数为 ℒ_VAE = 𝔼[log p(x|z)] - β D_KL(q(z|x) || p(z))。编码器 ℰ 将图像 x 压缩为潜在表示 z，解码器 𝒟 负责重建。此阶段可以利用大量无动作或次优数据中的视觉信息来学习更鲁棒的编码器，为后续规划提供紧凑的表示空间。</li>
+<li><strong>逆动力学模型</strong>：一个轻量级的扩散模型，用于学习从一对连续潜在状态 (z_t, z_{t+1}) 到动作 a_t 的映射。采用 MLPResNet 架构，优化去噪目标 ℒ_IDM = 𝔼[‖ϵ_ξ(â_t; z_t, z_{t+1}, t) - ϵ‖²]，其中 ξ 为模型参数。该模型使用带动作的数据训练，这些数据可以是次优的。</li>
+<li><strong>规划器</strong>：一个基于扩散模型的序列预测模型，用于根据当前潜在状态 z_k，预测未来 H 步的潜在状态序列 (z_{k+1}, ..., z_{k+H})。采用 Diffusion Policy 中使用的 Conditional U-Net（CNN主干）架构，优化目标 ℒ_planner = 𝔼[‖ϵ_ψ(ẑ_{k+1}, ..., ẑ_{k+H}; z_k, t) - ϵ‖²]，其中 ψ 为模型参数。规划器使用状态序列训练，这些数据可以是无动作的。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2504.16925v1/extracted/6384363/fig/method.png" alt="训练流程"></p>
+<blockquote>
+<p><strong>图2</strong>：LDP 训练流程示意图。<strong>上方</strong>：使用扩散目标训练逆动力学模型，直接从潜在状态对中提取用于控制的动作。<strong>下方</strong>：训练一个强大的潜在扩散模型来预测未来的一块潜在状态。规划器和 IDM 结合在一起产生动作块。</p>
+</blockquote>
+<p><strong>创新点</strong>：<br>与现有方法相比，LDP 的主要创新体现在：1) <strong>模块化设计</strong>：明确分离规划与动作推断，使两者能独立利用不同类型的数据（无动作数据用于规划，次优数据用于IDM），突破了传统行为克隆必须使用带最优动作标注数据的限制。2) <strong>潜在空间密集规划</strong>：不同于 UniPi 等工作在原始图像空间进行视频预测，也不同于一些方法只预测稀疏的子目标，LDP 在学得的紧凑潜在空间中进行密集的时序状态预测。这大大降低了生成规划的计算成本，使得在每一步进行重新规划（闭环控制）变得可行，同时保留了丰富的未来状态信息供逆动力学模型使用。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：在4个视觉机器人操作任务上进行评估：Robomimic 的 Lift、Can、Square 任务，以及模拟的双臂 ALOHA Transfer Cube 任务。</li>
+<li><strong>实验平台</strong>：模拟环境。</li>
+<li><strong>对比基线</strong>：<ul>
+<li>**DP (Diffusion Policy)**：最先进的扩散模仿学习方法。</li>
+<li><strong>DP-VPT</strong>：使用逆动力学模型为无动作数据重新标注动作后训练的 Diffusion Policy。</li>
+<li><strong>UniPi-OL/CL</strong>：基于视频模型的规划方法（开环和闭环版本）。</li>
+</ul>
+</li>
+<li><strong>数据设置</strong>：假设专家演示数据有限（例如 Can 和 Square 任务仅使用100/200条演示），并考察添加无动作数据和次优数据的影响。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>表1展示了 LDP 利用异构数据的能力。仅使用有限专家数据时，LDP 平均成功率（0.65）已与 DP-VPT（0.59）相当或更优，并在 ALOHA 任务上显著领先（0.64 vs 0.45）。当加入无动作数据后，LDP 性能进一步提升至平均 0.66。最重要的是，当<strong>同时加入无动作数据和次优数据</strong>后，LDP 取得了接近完美的性能，平均成功率高达 <strong>0.95</strong>，显著超过所有基线。这证明了模块化设计在综合利用异构数据方面的巨大优势。相比之下，UniPi 方法即使使用无动作数据，性能也远低于 LDP（0.11-0.18），凸显了在潜在空间进行密集规划相对于原始图像视频生成的高效性。</p>
+<p><img src="https://arxiv.org/html/2504.16925v1/extracted/6384363/fig/tasks.png" alt="任务图示"></p>
+<blockquote>
+<p><strong>图3</strong>：模拟实验任务示意图。从左至右分别为：Robomimic Lift, Can, Square 以及模拟 ALOHA Transfer Cube 任务。</p>
+</blockquote>
+<p><strong>真实世界验证</strong>：<br>论文还在真实的 Franka 机器人上进行了拧瓶盖任务测试。在仅有10条专家演示的极端数据稀缺设定下，LDP 通过利用额外的无动作和次优数据，成功率达到了 **90%**，而仅使用10条专家数据的 Diffusion Policy 成功率为 0%。</p>
+<p><img src="https://arxiv.org/html/2504.16925v1/extracted/6384363/fig/franka.png" alt="真实世界实验"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界 Franka 机器人拧瓶盖任务设置。LDP 在仅有10条专家演示的情况下，通过利用额外数据取得了90%的成功率。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：<br>论文通过消融实验验证了各数据源的作用。在有限专家数据基础上，单独添加无动作数据或次优数据都能带来性能提升，但<strong>两者结合时提升最大</strong>。这证实了规划器和逆动力学模型分别从不同类型数据中受益的假设。同时，实验也对比了在图像空间规划（LDP-Image）与在潜在空间规划（LDP），结果表明潜在空间规划在保持高性能的同时，<strong>推理速度快了6.6倍</strong>，验证了其效率优势。</p>
+<p><img src="https://arxiv.org/html/2504.16925v1/extracted/6384363/fig/traj_viz.png" alt="轨迹可视化"></p>
+<blockquote>
+<p><strong>图5</strong>：LDP 预测的潜在状态轨迹可视化（通过解码器重建）。规划器生成了连贯、合理的未来状态序列，逆动力学模型据此推断出正确的动作。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种新颖的模块化模仿学习算法 <strong>Latent Diffusion Planning</strong>，它通过分离状态规划与动作推断，并均在学得的潜在空间中使用扩散模型实现。</li>
+<li>证明了 LDP 能够有效利用<strong>次优和无动作数据</strong>，在专家演示数据有限的场景下，通过整合这些异构数据能极大提升策略性能。</li>
+<li>实验表明，通过在<strong>潜在空间进行密集时序预测</strong>，LDP 在实现与先进方法相媲美性能的同时，支持高效闭环推理，性能显著优于之前的视频规划方法。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文自身提到的局限性包括：1) 潜在空间的表示能力依赖于 VAE 的训练，本文未探索更复杂的潜在空间学习方法（如带有动态模型的）。2) 实验集中于单任务模仿学习，未扩展到多任务或基础模型设置。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>规划与控制的分离</strong>：将策略分解为“想”和“做”两个模块，为利用海量、易获得但标注不完美的机器人数据提供了通用框架。</li>
+<li><strong>数据利用的新范式</strong>：鼓励研究者设计能够自然兼容异构数据源（最优、次优、无动作、甚至互联网视频）的算法。</li>
+<li><strong>潜在空间规划的优势</strong>：在紧凑的潜在空间中进行序列预测，是平衡生成模型表达能力与计算效率、实现实时闭环控制的一个有前景的方向。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出潜在扩散规划（LDP），以解决模仿学习过度依赖大量昂贵专家数据、难以利用次优或无动作数据的问题。方法采用模块化设计：先通过变分自编码器学习紧凑的视觉潜在空间，再分别训练基于扩散目标的规划器（可利用无动作演示）和逆动力学模型（可利用次优数据）。在模拟视觉机器人操作任务上，LDP因能有效利用额外数据，性能超越了现有最先进的模仿学习方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2504.16925" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

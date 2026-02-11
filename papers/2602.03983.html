@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Efficient Long-Horizon Vision-Language-Action Models via Static-Dynamic Disentanglement - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Efficient Long-Horizon Vision-Language-Action Models via Static-Dynamic Disentanglement</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.03983" target="_blank" rel="noreferrer">2602.03983</a></span>
+        <span>作者: Qiu, Weikang, Huang, Tinglin, Feng, Aosong, Ying, Rex</span>
+        <span>日期: 2026/02/03</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型已成为通用机器人控制的一个有前景的范式。然而，现有VLA模型面临两大关键挑战：一是<strong>长时程上下文建模能力有限</strong>，主流方法通常以无记忆方式运行，仅以当前观察为输入，难以处理需要记忆追踪或时间依赖性的任务；二是<strong>推理效率低下</strong>，源于其庞大的参数量以及Transformer架构中注意力机制的二次复杂度。直接引入多帧观察会因视觉token数量庞大而导致上下文长度爆炸。</p>
+<p>现有方法尝试通过非学习的池化操作或仅在解码器头部进行多帧处理来缓解这些问题，但这要么可能导致显著的信息丢失，要么绕过了语言模型联合推理多帧的能力。近期一些利用时间冗余性的工作依赖于启发式、非学习的准则，并假设像素空间的视觉相似性意味着其潜在表示的时序一致性，这一假设在基于Transformer的架构中并不成立。</p>
+<p>本文针对上述痛点，提出了一个新的视角：在VLA任务中，场景中的大部分视觉信息在时间上是静态或缓慢变化的。基于这一观察，本文提出了<strong>静态-动态解耦</strong>的核心思路，旨在通过显式地将视觉token分解为静态和动态部分，在保留长时程建模能力的同时，大幅减少计算冗余，从而实现高效的推理。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>SD-VLA的整体框架基于标准的VLA架构，其核心创新在于对视觉编码器输出的token序列进行重组与缓存管理，以实现静态与动态信息的解耦。</p>
+<p><img src="https://arxiv.org/html/2602.03983v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：SD-VLA方法整体框架。左侧展示了现有VLA因拼接多帧图像导致上下文过长的问题；右侧展示了本文方法：通过保留一份静态token副本并将静态token置于所有动态token之前，实现了上下文压缩和KV缓存复用。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>静态-动态解耦</strong>：模型将每帧图像编码得到的N个视觉token显式地分解为静态token和动态token两部分。为了捕捉不同时间尺度的静态信息（如长期背景 vs. 中期物体外观），进一步引入了<strong>多级静态token</strong>。最终，第t帧的视觉输入表示为各级静态token和动态token的拼接。</li>
+<li><strong>长时程上下文建模</strong>：得益于成功的解耦，在构建包含T步历史观测的输入时，<strong>静态token只需保留一份副本</strong>，而动态token则按时间顺序拼接。这样，模型的输入序列从<code>NT</code>长度缩减为<code>rN + (1-r)NT</code>，其中r是静态token的比例，从而允许模型在有限的上下文窗口内整合更长的历史。</li>
+<li><strong>可学习的重缓存门</strong>：为了决定何时刷新缓存的静态token表示，避免因过度复用导致表征过时，为每个静态层级引入了一个轻量级的、可训练的重缓存门。该门以当前观测和缓存的历史观测为输入，输出一个刷新概率。训练时使用Gumbel-Softmax技巧实现端到端微分；推理时，当概率超过阈值δ_l时则刷新缓存。高级别缓存刷新会强制刷新低级别缓存。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.03983v1/x3.png" alt="模型架构与训练"></p>
+<blockquote>
+<p><strong>图2</strong>：模型架构与训练目标示意图。(a) 模型架构概览，展示了具有两级静态缓存的示例，以及重缓存门的工作流程。(b) 用于训练静态token时序持久性的对比损失构造方式。</p>
+</blockquote>
+<p><strong>训练目标</strong>：总损失函数由三部分组成：</p>
+<ul>
+<li><strong>任务损失</strong>：基础VLA模型的动作预测损失。</li>
+<li><strong>静态token对比损失</strong>：使用InfoNCE损失，将同一轨迹内不同时间步的观测作为正样本对，不同轨迹的观测作为负样本对，以此鼓励静态token在时间上保持稳定。</li>
+<li><strong>重缓存门正则化损失</strong>：一个带先验的二元交叉熵损失，其先验<code>p_Δt</code>随时间间隔Δt增大而增大，以此偏置门在时间接近时倾向于复用缓存，避免门学习到“总是刷新”的平凡解。</li>
+</ul>
+<p><strong>与现有方法的创新点</strong>：</p>
+<ul>
+<li><strong>显式且可学习的解耦</strong>：不同于依赖像素相似性启发式或非学习混合的方法，SD-VLA通过可训练的对比损失显式地学习具有时序不变性的静态表示。</li>
+<li><strong>上下文组织与缓存复用</strong>：通过将静态token置于序列前端并仅保留一份，不仅压缩了上下文，而且使得在自回归生成（rollout）过程中，静态token对应的Key-Value缓存可以被完全复用，大幅减少计算量。</li>
+<li><strong>自适应的缓存管理</strong>：可训练的重缓存门能够根据任务内容自适应地决定刷新时机，平衡了表征新鲜度与计算效率。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准测试</strong>：提出了新的<strong>LIBERO-Memory</strong>基准，专门用于评估长时程时间依赖性建模能力。同时，在<strong>SimplerEnv</strong>和<strong>LIBERO</strong>基准上评估泛化性能和推理效率。</li>
+<li><strong>基线方法</strong>：对比了TTF-VLA、TraceVLA、MemoryVLA、ContextVLA等专注于融入记忆或提升效率的VLA变体，以及FlashVLA、VLA-Cache等加速方法。</li>
+<li><strong>基础模型</strong>：主要实验以CogACT和OpenVLA-OFT作为基础VLA模型。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2602.03983v1/x4.png" alt="LIBERO-Memory基准示例"></p>
+<blockquote>
+<p><strong>图3</strong>：LIBERO-Memory基准任务流程示例。任务分为三步，要求机器人记忆“哪个”罐头被加热过（what）、“何时”应该取下（when）以及其原始位置“在哪”（where），以此评估情景记忆能力。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><p><strong>时间依赖性建模</strong>：在LIBERO-Memory基准上，SD-VLA在三个子任务上均显著优于所有基线。<br><img src="https://arxiv.org/html/2602.03983v1/x5.png" alt="内存依赖任务结果"></p>
+<blockquote>
+<p><strong>表1</strong>：在LIBERO-Memory基准上的结果。SD-VLA在“On Stove”、“Position Reset”成功率上分别达到69.8%和83.0%，在“Doneness”时间误差上低至0.26秒，相比表现次优的ContextVLA有巨大提升。</p>
+</blockquote>
+</li>
+<li><p><strong>性能与效率</strong>：在SimplerEnv和LIBERO基准上，SD-VLA在维持或提升任务成功率的同时，实现了显著的推理加速。<br><img src="https://arxiv.org/html/2602.03983v1/x6.png" alt="SimplerEnv结果"></p>
+<blockquote>
+<p><strong>表2</strong>：在SimplerEnv基准上的结果。SD-VLA在多个任务上取得最高或接近最高的成功率，同时FLOPs降至基线的43.4%，延迟降至601ms，实现了2.26倍的加速。</p>
+</blockquote>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.03983v1/x7.png" alt="LIBERO结果"></p>
+<blockquote>
+<p><strong>表3</strong>：在LIBERO基准上的结果。SD-VLA在平均成功率上达到96.0%，优于基础模型（95.4%），同时FLOPs降至63.4%，延迟437ms，实现1.70倍加速。</p>
+</blockquote>
+<ol start="3">
+<li><strong>消融实验与可视化</strong>：<br><img src="https://arxiv.org/html/2602.03983v1/x8.png" alt="消融实验与注意力可视化"><blockquote>
+<p><strong>图4</strong>：左图为消融实验结果，展示了静态token对比损失和重缓存门对性能的影响；右图为注意力可视化，表明模型学会了关注与任务相关的动态区域（如机械臂和罐头）。</p>
+</blockquote>
+</li>
+</ol>
+<p><strong>消融实验总结</strong>：</p>
+<ul>
+<li><strong>静态token对比损失</strong>：移除该损失会导致性能显著下降，证明了学习时序不变静态表示的重要性。</li>
+<li><strong>重缓存门</strong>：使用固定的、非学习的刷新策略（如每N步刷新）或完全移除门机制，都会导致性能或效率的损失，验证了自适应缓存管理的必要性。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>SD-VLA框架</strong>，通过将视觉token显式解耦为多级静态和动态部分，首次在VLA中同时实现了<strong>高效的长时程上下文建模</strong>和<strong>显著的推理加速</strong>。</li>
+<li>设计了<strong>可训练的重缓存门</strong>，能够自适应地管理静态token的缓存，在保证表征新鲜度的同时最大化计算复用。</li>
+<li>引入了<strong>LIBERO-Memory基准</strong>，为评估VLA的长时程时间依赖性建模能力提供了一个更严谨、更具挑战性的测试平台。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文提到，静态与动态的划分可能并非在所有场景下都完美，例如当背景发生剧烈变化时。此外，重缓存门的决策可能存在错误，导致在需要刷新时未刷新。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>解耦思想的扩展</strong>：静态-动态解耦的思想可以扩展到其他模态或多模态交互中，例如对语言指令进行稳态和瞬态部分的分解。</li>
+<li><strong>更精细的缓存管理</strong>：可以探索分层或基于内容的缓存策略，超越当前基于时间的门控机制。</li>
+<li><strong>基准的演进</strong>：LIBERO-Memory基准的设计启发了如何构建更能体现代理认知能力（如记忆、规划）的评估任务，未来可向更复杂的长期规划任务扩展。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对Vision-Language-Action模型在长时域任务中面临的核心问题：有限上下文难以建模时间依赖，以及二次注意力复杂度导致推理低效。提出SD-VLA框架，通过静态-动态解耦技术，将视觉输入分离为多级静态和动态令牌，保留静态令牌单一副本跨帧以压缩上下文长度，并利用轻量级重缓存门重用KV缓存以实现高效更新。实验表明，在新长时域基准上成功率绝对提升39.8%，在SimplerEnv基准上增益3.9%，推理速度相比基础VLA模型加快2.26倍。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.03983" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

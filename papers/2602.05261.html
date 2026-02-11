@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Length-Unbiased Sequence Policy Optimization: Revealing and Controlling Response Length Variation in RLVR - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Computation and Language (cs.CL)</span>
+      <h1>Length-Unbiased Sequence Policy Optimization: Revealing and Controlling Response Length Variation in RLVR</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.05261" target="_blank" rel="noreferrer">2602.05261</a></span>
+        <span>作者: Liu, Fanfan, Yin, Youyang, Shi, Peng, Yang, Siqi, Zeng, Zhixiong, Qiu, Haibo</span>
+        <span>日期: 2026/02/05</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在大型语言模型（LLM）和视觉语言模型（VLM）的训练中，基于可验证奖励的强化学习（RLVR）已成为提升复杂任务推理能力的关键技术。其中，Group Relative Policy Optimization (GRPO) 及其改进版 Group Sequence Policy Optimization (GSPO) 是当前的主流方法。GRPO 在 MoE 模型训练中存在因重要性采样不当导致的不稳定性问题，而 GSPO 通过采用序列级的重要性权重解决了稳定性问题。然而，这两种方法的目标函数均存在对响应长度的偏差（Length Bias）：在 GRPO 中，对轨迹内所有 token 的贡献取平均，导致模型对短的正确响应给予更大的梯度更新，而对长的错误响应惩罚更轻；GSPO 不仅继承了此偏差，其序列级裁剪（sequence-level clipping）和 Clip-Higher 机制进一步加剧了正负样本 token 的不平衡，使得训练过程中模型倾向于生成越来越短的响应，即出现“响应长度塌缩”问题，严重损害了模型的探索和推理能力。</p>
+<p>本文针对 RLVR 训练中因目标函数设计缺陷导致的响应长度偏差这一具体痛点，通过深入分析 GRPO 和 GSPO 目标函数的构成，揭示了其内在的长度偏好机制。核心思路是：通过一个简单而有效的修改——将每个序列的损失按其自身长度进行缩放，从而提出 Length-Unbiased Sequence Policy Optimization (LUSPO) 算法，以消除 GSPO 中的长度偏差，稳定训练过程并提升性能。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文首先对 GRPO 和 GSPO 的目标函数进行了理论分析。GRPO 的目标函数（公式1）对每个轨迹内 token 的损失取平均（除以 |y_i|），这导致了长度偏差：长响应中每个 token 的贡献被稀释，短响应中每个 token 的贡献被放大。GSPO 的目标函数（公式4）虽然使用了序列级重要性权重 s_i(θ)（公式6），但其梯度（公式9）中仍然包含对 token 梯度求和后的平均操作（即 1/|y_i| ∑_{t} ∇_θ log π_θ），因此未能解决长度偏差问题。此外，GSPO 的序列级裁剪和 Clip-Higher 操作在实践中导致了远超 token 级裁剪的 token 裁剪比例，且负样本 token 被裁剪得更多，间接使得单步梯度由正样本主导，加剧了模型生成短响应的趋势。</p>
+<p><img src="https://arxiv.org/html/2602.05261v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：在严格控制实验设置下，GRPO 和 GSPO 训练 Qwen2.5-VL-7B-Instruct 时的响应长度曲线。GRPO 诱导模型生成长响应，而 GSPO 导致模型在训练中逐渐缩短响应长度，直观展示了 GSPO 的长度塌缩问题。</p>
+</blockquote>
+<p>为了解决上述问题，本文提出了 LUSPO 算法。其核心创新在于对 GSPO 目标函数进行了一个关键修改：将每个序列的损失乘以该序列自身的长度 |y_i|。LUSPO 的优化目标如公式7所示：<br>𝒥<em>LUSPO(θ) = 𝔼 [ 1/G ∑</em>{i=1}^G min( s_i(θ) Â_i, clip( s_i(θ), 1-ε, 1+ε) Â_i ) · |y_i| ]<br>其中，优势估计 Â_i 和重要性比率 s_i(θ) 的定义与 GSPO 完全相同。</p>
+<p>通过梯度分析可以清晰地看到 LUSPO 如何消除偏差。在忽略裁剪的情况下，LUSPO 的梯度（公式8）最终形式为：<br>∇<em>θ𝒥_LUSPO(θ) = 𝔼 [ 1/G ∑</em>{i=1}^G ( π_θ(y_i|x)/π_θ_old(y_i|x) )^{1/|y_i|} Â<em>i ∑</em>{t=1}^{|y_i|} ∇<em>θ log π_θ(y_i,t|x, y_i,&lt;t) ]<br>而 GSPO 的梯度（公式9）为：<br>∇_θ𝒥_GSPO(θ) = 𝔼 [ 1/G ∑</em>{i=1}^G ( π_θ(y_i|x)/π_θ_old(y_i|x) )^{1/|y_i|} Â<em>i (1/|y_i|) ∑</em>{t=1}^{|y_i|} ∇_θ log π_θ(y_i,t|x, y_i,&lt;t) ]<br>对比两者，LUSPO 的梯度中移除了对 token 梯度求和后的平均操作（即消去了 1/|y_i| 项），使得每个序列的总梯度贡献不再因其长度而被稀释或放大，从而实现了对响应长度的无偏优化。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：为验证方法的通用性，实验涵盖了稠密模型（Qwen2.5-7B-Base）、MoE 模型（Qwen3-30B-A3B-Instruct）以及视觉语言模型（Qwen2.5-VL-7B-Instruct）。训练数据集包括 DAPO-MATH-17K（文本数学）和 ViRL39K（多模态 STEM）。奖励函数由准确性奖励（0/1）、格式奖励（0/0.5）和过长惩罚奖励三部分构成。对比的基线方法为 GRPO 和 GSPO。</p>
+<p><strong>主要结果</strong>：<br>在文本推理基准（AMC23, AIME24, AIME25, MATH500）上，LUSPO 显著超越 GSPO。</p>
+<p><img src="https://arxiv.org/html/2602.05261v1/x7.png" alt="文本结果"></p>
+<blockquote>
+<p><strong>表2</strong>：LUSPO 在文本推理基准上全面超越 GSPO。例如，Qwen2.5-7B-Base 在 AIME24 上提升 2.9%，平均提升 4.0%；Qwen3-30B-A3B-Instruct 在 AIME24 上提升 6.9%，在 AIME25 上大幅提升 17.1%。</p>
+</blockquote>
+<p>在多模态推理基准（MathVista-mini, MathVision 等）上，LUSPO 同样表现最佳。</p>
+<p><img src="https://arxiv.org/html/2602.05261v1/x8.png" alt="多模态结果"></p>
+<blockquote>
+<p><strong>表3</strong>：LUSPO 在多模态基准上的平均性能优于 GRPO 和 GSPO，尤其在 WeMath 和 LogicVista 上相比 GSPO 分别有 5.1% 和 6.0% 的显著提升。</p>
+</blockquote>
+<p><strong>训练动态分析</strong>：<br><img src="https://arxiv.org/html/2602.05261v1/x4.png" alt="响应长度曲线"></p>
+<blockquote>
+<p><strong>图4</strong>：训练过程中，LUSPO 的响应长度增长显著快于 GSPO，并有效防止了 VL 模型中的长度塌缩（图4c）。验证集平均响应长度（表4）显示 LUSPO 生成长度约为 GSPO 的 1.5 倍。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.05261v1/x5.png" alt="准确奖励曲线"></p>
+<blockquote>
+<p><strong>图5</strong>：在相同训练步数下，LUSPO 获得的准确性奖励始终高于 GSPO，表明其更有效的学习过程。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.05261v1/x6.png" alt="验证集性能曲线"></p>
+<blockquote>
+<p><strong>图6</strong>：在 AIME24 验证集上的 avg@32 分数显示，LUSPO 不仅在训练奖励上更高，其泛化性能也显著优于 GSPO。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br><img src="https://arxiv.org/html/2602.05261v1/x12.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>表5</strong>：即使在不会导致长度塌缩的数据集组合（ViRL39k + DAPO-MATH-17k）上训练，LUSPO 相比 GSPO 在多数多模态基准上仍有提升（平均 +2.3%），证明了其稳健性和普遍有效性。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献有三点：1) 对主流 RLVR 算法 GRPO 和 GSPO 的目标函数进行了深入理论分析，阐明了其内在的响应长度偏差产生机制；2) 提出了 LUSPO 算法，通过对 GSPO 损失函数进行简单的长度缩放，原则性地消除了长度偏差；3) 在稠密模型、MoE 模型、文本和多模态场景下进行了广泛实验，验证了 LUSPO 在提升性能、加速响应长度增长、稳定训练方面的有效性和通用性。</p>
+<p>论文自身提到的局限性主要隐含在实验设置中，即主要聚焦于数学和科学推理相关的数据集和任务进行验证。虽然展示了强大的泛化能力，但在更广泛、多样化的任务领域（如创意写作、开放式对话）上的表现仍需进一步探索。</p>
+<p>本研究对后续工作的启示在于：首先，它强调了 RLVR 算法设计细节（如梯度计算中的归一化方式）对模型行为（如输出长度）可能产生的重大且非预期的影响，提醒研究者需仔细审视目标函数的潜在偏差。其次，LUSPO 提供了一种简洁而强大的修正范式，表明通过对现有方法进行精准的、有理论依据的微调，即可解决关键问题并取得显著收益，这为未来 RLVR 算法的改进提供了思路。最后，研究证实了维持足够响应长度对于模型探索和复杂推理能力的重要性，这可能会推动更多关于如何平衡长度控制与内容质量的研究。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对RLVR训练中响应长度变化模式差异大、现有算法存在长度偏差的问题，提出了长度无偏序列策略优化（LUSPO）方法。该方法通过修正GSPO算法损失函数中的长度偏差，使其对响应长度无偏，从而解决了响应长度崩溃问题。实验在数学与多模态推理基准上进行，结果表明LUSPO相比GRPO、GSPO等现有方法性能更优，成为一种新的先进优化策略。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.05261" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
