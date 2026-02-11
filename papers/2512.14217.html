@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DRAW2ACT: Turning Depth-Encoded Trajectories into Robotic Demonstration Videos - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>DRAW2ACT: Turning Depth-Encoded Trajectories into Robotic Demonstration Videos</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.14217" target="_blank" rel="noreferrer">2512.14217</a></span>
+        <span>作者: Gitta Kutyniok Team</span>
+        <span>日期: 2025-12-16</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>视频扩散模型已成为具身智能领域强大的世界模拟器和数据增强源。然而，面向通用视频合成的模型通常依赖自然语言提示，这种条件在描述精细的机器人运动或操作轨迹时缺乏精确性。为了提升可控性，近期工作开始探索以轨迹为条件的视频生成，例如Tora、DragAnything和FreeTraj等方法。但这些方法大多依赖于2D轨迹或单一模态条件，而机器人手臂的运动本质上是三维的，这使得纯2D引导不足以产生可控且一致的机器人演示。像LeviTor等方法虽然向整合3D信息迈进了一步，但在应用于机器人演示时，往往缺乏显式的动作控制，导致手臂与物体间的交互不一致。因此，在生成视频中实现精确的3D轨迹控制，同时保持物体和交互的一致性，是当前视频生成模型面临的开放挑战。</p>
+<p>本文针对上述痛点，提出了一种新的视角：从输入轨迹中提取多个互补的正交表征（深度、语义、形状和运动），并将它们注入扩散模型，以增强其轨迹跟随能力。核心思路是：1）融合深度编码的3D轨迹、高级语义DINOv2物体特征和像素坐标增强的文本提示；2）联合生成空间对齐的RGB和深度视频，利用深度监督和跨模态注意力提升时空一致性；3）基于生成的多模态视频训练策略模型以回归机器人关节控制命令。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Draw2Act是一个条件多模态潜在扩散模型（LDM），旨在合成给定初始帧、物体掩码、文本提示和物体3D轨迹序列的机器人操作视频。其整体目标是将轨迹的多种互补表征注入扩散变换器（DiT），以精细控制生成过程。</p>
+<p><img src="https://arxiv.org/html/2512.14217v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图0</strong>：Draw2Act模型架构概览。从输入轨迹中提取多种表征（DINOv2物体级特征、像素坐标增强的文本提示以及叠加了深度感知轨迹的参考图像）。DINOv2特征通过专门的融合层注入每个DiT块。为了实现多模态输出生成，将参考帧、RGB帧和深度帧在时间维度上拼接，并用相同的补丁嵌入模块处理。</p>
+</blockquote>
+<p><strong>整体流程与输入输出</strong>：模型输入包括：包含任务相关物体的初始帧 I、指定被操作物体的二值掩码 M、用户定义的文本提示 c，以及物体轨迹序列 q = {(x_i, y_i, d_i)}，其中 (x, y) 是相对于图像原点的像素坐标，d 是每帧的相对深度值。输出是 N 帧的逼真操作视频 V（RGB）及其对应的深度视频 V_depth。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><p><strong>轨迹表征编码</strong>：模型从输入轨迹中提取三种互补表征 D = {z0_ref, y_dino, y_c}。</p>
+<ul>
+<li>**参考图像潜在编码 (z0_ref)**：在第一帧 I0 上绘制颜色编码的深度感知轨迹（起点、终点和轨迹线），编码成潜在特征 z0_ref ∈ R^{16×1×h×w}，并与视频潜在特征 z 在时间维度拼接，为去噪网络提供深度和运动信号。</li>
+<li>**DINOv2物体特征序列 (y_dino)**：从初始帧中裁剪出目标物体区域，提取其DINOv2特征。该特征被传播到轨迹 q 定义的每个对应位置，形成特征图，再经过时间插值压缩以匹配潜在空间维度，最终得到 y_dino ∈ R^{1024×n×h×w}。这一表征编码了物体的语义、形状和运动信息。</li>
+<li>**坐标增强文本提示 (y_c)**：文本提示被详细增强，包含机器人、物体和目标点的像素坐标（例如，“位于蓝点(x_robot, y_robot)的机械臂移动到红点(x_obj, y_obj)处的物体，将其拾起，然后移动到绿点(x_des, y_des)”）。该提示通过T5编码为特征向量 y_c。</li>
+</ul>
+</li>
+<li><p><strong>控制注入模块</strong>：专门设计用于将DINOv2特征 y_dino 注入DiT主干。首先对 y_dino 进行时空下采样以匹配补丁嵌入后的潜在特征维度。然后通过一个融合块，利用门控机制有选择地调制DINOv2特征，再通过LayerNorm稳定输出，最后以残差方式与Transformer的隐藏状态 h 融合。公式为：h&#39; = h + LayerNorm(y_dino ⊙ G) ⊙ (y_dino ⊙ G)，其中 G = σ(W_g y_dino + b_g) 是Sigmoid门控掩码。</p>
+</li>
+<li><p><strong>多模态生成</strong>：模型同时生成RGB和深度视频。深度视频由Video Depth Anything估计得到。在训练时，RGB和深度视频使用同一个预训练的3D因果VAE进行编码，然后在时间维度（而非通道维度）上拼接，形成一个长的输入序列。这使得模型能够通过自注意力机制跨模态捕获互补信息，公式化为：D_θ((z ∥ z_depth); σ, {z0_ref, y_dino, y_c})。这种设计利用深度监督来施加约束，从而提升生成视频的质量。</p>
+</li>
+<li><p><strong>多模态策略模型</strong>：如图1右侧所示，一个独立的策略模型利用生成的RGB和深度视频来回归机器人关节状态。RGB和深度潜在特征分别经过空间和时间Transformer处理，然后通过一个交叉注意力块交换信息，最后相加并通过一个基于ResNet的解码器来预测夹爪状态和关节角度。</p>
+</li>
+</ol>
+<p><strong>创新点</strong>：与现有依赖单一轨迹表征（如2D坐标或分割掩码）的方法相比，Draw2Act的核心创新在于<strong>多表征融合</strong>与<strong>RGB-D联合生成</strong>。通过深度感知3D轨迹、物体级语义特征和坐标增强文本的协同作用，实现了对运动、外观和几何的更精细、更全面的控制。同时，联合生成深度视频并通过跨模态注意力进行约束，显著增强了生成结果的时空一致性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>数据集</strong>：使用了三个机器人手臂数据集：BridgeData V2 (WidowX)、Berkeley Autolab (UR5) 以及MuJoCo模拟器中的Franka Panda数据集，共约50.6K个视频。</li>
+<li><strong>Baseline方法</strong>：对比了四种先进的轨迹控制视频生成方法：LeviTor、Tora、MotionCtrl和DragAnything。</li>
+<li><strong>评估指标</strong>：<ol>
+<li><strong>视频质量</strong>：使用VBench-2.0评估运动平滑度（Mot.Smth.）、背景一致性（Bg.Cons.）、主体一致性（Subj.Cons.）和时间闪烁（Tem.Fli.）。</li>
+<li><strong>轨迹精度</strong>：计算输入轨迹与生成视频中提取轨迹之间的平均L1距离（Object Traj. Error）。</li>
+<li><strong>任务成功率</strong>：在模拟器数据集上，通过策略模型执行生成视频对应的动作，评估任务完成成功率。</li>
+<li><strong>深度视频质量</strong>：使用LPIPS、SSIM、PSNR和FVD比较生成的深度视频与从生成RGB视频推断出的深度图。</li>
+</ol>
+</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>如表I所示，Draw2Act在所有数据集和评估指标上均优于基线方法。在轨迹精度方面，在Bridge V2数据集上，轨迹误差从最佳基线Tora的35.67显著降低至25.30。在模拟器数据集上，Draw2Act取得了最高的任务成功率65.2%，远高于其他方法（Tora: 36.8%, DragAnything: 31.2%）。</p>
+<p><img src="https://arxiv.org/html/2512.14217v1/x2.png" alt="定性对比"></p>
+<blockquote>
+<p><strong>图2</strong>：与基线方法的定性比较。基线方法常出现物体消失（如TORA）、几何畸变（如MotionCtrl中的瓶子）或轨迹跟随错误（如第一行任务中所有基线均未正确移动寿司）。Draw2Act能可靠地跟随给定轨迹，同时保持物体几何形状的一致性。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：<br>表II和表III展示了逐步添加不同控制信号的消融研究结果。</p>
+<p><img src="https://arxiv.org/html/2512.14217v1/x3.png" alt="Bridge消融"></p>
+<blockquote>
+<p><strong>图3</strong>：在Bridge数据集上不同控制方法的定性消融研究。仅使用第一帧或点帧条件会导致控制粗糙（如错误操作黄布或物体未移动）。2D和深度轨迹提升了精度，但仍可能出现物体外观不一致（如罐子）。结合深度轨迹和DINOv2特征的方法在轨迹跟随和物体一致性上表现最佳。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.14217v1/x4.png" alt="模拟器消融"></p>
+<blockquote>
+<p><strong>图4</strong>：在模拟器数据集上的定性消融研究。使用第一帧条件时，碗未被移动到指定位置；使用点帧条件时，机器臂和物体都发生严重变形。而完整方法（3D轨迹+DINOv2）能正确完成任务并保持形状。</p>
+</blockquote>
+<p>从“仅第一帧RGB”到“第一帧多模态（RGB+Depth）”、“点图像”、“2D轨迹图像”、“3D（深度）轨迹图像”，最后到“3D轨迹+DINOv2”，视频质量指标和轨迹精度逐步提升。例如，在Bridge V2数据集上，轨迹误差从仅用第一帧的39.88逐步降至完整方法的25.30。同时，联合生成深度视频（多模态）相比仅生成RGB视频，在所有设置下都能改善视频质量。任务成功率（表III）也呈现相同趋势，从仅用RGB第一帧的15.4%提升至完整方法的65.2%，证明了每个组件对于下游策略学习的重要性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>多表征轨迹条件视频生成</strong>：提出了一个集成深度感知3D轨迹、高级语义DINOv2特征和坐标增强文本提示的视频扩散模型框架，实现了对机器人操作视频更精细、更全面的控制。</li>
+<li><strong>物体中心特征控制与注入机制</strong>：设计了从第一帧提取物体DINOv2特征并沿轨迹传播的方法，以及专门的门控融合模块，有效编码并注入了物体的语义、形状和运动信息，提升了生成视频中物体的几何与运动一致性。</li>
+<li><strong>RGB-D视频联合生成与多模态策略</strong>：通过时间拼接和共享编码器实现RGB与深度视频的协同生成，利用深度监督和跨模态注意力提升了时空一致性；并提出了基于生成的多模态视频的策略模型，显著提高了下游机器人操作任务的成功率。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身指出，当前模型不支持长时程可控性，且仅支持对场景中的单个物体进行轨迹控制。</p>
+<p><strong>后续启示</strong>：本文的工作为可控机器人视频生成指明了一个方向：即通过融合多维度、互补的控制信号来逼近真实物理世界的复杂性。未来的研究可以在此基础上，探索如何实现对多个物体并行或顺序的轨迹控制，以支持更复杂的多物体操作任务，以及如何扩展模型以生成更长、更复杂的操作序列。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人演示视频生成中可控性不足的问题，提出Draw2Act框架。其核心方法是利用深度感知的轨迹条件视频生成，从输入轨迹提取深度、语义、形状和运动等多维正交表示，并注入扩散模型；同时联合生成空间对齐的RGB与深度视频，通过跨模态注意力机制和深度监督增强时空一致性。实验表明，该方法在Bridge V2等基准测试中，相比现有基线取得了更高的视觉保真度、一致性以及机器人操作成功率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.14217" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

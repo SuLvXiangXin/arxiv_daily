@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Online Estimation and Manipulation of Articulated Objects - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Online Estimation and Manipulation of Articulated Objects</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.01438" target="_blank" rel="noreferrer">2601.01438</a></span>
+        <span>作者: Sethu Vijayakumar Team</span>
+        <span>日期: 2026-01-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>服务机器人要操作铰接物体（如柜门、抽屉），需理解其关节模型。当前主流方法分为两类：一类是基于深度学习的视觉预测方法，能从点云预测物体运动仿射，提供先验，但通常是离线、单次推断，无法在线更新，且在视觉模糊（如外观相同的柜门）时不可靠；另一类是基于交互感知的概率估计方法，通过在交互中观察物体运动来估计关节参数，但这类方法严重依赖良好的初始猜测才能开始运动。本文针对“如何在没有先验知识的情况下，对视觉上模糊的物体进行鲁棒的在线估计和操作”这一痛点，提出将学习到的视觉先验与交互过程中的本体感知（运动学和力觉）融合到一个基于螺丝理论和因子图的解析模型中。核心思路是：机器人先利用视觉预测获得关节的初始估计，然后在抓取并操作物体时，通过因子图在线融合力觉和运动学测量，持续更新关节估计，实现闭环估计与控制。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文方法的核心是一个因子图框架，用于在线估计螺丝关节参数 ξ（恒定）和关节构型 θ(t)。状态变量为 𝒙(𝑡) ≔ [ξ, θ(𝑡)] ∈ ℝ⁷，同时联合估计铰接部件位姿 𝐓_𝙰 和基础部件位姿 𝐓_𝙱。框架融合三类测量：初始点云 𝒫、来自腕部六维力/力矩传感器的力测量 ℱ、以及来自机器人关节编码器的运动学测量 𝒦。</p>
+<p><img src="https://arxiv.org/html/2601.01438v1/x1.png" alt="方法框架图"></p>
+<blockquote>
+<p><strong>图2</strong>：因子图示意。白色大圆圈表示待估计变量：螺丝参数 ξ、关节构型 θ(t)、以及部件位姿 𝐓_𝙰(t) 和 𝐓_𝙱(t)。彩色小圆圈表示不同的测量因子：紫色为视觉仿射因子，绿色为关节因子，蓝色为力因子，橙色为运动学因子。该图展示了三个时间步，初始视觉因子作为 ξ 的先验。</p>
+</blockquote>
+<p>核心模块是四个因子：</p>
+<ol>
+<li><p>**不确定性感知的视觉仿射因子 (𝐫_𝒫)**：本文改进了之前的视觉预测网络。网络以带部件掩码的点云为输入，为铰接部件上的每个点预测一个表示微小运动方向的流向量 𝐟̂_i 及其不确定性 𝐮̂_i（通过协方差矩阵 𝚺̂_i 表示）。创新之处在于，不再将网络输出转换为单一的 ξ 测量，而是为每个点构建一个残差（公式19）：𝐫_𝒫_i = 𝐓_𝙱𝙰(ξ̂, θ) 𝐩_i − 𝐟̂_i − 𝐩_i。该残差直接约束预测的流向量应与基于当前估计的螺丝变换所计算出的运动一致，并利用网络预测的不确定性 𝚺̂_i 作为权重。这使得因子图能够利用视觉预测，同时理解其置信度。</p>
+</li>
+<li><p>**关节因子 (𝐫_𝒜)**：该因子强制铰接部件与基础部件之间的位姿关系必须符合螺丝运动学模型：𝐓_𝙰 = 𝐓_𝙱 𝐓_𝙱𝙰(ξ, θ)。其残差定义为两者之间的位姿差。</p>
+</li>
+<li><p>**力因子 (𝐫_ℱ)**：这是本文引入的新因子，用于解决滑动门等初始拉动方向错误的问题。当机器人沿错误方向施力时，物体不运动，无法获得运动学测量。力因子利用在接触点处，力方向应与运动方向共线的原理（即力不做功的方向是禁止运动的）。通过力测量可以约束螺丝运动中的线性速度分量 𝐯，从而校正估计。例如，对于滑动门，力因子可以强制运动方向垂直于初始错误拉力的方向。</p>
+</li>
+<li><p>**运动学因子 (𝐫_𝒦)**：该因子将机器人末端执行器的位姿测量（通过正向运动学获得）与估计的铰接部件位姿 𝐓_𝙰 联系起来，其残差为两者之间的位姿差。</p>
+</li>
+</ol>
+<p>整个系统运行时，首先通过视觉网络获得带不确定性的流预测，并初始化因子图。机器人尝试沿预测方向操作物体。在交互过程中，力因子和运动学因子被异步地添加到因子图中。因子图持续优化，输出关节参数和部件位姿的最优估计，并用于生成后续的控制指令，形成闭环。</p>
+<p><img src="https://arxiv.org/html/2601.01438v1/figures/network_output.png" alt="网络输出示例"></p>
+<blockquote>
+<p><strong>图3</strong>：神经网络仿射预测示例（来自先前工作）。左图为棱柱关节（抽屉），右图为旋转关节（门）。红色短线为网络预测的流向量。红黄大箭头表示通过平面拟合得到的关节预测。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.01438v1/x2.png" alt="不确定性预测示例"></p>
+<blockquote>
+<p><strong>图4</strong>：本文新的带不确定性的仿射预测输出示例。左：模拟滑动门渲染图。中左：带有真实流向量（红线）的点云。中右：网络预测的流向量（红线），网络误将其预测为旋转关节。右：每个流向量的协方差可视化，X方向不确定性最高，Y次之，Z最低。这种不确定性信息将被力因子利用。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：方法在模拟环境（SAPIEN仿真器）和真实机器人平台（Franka Emika Panda机械臂，配备腕部FT传感器和Intel RealSense D435i相机）上进行了验证。使用了包含各种橱柜和抽屉的模拟数据集进行网络训练和定量评估。</p>
+<p><strong>对比方法</strong>：主要与作者先前的工作 Buchanan et al. (2024) 进行对比，后者是本文方法的基础但缺少不确定性感知的视觉因子和力因子。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>模拟实验</strong>：定量分析了关节参数估计误差。结果表明，引入力因子后，对于滑动门这类挑战性案例，估计误差显著降低。</li>
+<li><strong>真实机器人实验 - 系统验证</strong>：机器人成功实现了对未知铰接物体的闭环估计与操作。在一个具有四个视觉相同、但开启方式不同（两扇旋转门、一扇抽屉式门、一扇滑动门）的柜子（图1）上，机器人成功打开了所有门。<br>   <img src="https://arxiv.org/html/2601.01438v1/figures/robot-experiments_TL.png" alt="机器人实验：左上柜门"><blockquote>
+<p><strong>图10</strong>：机器人成功打开左上旋转门。<br>   <img src="https://arxiv.org/html/2601.01438v1/figures/robot-experiments_TR.png" alt="机器人实验：右上柜门"><br><strong>图11</strong>：机器人成功打开右上旋转门。<br>   <img src="https://arxiv.org/html/2601.01438v1/figures/robot-experiments_BL.png" alt="机器人实验：左下柜门"><br><strong>图12</strong>：机器人成功打开左下抽屉式门。<br>   <img src="https://arxiv.org/html/2601.01438v1/figures/robot-experiments_BR.png" alt="机器人实验：右下柜门"><br><strong>图13</strong>：机器人成功打开右下滑动门。这是先前方法无法完成的。</p>
+</blockquote>
+</li>
+<li><strong>成功率</strong>：在真实的硬件实验中，机器人自主打开未知铰接物体的成功率达到 **75%**。</li>
+<li><strong>估计性能</strong>：实验曲线显示，在操作过程中，关节参数（如旋转轴方向、平移方向）的估计误差随着交互的进行而迅速收敛。<br>   <img src="https://arxiv.org/html/2601.01438v1/figures/robot-experiment-plots/combined-2x2.png" alt="估计误差曲线"><blockquote>
+<p><strong>图14</strong>：真实机器人实验中，对不同类型柜门进行估计时，螺丝参数误差随时间（或构型）的变化曲线。所有曲线均显示误差在交互过程中下降并收敛，验证了在线估计的有效性。</p>
+</blockquote>
+</li>
+</ol>
+<p><strong>消融实验</strong>：论文通过实验验证了各组件贡献。力因子的引入使得打开滑动门成为可能。不确定性感知的视觉因子相比固定不确定性的先验因子，提高了估计的鲁棒性和准确性。完整的多模态（视觉+力觉+运动学）融合框架相比仅使用视觉或仅使用部分传感的模式，性能最优。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个用于铰接物体在线估计的因子图框架，创新性地将<strong>不确定性感知的深度学习视觉仿射预测</strong>与<strong>本体感知（运动学与力觉）</strong> 融合到一个统一的解析（螺丝理论）模型中。</li>
+<li>引入了<strong>力传感因子</strong>，使机器人能够从力反馈中推断关节约束，从而成功操作如滑动门等视觉模糊且初始预测可能错误的物体。</li>
+<li>实现了完整的系统集成与<strong>闭环的共享自主控制</strong>，并在真实的机器人实验中进行了广泛验证，成功打开了视觉上完全相同的多种铰接柜门，将成功率提升至75%。</li>
+</ol>
+<p><strong>局限性</strong>：论文假设物体仅由两个部件通过单个关节连接。此外，视觉因子仅在交互开始时添加一次，而非持续在线更新。</p>
+<p><strong>启示</strong>：本工作展示了多模态传感融合与在线更新对于机器人操作模糊环境物体的关键价值。它指明了将数据驱动的学习（提供先验和不确定性）与基于模型的概率估计（提供可解释性和在线适应性）相结合的有效途径。后续研究可探索多关节物体估计、动态添加视觉观测、以及更复杂的接触力学模型。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文研究服务机器人对未知关节物体的在线估计与操作问题。提出一种融合视觉先验与本体感知的因子图估计方法：首先通过视觉预测关节类型，随后在操作过程中基于螺旋理论分析模型，实时融合运动学与力传感数据更新估计。实验表明，该方法能使机器人在真实场景中自主打开未见过的抽屉，对未知关节物体的操作成功率达到75%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.01438" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

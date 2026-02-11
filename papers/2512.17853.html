@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AnyTask: an Automated Task and Data Generation Framework for Advancing Sim-to-Real Policy Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>AnyTask: an Automated Task and Data Generation Framework for Advancing Sim-to-Real Policy Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.17853" target="_blank" rel="noreferrer">2512.17853</a></span>
+        <span>作者: Karl Schmeckpeper Team</span>
+        <span>日期: 2025-12-19</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人通用学习长期以来受限于数据：在现实世界中收集大规模、多样化、高质量的交互数据成本高昂。仿真已成为扩展数据收集的一种有前景的途径，但相关的任务设计、面向任务的场景生成、专家演示合成以及仿真到真实的迁移，仍然需要大量的人工努力。现有利用基础模型进行机器人仿真的工作，要么在任务设计和演示收集上仍需大量人力，要么难以实现仿真到真实的迁移。本文旨在解决这一系列挑战，提出了AnyTask框架，其核心思路是利用大规模并行的GPU仿真引擎与基础模型（LLMs/VLMs）相结合，从高级文本目标出发，自动化地生成多样化、高质量的场景、任务和专家演示数据，以训练可直接部署到真实世界的视觉运动策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>AnyTask框架旨在从对象数据库和高级任务类型（如“抓放”）出发，自动生成文本任务描述和对应的可执行仿真代码，进而通过智能体高效收集数据。</p>
+<p><img src="https://arxiv.org/html/2512.17853v2/figures_and_tables/draft_main_figure.jpg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：AnyTask整体框架概览。首先从对象数据库和高级任务生成模拟操作任务；然后流程自动提出任务描述、生成仿真代码，并利用ViPR、ViPR-RL和ViPR-Eureka等智能体在大规模并行仿真环境中高效收集数据；应用在线领域随机化以确保场景和视觉观测的多样性；最后使用模拟数据训练策略并零样本迁移到现实世界。</p>
+</blockquote>
+<p>框架包含几个核心组件：</p>
+<ol>
+<li><strong>对象数据库</strong>：存储物体的名称、颜色、纹理、材料、边界框、关节信息等元数据。通过渲染物体并从多视角使用VLM（GPT-4o）进行视觉属性标注，结合Sentence-T5-Large生成句子级嵌入，并使用faiss建立索引以支持自然语言查询。</li>
+<li><strong>任务生成器</strong>：接收高级任务和场景信息（如任务族、机器人规格、工作空间约束），在LLM的帮助下提出具体任务和涉及的对象。支持两种变体：基于对象的任务生成（先采样对象，再生成任务）和基于任务的对象提议（先由LLM提议适合任务的对象，再从数据库检索）。</li>
+<li><strong>仿真生成器</strong>：将任务描述和对象作为输入，生成可在IsaacLab仿真器中执行的代码。LLM被要求生成五个关键函数的代码：<code>reset()</code>（随机化场景）、<code>check_success()</code>（定义任务目标条件）、<code>compose_state()</code>（为RL策略提供状态表示）、<code>reward_function()</code>（RL奖励函数初始版本）和<code>scripted_policy()</code>（定义用于数据收集的专家策略）。为确保一致性，先生成<code>check_success()</code>，并用它来指导其他函数的生成。</li>
+<li><strong>密集标注系统</strong>：通过API <code>log_step()</code>，允许LLM在策略执行期间随时调用，并利用其他环境API决定包含哪些信息，从而自动生成总结动作前后环境状态的密集自然语言标注，为后续策略优化提供支持。</li>
+</ol>
+<p>为合成多样化任务的机器人轨迹，论文引入了三种基于任务与运动规划（TAMP）和强化学习（RL）的AnyTask智能体：</p>
+<ul>
+<li><strong>ViPR</strong>：一种新颖的TAMP智能体，采用<strong>V</strong>LM-<strong>i</strong>n-the-loop <strong>P</strong>arallel <strong>R</strong>efinement（VLM在环并行细化）。它首先使用LLM生成调用参数化技能API（如<code>move_to</code>, <code>grasp</code>）的任务-运动计划（Python程序）。为解决LLM空间理解不精确的问题，ViPR并行执行K个计划 rollout，收集视频和密集标注，由VLM评估每个episode并给出反馈和成功/失败判断。聚合这些判断后，VLM会迭代地细化原始计划，输出更新后的计划。</li>
+<li><strong>ViPR-Eureka</strong>：一种改进的RL智能体，结合了生成的密集奖励和<strong>LLM引导的接触采样</strong>。其核心创新是一个基于网格的接触采样算法，用于生成高质量的抓取候选。该算法在物体网格上采样三角形，通过重心插值确定接触位置，并在由VLM或用户提供的预定义夹爪z轴周围随机采样夹爪方向，同时采用拒绝采样机制排除碰撞或无效的候选。</li>
+<li><strong>ViPR-RL</strong>：一种混合TAMP+RL方法。对于每个子任务，它使用运动规划将夹爪移动到由上述抓取采样器采样的目标物体部件附近，然后调用训练好的基于物体的RL技能。RL技能使用LLM生成的简单成功检查器作为奖励函数进行训练。</li>
+</ul>
+<p>在基础设施方面，AnyTask采用<strong>两阶段数据收集管道</strong>：第一阶段，智能体在不渲染的情况下尝试任务，仅存储成功轨迹的模拟器状态；第二阶段，重放保存的状态并启用渲染，以生成包含RGB图像、点云等用于模仿学习的完整数据集。这种方法（尤其是动作重放）显著提高了数据生成吞吐量。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验评估了代码生成质量、任务多样性、数据生成成功率与速度、仿真及真实世界策略性能。</p>
+<p><strong>代码可运行性</strong>：测试了不同LLM生成仿真代码的能力。使用改进后的提示，o3-mini达到了96%的代码可运行率（表II）。常见错误多发生在需要处理物体放置和空间变换逻辑的<code>reset()</code>函数中。</p>
+<p><strong>任务多样性</strong>：使用self-BLEU分数评估生成任务描述的多样性。在对比RoboGen、RLBench和GenSim2的系统中，AnyTask的self-BLEU分数最低（0.352），表明其任务描述多样性最佳（表III）。</p>
+<p><strong>智能体生成演示的成功率</strong>：在超过400个涵盖提起、抓放、推、堆叠、开抽屉等任务上测试。如表IV所示，不同智能体擅长不同任务：ViPR（经细化后）在多步骤任务上表现最佳（如堆叠任务成功率44%）；ViPR-Eureka在接触丰富的任务（如推任务成功率60%）和抓取复杂物体上表现出色；ViPR-RL在需要混合行为（如开抽屉成功率33%）的任务上有效。智能体集合能解决最多任务（例如，抓放任务集合成功率87%）。</p>
+<p><img src="https://arxiv.org/html/2512.17853v2/figures_and_tables/vipr_improvement.png" alt="ViPR改进"></p>
+<blockquote>
+<p><strong>图3</strong>：ViPR细化效果。在301个任务上，使用ViPR（VLM在环并行细化）平均带来了12.8%的成功率提升。</p>
+</blockquote>
+<p><strong>接触采样的有效性</strong>：消融实验表明，引入LLM引导的接触采样后，ViPR-Eureka在多个任务族上的平均数据收集成功率从37%提升至57%（表V）。</p>
+<p><strong>数据生成速度</strong>：两阶段记录管道效率很高。在一个约36分钟的L4 GPU会话中，收集了500条演示。动作重放显著提升了数据生成吞吐量，在困难任务上（使用4个相机时）带来了四倍的加速（图4）。</p>
+<p><img src="https://arxiv.org/html/2512.17853v2/x2.png" alt="动作重放加速"></p>
+<blockquote>
+<p><strong>图4</strong>：动作重放实现了更快的数据收集，在挑战性任务上尤其明显。</p>
+</blockquote>
+<p><strong>仿真策略性能</strong>：使用生成的数据训练扩散策略并在仿真中评估（表VI）。ViPR数据在涉及长视野或多步骤过程的任务上表现更好，而包含RL的数据收集方法在涉及持续接触的任务上表现相等或更好。ViPR-Eureka数据虽然收集效率高，但更难提炼成行为克隆策略（例如在抓放任务中，它可能通过推物体而非抓取来“黑客”奖励系统）。</p>
+<p><strong>真实世界策略迁移</strong>：使用ViPR为8个真实世界任务（图5）各收集1000条专家演示，训练基于点云的3D扩散策略，并零样本部署到实体机器人。</p>
+<p><img src="https://arxiv.org/html/2512.17853v2/x3.png" alt="零样本仿真到真实评估"></p>
+<blockquote>
+<p><strong>图5</strong>：零样本仿真到真实策略评估的八个任务示例，包括抓放、开抽屉、接触式推动和长视野操作。</p>
+</blockquote>
+<p>在真实机器人上，面对新颖的物体姿态，策略在抓放、开抽屉、接触式推动和长视野操作等一系列任务上取得了平均44%的成功率（图5），证明了框架在实现仿真到真实迁移上的有效性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) 提出了AnyTask，一个利用大规模并行GPU仿真和基础模型、从高级目标自动化生成机器人任务与数据的端到端框架，极大减少了人工干预；2) 引入了ViPR、ViPR-Eureka和ViPR-RL三种智能体，能够基于AnyTask大规模自动生成专家演示，并探索了TAMP、RL及其混合方法在不同任务上的适用性；3) 通过仿真和真实的实验验证了生成数据的效用，成功实现了策略的零样本仿真到真实迁移，并指出了领域随机化和策略架构等因素的关键作用。</p>
+<p>论文自身提到的局限性包括：代码生成严重依赖LLM的能力和提示工程；需要预先存在高质量的物体资产库来构建对象数据库；尽管智能体集合能解决更多任务，但仍有部分生成的任务无法被任何智能体解决。</p>
+<p>这项工作为自动化机器人数据生成和仿真到真实学习提供了新范式。其对后续研究的启示在于：展示了基础模型与大规模并行仿真结合的巨大潜力；强调了针对不同任务类型设计专用数据生成策略（如TAMP与RL结合）的重要性；其两阶段数据收集、密集标注、接触采样等基础设施设计，为构建更高效、鲁棒的自动化机器人学习系统提供了参考。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>论文提出AnyTask框架，旨在解决机器人学习中仿真到现实策略学习的数据收集成本高、任务设计人力密集的核心问题。该框架结合大规模并行GPU仿真与基础模型，自动生成多样化操作任务和机器人数据，关键技术包括ViPR（VLM辅助并行细化的任务规划）、ViPR-Eureka（生成密集奖励的强化学习）和ViPR-RL（稀疏奖励下的混合规划学习）三个代理。实验结果表明，基于生成数据训练的行为克隆策略可直接部署到真实机器人，在拾放、开抽屉等任务中泛化至新物体姿态，平均成功率达到44%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.17853" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

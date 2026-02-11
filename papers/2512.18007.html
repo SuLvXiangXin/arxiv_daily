@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Robotic VLA Benefits from Joint Learning with Motion Image Diffusion - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Robotic VLA Benefits from Joint Learning with Motion Image Diffusion</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.18007" target="_blank" rel="noreferrer">2512.18007</a></span>
+        <span>作者: Juan Carlos Niebles Team</span>
+        <span>日期: 2025-12-19</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）模型已成为通用机器人操作的强大范式，通过将多模态观察和指令直接映射到动作来模仿专家轨迹。然而，这些模型通常缺乏对未来动力学的显式推理机制，这限制了它们对动作决策的推理能力，并最终制约了其在新任务、场景和具身形态上的泛化能力。近期工作试图通过引入关键点轨迹、光流等显式运动表征，或将VLA与预测未来图像的世界模型相结合来增强运动感知。但前者往往仅在预训练阶段使用运动信号，未与策略优化紧密耦合；而后者侧重于场景外观的预测，而非运动动力学的学习，且难以无缝集成到现有高性能VLA框架中。</p>
+<p>本文针对VLA模型缺乏显式运动推理能力的痛点，提出了一种新颖的联合学习策略。其核心思路是：在保持标准VLA推理流程不变的前提下，通过一个并行的运动头（基于扩散Transformer）预测基于光流的运动图像，并与动作头共享VLM主干进行联合训练，从而将密集的像素级动态监督与稀疏的动作监督相结合，增强模型的运动推理能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法旨在通过联合学习运动图像扩散来增强预训练的VLA模型。整体框架在标准VLA架构上增加了一个并行的运动头，形成双头设计。</p>
+<p><img src="https://arxiv.org/html/2512.18007v1/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图1</strong>：方法整体概览。本文提出的联合学习策略无缝地扩展了现有的大规模VLA模型，通过一个共享的VLM主干同时学习运动和动作，增强了运动推理能力，并保持了与标准VLA模型相同的推理流程。</p>
+</blockquote>
+<p>具体而言，给定视觉观测 o_t 和语言指令 l，共享的VLM主干编码得到多模态表示 z_t。在此基础上，两个并行的头部进行预测：</p>
+<ol>
+<li><strong>动作头</strong> π_θ：与原始VLA一致，预测未来k步的动作块 A_t ∈ R^{k×d}。</li>
+<li><strong>运动头</strong> μ_ψ：实现为一个轻量级的扩散Transformer（DiT），预测潜在运动令牌 m_t。这些令牌随后通过一个冻结的VAE解码器 f 解码为运动图像 M_t。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2512.18007v1/x2.png" alt="框架细节"></p>
+<blockquote>
+<p><strong>图2</strong>：联合学习VLA与运动图像扩散的框架概述。展示了共享的VLM主干、并行的动作头和运动头（DiT），以及运动令牌通过冻结VAE解码为运动图像的过程。</p>
+</blockquote>
+<p>两个头部采用相同的流匹配（Flow Matching）损失进行联合训练。对于目标信号 X_t（可以是动作 A_t 或运动令牌 m_t），通过线性插值在干净目标与高斯噪声之间构建噪声样本 X_t^τ。每个头部的目标是预测一个速度场 v(X_t^τ, o_t)，以匹配目标流 u(X_t^τ|X_t)。总损失为动作损失和运动损失之和：L = L_action + L_motion。通过共享主干耦合这两个互补的目标，模型能够学习更具时间一致性和物理基础的表征。</p>
+<p><strong>关键技术细节与创新点</strong>：</p>
+<ul>
+<li><strong>运动监督信号</strong>：采用基于图像的光流（流图像）作为运动表征。使用RAFT计算训练数据中观测对 (o_t, o_t+k) 之间的真实光流，并将其转换为3通道RGB图像，以确保与输入观测的空间分辨率一致，并与动作块的时间窗口对齐。</li>
+<li><strong>潜在空间扩散</strong>：为避免直接在高维光流图像上扩散带来的计算成本和不稳定问题，方法使用一个冻结的VAE将光流图像编码到紧凑的潜在空间（尺寸为 4 × H/8 × W/8）。运动头学习生成这些运动令牌，这降低了空间冗余、稳定了去噪过程，并使得运动头能与动作头在共享主干下进行一致的联合优化。</li>
+<li><strong>训练流程</strong>：采用两阶段训练。首先，在DROID数据集上使用光流对运动头进行预训练（热身阶段），仅优化运动头参数。随后，解冻整个架构（VAE编解码器仍冻结），对两个头部进行联合训练。</li>
+<li><strong>核心创新</strong>：与现有方法相比，本文的创新在于提出了一个<strong>可无缝集成到现有VLA中的并行双头架构</strong>，并论证了<strong>基于光流的运动图像</strong>作为一种密集、物理基础且与控制对齐的监督信号，在联合学习中的有效性。该方法不改动推理路径，保持了实时效率。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在仿真和真实世界环境中进行，使用了两个主要基准测试：</p>
+<ol>
+<li><strong>LIBERO基准</strong>：包含Spatial, Object, Goal, Long四个测试套件的大规模仿真操纵基准，每个套件10个任务，评估空间泛化、物体级迁移、语义目标理解和长视野规划能力。</li>
+<li><strong>RoboTwin基准</strong>：专注于双臂操纵的基准，包含7个任务，并在简单（域内）和困难（域随机化）两种设置下进行评估。</li>
+</ol>
+<p>对比的基线方法包括：Diffusion Policy (DP)、Octo、OpenVLA、SpatialVLA、WorldVLA、FlowVLA、π0-FAST以及π系列模型（π0, π0.5）。</p>
+<p><strong>关键实验结果</strong>：<br>在LIBERO基准上（表1），本文方法进一步提升了π系列模型的性能。使用联合学习的π0.5模型取得了97.5%的平均成功率，在最具挑战性的Long套件上比原始π0.5提升了4.0%。联合学习的π0模型也达到了94.7%的平均成功率，优于大多数基线。</p>
+<table>
+<thead>
+<tr>
+<th align="left">Model</th>
+<th align="left">Spatial</th>
+<th align="left">Object</th>
+<th align="left">Goal</th>
+<th align="left">Long</th>
+<th align="left">Average</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">...</td>
+<td align="left">...</td>
+<td align="left">...</td>
+<td align="left">...</td>
+<td align="left">...</td>
+<td align="left">...</td>
+</tr>
+<tr>
+<td align="left"><strong>π₀.₅</strong> [ intelligence2025pi_ ]</td>
+<td align="left">98.8%</td>
+<td align="left">98.2%</td>
+<td align="left">98.0%</td>
+<td align="left">92.4%</td>
+<td align="left">96.9%</td>
+</tr>
+<tr>
+<td align="left"><strong>Ours (π₀.₅)</strong></td>
+<td align="left"><strong>99.4%</strong></td>
+<td align="left"><strong>99.2%</strong></td>
+<td align="left"><strong>96.0%</strong></td>
+<td align="left"><strong>96.2%</strong></td>
+<td align="left"><strong>97.5%</strong></td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表1</strong>：LIBERO基准上各套件的成功率。本文的联合学习策略使π₀和π₀.5模型取得了领先性能。</p>
+</blockquote>
+<p>在RoboTwin基准上（表2），基于π0的本文方法在简单设置下平均成功率达到58.0%，比原始π0提升了12.9%，并且在大多数任务上优于其他模仿学习基线，展示了更强的鲁棒性和对长视野时序协调任务的改进。</p>
+<p><strong>消融实验与分析</strong>：<br>本文深入比较了不同运动表征对联合学习效果的影响。</p>
+<p><img src="https://arxiv.org/html/2512.18007v1/x3.png" alt="不同运动表示比较"></p>
+<blockquote>
+<p><strong>图3</strong>：不同运动表征概览。比较了语言描述、未来图像和运动图像（光流）三种用于联合学习的运动表示。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="left">Model</th>
+<th align="left">Supervision</th>
+<th align="left">Average</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left"><strong>π₀.₅</strong></td>
+<td align="left">action only</td>
+<td align="left">96.9%</td>
+</tr>
+<tr>
+<td align="left"><strong>π₀.₅</strong></td>
+<td align="left">action + language</td>
+<td align="left">95.1%</td>
+</tr>
+<tr>
+<td align="left"><strong>π₀.₅</strong></td>
+<td align="left">action + future image</td>
+<td align="left">95.7%</td>
+</tr>
+<tr>
+<td align="left"><strong>π₀.₅</strong></td>
+<td align="left"><strong>action + motion image</strong></td>
+<td align="left"><strong>97.5%</strong></td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表3</strong>：在LIBERO基准上探究不同运动表征的联合学习效果。运动图像（光流）取得了最佳的整体性能。</p>
+</blockquote>
+<p>结果表明（表3），<strong>基于光流的运动图像</strong>效果最佳。语言描述因其离散、低频的特性，监督效率低下；未来图像侧重于全局外观，在长视野任务上性能下降。而运动图像提供了密集且物理基础的表征，能直接关联观测运动与机器人控制。</p>
+<p><img src="https://arxiv.org/html/2512.18007v1/x4.png" alt="定性可视化"></p>
+<blockquote>
+<p><strong>图4</strong>： rollout过程中预测的动作和运动的定性可视化。顶行显示观测帧及动作头预测的机器人动作，底行可视化运动头预测的光流图像。可见预测的运动与底层物理动力学（如抓取、敲击、平移）吻合良好。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.18007v1/x5.png" alt="数据效率"></p>
+<blockquote>
+<p><strong>图5</strong>：在LIBERO-10上的数据效率展示。联合学习运动图像扩散比仅学习动作具有更高的数据效率。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.18007v1/x6.png" alt="真实世界实验"></p>
+<blockquote>
+<p><strong>图6</strong>：真实世界实验。(a) 实验设置。(b) 办公室场景下桌面任务的评估结果。联合学习方法相比原始π0在真实世界任务上获得了23%的性能提升。</p>
+</blockquote>
+<p>此外，定性可视化（图4）显示模型能预测出时空一致的光流场，与任务物理动态对齐。数据效率实验（图5）表明联合学习提高了样本效率。真实世界实验（图6）验证了方法的有效性，在桌面操纵任务上相比原始π0获得了23%的性能提升。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li>提出了一种<strong>联合学习运动图像扩散的策略</strong>，能够无缝增强VLA模型的运动推理能力，同时保持其实时推理效率。</li>
+<li>设计了<strong>运动图像扩散</strong>的具体实现，采用DiT在潜在空间预测光流，为动作学习提供了互补的密集像素级动态监督，并论证了光流是联合动作-运动学习最有效的表征。</li>
+<li>通过大量实验验证了方法的有效性，显著提升了π系列VLA模型在LIBERO（97.5%）和RoboTwin（提升23%）基准上的性能，并系统分析了不同运动表征的影响。</li>
+</ol>
+<p>论文提及的局限性主要在于对高质量光流计算（如RAFT）的依赖，这可能需要额外的计算或标注。此外，运动头的训练需要额外的数据（如DROID）进行预热。</p>
+<p>本文的启示在于，为数据驱动的机器人策略学习提供<strong>密集且物理对齐的辅助监督信号</strong>（如光流），是一种提升模型时序理解与泛化能力的有效途径。这种“并行头、联合训、单头推”的设计范式，为在不牺牲部署效率的前提下增强现有基础模型提供了可借鉴的思路。未来工作可探索更高效或自监督的运动表征学习方式，并进一步验证该方法在其他机器人平台和任务上的泛化性。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人视觉-语言-动作模型缺乏预测性运动推理能力的问题，提出一种联合学习运动图像扩散的新策略。方法采用双头设计：动作头预测动作序列，运动头作为扩散变换器预测基于光流的未来运动图像，两者通过共享的VLM骨干进行联合训练，使模型能耦合运动知识与控制表示。实验表明，该方法将π-series VLA在LIBERO基准上的成功率提升至97.5%，在RoboTwin基准上达58.0%，真实世界性能提高23%，显著增强了VLA的运动推理能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.18007" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

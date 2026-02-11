@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>A Pragmatic VLA Foundation Model - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>A Pragmatic VLA Foundation Model</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.18692" target="_blank" rel="noreferrer">2601.18692</a></span>
+        <span>作者: Kecheng Zheng Team</span>
+        <span>日期: 2026-01-26</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作基础模型已成为机器人执行多样化语言指令操控任务的一种有前景的方法。主流方法通常采用强大的预训练视觉语言模型作为语义主干，并结合基于扩散的动作头进行训练。尽管进展显著，但社区仍缺乏关于真实机器人性能如何随大规模预训练数据集扩展的全面实证研究，同时也缺少一个能够高效处理海量数据以进行此类扩展评估的优化训练代码库。因此，一个亟待探究的根本问题是：VLA模型在真实世界环境下，其性能究竟如何随海量真实机器人数据扩展？</p>
+<p>本文针对上述痛点，旨在通过大规模真实世界数据预训练，实证研究VLA模型的扩展规律，并构建一个高效、可部署的实用系统。本文的核心思路是：收集来自9种流行双手机器人平台约2万小时的真实世界数据，预训练一个名为LingBot-VLA的VLA基础模型，并通过一个高度优化的代码库实现高效训练，最后在包含100个任务的基准上进行跨3个机器人平台的系统评估，以验证其性能和泛化能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LingBot-VLA的整体框架旨在利用预训练的视觉语言表示，并将其与动作生成能力相结合。模型采用混合Transformer架构，将预训练的VLM与一个名为“动作专家”的初始动作生成模块集成。</p>
+<p><img src="https://arxiv.org/html/2601.18692v1/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图1</strong>：LingBot-VLA 概述。我们扩展了从真实世界收集的双手机器人数据进行预训练。LingBot-VLA可以轻松高效地迁移到下游任务。此外，我们在三个机器人实体上进行了系统评估，证明了我们模型的明显优势。</p>
+</blockquote>
+<p><strong>核心架构与流程</strong>：多视角操作图像和相关任务指令通过VLM统一编码，为后续动作生成建立多模态条件。同时，机器人的本体感知序列（初始状态和动作块）被输入到动作专家中，用于预测动作生成。模型采用流匹配进行连续动作建模，以实现流畅平滑的机器人控制。</p>
+<p>具体而言，在时间戳t的联合建模序列是观测条件O_t和动作块A_t的拼接。观测上下文定义为 O_t = [I_t^1, I_t^2, I_t^3, T_t, s_t]，其中包含了来自双手机器人三视角操作图像、任务指令T_t和机器人状态s_t的令牌。对应的动作序列为 A_t = [a_t, a_{t+1}, ..., a_{t+T-1}]，其中T是动作块长度（预训练阶段设为50）。训练目标是通过条件流匹配来表征条件分布 p(A_t | O_t)。</p>
+<p><strong>训练目标</strong>：对于流时间步s ∈ [0,1]，通过在高斯噪声ϵ和真实动作A_t之间进行线性插值定义概率路径，得到中间动作 A_{t,s} = s A_t + (1-s)ϵ。动作专家v_θ通过最小化流匹配目标进行训练：ℒ_FM = 𝔼_{s, A_t, ϵ} || v_θ(A_{t,s}, O_t, s) - (A_t - ϵ) ||^2。</p>
+<p><strong>注意力机制</strong>：遵循π0的方法，对联合序列[O_t, A_t]实施分块因果注意力。序列被划分为三个功能块：[I_t^1, I_t^2, I_t^3, T_t]、[s_t]和[a_t, a_{t+1}, ..., a_{t+T-1}]。在这些块之间应用因果掩码，使得每个块中的令牌只能关注自身及前面块中的令牌。而同一块内的所有令牌采用双向注意力，可以相互关注。这种配置确保动作专家可以利用所有可用的观测知识，同时防止未来动作令牌的信息泄漏到当前观测表示中。</p>
+<p><strong>空间感知增强</strong>：为了显式捕捉操控环境中的空间感知并进一步提高机器人执行的鲁棒性，采用了一种视觉蒸馏方法。具体为，应用对应于三视角操作图像的可学习查询[Q_t^1, Q_t^2, Q_t^3]。为了整合深度信息，这些查询由VLM处理，然后与来自LingBot-Depth模型的深度令牌[D_t^1, D_t^2, D_t^3]对齐。通过最小化蒸馏损失ℒ_distill = 𝔼_{Q_t} | Proj(Q_t) - D_t | 来实现对齐，其中Proj(·)是一个用于维度对齐的投影层。</p>
+<p><strong>训练效率优化</strong>：由于动作数据本质上是高频的，建立一个包含分布式训练和算子优化的高效流程至关重要。优化方法包括：1）<strong>分布式策略</strong>：采用完全分片数据并行（FSDP）来分片优化器状态、模型参数和梯度，以最小化内存占用。受VeOmni中提出的混合分片数据并行（HSDP）方法启发，为动作专家模块构建特定的“分片组”，以减轻过度参数分片带来的通信开销。同时实施混合精度策略。2）<strong>算子级优化</strong>：利用FlexAttention来优化稀疏注意力计算。此外，应用算子融合（通过torch.compile）以减少内核启动开销并最大化内存带宽利用率。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在GM-100基准上进行大规模实证评估，该基准包含100个多样化的操控任务。评估涉及3个不同的商业机器人平台：AgileX、Agibot G1和Galaxea R1Pro。每个任务在每个平台上收集130条经过质量筛选的专家演示用于训练。评估时，每个模型在每对任务-机器人组合上进行15次试验。</p>
+<p><strong>对比方法</strong>：与三个先进的VLA模型进行对比：π0.5、GR00T N1.6和WALL-OSS。所有模型均使用相同的后训练流程从公开的预训练检查点进行微调，以确保公平比较。</p>
+<p><strong>评估指标</strong>：采用<strong>成功率</strong>（SR：在3分钟时限内完成所有任务步骤的试验比例）和<strong>进度分数</strong>（PS：通过顺序子任务检查点跟踪部分任务完成度）。</p>
+<p><img src="https://arxiv.org/html/2601.18692v1/x2.png" alt="预训练数据集"></p>
+<blockquote>
+<p><strong>图2</strong>：LingBot-VLA使用的预训练数据集可视化。展示了来自9种不同双手机器人平台的数据。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.18692v1/x3.png" alt="原子动作词云"></p>
+<blockquote>
+<p><strong>图3</strong>：（a）预训练数据集和（b）基准测试中原子动作的词云。测试集中约50%的原子动作未出现在训练集前100个最常见动作中，体现了测试集的多样性和评估的严谨性。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：如表1所示，在两个指标上，不带深度信息的LingBot-VLA在所有平台上均显著优于WALL-OSS和GR00T N1.6。通过结合基于深度的空间信息，带深度信息的LingBot-VLA在三个实体上的平均SR比π0.5提高了4.28%，PS提高了7.76%。值得注意的是，GR00T N1.6在Galaxea R1Pro平台上达到了与π0.5相当的性能，这归因于其预训练阶段大量包含了该平台的数据，表明预训练可以显著增强在下游结构相似任务上的性能。</p>
+<p><strong>模拟基准结果</strong>：在RoboTwin 2.0模拟基准的50个任务上，LingBot-VLA也显示出显著优势。在干净场景和随机化场景中，不带深度信息的模型比π0.5基线分别绝对提高了3.76%和8.58%的成功率；整合深度信息后，提升幅度分别达到5.82%和9.92%。</p>
+<p><img src="https://arxiv.org/html/2601.18692v1/x4.png" alt="训练吞吐量分析"></p>
+<blockquote>
+<p><strong>图4</strong>：（a）Qwen2.5-VL-3B-π 和（b）PaliGemma-3B-pt-224-π 模型的训练吞吐量分析。与StarVLA、Dexbotic和OpenPI等基线代码库相比，本文的代码库在两种模型设置下均实现了最快的训练速度，并且扩展效率接近理论线性极限。</p>
+</blockquote>
+<p><strong>消融实验 - 数据扩展规律</strong>：为评估预训练数据的扩展规律，在基准测试的子集上进行了实验。如图5所示，当预训练数据时长从3,000小时增加到20,000小时时，进度分数和成功率均呈现一致的上升趋势。这表明扩展真实世界预训练数据有助于提高模型在多样化下游任务和实体上的泛化能力和性能，且即使在2万小时规模下也未观察到饱和迹象。</p>
+<p><img src="https://arxiv.org/html/2601.18692v1/x5.png" alt="数据扩展行为"></p>
+<blockquote>
+<p><strong>图5</strong>：跨数据集规模的扩展行为。随着数据规模的增加，我们的模型在成功率和进度分数方面表现出扩展规律。</p>
+</blockquote>
+<p><strong>消融实验 - 数据效率分析</strong>：如图6所示，在Agibot G1平台上，仅使用每个任务80条演示的有限预算进行后训练，LingBot-VLA在进度分数和成功率上均优于使用完整130条演示集的π0.5。随着后训练数据量的增加，LingBot-VLA与π0.5之间的性能差距显著扩大，证明了其卓越的数据效率和可扩展性。</p>
+<p><img src="https://arxiv.org/html/2601.18692v1/x6.png" alt="数据效率"></p>
+<blockquote>
+<p><strong>图6</strong>：LingBot-VLA后训练的数据效率。使用有限的后训练数据，LingBot-VLA的性能优于使用更多数据的基线模型π0.5。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1）<strong>大规模真实数据预训练</strong>：首次系统实证研究了VLA模型在约2万小时真实世界、多机器人数据上的扩展规律，证明了性能随数据规模持续提升且未见饱和。2）<strong>高效训练代码库</strong>：开发了一个高度优化的开源代码库，实现了每GPU每秒261个样本的高吞吐量，相比现有方案有1.5~2.8倍的加速，并具备优秀的扩展效率。3）<strong>系统化评估基准</strong>：在包含3个平台、100个任务的大规模真实世界基准上进行了严格评估，为VLA模型的可靠评测设立了新标准。</p>
+<p>论文自身提到的局限性可能在于数据收集仍依赖于特定机器人平台，且泛化评估虽跨平台但平台类型仍属双手机器人范畴。对后续研究的启示在于：大规模、高质量的真实世界数据是提升VLA模型性能的关键；训练效率的优化对于降低大规模机器人学习的成本至关重要；社区需要建立更统一、更 rigorous 的评估协议以公平比较不同方法。本文开源代码、模型和基准数据，将有力推动机器人学习领域的开放科学发展。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出了LingBot-VLA，一个实用的视觉-语言-动作基础模型，旨在解决VLA模型在真实机器人任务中泛化性、成本效率与部署可行性的核心问题。关键技术包括利用来自9种双臂机器人的约20,000小时真实数据进行预训练，并构建了高效代码库，训练吞吐量达每秒261样本/GPU，速度提升1.5-2.8倍。通过在3个机器人平台上对100项任务进行大规模评估，模型性能显著优于基线，且实验表明随着预训练数据量从3,000小时增至20,000小时，下游任务成功率持续提升，未出现饱和迹象，证明了其强大的性能与泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.18692" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

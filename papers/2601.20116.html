@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>In-Context Reinforcement Learning From Suboptimal Historical Data - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>In-Context Reinforcement Learning From Suboptimal Historical Data</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.20116" target="_blank" rel="noreferrer">2601.20116</a></span>
+        <span>作者: Vahid Tarokh Team</span>
+        <span>日期: 2026-01-27</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>Transformer模型因其强大的上下文学习（ICL）能力在诸多领域取得了显著成功。受此启发，研究者开始探索使用自回归Transformer进行上下文强化学习（ICRL）。在这一设定下，模型首先在一个由来自不同RL任务的轨迹组成的离线数据集上进行预训练，之后固定该模型并将其用于为新的RL任务生成动作策略。现有方法如算法蒸馏（AD）和决策预训练Transformer（DPT）展示了出色的ICRL能力，但它们对预训练数据集有严格要求：AD需要捕捉RL算法从随机策略到近乎最优策略的整个学习过程的数据；DPT则需要访问最优策略来生成最优动作标签。这极大地限制了ICRL的实际可行性，因为获取高质量数据（如最优策略的轨迹）成本高昂。</p>
+<p>本文针对“仅使用次优历史数据进行ICRL”这一具体痛点展开研究。次优轨迹（例如来自非专家用户的历史数据）更易于收集，但直接模仿这些数据（即行为克隆）会导致策略性能次优。本文提出了一种新视角：通过一个加权模仿学习框架，引导次优策略向最优策略靠拢。核心思路是：首先训练一个基于Transformer的优势函数估计器来评估次优行为策略下各动作的优劣，然后利用估计的优势值作为权重，对策略Transformer进行加权最大似然估计训练，从而赋予离线数据集中优势高的动作更大的学习权重。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的框架称为决策重要性Transformer（DIT）。其整体流程分为两个阶段：1）训练一个基于Transformer的优势函数估计器；2）使用该估计器计算权重，训练一个加权的策略Transformer。</p>
+<p><img src="https://arxiv.org/html/2601.20116v1/Figures/schema_1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1（d）</strong>：DIT框架示意图。在缺乏最优动作标签的情况下，DIT使用轨迹内的状态-动作对作为查询状态和伪最优动作标签，并采用加权预训练目标，其中权重基于动作的最优性，由一个基于Transformer的上下文优势函数估计器估计。</p>
+</blockquote>
+<p><strong>核心模块一：上下文优势函数估计器</strong>。由于ICRL中权重函数必须是任务依赖的，且预训练数据集中每个任务可能只有少量轨迹，直接估计优势函数具有挑战性。DIT采用两个独立的Transformer模型分别估计状态价值函数 $V$ 和动作价值函数 $Q$，进而计算优势 $A = Q - V$。具体地，对于预训练数据集中的每个状态-动作对 $(s_h^i, a_h^i)$，价值估计器 $V_\phi$ 和 $Q_\zeta$ 的输入分别是该轨迹中之前步骤的历史信息 $D_V^{i,h} = {(s_j^i, G_j^i)}<em>{j=1}^{h-1}$ 和 $D_Q^{i,h} = {(s_j^i, a_j^i, G_j^i)}</em>{j=1}^{h-1}$，其中 $G_j^i$ 是从步骤 $j$ 开始的折扣累积奖励，作为价值估计的噪声标签。训练损失 $L_A(\phi, \zeta)$ 包含三部分：回归损失 $L_{reg}$（使估计值接近 $G_h^i$），以及基于贝尔曼方程的一致性正则化项 $L_V^B$ 和 $L_Q^B$，以提升估计的准确性。</p>
+<p><strong>核心模块二：加权策略训练</strong>。获得优势估计 $\widehat{A}<em>b$ 后，DIT通过加权最大似然估计（WMLE）训练策略Transformer $T_\theta$。损失函数为：$\theta^* = \arg\min</em>{\theta} -\frac{1}{mH}\sum_{i,h} w_h^i \log T_\theta(a_h^i | s_h^i, D^i)$，其中权重 $w_h^i = \exp(\widehat{A}_b(s_h^i, a_h^i | \tau^i) / \eta)$，$\eta$ 是温度超参数。该权重机制使得优势高的动作在训练中获得更高的重要性，从而引导策略超越次优的行为策略。</p>
+<p><strong>理论依据与创新点</strong>：论文从理论上证明了该加权目标等价于优化一个同时最大化期望优势（提升性能）和最小化与行为策略KL散度（防止策略崩溃）的目标。与标准RL中的优势加权回归不同，DIT的创新在于将其推广到ICRL的多任务设定，并解决了关键挑战——如何为来自未知、多样化任务的次优轨迹进行任务依赖的优势估计。DIT通过训练一个能够跨任务插值的Transformer优势估计器来实现这一点。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在两类问题上进行：1) Bandit问题（如Beta-Bernoulli Bandit）；2) 马尔可夫决策过程（MDP）问题，包括两个稀疏奖励的导航任务（Pointmaze-Umaze, Antmaze-Umaze）和两个复杂的连续控制任务（HalfCheetah, Walker2d）。预训练数据集由来自不同任务实例的轨迹构成，且行为策略是次优的（例如，在MDP任务中使用未完全收敛的SAC策略收集数据）。对比的基线方法包括：DPT（使用最优标签）、AD、行为克隆（BC）以及标准的离线RL算法（如IQL、CQL）。</p>
+<p><strong>关键实验结果</strong>：<br><img src="https://arxiv.org/html/2601.20116v1/Figures/LB_with_dpt.jpg" alt="Bandit结果"></p>
+<blockquote>
+<p><strong>图2</strong>：在Beta-Bernoulli Bandit问题上的在线学习性能。DIT（红色）的性能与理论最优的Thompson Sampling算法（绿色）相当，并显著优于行为克隆（BC，蓝色）和AD（紫色）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.20116v1/x1.png" alt="MDP在线结果1"></p>
+<blockquote>
+<p><strong>图3</strong>：在Pointmaze-Umaze导航任务上的在线评估性能。DIT（红色）在仅使用次优数据预训练的情况下，其性能与使用最优数据预训练的DPT（绿色）相当，并远超BC（蓝色）和AD（紫色）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.20116v1/x3.png" alt="MDP在线结果2"></p>
+<blockquote>
+<p><strong>图4</strong>：在Antmaze-Umaze任务上的在线评估性能。DIT（红色）再次展示了与DPT（绿色）相当的性能，显著优于其他基线。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.20116v1/x5.png" alt="MDP离线结果1"></p>
+<blockquote>
+<p><strong>图5</strong>：在HalfCheetah任务上的离线评估性能（归一化得分）。当预训练数据质量从“中等”下降到“差”时，DIT（红色）的性能下降幅度远小于BC（蓝色），展现了其从次优数据中提取有效信息的鲁棒性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.20116v1/x7.png" alt="MDP离线结果2"></p>
+<blockquote>
+<p><strong>图6</strong>：在Walker2d任务上的离线评估性能。DIT（红色）在不同质量的数据集上 consistently 优于BC（蓝色），并且在中等质量数据上接近DPT（绿色）的性能。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br><img src="https://arxiv.org/html/2601.20116v1/x9.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图7</strong>：消融研究结果。移除优势加权（“DIT (w/o AW)”，即退化为BC）或移除优势估计中的贝尔曼一致性损失（“DIT (w/o Bellman)”）都会导致性能显著下降，验证了DIT两个核心组件的必要性。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 提出了DIT框架，首次实现了仅使用次优历史数据进行有效的上下文强化学习（ICRL），大幅降低了数据收集门槛。2) 提供了理论分析，证明了加权训练目标能带来策略改进保证。3) 通过大量实验验证了DIT在Bandit和MDP问题上的卓越性能，尤其在数据次优时表现突出，甚至能与需要最优标签的DPT相媲美。</p>
+<p><strong>局限性</strong>：论文自身提到的局限性包括：1) 训练两个大型Transformer模型（优势估计器和策略模型）的计算成本较高。2) 策略性能依赖于优势函数估计的质量，在极端稀疏奖励或高随机性环境中估计可能不准确。</p>
+<p><strong>后续启示</strong>：DIT的工作为ICRL的实用化开辟了新路径，表明利用大量易得的次优数据训练通用决策模型是可行的。它启发了后续研究如何设计更高效、更稳健的优势估计器，以及如何将该框架扩展到更广泛的任务分布和更复杂的决策场景中。同时，这项工作也架起了离线RL与ICRL之间的桥梁，展示了如何将离线RL中的策略改进思想（如优势加权）适配到多任务、上下文学习的框架中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文研究上下文强化学习（ICRL）中如何利用次优历史数据学习最优策略的问题。针对离线数据来自次优行为策略导致传统自回归训练性能受限的挑战，提出了决策重要性变换器（DIT）框架。该方法通过训练基于Transformer的价值函数估计行为策略的优势函数，并以此构建权重，采用加权最大似然估计训练策略网络，从而将次优策略向最优方向引导。实验在Bandit和马尔可夫决策过程问题上验证了DIT的有效性，结果表明其在处理次优离线数据时性能显著优于基线方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.20116" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

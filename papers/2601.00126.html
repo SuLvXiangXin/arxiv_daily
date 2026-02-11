@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Compositional Diffusion with Guided Search for Long-Horizon Planning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Compositional Diffusion with Guided Search for Long-Horizon Planning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.00126" target="_blank" rel="noreferrer">2601.00126</a></span>
+        <span>作者: Danfei Xu Team</span>
+        <span>日期: 2026-01-05</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>长序列合成是机器人规划、全景图像生成和长视频生成等领域的核心挑战，需要推理长时程的依赖关系。生成模型，特别是扩散模型，因其强大的多模态数据建模能力，已成为规划的有力工具。然而，获取完整的长序列数据成本高昂，且单一模型难以泛化到超出训练视野的范围。组合生成范式通过组合局部、模块化的生成模型来建模长时程任务分布，提高了数据效率并允许外推。主流方法（如GSC）利用分数平均（score-averaging）将局部分布的模态组合成全局分布。但该方法存在一个关键局限性：当局部分布高度多模态时，组合过程会平均掉不相容的局部模态（称为“模式平均”问题），导致产生的全局计划既局部不可行，也全局不连贯。</p>
+<p>本文针对组合生成中因局部多模态性导致的“模式平均”这一具体痛点，提出了将搜索直接嵌入扩散去噪过程的新视角。其核心思路是：通过在扩散过程中进行基于种群的采样、迭代重采样和基于似然的剪枝，来探索相容的局部模式序列，从而生成全局连贯的长时程计划。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>CDGS是一个结构化的推理时算法，旨在识别能形成有效全局计划的、连贯的局部模式序列。其整体流程是在标准扩散去噪过程的每个时间步内，集成一个引导搜索机制。</p>
+<p><img src="https://arxiv.org/html/2601.00126v2/x4.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图4</strong>：组合扩散与引导搜索。在每个去噪时间步，CDGS通过（i）迭代重采样在重叠处（蓝色）通过平均分数传播信息，以及（ii）基于预测的干净样本（黄色）对具有局部不一致性的候选进行剪枝，来迭代地去噪一批噪声全局计划候选。此过程确保所有局部计划对齐且属于p(y)的高似然区域，从而产生全局连贯的计划。</p>
+</blockquote>
+<p>方法基于因子图对长时程联合分布p(τ)进行贝特近似，将其分解为可重叠的局部分布p(y)的组合。组合扩散采样通过计算全局组合分数（公式3）来实现，该分数是局部因子分数和变量边际分数的加权和。</p>
+<p>CDGS的核心创新在于两个关键组件，它们被集成到每个扩散时间步的采样中：</p>
+<ol>
+<li><strong>迭代重采样（Iterative Resampling）</strong>：用于增强候选计划的全局一致性。标准组合采样中，局部计划独立采样，重叠变量处的信息无法在长距离上传递。CDGS在计算组合分数时（见算法2），进行U次重采样迭代：每次迭代先进行一次去噪步骤，然后对固定的起点和终点进行噪声注入，再执行一次前向加噪步骤。这个过程类似于链式因子图上的信念传播，使每个局部计划y_m的预测能通过重叠变量（y_m ∩ y_{m-1} 和 y_m ∩ y_{m+1}）整合其邻居的信息，从而鼓励整个序列的全局一致性。</li>
+<li><strong>基于似然的剪枝（Likelihood-based Pruning）</strong>：用于移除不连贯的候选计划。其关键洞察是：一个全局计划可行，当且仅当其所有局部转移都可行，即所有局部计划段都应处于局部分布p(y)的高似然区域。由于直接计算扩散模型的似然值计算昂贵，CDGS利用DDIM逆过程（公式4）来近似。它定义了一个平滑度度量g(y^(0))，即沿着逆扩散路径的噪声预测梯度范数之和（公式5）。g(y^(0))值越高，表示该局部样本距离p(y)的最近模式越远，似然越低。全局计划的排名指标J(τ^(0))定义为所有局部段g值的负指数乘积，J值越低表示计划整体可行性越高。</li>
+</ol>
+<p>CDGS的完整流程（算法1）采用了一种类似于交叉熵方法的蒙特卡洛搜索：在每个去噪步t，首先使用包含迭代重采样的组合分数对当前噪声计划τ^(t)进行去噪，得到一批候选τ^(t-1)及其对应的干净估计τ̂_0^(t-1)。然后，根据排名指标J(τ̂_0^(t-1))对这些候选进行排序，保留前K个精英计划，并用它们重新填充候选池以进行下一步的采样。通过在整个去噪过程中重复此过程，CDGS能够逐步筛选出局部可行且全局连贯的计划。</p>
+<p><img src="https://arxiv.org/html/2601.00126v2/x3.png" alt="运行示例"></p>
+<blockquote>
+<p><strong>图3</strong>：运行示例。(a) 一个具有两个可行长时程计划的1D域。(b) 在朴素组合中，采样的计划可能始于顶部而终于底部，导致中间模型对中间变量进行模式平均，产生不可行的转移（红色）。(c) 添加迭代重采样减少了模式平均的频率。(d) 添加剪枝消除了具有不可行y的计划。</p>
+</blockquote>
+<p>与现有方法相比，CDGS的创新点具体体现在：它将经典的搜索思想（种群采样、排序、剪枝）无缝嵌入到扩散模型的迭代去噪框架中，从而在<strong>无需重新训练</strong>的情况下，解决了组合扩散模型固有的模式平均问题，实现了对庞大组合多模态空间的有效探索。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在机器人规划实验中，作者使用<strong>OGBench Maze和Scene任务套件</strong>评估长时程规划性能，包括PointMaze、AntMaze和五个物体操纵任务（Scene）。此外，还在<strong>TAMP（任务与运动规划）任务套件</strong>上评估，涉及钩子抓取、重排推动和重排记忆等复杂任务。CDGS使用Diffuser学习局部计划（最多4秒轨迹）的分布，并在推理时为目标状态组合它们以生成更长的运动计划。</p>
+<p><strong>对比基线</strong>：包括逆强化学习基线（GCBC, GCIVL, GCIQL, HIQL）、生成式基线（Diffuser）以及组合生成基线（GSC, CompDiffuser）。在TAMP任务中，还与随机搜索、基于CEM的STAP、基于LLM/VLM的方法以及需要PDDL领域知识或任务规划的GSC变体进行了比较。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li>在OGBench的“Giant stitch”任务上，CDGS在PointMaze上取得了**82% ± 4%<strong>的成功率，在AntMaze上取得了</strong>84% ± 3%<strong>的成功率，显著优于所有基线（见表1）。在“Scene play”任务上，CDGS取得了</strong>51% ± 2%**的成功率，与最佳基线GCIQL持平，并大幅优于其他生成式和组合式基线。</li>
+<li>在TAMP任务上（见表2），CDGS在无需符号任务规划或PDDL知识的情况下，在“Rearrangement Memory”这种需要记忆和复杂推理的任务上（成功率<strong>0.42</strong>和<strong>0.18</strong>），显著优于需要任务规划先验的GSC（成功率<strong>0.07</strong>和<strong>0.00</strong>）以及基于提示的LLM/VLM方法（成功率<strong>0.0</strong>），展示了其处理复杂混合规划问题的能力。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2601.00126v2/x5.png" alt="结果与可视化"></p>
+<blockquote>
+<p><strong>图5</strong>：左：计划剪枝可视化。当组合采样选择了不可行的模式序列时，会因模式平均产生分布外的转移或状态幻觉。CDGS的剪枝目标确保了去噪过程中只保留所有转移都在分布内的可行计划。右：缩放分析。(c)任务规划成功率随批大小增加而提升，重采样步骤越多增益越大。(d)运动规划成功率随重采样步骤增加而提升，但前提是批大小足够大。</p>
+</blockquote>
+<p><strong>消融实验</strong>：图5右侧的缩放分析展示了CDGS两个核心参数（批大小B和重采样步数U）的影响。结果表明，对于困难的长时程任务（如H=7），增加批大小和重采样步数都能提升任务和运动规划的成功率，且两者存在协同效应。表1和表2中的“Ours w/o PR”（即CDGS without Pruning）结果也表明，移除剪枝组件会导致性能显著下降，验证了该组件的必要性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>CDGS框架</strong>，通过将引导搜索（迭代重采样和基于似然的剪枝）集成到扩散去噪过程中，有效解决了组合生成中的模式平均问题。</li>
+<li>在多个领域（机器人长时程规划、TAMP、全景图像、长视频）验证了CDGS的有效性，其性能达到或超过了需要长时程数据训练或缺乏组合性的基线方法。</li>
+<li>提供了一种<strong>无需重训练</strong>的推理时算法，能够显著提升现有组合扩散模型（如GSC）在复杂多模态任务上的性能。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到CDGS在推理时需要维护一个候选种群并进行多次重采样，这引入了额外的计算开销。此外，算法的性能依赖于批大小（B）、精英数量（K）和重采样步数（U）等超参数，需要根据任务难度进行调整。</p>
+<p><strong>后续启示</strong>：</p>
+<ol>
+<li><strong>生成与搜索的融合</strong>：CDGS展示了将经典搜索策略深度集成到现代生成模型推理流程中的潜力，为处理组合多模态问题提供了新范式。</li>
+<li><strong>高效推理算法</strong>：未来的工作可以探索更高效的近似剪枝策略或自适应调整搜索资源的方法，以降低计算成本。</li>
+<li><strong>领域扩展</strong>：该方法框架的通用性鼓励将其应用于其他需要组合长序列输出的领域，如代码生成、音乐作曲或分层次决策。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对组合生成模型在长时程规划中面临的“模式平均”问题，提出组合扩散引导搜索方法。该方法在扩散去噪过程中嵌入搜索，通过种群采样探索局部模式的多样组合，利用迭代重采样保证全局一致性，并用似然过滤修剪不可行路径。在七个机器人操作任务上，CDGS达到了与真实数据相当的性能，优于缺乏组合性或需长时程训练数据的基线方法，并能泛化至全景图像生成长视频生成领域。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.00126" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

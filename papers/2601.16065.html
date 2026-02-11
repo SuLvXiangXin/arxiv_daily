@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DTP: A Simple yet Effective Distracting Token Pruning Framework for Vision-Language Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>DTP: A Simple yet Effective Distracting Token Pruning Framework for Vision-Language Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.16065" target="_blank" rel="noreferrer">2601.16065</a></span>
+        <span>作者: Jingqun Tang Team</span>
+        <span>日期: 2026-01-22</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>视觉-语言-动作模型通过结合视觉-语言模型的强大感知能力和语言模型的推理能力，能够理解环境并直接输出机器人动作，在机器人操作任务中取得了显著进展。然而，现有的VLA模型在默认情况下，可能会在交叉注意力机制中过度关注与任务无关的图像区域（即“干扰令牌”），这种注意力分散会妨碍模型在每个步骤中生成期望的动作令牌，从而降低任务成功率。当前一些工作试图通过修改输入图像或增加模型组件来缓解视觉噪声，但这些方法要么在输入层面操作，要么需要架构重设计和端到端训练，难以广泛适用于现有VLA系统。</p>
+<p>本文针对VLA模型中普遍存在的“注意力分散”这一具体痛点，提出了一种新的视角：在不改变模型原始架构或增加额外输入的前提下，通过一种即插即用、无需训练的后处理框架，动态检测并剪除这些干扰图像令牌，以修正模型的视觉注意力模式，探索模型在不改变其权重情况下的性能上界。本文的核心思路是：通过分析提示词与图像令牌的相关性来识别任务关键区域，同时分析模型生成动作时的注意力模式，然后基于交集策略，剪除非关键区域中注意力值过高的令牌，从而引导模型聚焦于任务相关信息。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>DTP框架是一个即插即用的后处理方法，包含三个顺序执行的阶段：1）基于相关性的重要区域构建；2）视觉注意力模式构建；3）基于交集的干扰令牌剪除。其输入是原始的视觉令牌序列和提示令牌，输出是经过剪枝、去除了干扰令牌的视觉令牌子集，用于后续的动作生成。</p>
+<p><img src="https://arxiv.org/html/2601.16065v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：DTP方法的详细架构。包含三个主要组件：(a) 重要区域构建：利用选定的Transformer层 C 计算图像与提示令牌之间的相关性得分，形成任务相关的重要区域 G。(b) 视觉注意力模式构建：从所有注意力层创建输出动作令牌到图像令牌的注意力热图 A，并按视觉注意力比例加权。它捕捉模型生成动作时的关注点。(c) 干扰令牌剪除：对于不重要区域中的任何图像令牌，如果其注意力值大于 τ⋅a_m，则被视为干扰令牌并被剪除。</p>
+</blockquote>
+<p><strong>核心模块一：重要区域构建</strong>。该模块旨在从模型内部视角识别与用户指令（提示）最相关的图像区域。对于大多数Transformer-based VLA模型，选取中间层的注意力矩阵，计算每个提示令牌到所有视觉令牌的注意力权重，并在注意力头和选定层上取平均，得到每个视觉令牌的整体相关性热图 R。对于某些特殊架构（如UniVLA），提示令牌不关注图像令牌，则改用嵌入向量的余弦相似度来计算相关性。随后，对热图进行空间偏置（抑制角落伪影并应用高斯平滑），最终选取相关性最高的 top-k 个视觉令牌构成重要区域 G。</p>
+<p><strong>核心模块二：视觉注意力模式构建</strong>。该模块旨在从模型生成视角分析其在输出每一个动作令牌时关注了哪些图像区域。对于模型生成的每个动作令牌 t_j，遍历所有层 l，提取该层中 t_j 指向所有视觉令牌的注意力权重，形成层特定热图 A_j^l。然后将每层的热图按该层总视觉注意力的比例 w^l 进行加权，并跨层求和，得到该动作令牌的最终视觉注意力模式 A_j。这反映了模型生成特定动作时对图像不同部分的关注强度。</p>
+<p><strong>核心模块三：干扰令牌剪除</strong>。这是框架的决策核心。给定重要区域 G 和当前动作生成步骤的视觉注意力模式 A，设 a_m 为重要区域内所有视觉令牌的最大注意力值。对于位于不重要区域 A_u 中的每个视觉令牌 v，如果其注意力值 A_u[v] 超过了经过容忍度因子 τ 缩放后的阈值（即 A_u[v] &gt; τ ⋅ a_m），则该令牌被判定为干扰令牌 d，并将其从当前生成步骤的视觉输入中剪除。τ 是一个可调参数，控制剪除的严格程度：τ 越小，剪除越激进；τ 越大，剪除越保守，当 τ 足够大时，不进行任何剪除。</p>
+<p><strong>创新点</strong>：与需要修改输入或重新训练模型的方法相比，DTP的创新性在于其“即插即用”和“无需训练”的特性。它通过分析模型前向传播过程中的内部信号（注意力和嵌入），动态地、有针对性地移除干扰信息，而非盲目过滤或引入额外模块。这种基于“模型自身行为”进行校正的思路，使其具有良好的模型泛化能力。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：本文在SIMPLER Benchmark和LIBERO Benchmark上评估DTP。使用了三个先进的、架构各异的VLA模型：SpatialVLA（基于Paligemma 2的3B模型，集成3D位置编码）、Nora（基于Qwen2.5-VL-3B，使用FAST动作分词器）和UniVLA（9B的世界模型VLA）。实验平台涉及WidowX机器人和Google机器人。对于每个模型，作者固定一组全局超参数（τ, C, k, σ）用于所有任务，并未针对每个任务进行调优。</p>
+<p><strong>主要结果</strong>：DTP在多个基准测试和模型上均一致地提升了任务成功率。<br>在WidowX机器人任务上（表1），SpatialVLA的平均成功率从29.2%提升至37.5%（相对提升28.4%）；Nora从6.2%提升至11.5%（相对提升近2倍）；本已很强的UniVLA也从68.7%提升至74.0%（相对提升7.7%）。<br>在Google机器人任务上（表2），提升幅度较小但依然一致，SpatialVLA和Nora均获得了1-3%的相对提升。<br>在LIBERO Benchmark上（表3），DTP进一步提升了Nora在所有子任务上的性能，尤其在最具挑战性的LIBERO-10上取得了6.6%的绝对提升。</p>
+<p><img src="https://arxiv.org/html/2601.16065v1/x1.png" alt="结果图表"></p>
+<blockquote>
+<p><strong>图1</strong>：方法概览。左侧为输入（当前视觉观察和自然语言指令）。中间对比了原始VLA模型（上）可能关注任务无关区域导致任务失败，而DTP增强的方法（下）在任务关键区域产生更集中的注意力，从而提高了任务成功率。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.16065v1/spatialvla_tolerance_success_rates.png" alt="性能上界探索"></p>
+<blockquote>
+<p><strong>图4（部分）</strong>：通过调整容忍度参数 τ 探索不同VLA模型的性能上界。虚线表示不使用DTP的基线成功率，实线表示不同 τ 值下DTP的性能。标注了峰值成功率和对应的 τ^。结果表明，通过调整 τ 可以选择最优容忍度水平，从而最大化潜在性能增益。该图证实了存在模型和任务特定的最优 τ 值。</p>
+</blockquote>
+<p><strong>消融实验</strong>：为了验证DTP各组件设计的有效性，论文进行了系统的消融研究（表4，表5）。对比了三种替代策略：1）<strong>Random_all_region</strong>：在整个图像区域随机剪除令牌；2）<strong>Random_unimportant_region</strong>：仅在非重要区域随机剪除令牌；3）<strong>No_Gaussian</strong>：构建重要区域时不使用高斯平滑和角落抑制。实验结果表明，完整的DTP方法（Ours）在所有模型和任务上均显著优于这些变体。例如，在WidowX任务上，完整DTP使SpatialVLA达到37.5%的成功率，而随机剪除策略仅能带来15.6%至17.7%的成功率，不使用高斯平滑则与基线相同（29.2%）。这证明了<strong>针对性识别干扰令牌</strong>和<strong>空间平滑处理</strong>对于性能提升至关重要。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>干扰令牌剪除框架</strong>，这是一种新颖的、基于交集的、即插即用的后处理方法，能够自动识别并剪除VLA模型中的干扰视觉令牌，通过解决VLA模型中常见的注意力弱点，普遍提高了任务成功率。</li>
+<li>通过调整容忍度 τ，<strong>探索了VLA模型在现有架构下的性能上界</strong>，寻找符合模型偏好并能最大化可实现性能的理想视觉注意力模式。</li>
+<li>分析了不重要区域的注意力值，揭示了其与任务成功率的<strong>负相关关系</strong>，为构建更鲁棒的VLA模型提供了见解。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，DTP是一种后处理框架，虽然能有效提升性能，但并未从根本上改变或优化模型内部的注意力机制。它依赖于对模型中间特征的分析，其效果可能受到所选分析层（C）和超参数（τ, k）的影响。</p>
+<p><strong>后续研究启示</strong>：</p>
+<ol>
+<li><strong>注意力模式与性能强相关</strong>：本文的发现强调了VLA模型的视觉注意力质量是其决策可靠性的关键指标。未来的模型设计或训练目标可以 explicitly 鼓励更集中、更任务相关的注意力模式。</li>
+<li><strong>即插即用优化潜力</strong>：DTP的成功表明，在不进行昂贵重训练的情况下，通过轻量级推理时干预来修正模型行为是可行的。这为部署后模型优化和适应提供了新思路。</li>
+<li><strong>模型诊断工具</strong>：DTP的分析框架（重要区域 vs. 实际注意力）本身可以作为一种诊断工具，帮助研究者理解和可视化VLA模型失败的原因，从而进行更有针对性的改进。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉语言动作（VLA）模型在机器人操作任务中过度关注任务无关区域图像标记（即“干扰标记”）而导致动作生成错误、成功率下降的问题，提出了一种即插即用的干扰标记剪枝（DTP）框架。该框架的核心方法是动态检测并剪枝这些干扰图像标记，以修正模型的视觉注意力模式，且无需改变模型原始架构或增加额外输入。在SIMPLER基准测试上的实验表明，DTP能持续提升不同类型VLA模型的任务成功率，证明了其良好的泛化性；分析进一步揭示，所有测试模型的任务成功率与任务无关区域的注意力数量均呈负相关。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.16065" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

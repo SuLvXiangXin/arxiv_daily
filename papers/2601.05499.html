@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>TOSC: Task-Oriented Shape Completion for Open-World Dexterous Grasp Generation from Partial Point Clouds - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>TOSC: Task-Oriented Shape Completion for Open-World Dexterous Grasp Generation from Partial Point Clouds</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.05499" target="_blank" rel="noreferrer">2601.05499</a></span>
+        <span>作者: Zhiping Cai Team</span>
+        <span>日期: 2026-01-09</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前任务导向的灵巧抓取生成方法，在合成物体或几何完整的真实物体上已展现出零样本处理开放世界物体的潜力。然而，在杂乱的真实世界环境中，由于严重的遮挡、背景干扰和传感器噪声，物体点云数据存在严重缺失，导致这些方法的性能显著下降。一个直观的解决方案是首先对输入点云进行通用形状补全，再基于补全后的形状生成抓取。但这种解耦方法会因数据缺失带来的歧义性，导致对整个物体及其接触区域的几何形状估计错误，从而生成无法满足特定抓取任务要求的抓握。</p>
+<p>本文针对上述痛点，提出了<strong>任务导向形状补全</strong>这一新任务，其核心思想是：用于抓取的形状补全应明确地由下游操作任务引导。因此，该方法专注于重建潜在的接触区域，而非完整的物体几何形状，使得补全过程具有任务意识，能够容忍不相关区域的不完美。</p>
+<p>本文的核心思路是：首先利用多个预训练基础模型的零样本能力，生成多个任务导向的补全形状候选；然后提出一个3D判别自编码器来评估每个候选的合理性并从全局视角优化最合理的形状；最后，开发一个名为FlowGrasp的条件流匹配模型，从优化后的形状生成任务导向的灵巧抓取。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>方法整体流程如图2所示。输入包括物体的部分点云 (P_{\text{in}})、其类别标签 (C) 以及操作任务的语言描述 (G)。输出为任务导向的灵巧抓取。流程分为三个阶段：1) TOSC候选生成；2) TOSC选择与恢复；3) FlowGrasp抓取生成。</p>
+<p><img src="https://arxiv.org/html/2601.05499v1/x2.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：方法总览。输入为部分点云、物体类别和任务语言描述。首先通过TOSC候选生成模块生成多个任务导向补全形状候选；然后通过TOSC选择与恢复模块评估候选合理性并恢复最优形状；最后通过FlowGrasp模块生成任务导向灵巧抓取。</p>
+</blockquote>
+<p><strong>1. TOSC候选生成</strong><br>该模块旨在生成多个专注于任务相关（接触）区域的补全形状候选，而非通用补全。具体流程如图3所示。</p>
+<ul>
+<li><strong>深度图渲染与视角选择</strong>：使用Hidden-Point-Removal算法估计一个能最大化可见点的视角 (V)，将输入点云 (P_{\text{in}}) 渲染为深度图 (I_{\text{depth}})。</li>
+<li><strong>条件RGB图像合成</strong>：将深度图 (I_{\text{depth}}) 和物体类别 (C) 作为提示词，输入ControlNet。通过采用多个不同的控制尺度 (\lambda) 来合成多个RGB图像，(\lambda) 控制几何遵循与语义补全之间的平衡，以生成多种合理的形状假设。</li>
+<li><strong>3D形状生成</strong>：使用预训练的3D形状生成网络 (G_M)（一个以DINOv2特征为条件的流扩散模型）为每个RGB图像估计网格 (M)，并从中采样点集 ({P^{i}_{\text{gen}}})。</li>
+<li><strong>任务区域对齐与融合</strong>：使用SAM分割RGB图像，并用多模态大模型检测图像空间中的任务相关区域。将这些区域投影到输入点云和生成点云上，得到 (P^{\text{task}}<em>{\text{in}}) 和 (P^{\text{task}}</em>{\text{gen}})。通过优化公式(1)求解尺度 (k) 和变换 (tr)，该公式在Chamfer距离中加入了任务区域对齐项（权重 (w_{\text{task}})），使得对齐更关注任务相关区域。最后对对齐后的点云进行融合，得到候选点云 (P_{\text{can}})。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2601.05499v1/x3.png" alt="TOSC候选生成流程"></p>
+<blockquote>
+<p><strong>图3</strong>：TOSC候选生成流程。输入点云被渲染为深度图，ControlNet合成多个RGB图像，3D生成网络生成对应3D形状，经任务区域检测、对齐与融合后得到候选补全形状。</p>
+</blockquote>
+<p><strong>2. TOSC选择与恢复</strong><br>由于RGB合成和3D重建可能产生瑕疵，本模块旨在评估候选的合理性并恢复最优形状的几何。其核心是一个3D判别自编码器，结构如图4所示。</p>
+<ul>
+<li><strong>训练数据生成</strong>：从多个数据集中收集了72,524个“合理”物体（即具有足够几何支持执行给定任务的物体）。通过大语言模型识别任务接触区域，并使用PartSlip分割物体，然后随机移除任务相关片段、添加噪声和扰动局部块来生成“不合理”数据。</li>
+<li><strong>网络架构与训练</strong>：编码器 (\varepsilon(\cdot)) 将点云 (P_{\text{can}}) 分块、标记化后，通过Transformer块编码为潜在向量 (l_{\text{can}})。解码器 (\zeta(\cdot)) 通过Transformer块和全连接层恢复点云 (P_{\text{restore}})。<strong>关键创新</strong>在于引入了判别组件：通过两个MLP从 (l_{\text{can}}) 预测高斯分布 (\mathcal{N}(\mu,\sigma)) 的参数。训练时，使用KL散度损失 (L_{\text{pos}}^{\text{KL}}) 和 (L_{\text{neg}}^{\text{KL}}) 分别驱使合理形状的分布接近标准正态分布 (\mathcal{N}(0,1))，不合理形状的分布接近 (\mathcal{N}(1,1))。此外，还有恢复损失 (L_{\text{restore}})（仅对合理数据）和掩码一致性损失 (L_{\text{mask}})（鼓励掩码前后特征一致，提升遮挡鲁棒性）。总损失 (L = L_{\text{pos}}^{\text{KL}} + L_{\text{neg}}^{\text{KL}} + L_{\text{recon}} + L_{\text{mask}})。</li>
+<li><strong>推理</strong>：输入候选点云 (P_{\text{can}})，编码器输出分布 (d_{\text{can}} = \mathcal{N}(\mu,\sigma))。通过公式(5)计算合理性分数 (s_{\text{can}})，其值越高表示候选越合理。选择分数最高的候选，并由解码器恢复其几何，得到最终优化后的形状。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2601.05499v1/x4.png" alt="TOSC选择与恢复组件"></p>
+<blockquote>
+<p><strong>图4</strong>：TOSC选择与恢复的关键组件。3D判别自编码器（DAE）的编码器提取特征并预测分布参数以进行判别，解码器负责恢复几何。训练时使用合理与不合理数据，并施加多种损失。</p>
+</blockquote>
+<p><strong>3. FlowGrasp抓取生成</strong><br>本模块从恢复后的形状生成任务导向抓取。创新点在于提出了一个约束感知的条件流匹配模型，将任务和物理约束通过单步梯度修正直接整合到训练中，无需额外损失或推理时调整。</p>
+<ul>
+<li><strong>条件构建</strong>：将恢复形状的PointNet++特征与任务描述的CLIP嵌入拼接，形成条件向量 (l_{\text{con}})。</li>
+<li><strong>约束感知流匹配</strong>：在标准流匹配框架中，目标速度场为 (u_t(x_t) = x_1 - x_0)。为引入约束，对其应用一步梯度修正得到 (u_t^*(x_t))，如公式(6)所示。其中 (g_i(x_t)) 编码第i个几何或语义约束，(\nabla) 计算其梯度，(w_{\text{con}}^i) 为权重，(\alpha(t)) 为时间衰减因子。网络 (\theta) 的训练目标是最小化公式(7)，以回归修正后的速度场 (u_t^*(x_t))。</li>
+<li><strong>推理</strong>：从噪声 (x_0) 出发，通过求解学习到的ODE (dx/dt = v_t^\theta(x_t|l_{\text{con}})) 从 (t=0) 积分到 (t=1)，得到最终抓取。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2601.05499v1/x5.png" alt="FlowGrasp示意图"></p>
+<blockquote>
+<p><strong>图5</strong>：FlowGrasp示意图。在训练过程中，对标准流匹配目标速度场施加基于约束的梯度修正，使模型学习到一个隐含满足约束的速度场，从而在推理时直接生成符合约束的抓取。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>数据集</strong>：主要在一个新构建的OakInk-PartialPC数据集上进行评估，该数据集通过对OakInk物体进行多视角渲染并添加随机扫描噪声和前景遮挡，生成模拟真实场景的部分点云。任务描述来自CapGrasp数据集。3D DAE的训练数据则整合了ModelNet40、ShapeNetCore等6个数据集。</li>
+<li><strong>对比基线</strong>：在任务导向抓取任务上，对比了GraspCVAE、GraspTTA、SceneDiffuser、DexTOG、DexGYSGrasp等方法。在点云补全任务上，对比了PointAttn、SVDFormer、SymmCompletion等方法。</li>
+<li><strong>评估指标</strong>：抓取质量评估包括穿透体积/深度（Penetration）、抓取位移（Grasp Displacement）、接触率（Contact Ratio）、P-FID、LLM评分和人工感知评分（语义一致性SC、物理合理性PP、交互稳定性IS）。补全质量评估包括Chamfer距离（CD）、F1分数和密度感知CD（DCD）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><p><strong>任务导向抓取定量比较</strong>：如表1所示，本文方法在Grasp Displacement（平均位移和方差位移）上取得了最佳成绩，分别比之前最好的方法提升了16.17%。在穿透深度、接触率（98.30%）、P-FID（21.60）、LLM评分（88.3）以及所有三项人工感知评分（SC 4.38, PP 3.84, IS 3.80）上均达到最优或极具竞争力，证明了生成抓取的物理可靠性和任务符合性。</p>
+</li>
+<li><p><strong>点云补全定量比较</strong>：如表2所示，本文方法在任务导向形状补全任务上显著优于通用补全方法，CD-ℓ₂指标比最佳基线提升了55.26%，F-Score@1和DCD也达到最优。</p>
+</li>
+<li><p><strong>定性结果</strong>：<br><img src="https://arxiv.org/html/2601.05499v1/x6.png" alt="抓取生成视觉对比"></p>
+<blockquote>
+<p><strong>图6</strong>：与基线方法的抓取生成视觉对比。在“倒水”和“使用遥控器”任务中，本文方法生成的抓取更符合任务语义（如握住壶柄、捏住遥控器侧边），而基线方法可能抓在不适合的位置。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.05499v1/x7.png" alt="点云补全视觉对比"></p>
+<blockquote>
+<p><strong>图7</strong>：点云补全视觉对比。本文方法（TOSC）专注于补全任务相关区域（如锤头、剪刀刃），而通用补全方法（SVDFormer）可能错误地补全了整个形状的缺失部分，导致几何失真。</p>
+</blockquote>
+</li>
+<li><p><strong>消融实验</strong>：如表3所示，移除了TOSC候选生成（w/o TCG）、TOSC选择与恢复（w/o TSR）、整个TOSC模块而使用通用补全（w/o TOSC）、3D DAE中的令牌掩码（w/o token masking）以及FlowGrasp中的梯度引导（w/o gradient guidance）等关键组件。实验表明，每个组件都对最终性能有贡献，完整方法在多数指标上综合表现最佳，尤其是在衡量任务符合度的LLM评分和人工感知评分上优势明显。</p>
+</li>
+<li><p><strong>泛化能力</strong>：在未见过的物体类别上进行测试（表4），本文方法在多数指标上仍优于基线，显示了其对开放类别和任务的良好泛化能力。</p>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了 <strong>“任务导向形状补全”</strong> 这一新任务和研究视角，将下游操作任务作为形状补全的明确条件，专注于潜在接触区域的重建。</li>
+<li>设计了一个完整的 <strong>两阶段补全框架</strong>：首先利用基础模型生成多个任务导向补全候选，然后通过一个新颖的 <strong>3D判别自编码器</strong> 进行合理性评估与全局几何恢复。</li>
+<li>提出了 <strong>FlowGrasp</strong>，一种约束感知的条件流匹配模型，通过单步梯度修正将几何和语义约束隐式地融入训练过程，无需额外损失或推理开销。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，其方法在推理时依赖于多个预训练的大模型（如ControlNet、3D生成网络、SAM、多模态LLM），这可能导致较高的计算成本。此外，方法性能在一定程度上受到这些基础模型能力的制约。</p>
+<p><strong>启示</strong>：本研究展示了将高层任务语义与底层几何处理紧密结合的有效性，为处理严重缺失观测的机器人操作问题提供了新思路。其利用并串联多个现成基础模型零样本能力以解决复杂机器人任务的方法，以及对自编码器引入判别能力进行质量筛选的设计，对后续研究具有借鉴意义。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对严重部分观测下开放世界物体的任务导向灵巧抓取生成问题，提出**任务导向形状补全**新任务，专注于补全潜在接触区域而非完整物体形状。方法首先利用多个预训练基础模型的零样本能力生成多个任务导向形状补全候选，然后提出**3D判别自编码器**评估并全局优化最合理的候选，最后开发**条件流匹配模型FlowGrasp**从优化形状生成抓取。实验表明，该方法在任务导向抓取和形状补全上达到最先进性能，将抓取位移和倒角距离指标分别提升16.17%和55.26%，并能有效处理严重数据缺失的物体。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.05499" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

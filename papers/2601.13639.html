@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>A General One-Shot Multimodal Active Perception Framework for Robotic Manipulation: Learning to Predict Optimal Viewpoint - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>A General One-Shot Multimodal Active Perception Framework for Robotic Manipulation: Learning to Predict Optimal Viewpoint</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.13639" target="_blank" rel="noreferrer">2601.13639</a></span>
+        <span>作者: Yongchun Fang Team</span>
+        <span>日期: 2026-01-20</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在基于视觉的机器人操作中，主动感知旨在将相机移动到更具信息量的观测视点，从而为下游任务提供高质量的感知输入。当前主流方法（如Next-Best-View规划）通常将视点选择建模为一个序列优化过程，需要多次“感知-决策-动作”循环才能逐步接近理想视点。这导致高昂的时间与运动成本，并且这些方法的视点评估函数通常与特定任务目标紧密耦合，限制了其跨任务的泛化能力。</p>
+<p>本文针对迭代优化成本高、任务耦合性强这两个关键痛点，提出了一个数据驱动的、一次性的多模态主动感知新框架。其核心思路是：模仿人类“先聚焦后执行”的高效行为模式，通过解耦视点质量评估与整体架构，构建一个能够直接从当前观测推断出最优观测视点相机位姿调整量的通用学习框架。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架旨在学习一个策略π: (O, L) ↦ T，该策略以当前观测O和指定目标物体的自然语言指令L为输入，输出所需的相机位姿调整T。实现分为三个阶段：(a) 合成数据集构建；(b) 感知与预处理；(c) 网络架构构建。本文以视点受限环境下的机器人抓取任务为例进行实例化验证。</p>
+<p><img src="https://arxiv.org/html/2601.13639v1/x2.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图2</strong>：方法整体框架示意图，以视点受限环境下的机器人抓取为例：(a) 通过采样和评估候选视点获得每个物体的最优视点，随后通过域随机化构建数据集；(b) 基于构建的数据集训练MVPNet；(c) 部署训练好的网络并进行对比评估。</p>
+</blockquote>
+<p><strong>1. 合成数据集构建流程</strong>：首先定义最优观测视点。在仿真中围绕物体随机采样大量候选相机视点，均朝向物体中心。对于每个视点，获取RGB-D图像，并利用Grounding DINO和SAM2根据语言指令进行目标检测与分割，得到物体点云。随后，使用抓取模型Economic Grasp计算抓取位姿候选，并以其聚合分数（多次检测中Top-10得分的平均值）作为该视点的质量评分。针对65类物体，共采样97.5k张图像，进行487.5k次抓取检测。视点分数在3D空间呈连续分布。</p>
+<p><img src="https://arxiv.org/html/2601.13639v1/x4.png" alt="视点分数分布示例"></p>
+<blockquote>
+<p><strong>图4</strong>：物体视点分数分布示例：(a) 3D分布；(b-d) 三个平面的2D投影。红点分数最高，绿点中等，蓝点最低。</p>
+</blockquote>
+<p>对评分最高的800个视点进行DBSCAN聚类，选取最大簇的质心作为该物体在当前状态下的最优观测视点t_best。通过公式 t_best = t_obj + R(q_obj) · p_cam^obj，将最优视点位置p_cam^obj定义在物体坐标系下，使其能随物体位姿变化。在数据收集中，对初始相机视点、物体类别、位姿、尺度和环境光照进行域随机化。网络输入为掩码图像和点云，学习目标为相机位姿调整量ΔT = (Δt, Δq)，其通过当前相机位姿与计算得到的最优视点相机位姿之差求得。最终构建了17k个数据样本。</p>
+<p><strong>2. 感知与预处理</strong>：使用腕戴式相机获取RGB-D图像。为让网络专注于目标物体几何而非颜色纹理，并支持语言引导，采用Grounded SAM 2进行预处理：先由Grounding DINO根据语言指令检测目标边界框，再由SAM 2生成分割掩码。该掩码直接作为网络图像输入，并用于对原始点云进行掩蔽。处理后的点云还经过随机丢点、最远点采样等数据增强。</p>
+<p>**3. 网络架构 (MVPNet)**：核心创新在于其多模态特征对齐与融合机制。</p>
+<p><img src="https://arxiv.org/html/2601.13639v1/x5.png" alt="感知预处理与MVPNet框架"></p>
+<blockquote>
+<p><strong>图5</strong>：感知与预处理模块及MVPNet的整体框架。展示了从RGB-D图像和语言指令生成掩码图像和过滤后点云，并输入MVPNet进行特征提取、对齐融合，最终预测位姿调整的全过程。</p>
+</blockquote>
+<ul>
+<li><strong>特征提取</strong>：使用ResNet编码二进制掩码图像。对于包含丰富三维空间关系的点云，采用PointNeXt和PointNet++两种编码器进行协同特征提取，以同时捕获局部几何细节和全局上下文语义。</li>
+<li><strong>特征对齐与融合</strong>：将提取的点云和图像特征向量作为令牌(token)拼接，送入Transformer编码器。其交叉注意力机制能够隐式地建立2D-3D对应关系并融合多模态表征。引入一个可训练的[CLS]令牌，通过交叉注意力聚合所有信息，用于最终的位姿预测。</li>
+<li><strong>姿态输出</strong>：使用MLP将[CLS]令牌对应的输出映射到任务空间，即平移量Δt和旋转四元数Δq。</li>
+<li><strong>损失函数</strong>：总损失为平移的MSE损失与旋转的测地线距离损失之和：ℒ_total = ||t̂ - t||₂² + λ * 2arccos(|⟨q̂, q⟩|)。</li>
+</ul>
+<p>与现有方法相比，本文的创新点具体体现在：1) <strong>框架解耦</strong>：将视点质量评估函数定义为可定制模块，与框架主体分离，提升了通用性；2) <strong>一次性预测</strong>：通过数据驱动学习，直接输出单步调整量，避免了迭代优化；3) <strong>输入设计</strong>：使用二进制掩码而非彩色掩码，迫使网络学习几何特征，增强了泛化能力；4) <strong>多模态融合</strong>：利用Transformer交叉注意力有效对齐和融合2D掩码与3D点云特征。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验平台基于Isaac Sim 4.0.0仿真器，使用Franka Emika机械臂和腕戴的RealSense D435i相机。测试对象包括65个“相似物体”和18个“全新物体”。评估在视点受限环境下进行，相机初始化为随机侧视位姿。</p>
+<p><strong>对比实验</strong>：将本文框架（MVPNet）与以下基线方法对比：1) <strong>固定视点</strong>：在初始随机视点直接抓取；2) <strong>视点随机化</strong>：随机移动相机到一个新视点后再抓取；3) <strong>基于TSDF的NBV</strong>：一种使用截断有符号距离场进行Next-Best-View规划的方法。</p>
+<p><strong>关键实验结果</strong>：评估指标为SR-1（首次尝试抓取成功率）和SR-5（前五次尝试中至少成功一次的概率）。</p>
+<p><img src="https://arxiv.org/html/2601.13639v1/x6.png" alt="仿真抓取成功率对比"></p>
+<blockquote>
+<p><strong>图6</strong>：在相似物体和全新物体上的仿真抓取成功率对比。MVPNet引导的主动感知在SR-1和SR-5上均显著优于所有基线方法。</p>
+</blockquote>
+<p>仿真结果表明，在相似物体上，MVPNet将SR-1从初始视点的38.2%提升至71.8%（相对提升87.96%），SR-5从65.2%提升至92.8%；在全新物体上，SR-1从42.9%提升至78.6%，SR-5从73.8%提升至94.6%。均大幅优于随机移动和基于TSDF的NBV方法。</p>
+<p><strong>消融实验</strong>：验证了各核心组件的贡献。</p>
+<p><img src="https://arxiv.org/html/2601.13639v1/x7.png" alt="消融研究结果"></p>
+<blockquote>
+<p><strong>图7</strong>：消融研究结果。移除非最优视点数据、点云编码器之一、或掩码图像输入，均会导致性能显著下降，证明了各组件设计的必要性。</p>
+</blockquote>
+<ul>
+<li><strong>训练数据质量</strong>：使用非最优视点（最低分视点）数据训练，性能急剧下降，证明了高质量视点标签的重要性。</li>
+<li><strong>多模态输入</strong>：仅使用点云或仅使用掩码图像，性能均不如两者结合，验证了多模态融合的有效性。</li>
+<li><strong>点云双编码器</strong>：仅使用PointNeXt或PointNet++单一编码器，性能低于两者结合，表明协同提取能获得更鲁棒的特征。</li>
+<li><strong>二进制掩码 vs. 彩色掩码</strong>：使用彩色掩码作为输入会降低性能，支持了迫使网络学习几何形状的设计选择。</li>
+</ul>
+<p><strong>定性结果</strong>：<br><img src="https://arxiv.org/html/2601.13639v1/x8.png" alt="定性结果对比"></p>
+<blockquote>
+<p><strong>图8</strong>：不同方法的视点优化与抓取结果定性对比。MVPNet能够预测出显著改善观测质量的视点调整，从而产生更多、更稳定的抓取候选。</p>
+</blockquote>
+<p><strong>真实世界实验</strong>：将仿真训练的网络直接迁移到真实机器人系统，无需微调。</p>
+<p><img src="https://arxiv.org/html/2601.13639v1/x9.png" alt="真实世界实验设置与物体"></p>
+<blockquote>
+<p><strong>图9</strong>：真实世界实验场景设置（左）与使用的实验物体（右）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.13639v1/x10.png" alt="真实世界抓取成功率"></p>
+<blockquote>
+<p><strong>图10</strong>：真实世界抓取成功率。MVPNet将SR-1从初始视点的30%提升至58%（相对提升93.33%），接近仿真中的提升趋势，证明了优秀的Sim-to-Real迁移能力。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1) 提出了一个通用的、一次性的多模态主动感知框架，通过解耦视点质量评估，实现了跨任务需求的统一建模；2) 建立了一个基于任务特定评估函数和域随机化的最优视点数据自动收集流程，无需人工标注；3) 设计了MVPNet，利用Transformer交叉注意力机制有效对齐和融合2D掩码与3D点云特征，直接预测相机位姿调整。</p>
+<p>论文自身提到的局限性包括：框架性能依赖于目标分割模块（如Grounded SAM 2）的准确性；当前实例化集中于抓取任务，在其他任务（如位姿估计）中的有效性有待进一步验证。</p>
+<p>本文对后续研究的启示在于：<strong>解耦设计</strong>为构建通用主动感知系统提供了可行路径，未来可将不同的任务评价函数即插即用地接入该框架。<strong>一次性预测范式</strong>为降低主动感知的时间与运动成本提供了新思路。<strong>多模态学习策略</strong>，特别是通过注意力机制融合2D与3D特征，对于需要几何理解的任务具有借鉴价值。如何进一步减少对预训练分割模型的依赖，以及探索更高效的模拟到真实迁移技术，是值得深入的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出了一种通用的单次多模态主动感知框架，用于解决机器人操作中依赖迭代优化、成本高且任务耦合性强的问题。其核心是构建数据收集流程与最优视角预测网络，通过跨注意力机制对齐融合多模态特征，直接预测相机位姿调整。在视角受限的机器人抓取任务中实例化验证，实验表明该框架显著提升了抓取成功率，真实世界评估成功率接近翻倍，且无需微调即可实现从仿真到现实的迁移。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.13639" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

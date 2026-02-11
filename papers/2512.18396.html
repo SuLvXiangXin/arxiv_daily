@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AOMGen: Photoreal, Physics-Consistent Demonstration Generation for Articulated Object Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>AOMGen: Photoreal, Physics-Consistent Demonstration Generation for Articulated Object Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.18396" target="_blank" rel="noreferrer">2512.18396</a></span>
+        <span>作者: Yakun Huang Team</span>
+        <span>日期: 2025-12-20</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，为机器人操作策略（尤其是基于视觉-语言-动作的VLA模型）提供高质量训练数据的主流方法主要包括基于物理的仿真和基于视频的世界模型。物理仿真能高效生成大量状态-动作对齐的演示，但视觉真实性不足，给仿真到真实的迁移带来挑战。视频世界模型直接从大规模真实视频学习，具有更高的视觉保真度，但往往对物理真实性和动作可执行性的监督不足，导致物理上不一致的交互。对于铰接物体的精细操作任务，其复杂的运动学约束需要更丰富和精确的数据，而现有方法（如DemoGen和R2RGen）存在局限：仅能处理简单的抓取和放置，无法处理铰接操作；物体外观和几何形状固定，难以泛化到新物体或新姿态；且多为单视图输入，降低了多视角观察的视觉真实性。</p>
+<p>本文针对铰接物体操作演示数据收集昂贵、稀缺且现有生成方法在视觉逼真度与物理一致性上难以兼顾的痛点，提出了AOMGen框架。其核心思路是：仅利用单个真实场景扫描视频、一次真实操作演示以及一个现成的数字资产库，通过三维高斯溅射（3DGS）重建、物理一致的运动恢复以及类别内物体替换与姿态泛化，生成大量视觉逼真且物理状态可验证的铰接操作训练数据。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>AOMGen的整体流程旨在从单个真实演示扩展到多样化的合成数据。其输入包括：静态场景扫描视频 <code>V_static</code>、动态操作视频 <code>V_dynamic</code>、机械臂关节状态序列 <code>A</code>，以及同一类别铰接物体的仿真3D资产。输出是同步的多视角RGB视频，其时间与动作指令、关节及接触点状态标注对齐。</p>
+<p><img src="https://arxiv.org/html/2512.18396v1/Fig/robot_pipeline.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图2</strong>：AOMGen方法整体流程。左侧为基于3D高斯溅射的场景重建与运动恢复阶段，右侧为铰接物体替换与姿态泛化阶段。以旋转关节物体为例，展示了从原始数据到生成新演示的完整过程。</p>
+</blockquote>
+<p>框架包含两个核心模块：</p>
+<ol>
+<li><strong>场景重建与运动恢复</strong>：首先，使用COLMAP进行稀疏重建和相机姿态估计。然后，基于SAGA方法构建带有特征的分割3DGS模型，利用SAM2生成的多视图2D掩码实现部件级分割，从而区分出铰接物体的可动部件（<code>Part_move</code>）和静态部件（<code>Part_static</code>）。通过迭代最近点（ICP）算法将GS坐标系与真实世界坐标系对齐。运动恢复部分（AOMotion）是关键创新，它利用真实的机械臂轨迹作为物理先验，在缺乏目标物体运动直接记录的情况下，通过四个子模块恢复其运动：a) <strong>关键帧提取</strong>：通过处理动态视频中可动部件和机械臂的掩码，计算并平滑“运动分数”，动态确定交互的起始帧和结束帧。b) <strong>接触点检测</strong>：在起始帧，基于机械臂末端执行器与可动部件点云之间的最近距离，确定两者接触点的位置（<code>PC_r</code> 和 <code>PC_move</code>）。c) <strong>铰接物体建模</strong>：通过分析可动与静态部件的包围盒边缘，设计评分方案（考虑边缘平行度、距离以及与末端执行器方向、接触点的关系）来确定与关节相邻的边缘对，进而计算关节的方向和中心。d) <strong>可动部件运动恢复</strong>：以机械臂接触点轨迹 <code>Traj_r</code> 为监督，通过优化旋转角度（或平移距离）<code>θ_t</code>，使变换后的可动部件表面与轨迹的交点尽可能接近真实的接触点，从而恢复出物理一致的运动。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2512.18396v1/Fig/motionscore.png" alt="运动分数计算"></p>
+<blockquote>
+<p><strong>图3</strong>：运动分数的计算过程。上方为原始视频帧序列，下方为计算出的运动分数曲线、平滑后的曲线以及动态阈值，用于精确检测交互的开始与结束。</p>
+</blockquote>
+<ol start="2">
+<li><strong>铰接物体替换与姿态泛化</strong>：给定同一类别的新铰接物体资产 <code>AO_new</code>，首先通过基于NOCS的接触点映射方法，将原始可动部件上的接触点 <code>PC_move</code> 映射到新物体上，得到 <code>PC_map</code>。然后，采用两阶段优化使新物体与原始机械臂轨迹物理兼容：第一阶段优化缩放、初始运动参数和偏移量，使映射后的接触点轨迹粗略匹配机械臂轨迹；第二阶段进一步优化，以最小化机械臂接触点与新物体可动部件表面之间的交点误差，从而处理非匀速运动和接触滑动问题。在视觉层面，使用DiffusionLight从真实场景提取光照并烘焙到新物体材质上，并应用高斯修复来处理物体替换造成的空洞。最后，为了极大扩展数据多样性，支持对替换物体施加任意的姿态变换 <code>T_ao</code>，并相应地通过插值和逆运动学生成新的、与之适配的机械臂轨迹。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了UR5e机械臂收集的真实演示数据。为验证AOMGen的泛化能力，选用了来自ArtVIP资产库的三类旋转关节物体（微波炉、工具箱、电脑）和两类棱柱关节物体（抽屉、柜子）进行替换测试。物体姿态泛化的平移范围为[-0.05m, 0.3m] * [-0.05m, 0.05m]，旋转范围为[-45°, 45°]。</p>
+<p><img src="https://arxiv.org/html/2512.18396v1/Fig/mic_data.png" alt="高斯场可视化-微波炉"></p>
+<blockquote>
+<p><strong>图4</strong>：AOMGen生成的旋转关节（微波炉）操作数据的高斯场可视化。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.18396v1/Fig/drawer_data.png" alt="高斯场可视化-抽屉"></p>
+<blockquote>
+<p><strong>图5</strong>：AOMGen生成的棱柱关节（抽屉）操作数据的高斯场可视化。</p>
+</blockquote>
+<p>首先，通过在仿真中重放生成的演示来验证物理一致性。如表1所示，对于五类不同的替换物体，生成演示在仿真中重放的成功率平均高达98%，证明了AOMGen生成的交互数据具有高度的物理合理性和精确性。</p>
+<p><img src="https://arxiv.org/html/2512.18396v1/Fig/Replay.png" alt="仿真重放结果-微波炉"></p>
+<blockquote>
+<p><strong>图6</strong>：微波炉（旋转关节）生成数据在仿真环境中的重放结果序列，展示了物理交互的一致性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.18396v1/Fig/Replay_drawer.png" alt="仿真重放结果-抽屉"></p>
+<blockquote>
+<p><strong>图7</strong>：抽屉（棱柱关节）生成数据在仿真环境中的重放结果序列。</p>
+</blockquote>
+<p>其次，评估生成数据对VLA策略训练的有效性。使用OpenVLA作为基础模型，分别在仅用真实数据、仅用AOMGen合成数据、以及用合成数据微调预训练模型三种设置下进行训练和测试。</p>
+<p><img src="https://arxiv.org/html/2512.18396v1/Fig/success_rate_comparison.png" alt="成功率对比"></p>
+<blockquote>
+<p><strong>图8</strong>：不同训练数据设置下，VLA策略在未见过的物体和布局上的测试成功率对比。仅用真实数据训练的成功率为0%，仅用AOMGen数据训练达到53.3%，而用AOMGen数据微调预训练的OpenVLA模型，成功率大幅提升至88.7%。</p>
+</blockquote>
+<p>关键结果显示：仅使用有限的真实数据（1条演示）训练时，模型无法泛化，成功率为0%。仅使用AOMGen生成的合成数据训练，成功率可达53.3%。而使用AOMGen数据对预训练的OpenVLA模型进行微调，能将成功率显著提升至88.7%。这证明了合成数据对于提升模型性能的有效性。</p>
+<p>最后，通过消融实验验证姿态泛化策略对模型鲁棒性的增强作用。如图9所示，在使用经过姿态泛化数据训练的模型与使用未经过姿态泛化数据训练的模型进行对比时，前者在面对物体位置和角度变化时表现出了更强的鲁棒性。</p>
+<p><img src="https://arxiv.org/html/2512.18396v1/Fig/pose_gen.png" alt="姿态泛化消融实验"></p>
+<blockquote>
+<p><strong>图9</strong>：姿态泛化策略的消融研究。使用姿态泛化数据训练的模型（绿色）在面对物体位置和角度变化时，比未使用该策略的模型（蓝色）成功率更高，鲁棒性更强。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.18396v1/Fig/scale.png" alt="尺度泛化示例"></p>
+<blockquote>
+<p><strong>图10</strong>：AOMGen生成的针对不同尺度物体的操作数据示例。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.18396v1/Fig/new_obj.png" alt="新物体泛化示例"></p>
+<blockquote>
+<p><strong>图11</strong>：AOMGen将操作能力泛化到同一类别内全新物体上的示例。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了一个可扩展的框架，能够从单个真实扫描和演示出发，生成同一类别内任意铰接物体的逼真操作数据。2) 通过创新的、基于真实机械臂轨迹监督的运动恢复方法（AOMotion）和两阶段物体替换优化，确保了生成数据兼具高度的物理一致性与视觉真实性。3) 引入了物体姿态泛化机制，显著扩大了生成数据的配置多样性，从而增强了训练出的策略模型的鲁棒性。</p>
+<p>论文提及的局限性在于，其方法依赖于同一类别物体具有相似的关节相对位置和运动模式这一假设，对于关节结构或运动模式差异巨大的“类别”，泛化能力可能受限。此外，当前框架主要处理单步、单目标的铰接操作。</p>
+<p>这项工作对后续研究的启示包括：将物理一致的生成范式扩展到更复杂的操作序列或多物体交互场景；探索对更广泛“类别”定义（如功能相似但结构不同）的泛化能力；以及将生成的数据闭环用于世界模型或物理仿真器的训练，进一步提升仿真真实性。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对关节物体精细操作任务依赖大量昂贵真实演示数据的问题，提出AOMGen框架。该方法仅需单个真实扫描和演示，结合数字资产库，生成视觉逼真且物理状态可验证的训练数据，通过系统变化相机视角、物体风格与位姿来增强数据多样性。实验表明，使用AOMGen数据微调VLA策略后，任务成功率从0%提升至88.7%，并能在未见物体和布局上有效泛化。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.18396" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

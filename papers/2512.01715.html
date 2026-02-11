@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DiG-Flow: Discrepancy-Guided Flow Matching for Robust VLA Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>DiG-Flow: Discrepancy-Guided Flow Matching for Robust VLA Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.01715" target="_blank" rel="noreferrer">2512.01715</a></span>
+        <span>作者: Zongqing Lu Team</span>
+        <span>日期: 2025-12-01</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于流匹配（Flow Matching）训练的视觉-语言-动作（VLA）模型在机器人操作任务上展现出强大能力。然而，在分布偏移（如光照、纹理、视角变化）和复杂的多步任务下，其性能常常显著下降，这表明模型学习到的表示可能未能鲁棒地捕获任务相关的语义。流匹配框架通过回归神经向量场来学习动作分布，但其回归目标本身可能不足以激励模型学习到语义根基扎实的表示。</p>
+<p>本文针对VLA模型表示鲁棒性不足这一痛点，提出了一个几何正则化的新视角。其核心洞察是：观测特征与动作嵌入之间的分布差异（Discrepancy）提供了一个有意义的几何信号——较低的传输成本意味着表示兼容，而较高的成本则暗示可能存在错位。本文提出DiG-Flow框架，通过这种差异信号来引导和调制表示学习，从而增强VLA模型的鲁棒性。核心思路是：计算观测与动作嵌入的经验分布之间的差异度量，将其映射为一个调制权重，并在流匹配之前对观测嵌入应用残差更新。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>DiG-Flow是一个旨在通过表示层面的几何正则化来增强VLA鲁棒性的框架。其整体流程如论文图1所示：预训练的视觉-语言主干网络提取多模态观测特征，一个轻量级的DiG-Block模块被插入到主干网络与流匹配动作头之间，一个可选的DiG-Refine模块则完全在动作头内部运行以细化预测。</p>
+<p><img src="https://arxiv.org/html/2512.01715v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：DiG-Flow整体框架及DiG-Block集成示意图。(a) DiG-Flow将DiG-Block附加在预训练的VLM主干上。观测被投影到一个共享的差异空间，而真实（训练时）或预测（推理时）的动作被映射到同一空间。该模块计算一个传输感知的差异D，并将其转换为门控值g，用于在特征传入流匹配动作头之前对其进行软调制。流匹配头像标准VLA模型一样从噪声生成动作轨迹，DiG-Refine模块可在动作头内应用少量细化步骤以进一步优化预测动作。(b) DiG-Block集成细节。给定输入嵌入，主干首先应用标准注意力。注意力后的特征被归一化并送入DiG-Block，该模块使用动作/观测投影计算差异D和门控g，并执行门控残差更新。此设计允许DiG-Flow利用来自动作的差异信号调制高层表示，同时保持预训练主干架构和注意力块不变。</p>
+</blockquote>
+<p>核心模块包括三个部分：</p>
+<ol>
+<li><strong>差异函数</strong>：用于量化观测分布μ_H与动作分布μ_Z之间几何距离的函数。默认采用具有几何解释性的平方2-Wasserstein距离。为计算高效，使用切片Wasserstein距离进行近似：采样M个随机单位方向，将高维分布投影到这些方向上，计算一维Wasserstein距离（通过对投影特征排序并计算均方差实现），最后取平均。</li>
+<li><strong>权重映射</strong>：通过一个单调递减函数ϕ将差异D映射为调制门控值g ∈ [g_min, 1]。具体使用指数衰减映射：g = max{g_min, exp(-τD)}，其中τ为温度参数，g_min防止门控值过小。低差异（对齐良好）的样本对获得接近1的权重，高差异的样本对权重被抑制但仍保留非零贡献。</li>
+<li><strong>残差算子</strong>：一个轻量级的残差算子ℛ，用于变换观测特征。实现为一个具有谱范数正则化的单线性层：ℛ(H) = W_ℛ H + b_ℛ。增强后的观测特征计算为：H̃ = H + λ·g·ℛ(H)，其中λ为残差强度参数。门控g调节残差调整的幅度。</li>
+</ol>
+<p><strong>训练过程</strong>（对应图2左半部分）：使用真实动作计算差异信号。观测特征H由主干网络提取，真实动作通过一个轻量级编码器f映射为动作嵌入z^gt，经平均池化和广播后得到动作表示Z^gt。计算差异D(μ_H, μ_Z^gt)并得到门控g（梯度在此处停止）。利用g调制残差更新，得到增强特征H̃，将其输入流匹配头。最终的训练目标是加权损失：J(θ) = E[ sg(g) · ℓ(θ; H̃, t) ]，其中ℓ是逐样本流匹配损失。这使g成为一个数据依赖的置信权重，抑制差异大的“捷径”样本。</p>
+<p><img src="https://arxiv.org/html/2512.01715v1/x2.png" alt="训练与推理门控"></p>
+<blockquote>
+<p><strong>图2</strong>：训练时和推理时的差异引导门控机制。左（训练）：观测嵌入和真实动作嵌入定义经验分布，差异被映射为门控g，该门控调制对观测的残差更新，并通过门控目标J(θ)=E[g ℓ(θ)]重新加权流匹配损失。右（推理）：使用编码后的模型预测动作而非真实动作应用相同的机制。门控根据观测嵌入和预测动作嵌入之间的差异计算，然后在流匹配头内部使用一次或多次。</p>
+</blockquote>
+<p><strong>推理过程</strong>（对应图2右半部分及算法2）：默认配置与训练时调制类似，为单次前向。给定观测o，模型计算H并预测初始动作块a^(0)。预测动作被编码得到Z，计算差异D和门控g，生成增强特征H̃，进而产生最终动作块。此外，DiG-Flow支持可选的迭代细化（DiG-Refine）：以初始预测为起点，重复编码预测动作、计算差异和门控、生成增强特征、产生新动作的过程，性能通常在2-3步后饱和。</p>
+<p><strong>理论保证</strong>：论文提供了理论分析，表明在适当的假设下：（1）使用门控目标J(θ)的梯度下降能保证目标函数下降，且J(θ)与原损失函数ℒ(θ)有界；（2）如果残差算子ℛ(H)的方向与损失关于H的负梯度在门控加权下平均对齐，则足够小的残差更新步能严格降低期望损失；（3）固定门控的推理细化方案具有收缩性，能保证收敛。</p>
+<p>与现有方法（如使用最优传输直接修改流匹配轨迹的OT-CFM）相比，DiG-Flow的创新点在于将Wasserstein距离作为辅助信号来<strong>调制表示学习</strong>，在表示层面进行干预，而不改变流匹配路径或目标向量场本身，从而以可忽略的开销增强鲁棒性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在模拟和真实世界基准测试上进行，包括<strong>CALVIN</strong>（语言条件机器人操作）、<strong>LIBERO</strong>（长视野任务套件）、<strong>AdAMU</strong>（涉及分布偏移的挑战性操作任务）以及真实机器人<strong>Pi0-Bench</strong>。对比的基线方法包括RT-2、Pi0.5、OpenVLA、Octo、GR-3等主流VLA模型。</p>
+<p>关键实验结果如下：在CALVIN基准上，DiG-Flow将Pi0.5的成功率从74.2%提升至79.5%（相对提升7.1%），将OpenVLA的成功率从70.4%提升至75.9%（相对提升7.8%）。在LIBERO的长视野任务上提升尤为显著，例如在<code>LIBERO-90</code>上，DiG-Flow将Pi0.5的成功率从30.0%提升至47.5%（相对提升58.3%），将OpenVLA从27.5%提升至42.5%（相对提升54.5%），证明了其在复杂多步任务上的有效性。</p>
+<p><img src="https://arxiv.org/html/2512.01715v1/x3.png" alt="CALVIN与LIBERO结果"></p>
+<blockquote>
+<p><strong>图3</strong>：在CALVIN和LIBERO基准测试上的性能对比。DiG-Flow consistently提升了基线模型（Pi0.5和OpenVLA）的成功率，在LIBERO长视野任务上的提升幅度尤其显著。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.01715v1/x4.png" alt="数据效率与消融实验"></p>
+<blockquote>
+<p><strong>图4</strong>：数据效率研究（左）与消融实验（右）。左图显示在CALVIN上使用不同比例训练数据时，DiG-Flow相比基线Pi0.5始终保持优势，在数据有限（10%）时相对提升高达21.3%。右图消融实验表明，差异门控（Gating）、残差更新（Residual）和动作编码器（Action Enc.）都是有效的组件，共同作用取得最佳性能。</p>
+</blockquote>
+<p>在涉及分布偏移的AdAMU基准上，DiG-Flow同样带来了显著提升。例如在<code>AdAMU-Hard</code>上，将Pi0.5的成功率从26.7%提升至43.3%（相对提升62.2%）。真实机器人Pi0-Bench的实验也验证了其有效性。</p>
+<p><img src="https://arxiv.org/html/2512.01715v1/x5.png" alt="AdAMU结果"></p>
+<blockquote>
+<p><strong>图5</strong>：在AdAMU基准测试上的性能。DiG-Flow在具有挑战性的分布偏移设置下（尤其是Hard级别），相比基线模型取得了大幅度的成功率提升。</p>
+</blockquote>
+<p>消融实验（图4右）总结了各组件贡献：完整的DiG-Flow（差异门控+残差更新+动作编码器）性能最佳；仅使用差异门控加权损失（无残差更新）有一定提升；仅使用残差更新（无门控，即λ固定）或仅使用动作编码器（无门控和残差）带来的提升较小或微弱。这表明差异计算、门控调制和残差更新协同工作。</p>
+<p><img src="https://arxiv.org/html/2512.01715v1/x6.png" alt="定性结果与差异可视化"></p>
+<blockquote>
+<p><strong>图6</strong>：定性结果与差异值可视化。上图展示了DiG-Flow在复杂长视野任务（如“打开抽屉，然后拿起水壶”）上相比基线更可靠的成功执行。下图将预测轨迹各步骤的差异值D可视化为热图，显示在任务关键阶段（如接近目标）差异值较低（蓝色），表明表示对齐良好。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li>提出了一个<strong>差异引导（Discrepancy-Guided）的框架DiG-Flow</strong>，通过量化并利用观测与动作表示之间的分布差异作为几何正则化信号，来增强VLA模型的鲁棒性。</li>
+<li>提供了<strong>理论分析</strong>，证明了差异引导训练能降低目标函数，且引导的推理细化具有收敛保证，为方法设计提供了理论依据。</li>
+<li>进行了<strong>广泛的实验验证</strong>，表明DiG-Flow能以可忽略的开销集成到现有VLA架构中，一致地提升性能，尤其在复杂多步任务、分布偏移场景以及数据有限的设置下提升显著。</li>
+</ol>
+<p>论文自身提到的局限性包括：依赖切片Wasserstein距离的近似计算仍有一定开销；理论分析基于简化假设（如固定门控）；方法主要针对基于流匹配的VLA模型。</p>
+<p>对后续研究的启示：将几何一致性信号引入表示学习是提升模型鲁棒性的一个有前景的方向。DiG-Flow在表示层面的干预思路可扩展至其他生成式策略学习框架（如扩散模型）。差异信号本身可作为模型置信度或异常检测的指标。如何设计更高效、更普适的差异度量与调制机制是未来的探索方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>论文提出DiG-Flow框架，解决视觉-语言-动作（VLA）模型在分布偏移和复杂多步骤任务上性能下降、表示语义不鲁棒的问题。其关键技术是差异引导的流匹配：通过计算观察与动作嵌入的经验分布差异，映射为调制权重，并在流匹配前对观察嵌入进行残差更新，实现几何正则化。实验表明，该方法能以可忽略开销集成到现有VLA架构，持续提升性能，在复杂多步骤任务和有限训练数据下增益尤其显著。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.01715" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

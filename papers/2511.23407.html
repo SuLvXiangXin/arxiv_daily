@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>From CAD to POMDP: Probabilistic Planning for Robotic Disassembly of End-of-Life Products - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>From CAD to POMDP: Probabilistic Planning for Robotic Disassembly of End-of-Life Products</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.23407" target="_blank" rel="noreferrer">2511.23407</a></span>
+        <span>作者: Jürgen Fleischer Team</span>
+        <span>日期: 2025-11-28</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人拆解序列规划的主流方法通常假设产品模型是确定且完全可观测的，即产品状态与原始CAD设计完全一致。然而，现实中的报废产品常因磨损、腐蚀、损坏或未记录的维修而严重偏离其原始设计，导致基于确定性模型的规划器在遇到意外情况（如螺丝锈死）时可能失败或效率低下。现有研究虽在工厂控制层面考虑了不确定性，但尚未在单个产品和操作层面探索部分可观测性问题。</p>
+<p>本文针对报废产品内部状态不确定这一具体痛点，提出了将拆解规划重新表述为部分可观测马尔可夫决策过程的新视角。POMDP能够自然地将影响拆解过程的不确定结构或物理属性（如零件是否锈死）建模为隐藏变量。核心思路是：从CAD数据、机器人能力和先验检查结果自动推导出具体的POMDP模型，并通过强化学习近似求解获得策略，同时利用贝叶斯滤波器在执行过程中持续更新对隐藏报废条件的信念。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架（Task and Motion Planning, TAMP）将拆解分解为基于POMDP的符号任务规划器和生成可执行轨迹的运动规划器。输入包括产品CAD模型、机器人能力定义和先验检查数据；输出是具体的拆解动作序列。系统通过“能力”和“观察器”抽象机器人的工具和传感器。</p>
+<p><img src="https://arxiv.org/html/2511.23407v1/x2.png" alt="系统框架"></p>
+<blockquote>
+<p><strong>图2</strong>：系统整体框架。蓝色为感知部分（观察器），黄色为规划部分（POMDP），红色为执行部分（运动控制器）。系统结合了符号任务规划与运动规划。</p>
+</blockquote>
+<p>核心模块是POMDP，其各组件定义如下：</p>
+<ol>
+<li><strong>状态空间 S</strong>：状态表示产品结构，核心是零件间的拆卸关系矩阵Ψ。其中每个元素ψ_ij(θ, φ)被重新解释为零件i相对于j在球坐标方向(θ, φ)上可移动的<strong>概率</strong>（而非确定性的0/1值）。报废条件（如腐蚀、粘合）被视为在产品生命周期中隐式应用的、会修改名义拆卸关系ψ^0_ij的算子f_c。已拆卸零件用ψ_ij(θ, φ)=1 ∀j表示，以保持状态维度固定。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.23407v1/x3.png" alt="拆卸关系示例"></p>
+<blockquote>
+<p><strong>图3</strong>：角磨机头部(1)与机身(2)之间的拆卸关系ψ_12(θ, φ)曲面图。绿色区域表示头部仅能沿一个方向被拉出（ψ_12(θ, φ)=1）。</p>
+</blockquote>
+<ol start="2">
+<li><strong>动作空间 A</strong>：包含非破坏性动作（如操纵、拧螺丝）和破坏性动作（如铣削）。非破坏性动作a_k(i)表示使用工具k拆卸零件i。破坏性动作被建模为直接修改零件i对所有其他零件j的拆卸关系ψ_ij(θ, φ)的算子，从而创建新的可行拆卸方向。所有动作都需通过几何符号约束（前提函数）和运动层可行性检查。</li>
+<li><strong>转移函数 T</strong>：定义了执行动作后的状态转移概率。对于非破坏性动作，成功拆卸零件i的概率T(Ψ^(i)|Ψ, a_k(i)) = p_success * [max_(θ,φ) ∏_(j=1)^n ψ_ij(θ, φ) &gt; 0]，其中p_success是工具k的运动策略π_k成功执行动作的概率。破坏性动作（如铣削）的转移是确定性的。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.23407v1/x4.png" alt="转移函数示例"></p>
+<blockquote>
+<p><strong>图4</strong>：以铆钉为例，说明转移函数T如何改变Ψ。初始时铆钉和顶部均无法拆卸（所有方向乘积为0，红色）。应用铣削动作a_mill后，铆钉与顶部间的拆卸关系出现了新的可行方向（绿色），使得后续可用操纵动作a_manip移除任一部分。</p>
+</blockquote>
+<ol start="4">
+<li><strong>观察函数 O</strong>：分为依赖于动作的反馈观察（如尝试拆卸后判断零件是否被卡住）和不依赖于动作的直接状态观察（如用相机检测螺丝是否生锈）。观察将传感器数据映射到对符号状态的估计。</li>
+<li><strong>奖励函数 R</strong>：目标是快速拆除预定的一组有价值零件。奖励为负的时间成本，包括执行动作、更换末端执行器、放置零件的时间，并附加零件价值惩罚项r_value,i以阻止盲目破坏。</li>
+</ol>
+<p><strong>创新点</strong>在于：1) 首次为拆解规划提供了显式的POMDP公式，将不确定的报废条件作为隐藏变量；2) 提出了一个从CAD数据自动生成具体POMDP实例的系统化流程；3) 在统一的符号框架下集成了非破坏性和破坏性动作，以处理不确定性导致的失败。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：使用了三个产品（角磨机、双盖电机、单盖电机，如图1所示）和两个具有不同能力的机器人系统（系统A支持操纵和拧螺丝；系统B额外支持铣削，如图5所示）。平台基于仿真进行验证。</p>
+<p><img src="https://arxiv.org/html/2511.23407v1/x1.png" alt="实验产品"></p>
+<blockquote>
+<p><strong>图1</strong>：用于系统验证的三个产品。(a)角磨机，(b)双盖电机，(c)单盖电机。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.23407v1/x5.png" alt="机器人系统"></p>
+<blockquote>
+<p><strong>图5</strong>：实验使用的两个机器人系统及其各自的能力。</p>
+</blockquote>
+<p><strong>对比基线</strong>：与确定性规划器（假设产品处于名义CAD状态）进行对比。<br><strong>关键结果</strong>：</p>
+<ol>
+<li><strong>性能对比</strong>：在模拟的报废条件（零件缺失或卡住）下，POMDP规划器在所有三种产品上的平均拆解时间均优于确定性基线。对于角磨机，平均时间减少37.1%，方差减少28.8%；对于双盖电机，平均时间减少16.9%，方差减少84.2%；对于单盖电机，平均时间减少9.1%，方差减少68.4%。</li>
+<li><strong>泛化能力</strong>：系统成功适配到两个不同的机器人系统（A和B），并完成了两个不同产品的拆解，证明了框架对不同机器人能力的泛化能力。</li>
+<li><strong>适应性</strong>：系统能够成功适应与CAD模型的偏差，例如选择性地处理缺失或卡住的零件。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.23407v1/x7.png" alt="结果对比图"></p>
+<blockquote>
+<p><strong>图7</strong>：三种产品在模拟报废条件下，POMDP规划器与确定性规划器的平均拆解时间及方差对比。POMDP方法在时间和稳定性上均更优。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.23407v1/x8.png" alt="泛化结果"></p>
+<blockquote>
+<p><strong>图8</strong>：系统在两个不同机器人系统（A和B）上成功拆解两个不同产品的演示，展示了框架的泛化能力。</p>
+</blockquote>
+<p><strong>观察器实现</strong>：系统共享一个基于深度相机的观察器，通过点云匹配来定位组件并估计零件姿态，进而推导出“零件缺失”或“零件卡住”等符号观察。</p>
+<p><img src="https://arxiv.org/html/2511.23407v1/x6.png" alt="状态估计"></p>
+<blockquote>
+<p><strong>图6</strong>：角磨机和电机的状态估计过程示例。通过比对和配准真实点云（蓝）与模拟点云（黄/绿），来判定零件缺失（红）或卡住（右图）。</p>
+</blockquote>
+<p><strong>符号控制器</strong>：为获得可行策略，通过用检查先验对隐藏的报废条件进行边缘化，将POMDP近似为一个期望MDP，并训练Q学习智能体。在执行时，使用贝叶斯滤波器根据新观察更新信念，并基于最可能的状态采取行动。论文指出，此设计牺牲了显式的知识寻求行为，但由于动作反馈能立即揭示隐藏状态，且存在备用恢复方案，这已被认为可接受。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个将机器人拆解报废产品规划形式化为部分可观测马尔可夫决策过程的通用框架，显式地将不确定的报废条件建模为隐藏变量。</li>
+<li>开发了一个能够从CAD数据、机器人能力和先验检查数据自动生成具体POMDP模型并求解实例特定拆解策略的系统。</li>
+<li>通过仿真实验在三个产品和两个机器人系统上验证了该概率规划框架在平均拆解时间、方差、泛化性和适应性方面优于确定性基线方法。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>采用的符号控制器（基于最可能状态的Q学习）没有显式的知识寻求行为，不会单纯为了减少不确定性而选择探索性动作。</li>
+<li>对观察函数做出了理想化假设（如p_TP=1, p_FP=0），忽略了实际传感器（如相机）可能因光照等因素产生的假阴性。</li>
+<li>目前主要考虑了零件“卡住”这一种报废条件。</li>
+</ol>
+<p><strong>启示</strong>：</p>
+<ol>
+<li>为处理产品不确定性的拆解规划提供了一个坚实且可扩展的概率建模基础。更复杂的、依赖于信念的控制器（如标准POMDP求解器）可直接替代当前的Q学习智能体，有望带来进一步的性能提升。</li>
+<li>展示了从CAD到可执行策略的自动化流程的可行性，为机器人自主适应真实世界复杂性和可变性指明了方向。</li>
+<li>观察函数的理想化假设指出了未来工作的一个方向：集成更鲁棒、能处理传感器噪声和不确定性的感知算法。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对报废产品拆卸中产品状态不确定性问题，提出将拆卸建模为部分可观察马尔可夫决策过程（POMDP），以处理因磨损、腐蚀等导致的模型偏差。关键技术包括从CAD数据自动生成POMDP模型的框架，以及基于强化学习和贝叶斯滤波的近似规划方法。实验在三个产品和两个机器人系统上验证，该概率规划框架在平均拆卸时间和方差上优于确定性基线，能泛化到不同机器人设置并成功适应零件缺失或卡住等偏差。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.23407" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

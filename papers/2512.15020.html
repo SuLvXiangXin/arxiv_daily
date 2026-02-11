@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>ISS Policy : Scalable Diffusion Policy with Implicit Scene Supervision - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>ISS Policy : Scalable Diffusion Policy with Implicit Scene Supervision</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.15020" target="_blank" rel="noreferrer">2512.15020</a></span>
+        <span>作者: Jie Mei Team</span>
+        <span>日期: 2025-12-17</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>视觉模仿学习已成为获取机器人操作技能的重要范式，但当前主流方法严重依赖物体外观（2D图像），而忽略了底层的3D场景结构，这导致了训练效率低下和泛化能力差的问题。具体而言，基于2D图像的策略（如IBC、BC-RNN）存在空间模糊性，在处理遮挡或需要精确几何推理的接触任务时性能受限。为了缓解2D的局限，近期研究转向了3D表征（如基于体素或连续特征场的方法），但这些方法通常采用复杂的网络架构，导致推理缓慢、计算成本高昂。更重要的是，这些3D策略仅依赖策略损失来监督整个场景编码器和动作头，这种监督信号过于微弱和间接，导致学习效率低下。本文针对现有3D策略训练效率低、监督信号弱的具体痛点，提出了一种新视角：为扩散策略引入一个额外的、自监督的隐式场景监督信号，以增强模型对场景几何动态的理解。本文的核心思路是：构建一个基于DiT的3D视觉运动策略，从点云观测中预测连续动作序列，并引入一个隐式场景监督模块，通过预测未来点云特征来强制输出与场景几何演化一致，从而提升策略的性能和鲁棒性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>ISS Policy的整体框架是一个基于DiT的条件扩散模型，它以单视角深度图转换而来的稀疏点云和机器人本体状态作为输入，输出未来连续动作序列。其核心创新在于增加了一个仅在训练时使用的隐式场景监督（ISS）模块，为动作预测提供几何动态一致性约束。</p>
+<p><img src="https://arxiv.org/html/2512.15020v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：ISS Policy模型架构。专家演示的点云和状态被编码为观测上下文。训练时，扩散噪声调度器向专家动作轨迹添加噪声，基于DiT的策略头以上下文和扩散时间步t为条件进行去噪，预测未来动作序列。策略生成候选轨迹后，ISS模块利用全局点云上下文和一段预测动作，预测一个跳跃K步的未来点云嵌入，提供辅助的未来预测信号以塑造训练过程中的表征学习。</p>
+</blockquote>
+<p><strong>整体流程与问题定义</strong>：模型学习一个端到端的视觉运动策略 π_θ: O^To → A^T。输入是长度为To的观测窗口，每个观测Ot包含单视角机器人中心点云Pt和本体状态st。输出是长度为T的预测动作序列，但在执行时仅应用前Ta个动作（Ta ≤ T），以滚动时域方式控制。</p>
+<p><img src="https://arxiv.org/html/2512.15020v1/x3.png" alt="策略公式"></p>
+<blockquote>
+<p><strong>图3</strong>：策略公式化。展示了预测总时长T、观测窗口长度To和执行动作步数Ta之间的关系。</p>
+</blockquote>
+<p><strong>核心模块一：DiT架构（动作生成）</strong>。该部分采用编码器-解码器设计。</p>
+<ol>
+<li><strong>条件编码器</strong>：点云编码器采用MLP加最大池化操作，将点云Pt编码为紧凑的全局特征z_pc。机器人状态st通过另一个MLP直接编码为z_state。</li>
+<li><strong>动作解码器</strong>：基于DiT架构。首先将带噪声的动作序列A_t^(τ)嵌入为高维向量H。为了增强去噪过程的空间感知，将H与点云特征z_pc融合，生成动作查询Q = MLP(concat(H, z_pc))。随后，Q通过多个DiT块进行处理，每个块包含多头自注意力（MHSA）和前馈网络（FFN），并使用AdaLN-zero层注入条件信息C = z_pc + z_state + Emb(τ)，其中Emb(τ)是扩散时间步τ的正弦位置编码。最终，一个预测头将处理后的特征映射回干净的动作预测。</li>
+</ol>
+<p><strong>核心模块二：隐式场景监督（ISS）模块</strong>。这是本文的核心创新。其核心思想是：如果模型预测的动作是正确的，那么这些动作应该能够准确预测对应的未来场景。因此，ISS模块利用动作解码器预测出的动作序列 Â_{t,K} 来预测未来K步后的点云场景特征，而不是预测下一帧（因为相邻点云变化微小，监督信号弱）。预测K步未来鼓励模型捕获更有意义的长期动态和物体运动。</p>
+<ol>
+<li><strong>技术细节</strong>：给定当前时刻编码的点云特征z_pc,t和预测动作Â_{t,K}，ISS模块（由几个前馈网络和自适应层归一化组成）预测未来点云嵌入 ẑ<em>pc,t+K。具体过程如公式(12)-(14)：先对当前点云特征进行变换，然后通过FFN(AdaLN(·, Ã</em>{t,K}))注入动作信息，最后输出预测特征。</li>
+<li><strong>损失函数与训练策略</strong>：ISS损失是预测特征与真实未来点云特征之间的简单L2回归损失：L_iss = E[ ||ẑ<em>pc,t+K - z_pc,t+K||<em>2^2 ]。此监督无需额外标注，输入（历史点云和动作）和目标（未来点云）均直接来自演示数据。为避免训练早期因动作预测不准导致的误差累积和不稳定，论文采用了<strong>计划采样</strong>策略：以概率p使用真实动作A</em>{t,K}，以概率1-p使用预测动作Â</em>{t,K}作为ISS模块的输入（公式16）。</li>
+</ol>
+<p><strong>总体训练目标</strong>：最终的损失是行为克隆的扩散去噪损失与ISS损失的加权和：L(θ, ψ) = L_bc(θ) + λ_iss * L_iss(θ, ψ)。其中θ是DiT策略参数，ψ是ISS头参数，λ_iss是控制ISS监督强度的超参数。<strong>测试时，ISS头被丢弃，仅使用DiT策略生成动作，因此不增加任何推理开销。</strong></p>
+<p><strong>与现有方法的创新点</strong>：</p>
+<ol>
+<li><strong>高效的3D表征</strong>：采用稀疏点云编码，相比基于体素或神经场的方法更轻量。</li>
+<li><strong>隐式场景监督</strong>：引入了额外的、自监督的几何动态一致性约束（ISS损失），为策略学习提供了更丰富的信号，这是与DP3等仅用策略损失的方法的关键区别。</li>
+<li><strong>训练策略优化</strong>：结合计划采样来稳定ISS模块的训练，缓解暴露偏差。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>Benchmark/数据集</strong>：在模拟环境Adroit（灵巧手操作）和MetaWorld（单臂操作）上进行评估。</li>
+<li><strong>Baseline方法</strong>：对比了2D方法（BCRNN, IBC, Diffusion Policy）和3D方法（DP3, Mamba Policy）。</li>
+<li><strong>评估指标</strong>：报告SR_5（训练过程中最高五个成功率的平均值）的均值和标准差。</li>
+<li><strong>实验平台</strong>：单张NVIDIA RTX 5880 GPU。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2512.15020v1/x4.png" alt="模拟环境点云观测"></p>
+<blockquote>
+<p><strong>图4</strong>：模拟环境中的3D点云观测可视化。展示了来自Adroit和MetaWorld的代表性点云。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：<br>如表I所示，ISS Policy在9个任务上取得了最高的平均成功率（86.2%），显著优于所有基线。特别是在具有挑战性的Adroit任务（如Pen）和复杂的MetaWorld任务（如Pick-Place-Wall）上表现突出。传统行为克隆方法（BCRNN, IBC）表现很差，扩散类方法普遍更优，而ISS Policy在3D扩散基线（DP3, Mamba Policy）基础上实现了进一步提升。</p>
+<p><img src="https://arxiv.org/html/2512.15020v1/x5.png" alt="学习效率与稳定性"></p>
+<blockquote>
+<p><strong>图5</strong>：ISS Policy与DP3在MetaWorld任务上的训练曲线对比。ISS Policy收敛更快，学习效率更高，并且达到了更高的渐近性能。</p>
+</blockquote>
+<p><strong>可扩展性评估</strong>：</p>
+<ol>
+<li><strong>模型容量扩展</strong>：如表II和图6所示，增大DiT策略头的规模（从小型到大型）能持续提升SR_5，表明该架构能有效利用增加的模型容量。</li>
+<li><strong>数据规模扩展</strong>：如表III所示，即使在仅有10条演示的低数据区域，ISS Policy也能取得不错性能，并随着演示数据量的增加而稳步提升。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2512.15020v1/x6.png" alt="可扩展性研究（模型大小）"></p>
+<blockquote>
+<p><strong>图6</strong>：ISS Policy在不同DiT模型大小下的可扩展性研究。展示了在四个任务上，使用三种不同规模DiT策略头（带ISS和不带ISS）的SR_5性能。模型越大，性能通常越好，且ISS模块能带来增益。</p>
+</blockquote>
+<p><strong>消融实验</strong>：</p>
+<ul>
+<li><strong>模块贡献</strong>：表IV的消融研究表明，条件融合、ISS模块和计划采样三者是互补的。条件融合提升了感知-动作耦合；ISS模块塑造了面向未来的上下文表征；而计划采样使得ISS监督在模型自身动作分布下更有效，从而提升了策略 rollout 时的鲁棒性。三者结合效果最佳。</li>
+<li><strong>ISS权重影响</strong>：表V显示，ISS损失权重λ_iss存在一个最优值（0.4），此时平均成功率最高（89.75%）。权重过低或过高都会导致性能下降，说明需要适度的平衡。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种高效、可扩展的基于DiT的3D视觉运动策略（ISS Policy），用于从点云观测中生成机器人操作动作序列。</li>
+<li>引入了新颖的隐式场景监督（ISS）损失，通过自监督的未来点云特征预测，为策略学习提供了额外的几何动态一致性约束，显著提高了学习效率和泛化能力。</li>
+<li>在模拟（Adroit, MetaWorld）和真实世界实验中，ISS Policy均取得了最先进的性能，并表现出优异的可扩展性（对模型大小和数据量）以及训练稳定性。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文自身提到，方法依赖于单视角深度图转换的点云，这可能限制了其对被遮挡物体或场景完整几何的理解。此外，ISS模块的设计（如预测跳跃步数K的选择）可能不是最优的，未来有改进空间。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>多模态与多视角输入</strong>：可以探索融合多视角点云或RGB信息，以提供更全面的场景理解。</li>
+<li><strong>ISS模块的改进</strong>：未来工作可以研究更先进的场景预测模型（如神经辐射场）或更复杂的动态建模方式来替代简单的特征回归。</li>
+<li><strong>应用于更复杂任务</strong>：该方法展现出的高效性和鲁棒性使其有望应用于更长期、多步骤的移动操作任务。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉模仿学习过度依赖物体外观、忽视3D场景结构导致的训练效率低、泛化差问题，提出ISS Policy。该方法是一种基于DiT的3D视觉运动扩散策略，以点云为输入预测连续动作序列。其核心是提出了隐式场景监督模块，通过鼓励模型输出与场景几何演化一致，提升策略性能与鲁棒性。实验表明，该方法在MetaWorld单臂操作和Adroit灵巧手操作任务上达到SOTA性能，并在真实世界展现出强泛化与鲁棒性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.15020" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

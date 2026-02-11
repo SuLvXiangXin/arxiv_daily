@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Instruct2Act: From Human Instruction to Actions Sequencing and Execution via Robot Action Network for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Instruct2Act: From Human Instruction to Actions Sequencing and Execution via Robot Action Network for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.09940" target="_blank" rel="noreferrer">2602.09940</a></span>
+        <span>作者: Laxmidhar Behera Team</span>
+        <span>日期: 2026-02-10</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于大语言模型（LLMs）和视觉语言模型（VLMs）的视觉语言动作（VLA）管道，能够将自由形式的指令直接映射到感知和轨迹生成，是机器人人机交互领域的主流方法。然而，在仅使用眼在手（手腕）单摄像头配置的实际部署中，这些方法面临关键局限性：手臂和夹具频繁遮挡关键物体、视角快速变化、全局上下文有限导致位姿和帧模糊，从而降低操作可靠性。此外，即便是轻量级VLA变体也常依赖广角多摄像头设置或庞大的多模态编码器，引入了延迟并增加了实际环境中的维护成本。</p>
+<p>本文针对在资源受限、仅配备单眼在手摄像头的实际环境中，实现可靠、实时操作的痛点，提出了一个新视角：不追求端到端的、基于大型模型的复杂理解，而是采用一个轻量级、完全在设备上运行的两阶段确定性管道。其核心思路是：首先，将自然语言指令精细解析为一个有序的原子动作序列（如<code>reach</code>, <code>grasp</code>, <code>move</code>）；然后，利用一个结合了动态自适应轨迹径向网络（DATRN）和视觉分析器的机器人动作网络（RAN），为每个子动作生成并执行精确的控制轨迹。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法是一个完整的两阶段管道，整体框架如图1所示。第一阶段（Instruct2Act模块）的输入是自然语言指令（或经语音转文本后的文本），输出是一个有序的原子子动作序列。第二阶段（RAN模块）的输入是该子动作序列，输出是控制机器人执行这些动作的具体轨迹命令，最终完成整个任务。</p>
+<p><img src="https://arxiv.org/html/2602.09940v1/front_page_jp.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：Instruct2Act与RAN的整体框架。左侧为指令解析为动作序列的Instruct2Act模块，右侧为执行动作序列的RAN模块，包含环境分析、轨迹生成与机器人执行。</p>
+</blockquote>
+<p><strong>核心模块一：Instruct2Act（指令到动作解析模块）</strong><br>该模块的目标是将任务描述翻译成子动作序列。其技术细节如下：</p>
+<ol>
+<li><strong>任务嵌入提取</strong>：使用<code>bert-large-uncased</code>模型将指令文本转换为1024维的语义嵌入向量。</li>
+<li><strong>序列对齐</strong>：将上述嵌入向量在时间维度上复制/对齐到固定长度<code>L</code>，形成序列<code>{R_i,t}</code>，作为后续序列模型的输入。</li>
+<li><strong>学习架构</strong>：采用双向LSTM（BiLSTM）结合多头自注意力（MHA）和自编码器的轻量级网络。<ul>
+<li><strong>BiLSTM层</strong>：处理对齐后的嵌入序列，捕获前后文信息，输出512维（每个方向256维）的隐藏状态序列。</li>
+<li><strong>MHA层</strong>：包含8个注意力头（<code>dk=256</code>），对BiLSTM输出进行自注意力计算，使模型能关注序列中不同位置的信息，输出经线性映射和另一个BiLSTM（作为前馈块）处理，得到256维特征。</li>
+<li><strong>自编码器层</strong>：作为一个正则化组件，将前述256维特征通过一个BiLSTM编码器压缩为128维的瓶颈特征，再通过一个BiLSTM解码器重建回256维。训练时，计算瓶颈特征与重建特征之间的均方误差（MSE）作为重建损失。</li>
+<li><strong>输出层</strong>：一个时间分布的全连接层，对解码器每个时间步的输出应用Softmax，预测该步对应的子动作类别概率分布。</li>
+</ul>
+</li>
+<li><strong>训练与损失</strong>：模型端到端训练，损失函数是子动作分类的交叉熵损失与自编码器重建损失的加权和（<code>ℒ = 交叉熵 + λ * MSE</code>），使用Adam优化器。</li>
+</ol>
+<p><strong>核心模块二：机器人动作网络（RAN）</strong><br>RAN负责执行Instruct2Act预测出的每个子动作，其工作流程如图3所示，包含三个组件：</p>
+<p><img src="https://arxiv.org/html/2602.09940v1/RAN.jpeg" alt="RAN工作流程"></p>
+<blockquote>
+<p><strong>图3</strong>：RAN的工作流程。接收子动作序列后，环境分析器检测物体；若物体存在，则进行坐标转换并交由DATRN生成轨迹，最后由机器人执行。</p>
+</blockquote>
+<ol>
+<li><strong>最优轨迹学习（DATRN）</strong>：这是RAN的核心创新。针对动态运动基元（DMP）方法需要迭代超参数搜索、相位/增益调度和长拟合时间等局限，提出了动态自适应轨迹径向网络（DATRN）。它使用径向基函数（RBF）网络来建模轨迹动力学。RBF中心通过K-Means聚类在示范轨迹上优化放置，宽度根据中心间平均距离自动设置。网络权重通过正则化最小二乘（岭回归）一次性求解（公式9），实现了快速、单次学习。DATRN的动力学方程（公式7）包含一个非线性吸引子项<code>tanh(g - y(t_k))</code>，能稳定驱动轨迹收敛至目标<code>g</code>。</li>
+<li><strong>环境分析器</strong>：使用定制训练的YOLOv8-n模型实时检测工作空间中指令提及的物体。如果检测到目标物体，则返回其位置；否则任务安全停止。对于指令中缺失的对象或目标位置，系统会交互式地向用户查询。</li>
+<li><strong>机器人执行模型</strong>：负责将感知信息转化为具体动作。<ul>
+<li><strong>坐标转换</strong>：结合YOLO检测的物体2D图像中心<code>(u, v)</code>和深度传感器提供的深度值<code>d</code>，通过相机内参反投影到3D相机坐标系，再通过ROS TF2提供的变换矩阵转换到机器人基坐标系，得到目标位置<code>(x, y, z)</code>。</li>
+<li><strong>轨迹规划与执行</strong>：将目标坐标<code>(x, y, z)</code>输入DATRN，生成平滑的、类人的轨迹。机器人执行该轨迹。对于需要高精度到达的任务（如抓取、倾倒），使用比例-微分（PD）控制器进行误差最小化。</li>
+<li><strong>处理遮挡</strong>：对于抓取后摄像头被遮挡的情况（如抓取-放置、抓取-倾倒），系统在抓取前预先识别并存储后续放置/倾倒的目标位置。</li>
+</ul>
+</li>
+</ol>
+<p><strong>创新点</strong>：与现有VLA方法相比，本文的创新具体体现在：1) <strong>轻量级与完全在设备运行</strong>：整个管道设计紧凑，无需云端服务，适合资源受限环境。2) <strong>确定性动作解析</strong>：将模糊的指令解析为确定的原子动作序列，提高了操作的可靠性和可解释性。3) <strong>高效的轨迹生成</strong>：用DATRN替代DMP，避免了繁琐的参数调整，实现了快速、自适应的轨迹生成。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>硬件</strong>：Kinova 7自由度机械臂，Intel RealSense D410深度相机（眼在手配置），Nvidia RTX 4060 GPU用于训练。</li>
+<li><strong>软件</strong>：ROS， Kinova库， Huggingface Transformers， TensorFlow， PyTorch。</li>
+<li><strong>数据集</strong>：自定义专有数据集，包含2850条自然语言指令及其对应的结构化子动作序列，涵盖拾放、倾倒、清洁、给予等任务。</li>
+</ul>
+<p><strong>对比的Baseline方法</strong>：在指令解析任务上，对比了标准LSTM、BiLSTM以及BiLSTM+MHA模型。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>指令解析精度</strong>：如表IV(c)所示，Instruct2Act在测试集上达到了91.5%的子动作预测准确率，显著高于LSTM（79.21%）、BiLSTM（81.92%）和BiLSTM+MHA（85.56%）。其加权F1分数和召回率也分别为91%和88%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.09940v1/x3.png" alt="混淆矩阵"></p>
+<blockquote>
+<p><strong>图5</strong>：Instruct2Act在测试集上的混淆矩阵。显示了模型对不同子动作类别的预测情况，对角线上的高亮度表明整体预测准确性很高。</p>
+</blockquote>
+<ol start="2">
+<li><strong>训练过程</strong>：如图4所示，训练损失和验证损失平滑下降并收敛（最终分别为0.0091和0.0088），重建损失也同步下降，表明模型学习有效且未过拟合。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.09940v1/x2.png" alt="训练损失曲线"></p>
+<blockquote>
+<p><strong>图4</strong>：模型的训练与验证损失（分类损失）曲线，以及自编码器分支的重建损失曲线。两条主损失曲线平行收敛，显示模型泛化良好。</p>
+</blockquote>
+<ol start="3">
+<li><strong>消融实验</strong>：如图6所示，移除非核心组件会降低性能。移除自编码器导致准确率下降1.8%，移除MHA下降4.3%，同时移除两者则下降9.6%，证明了MHA和自编码器各自对提升模型性能的贡献。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.09940v1/x4.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图6</strong>：Instruct2Act架构的消融研究结果。完整模型性能最佳，移除多头注意力（MHA）或自编码器（AE）组件均会导致准确率下降，证明两者均为有效设计。</p>
+</blockquote>
+<ol start="4">
+<li><p><strong>机器人任务执行成功率</strong>：在真实机器人上评估了四个任务（见表IV(a)）。整体任务成功率达到90%，其中“桌面清洁”成功率最高（95%），“拾取并给予”最低（85%）。子动作推理时间小于3.8秒，端到端任务执行时间在30-70秒之间，取决于任务复杂度。</p>
+</li>
+<li><p><strong>失败分析</strong>：如表IV(b)所示，在总共8次失败中，37.5%归因于机器人动作网络（如轨迹执行误差），25%归因于子动作序列预测错误，另外37.5%为系统故障（如通信问题）。</p>
+</li>
+<li><p><strong>定性结果</strong>：图7至图11展示了系统成功执行“拾放”、“拾取并倾倒”、“桌面清洁”、“拾取并给予”以及一个组合任务（“拾取瓶子，倒入杯中，然后清洁桌子”）的序列图像，直观证明了方法的有效性。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.09940v1/x5.png" alt="定性结果1"></p>
+<blockquote>
+<p><strong>图7</strong>：“拾取与放置”任务的执行序列。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.09940v1/x6.png" alt="定性结果2"></p>
+<blockquote>
+<p><strong>图8</strong>：“拾取与倾倒”任务的执行序列。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.09940v1/x7.png" alt="定性结果3"></p>
+<blockquote>
+<p><strong>图9</strong>：“桌面清洁”任务的执行序列。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.09940v1/x8.png" alt="定性结果4"></p>
+<blockquote>
+<p><strong>图10</strong>：“拾取并给予”任务的执行序列。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.09940v1/x9.png" alt="定性结果5"></p>
+<blockquote>
+<p><strong>图11</strong>：组合任务（“拾取瓶子，倒入杯中，然后清洁桌子”）的执行序列。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种集成了学习模块（指令解析）与执行模块（轨迹生成与控制）的完整方法论，弥合了自然语言解析与精确机器人控制之间的鸿沟。</li>
+<li>提出了一个轻量级的Instruct2Act框架，它通过结合BiLSTM、多头注意力和自编码器，能够以较低计算开销从人类指令中准确提取细粒度的子动作序列。</li>
+<li>引入了机器人动作网络（RAN），其中创新的动态自适应轨迹径向网络（DATRN）与基于视觉的环境分析器（YOLOv8）结合，能在机器人工作空间内生成平滑、精确的操纵轨迹。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，该方法目前依赖于一个自定义的专有数据集进行训练和评估。此外，实验是在受控的实验室和初步的现实医疗环境中进行的，尚未在高度动态或不可预测的非结构化环境中进行大规模测试。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>轻量级与确定性的价值</strong>：在资源受限的实际部署场景中，一个轻量级、完全在设备上运行、具有确定性的管道可能比依赖大型模型和云端的复杂系统更具实用性和鲁棒性。</li>
+<li><strong>模块化设计</strong>：将复杂的“指令到动作”问题分解为“解析”和“执行”两个相对独立的阶段，并分别优化，是一种有效的工程化思路，提高了系统的可解释性和可调试性。</li>
+<li><strong>DATRN的潜力</strong>：DATRN作为一种高效、免调参的轨迹生成方法，在需要从演示中快速学习并适应新目标的机器人技能学习领域具有进一步的应用和拓展空间。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出Instruct2Act框架，旨在解决机器人在资源受限环境下难以理解和执行自由形式人类指令的问题。核心方法包括：1）基于BiLSTM与多头注意力自编码器的指令解析模块，将自然语言指令分解为原子动作序列；2）结合动态自适应轨迹径向网络（DATRN）与YOLOv8视觉分析器的机器人动作网络，生成精确控制轨迹。实验表明，该系统在自定义数据集上子动作预测准确率达91.5%，在四种真实机器人任务中整体成功率为90%，单次子动作推理时间小于3.8秒。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.09940" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

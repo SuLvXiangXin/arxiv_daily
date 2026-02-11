@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VERM: Leveraging Foundation Models to Create a Virtual Eye for Efficient 3D Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>VERM: Leveraging Foundation Models to Create a Virtual Eye for Efficient 3D Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.16724" target="_blank" rel="noreferrer">2512.16724</a></span>
+        <span>作者: Liang Wang Team</span>
+        <span>日期: 2025-12-18</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于视觉的3D机器人操作通常依赖多个固定摄像机的感知输入进行动作规划。这种多相机设置引入了大量的冗余和无关信息，增加了计算成本，并迫使模型花费额外的训练时间来提取关键的任务相关信息。现有方法主要分为两类：一类将多视角RGB-D图像投影到统一的3D体素或点云表示中，但庞大的3D表示仍包含冗余背景，且训练耗时（例如PerAct在8块V100 GPU上需约16天）；另一类（如RVT系列）则将点云投影到由人类专家经验预定义的虚拟相机平面上，但这类预定义视角缺乏对新任务的适应性。人类则能够利用其广泛的知识，仅凭一瞥和想象就为各种任务确定自适应的操作视角。本文针对多相机输入冗余、计算成本高以及预定义视角缺乏灵活性的痛点，提出利用基础模型的知识为机器人“想象”一个虚拟的、任务自适应的视角。核心思路是：利用GPT-4o等大模型根据多视角观测和语言指令预测一个最优虚拟相机位姿，仅使用从该视角渲染的单张图像来指导策略网络，从而大幅减少输入冗余，加速训练和推理。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>VERM方法的整体流程分为两步：首先，通过一个基于提示的范式，利用GPT-4o预测完成当前任务所需的自适应虚拟相机位姿；其次，基于该位姿从构建的3D点云渲染出单张虚拟图像，并输入到一个集成了深度感知模块和动态粗到细（Coarse-to-Fine, C2F）机制的策略网络中，最终预测出机器人的动作。</p>
+<p><img src="https://arxiv.org/html/2512.16724v1/x1.png" alt="提示范式"></p>
+<blockquote>
+<p><strong>图1</strong>：使用GPT-4o查询虚拟相机位姿的提示范式。左侧为结构化的文本提示，包含环境描述、任务描述、上下文示例和规则四部分。右上角为两个视觉提示：左图使用SoM技术标注了工作空间及固定相机位置与坐标轴，右图展示了来自这些固定相机的原始RGB图像。GPT-4o处理这些提示后输出虚拟相机位姿参数（<code>elev</code>和<code>azim</code>）。右下角展示了由查询到的位姿生成的虚拟图像示例。</p>
+</blockquote>
+<p><strong>核心模块一：虚拟相机位姿选择</strong><br>该模块旨在将GPT-4o转化为一个空间推理智能体。如图1所示，研究者设计了一个结构化的提示框架，将文本提示分为四个部分：1) <strong>环境描述</strong>：概述场景中固定相机位姿、原点位置及坐标轴方向，并辅以SoM标注的视觉提示以帮助模型理解空间关系。2) <strong>任务描述</strong>：定义用<code>elev</code>（与XZ平面夹角）和<code>azim</code>（在参考平面上的投影与参考向量的夹角）两个角度参数来表征指向原点的虚拟相机方向。3) <strong>上下文示例</strong>：提供来自RVT-2设置的三个相机示例，帮助模型理解空间关系。4) <strong>规则</strong>：设立四条规则来精炼输出，包括偏好轴对齐以方便深度信息捕获、强调必须分析视觉信息而非相机标签、确保相机从上方向下看桌子以及约束输出格式。结合文本提示和五张视觉提示（一张环境图，四张原始RGB-D输入图），GPT-4o输出虚拟相机位姿，进而从统一3D点云渲染出全局虚拟图像<code>o_global</code>。</p>
+<p><strong>核心模块二：策略网络</strong><br>策略网络架构如图2所示，它接收虚拟图像<code>o_global</code>、语言指令和本体感知（机器人状态和时间）信息，输出一个8维动作向量（3维位置、3维旋转、1维夹爪状态、1维碰撞参数）。</p>
+<p><img src="https://arxiv.org/html/2512.16724v1/x2.png" alt="策略网络"></p>
+<blockquote>
+<p><strong>图2</strong>：VERM的策略网络架构。原始多视角RGB-D输入被转化为统一3D点云，并根据GPT-4o预测的位姿投影生成单张全局虚拟图像。该图像与语言指令、本体感知信息一起，通过Transformer预测一个粗粒度动作（包括2D热图和深度估计）。在任务关键阶段，通过动态C2F模块触发视角缩放，聚焦于局部感兴趣区域以细化动作。</p>
+</blockquote>
+<ul>
+<li><strong>动态粗到细模块</strong>：为了解决高精度操作需求，VERM引入了动态C2F机制。与以往在每个步骤都进行细化的方法不同，VERM仅在任务关键阶段（如抓取、对齐）触发细化。具体而言，在训练时，通过比较粗粒度预测和细粒度预测在平移或旋转上的差异是否超过阈值（0.01米或5°）来标记需要细化的样本，并训练一个轻量级分类器。在推理时，该分类器决定是否激活“细化阶段”：即根据粗粒度预测的位置，对点云进行中心化和缩放操作（不改变相机方向），生成一个局部放大的视图，并在此视图上重新预测更精细的动作。</li>
+<li><strong>深度感知模块</strong>：由于单张2D图像缺乏深度信息，VERM在Transformer中引入了<strong>可学习的深度token</strong>。网络在虚拟图像的2D空间上预测一个动作热图，同时通过这些深度token估计出一个对应的深度值，从而共同确定3D空间中的末端执行器位置。3维旋转被离散化为每个轴5度的区间进行分类预测。</li>
+</ul>
+<p><strong>训练细节</strong>：从专家轨迹中根据末端执行器状态变化和近零速度点提取关键点。损失函数如公式(1)所示，是平移、旋转、夹爪开合、碰撞、深度以及动态C2F指示器分类损失的加权和。</p>
+<p><strong>创新点</strong>：与现有方法相比，VERM的主要创新在于：1) <strong>视角选择自动化</strong>：利用基础模型替代人工经验，自动生成任务自适应的最优虚拟视角。2) <strong>高效的单图像输入</strong>：仅使用单张虚拟图像作为策略网络的主要视觉输入，极大减少了计算负担。3) <strong>深度感知与动态细化</strong>：通过深度token将2D预测扩展至3D，并通过动态触发的C2F机制在精度和效率间取得平衡。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在仿真基准<strong>RLBench</strong>和真实世界环境中进行评估。RLBench实验遵循PerAct设置，使用Franka Panda机器人，任务包含堆叠积木、开抽屉、插入销钉等17种，每种任务有100条专家演示。视觉输入来自四个128×128分辨率的固定RGB-D相机。对比了<strong>C2F-ARM</strong>、<strong>PerAct</strong>、<strong>HiveFormer</strong>、<strong>PolarNet</strong>、<strong>RVT</strong>、<strong>Act3D</strong>、<strong>3D Diffuser Actor (3DDA)</strong> 和 <strong>RVT-2</strong> 共八种先进方法。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>性能与速度</strong>：如表I所示，VERM在RLBench的17个任务上取得了<strong>83.6%<strong>的平均成功率，超过了RVT-2的82.2%，并在11个任务上表现最佳。同时，如图4所示，VERM实现了</strong>1.89倍</strong>的训练加速和<strong>1.54倍</strong>的推理加速（与RVT-2相比）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2512.16724v1/x4.png" alt="训练与推理速度"></p>
+<blockquote>
+<p><strong>图4</strong>：左图（对数尺度）展示了各方法的训练时间（天），右图展示了推理速度（帧每秒）。VERM在保持高性能的同时，显著提升了训练和推理效率。</p>
+</blockquote>
+<ol start="2">
+<li><strong>定性分析</strong>：图3可视化了VERM生成的虚拟视角和动作预测。例如，在“开抽屉”和“放钱”任务中，所选视角完整展示了在原始视角中被部分遮挡的物体（如整个把手）；在“分类形状”任务中，轻微的旋转暴露了被遮挡的孔洞。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2512.16724v1/x3.png" alt="动作预测可视化"></p>
+<blockquote>
+<p><strong>图3</strong>：VERM在RLBench任务中动作预测的可视化。左侧两列展示原始固定相机视图，第三列为GPT-4o生成的虚拟视图，第四列为在该虚拟视图上预测的动作热图（红色点）。虚拟视图有效整合了多视角信息并避免了遮挡。</p>
+</blockquote>
+<ol start="3">
+<li><strong>消融实验</strong>：如表II所示（对应论文中的表II，其可视化形式应为图7），消融研究验证了各组件的重要性。使用GPT-4o生成的全局视图（模型#1）性能最好。仅使用RVT-2预定义的单个相机视图（模型#2-#4）性能显著下降，其中顶部相机最佳但仍有限制。移除动态C2F过程（模型#5）或轴对齐约束（模型#8）均会导致性能下降。低图像分辨率（模型#6）或缺失缩放操作（模型#7）也会损害性能。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2512.16724v1/x7.png" alt="消融研究结果"></p>
+<blockquote>
+<p><strong>图7</strong>：消融研究结果柱状图（对应论文表II）。展示了不同设计选择（如相机位姿来源、是否使用C2F、图像尺寸、是否缩放、是否轴对齐）对平均成功率的影响，验证了完整VERM设计（#1）的有效性。</p>
+</blockquote>
+<ol start="4">
+<li><p><strong>跨模型通用性</strong>：如表III所示，VERM框架可兼容不同的基础模型。使用Qwen2.5和Claude 3.5 Sonnet（辅以迭代细化策略）分别取得了80.3%和81.2%的成功率，虽略低于GPT-4o的83.6%，但证明了该方法的可插拔性。</p>
+</li>
+<li><p><strong>失败案例分析</strong>：图5展示了典型失败案例，例如在“放入橱柜”任务中，物体和目标容器从不同角度可见，单一初始视角可能无法覆盖所有后续关键信息。论文通过引入动态重查询策略（在任务中途更新视角）将该任务成功率从55.2%提升至66.4%。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2512.16724v1/x5.png" alt="失败案例"></p>
+<blockquote>
+<p><strong>图5</strong>：VERM的典型失败案例可视化。例如在“放入橱柜”任务中，初始选择的虚拟视图（最右列）可能无法同时清晰捕捉物体和目标容器的关键细节，导致后续操作困难。</p>
+</blockquote>
+<ol start="6">
+<li><strong>真实世界评估</strong>：在真实机器人平台上（使用2个RealSense D435i相机）评估了8个任务。如图6和论文所述，VERM在大多数任务上取得了与仿真相当的成功率，并优于RVT和RVT-2，证明了其从仿真到现实的迁移能力。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2512.16724v1/x6.png" alt="真实世界预测"></p>
+<blockquote>
+<p><strong>图6</strong>：VERM在真实世界任务中的动作预测可视化。格式与图3类似，展示了原始相机视图、GPT-4o生成的虚拟视图及预测的动作热图。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种利用大模型（如GPT-4o）作为空间推理智能体，为3D机器人操作自动选择任务自适应虚拟相机视角的新范式，显著减少了输入信息的冗余。</li>
+<li>设计了深度感知模块和动态粗到细调整机制，使基于单张2D图像的策略能够进行精确的3D空间规划和细粒度操作。</li>
+<li>在RLBench基准和真实实验中验证了方法的有效性，在取得领先成功率的同时，大幅提升了训练和推理速度，并展示了良好的跨基础模型通用性。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>对于某些复杂任务（如“放入橱柜”），单一静态视角可能无法捕捉所有阶段所需的关键信息。</li>
+<li>依赖的基础模型可能存在“幻觉”，生成无效的相机位姿（如桌子下方），需要额外的提示约束和自验证循环来缓解。</li>
+</ol>
+<p><strong>启示</strong>：</p>
+<ol>
+<li>大型多模态基础模型所蕴含的空间推理知识可以被有效地引导和用于解决机器人学中的具体感知问题，而不仅仅是高层任务规划。</li>
+<li>“预测-获取-引导”的流程为构建高效、专注的机器人感知系统提供了新思路。动态调整机制（如动态C2F、动态重查询）为实现精度与效率的平衡提供了借鉴。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出VERM方法，旨在解决3D机器人操作中多固定摄像头带来的信息冗余与计算负担问题。该方法核心是利用基础模型，从3D点云中生成一个虚拟的、任务自适应的视角（虚拟眼），以高效聚焦关键信息并缓解遮挡。技术要点包括深度感知模块和动态由粗到精的处理流程。实验表明，该方法在RLBench仿真和真实场景中均超越先前最佳方法，实现了训练速度1.89倍、推理速度1.54倍的提升。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.16724" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SafeHumanoid: VLM-RAG-driven Control of Upper Body Impedance for Humanoid Robot - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>SafeHumanoid: VLM-RAG-driven Control of Upper Body Impedance for Humanoid Robot</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.23300" target="_blank" rel="noreferrer">2511.23300</a></span>
+        <span>作者: Dzmitry Tsetserukou Team</span>
+        <span>日期: 2025-11-28</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，确保安全的人机交互主要依赖于阻抗控制，它允许机器人通过编程设定刚度和阻尼来与环境接触。然而，具有单一固定阻抗设置的机器人难以应对人机交互的多样性。现有的自适应控制器通常基于接触反馈或几何信息（如人与机器人的距离）进行反应式调整，但它们往往在交互发生后才响应，缺乏前瞻性，并且对场景的语义上下文（例如，附近的人是旁观者还是协作者）是“盲目的”。近年来，视觉语言模型和视觉语言动作模型为机器人带来了常识推理能力，能够将高级指令转化为任务序列或关节轨迹，但它们通常专注于位置控制和任务完成，很少考虑在靠近人类时应如何安全地执行动作，即缺乏对阻抗行为的主动调制。</p>
+<p>本文针对“如何将高级语义理解与底层安全合规控制（阻抗与速度调度）相结合”这一具体痛点，提出了一个新视角：利用视觉语言模型的语义推理能力，通过检索增强生成技术，在任务执行前根据场景上下文主动调度阻抗和速度参数。本文的核心思路是：构建一个由视觉语言模型驱动语义理解、由检索增强生成进行安全参数映射的管道，为人形机器人的任何轨迹执行添加一个动态的、符合安全标准的合规层。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>SafeHumanoid的整体框架是一个模块化架构，连接高级语义推理与Unitree G1人形机器人的底层阻抗控制。其输入是机器人的自我中心RGB图像，输出是用于关节级阻抗控制的命令集 <code>{q_ref, q̇_ref, τ_ff, K_p, K_d}</code>。管道主要分为四个部分：机器人-服务器通信、基于VLM的自我中心感知、基于RAG的安全参数生成以及机器人控制模块。</p>
+<p><img src="https://arxiv.org/html/2511.23300v1/sysss.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：SafeHumanoid管道架构。机载PC以50Hz频率流式传输自我中心图像帧并执行阻抗控制，而外部工作站运行Molmo VLM和基于FAISS的RAG系统，将场景语义与从策划的场景数据库中检索出的已验证阻抗和速度参数进行匹配。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>通信架构</strong>：采用客户端-服务器模型。机器人机载计算机以1-2Hz的频率将图像通过Wi-Fi发送至外部服务器。服务器处理后将包含29个值（28个关节刚度/阻尼增益 + 1个标称速度）的参数有效载荷返回。机载控制环以50Hz运行，使用最新的有效载荷，并在通信中断时自动回退到保守的备用参数集。</li>
+<li><strong>感知模块</strong>：使用Molmo-7B模型处理自我中心图像。每个图像帧与一个固定的、任务特定的提示词配对，该提示词强制输出预定义的键值对，包括任务类型、主要物体、物体易碎性、人类存在、障碍物信息等。这种严格的提示策略确保了模块直接生成适合嵌入和检索的结构化语义描述。</li>
+<li><strong>安全参数生成模块</strong>：采用一个简化的两阶段RAG系统。<ul>
+<li><strong>检索阶段</strong>：将VLM的结构化JSON输出通过<code>sentence-transformers/all-MiniLM-L6-v2</code>模型嵌入为384维向量。然后使用FAISS进行精确最近邻搜索，与预先计算的场景数据库嵌入进行比对。数据库包含16个经过实证验证的场景，每个场景关联一组关节阻抗参数。</li>
+<li><strong>生成阶段</strong>：识别最佳匹配场景后，将其参数有效载荷以标准化的JSON/CSV格式返回。该有效载荷指定了28个阻抗参数（14个关节 × 比例和微分增益）和一个标称关节速度。为确保鲁棒性，若匹配分数低于阈值或出现歧义，系统将拒绝检索并回退到保守的备用参数集。</li>
+</ul>
+</li>
+<li><strong>机器人控制模块</strong>：在机器人上集成了逆运动学求解器和关节空间阻抗控制器。IK求解器基于简化模型（锁定腿部和腰部关节）工作，为目标6-DoF末端执行器位姿求解出可行的关节参考位置 <code>q_ref</code> 和用于重力补偿的前馈扭矩 <code>τ_ff</code>。这些参考值与RAG模块提供的 <code>K_p</code>, <code>K_d</code> 以及计算出的 <code>q̇_ref</code> 一同输入到低层阻抗控制器，控制器按照公式 <code>τ = K_p (q_ref − q) + K_d (q̇_ref − q̇) + τ_ff</code> 在50Hz下生成电机扭矩命令，从而调节末端执行器的表观刚度和阻尼。</li>
+</ol>
+<p><strong>创新点</strong>：与现有方法相比，本文的创新在于构建了“语义指导阻抗控制”的桥梁。不同于仅依赖几何信息（如速度与距离监控）或专注于任务级序列生成的VLM应用，SafeHumanoid专门解决了缺失的合规层问题：将语义理解映射到符合安全标准的参数 <code>{K_p, K_d, v}</code> 的检索与调度，使得任何来源（如VLA模型、任务规划器）生成的轨迹都能以安全、适应上下文的方式执行。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在配备Intel RealSense RGB-D相机和NVIDIA Jetson Orin NX机载计算机的Unitree G1人形机器人上进行。VLM-RAG管道部署在配备RTX 4090的外部服务器上。评估了包括擦拭、物体交接（立方体、针、酱油瓶）、液体倾倒在内的桌面操作任务。每个任务在“无人”和“有人手在 workspace”两种条件下执行。</p>
+<p><strong>Baseline</strong>：对比基线是固定增益的阻抗控制设置。</p>
+<p><strong>关键实验结果</strong>：系统在所有六项桌面操作任务中均成功根据任务需求和人类存在调整了阻抗参数和标称速度。例如，在表面擦拭任务中，当人手进入场景时，系统立即降低了 <code>K_p</code>，提高了 <code>K_d</code>，并降低了速度，产生了更柔顺的运动。在针交接任务中，尽管“针”不在场景数据库中，系统仍能泛化到合适的柔顺参数集。任务成功率得以保持，且阻抗调制与语义上下文一致。然而，离板VLM-RAG回路的延迟高达1.4秒，限制了其在高度动态HRI场景中的应用。</p>
+<p><img src="https://arxiv.org/html/2511.23300v1/ttt11122.png" alt="整体流程"></p>
+<blockquote>
+<p><strong>图1</strong>：自我中心感知与语义到安全的管道。左侧展示了机器人在有无人类存在情况下的抓取，显示了<code>K_p</code>、<code>K_d</code>和<code>v</code>的自适应调制。右侧是从相机输入，经过VLM-RAG推理，到G1上半身关节阻抗控制的高级流程。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.23300v1/exp2.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图3</strong>：在易碎物体（液体）交接过程中的语义到安全自适应示例。(a,b) 无人时，系统调度中等阻抗和速度以稳定操作。(c,d) 有人手存在时，刚度<code>K_p</code>降低，阻尼<code>K_d</code>增加，以确保柔顺交互并防止过大的接触力。</p>
+</blockquote>
+<p><strong>表1</strong>：六项操作实验的代表性结果。箭头表示相对于基线的调制情况。</p>
+<table>
+<thead>
+<tr>
+<th align="left">任务</th>
+<th align="left">人类存在</th>
+<th align="left">调整</th>
+<th align="left">结果</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">表面擦拭</td>
+<td align="left">否</td>
+<td align="left">基线增益</td>
+<td align="left">稳定的擦拭动作</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">是</td>
+<td align="left"><code>↓ K_p</code>, <code>↑ K_d</code>, <code>↓ v</code></td>
+<td align="left">靠近手部的柔顺擦拭</td>
+</tr>
+<tr>
+<td align="left">拾取针（OOD）</td>
+<td align="left">否</td>
+<td align="left">基线增益</td>
+<td align="left">成功拾取</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">是</td>
+<td align="left"><code>↓ K_p</code>, <code>↑ K_d</code>, <code>↓ v</code></td>
+<td align="left">尽管物体不在数据集中，仍实现安全交接</td>
+</tr>
+<tr>
+<td align="left">拾取立方体（在DB中）</td>
+<td align="left">否</td>
+<td align="left">基线增益</td>
+<td align="left">成功拾取</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">是</td>
+<td align="left"><code>↓ K_p</code>, <code>↑ K_d</code>, <code>↓ v</code></td>
+<td align="left">安全交接，人手离开后正确恢复</td>
+</tr>
+<tr>
+<td align="left">酱油瓶</td>
+<td align="left">是（交接）</td>
+<td align="left"><code>v</code>: 中速 → 慢速 → 中速</td>
+<td align="left">通过降低运动速度实现安全倾倒</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表1</strong>总结了关键实验的结果，展示了系统在不同任务和人类存在条件下对阻抗和速度参数的自适应调制能力，即使在遇到数据库外物体时也能保持安全行为。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个VLM-RAG控制管道，利用自我中心视觉和任务提示实时选择安全且上下文感知的阻抗与速度参数，首次将语义推理与人体机器人交互中的动态安全参数调度相连接。</li>
+<li>在Unitree G1人形机器人上实现了完整系统演示，展示了高级语义推理与低级上半身运动控制的实际集成。</li>
+<li>通过操作和近人任务实验证明，该方法在保持任务成功的同时，提供了比固定增益基线更安全、更自适应的行为。</li>
+</ol>
+<p><strong>局限性</strong>：论文明确指出当前系统存在三点主要局限：1）离板推理管道引入高达1.4秒的延迟，限制了在动态交互中的应用；2）场景数据库通过手动策划和验证构建，规模小（仅16个场景），多样性和可扩展性有限；3）实验依赖于预定义的末端执行器目标位姿，而非完全自主的动作生成。</p>
+<p><strong>对后续研究的启示</strong>：本文指明了一条通过语义基础实现合规控制的新路径。未来的工作可围绕以下方向展开：通过模型蒸馏、轻量级VLM边缘部署来降低延迟；利用仿真到真实迁移、合成数据增强等技术自动化数据库的构建与扩展；集成深度感知以实现更精确的距离估计和基于距离的精细参数调整；将本语义-安全层与更先进的VLA动作生成模型相结合，实现从感知到安全执行的端到端自主。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出SafeHumanoid系统，解决人形机器人在人机交互中根据场景上下文和人类接近度自适应调节上肢阻抗和速度以实现安全交互的核心问题。关键技术采用VLM-RAG驱动的视觉管道：通过视觉语言模型处理自我中心图像，结合检索增强生成匹配验证场景数据库，经逆运动学映射生成关节阻抗命令。实验在桌面操作任务（如擦拭、物体传递、液体倾倒）中进行，结果表明系统能上下文感知地调整刚度、阻尼和速度，在保持任务成功率的同时提升安全性，但当前推理延迟高达1.4秒，限制了高动态环境的响应性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.23300" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

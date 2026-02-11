@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>InternVLA-A1: Unifying Understanding, Generation and Action for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>InternVLA-A1: Unifying Understanding, Generation and Action for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.02456" target="_blank" rel="noreferrer">2601.02456</a></span>
+        <span>作者: Yuchen Zhu Team</span>
+        <span>日期: 2026-01-05</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前主流的视觉-语言-行动模型通常基于多模态大语言模型，在语义理解方面表现出色，但本质上缺乏推断物理世界动态的能力。这导致它们在需要理解动量、惯性和接触动力学等物理规律的动态环境中表现不佳。另一方面，近期研究转向通过视频预测构建的世界模型来获得预见能力，但这些方法往往缺乏语义基础，且对预测错误敏感。本文旨在协同语义理解与动态预测能力，以解决现有策略在应对场景变化（尤其是动态设置）时泛化能力不足的痛点。本文的核心思路是提出一个统一的混合专家Transformer架构，整合理解、生成和行动三个专家，并采用混合合成-真实数据训练策略，以同时增强模型的语义推理和物理动态预测能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>InternVLA-A1采用统一的混合专家Transformer架构，协调三个专家：场景理解、视觉预见生成和动作执行。这些组件通过统一的掩码自注意力机制无缝交互。</p>
+<p><img src="https://arxiv.org/html/2601.02456v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：InternVLA-A1框架。架构包含三个专家：(1) 理解专家，从图像和文本输入编码场景上下文；(2) 生成专家，预测未来的视觉状态和任务动态；(3) 行动专家，将编码的场景上下文与这些预测动态相结合，通过流匹配合成控制命令。</p>
+</blockquote>
+<p><strong>整体流程</strong>：给定多视角观测图像和语言指令，理解专家首先处理这些多模态输入，生成用于条件化下游专家的前缀令牌。生成专家接收理解专家的输出以及历史与当前帧的压缩视觉潜在表示，预测未来时刻的视觉潜在状态。行动专家则综合语言指令、当前观测、本体感知状态以及生成专家的预测结果，输出未来一段时间内的目标动作块。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>理解专家</strong>：直接采用现有MLLM的架构，本工作实例化了InternVL3或Qwen3-VL。其处理流程遵循基础MLLM：将时间t的多视角观测编码为视觉令牌，将语言指令转换为文本令牌，然后拼接形成前缀令牌。</li>
+<li><strong>生成专家</strong>：为了解决理解任务所需的高级语义抽象与生成任务所需的细粒度空间结构之间的差异，生成专家采用了基于VAE的tokenizer。具体使用Cosmos CI 8×8连续VAE tokenizer将输入图像编码为连续潜在特征。为了提升推理效率，通过一个卷积层将每个图像的潜在特征图空间维度压缩至4×4（即每图仅用16个令牌表示），再通过投影器对齐到Transformer的隐藏维度。这些压缩后的令牌在生成专家中通过多层掩码自注意力与理解专家的前缀令牌（在推理时被缓存为K/V）进行交互，其隐藏状态在时间维度上池化以形成预测的未来潜在表示，并通过L2损失与真实未来帧的Cosmos编码进行监督。</li>
+<li><strong>行动专家</strong>：以语言目标、当前观测（通过前缀令牌）、本体感知状态以及生成专家预测的潜在令牌为条件，预测目标动作块。采用流匹配目标进行训练：从高斯噪声开始，通过学习的速度场沿时间步迭代求解ODE，最终生成动作。</li>
+</ol>
+<p><strong>注意力机制与创新点</strong>：核心创新在于统一的、分块的注意力掩码设计。在拼接的理解、生成和行动专家令牌流上实施累积分段掩码，强制执行严格的信息流：理解 → 生成 → 行动。较晚模块的令牌可以关注所有较早模块的令牌，但较早模块不能向前关注。这种设计确保了语义理解能指导动态预测，而两者共同指导动作生成，实现了语义与动态的紧密耦合。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在12个真实世界机器人任务和模拟基准上评估InternVLA-A1。使用了两个参数规模的模型：InternVLA-A1 (2B) 和 InternVLA-A1 (3B)。推理速度均可达到约13 Hz。</p>
+<p><strong>对比基线</strong>：包括领先的VLA模型，如π0和GR00T N1.5。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li>在日常任务中，InternVLA-A1显著优于基线，成功率提高了14.5%。</li>
+<li>在动态任务中表现尤为突出：在“快速分拣”任务上提升40%，在“运动中拾取食材”任务上提升73.3%。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2601.02456v1/x4.png" alt="真实世界任务成功率对比"></p>
+<blockquote>
+<p><strong>图4</strong>：在真实世界任务上的成功率对比。InternVLA-A1在大多数任务上超越了基线模型π0和GR00T N1.5，尤其是在动态任务（如Express Sorting）中优势明显。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.02456v1/x5.png" alt="模拟基准结果"></p>
+<blockquote>
+<p><strong>图5</strong>：在模拟基准（如RLBench）上的结果。InternVLA-A1取得了具有竞争力的性能，证明了其泛化能力。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.02456v1/x6.png" alt="动态任务性能分解"></p>
+<blockquote>
+<p><strong>图6</strong>：动态任务性能分解。展示了在传送带分拣任务中，模型在不同子技能（如跟踪、抓取）上的成功率，突显了其在动态场景下的综合能力。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.02456v1/x7.png" alt="消融研究：数据混合"></p>
+<blockquote>
+<p><strong>图7</strong>：数据混合策略的消融研究。结果表明，混合合成数据（InternData-A1）和真实世界数据（Agibot-World）能带来最佳性能，验证了分层数据金字塔的有效性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.02456v1/x8.png" alt="消融研究：架构组件"></p>
+<blockquote>
+<p><strong>图8</strong>：模型架构组件的消融研究。移除非理解专家或生成专家都会导致性能下降，证明了统一架构中各个组件的必要性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.02456v1/x9.png" alt="定性结果示例"></p>
+<blockquote>
+<p><strong>图9</strong>：定性结果示例。展示了InternVLA-A1在多个真实世界任务中成功执行的轨迹，包括日常和动态场景。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：消融研究表明，结合合成与真实数据的混合训练策略对性能提升至关重要。同时，移除理解专家或生成专家都会导致性能显著下降，验证了统一架构中语义理解和动态预测两个组件不可或缺的作用。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出统一的VLA架构</strong>：通过Mixture-of-Transformers将语义理解专家（MLLM）、动态预测专家（世界模型）和动作执行专家集成在一个框架内，使用分块注意力掩码协调信息流，有效弥合了语义与动态之间的鸿沟。</li>
+<li><strong>设计分层数据金字塔</strong>：提出并实践了混合大规模合成数据与真实机器人数据的训练策略，利用合成数据的多样性和可扩展性，同时通过真实数据校准以减少模拟到真实的差距。</li>
+<li><strong>在动态任务上实现显著提升</strong>：模型在需要物理动态推理的挑战性任务（如传送带操作）上取得了大幅性能改进，证明了所提方法的有效性。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，为实现高频实时推理（约13Hz），在生成专家中采用了激进的图像潜在表示压缩策略（将每图压缩至16个令牌），这可能在细节保留上存在权衡。同时，模型性能仍依赖于大规模高质量的数据集。</p>
+<p><strong>对后续研究的启示</strong>：InternVLA-A1证明了将高级语义推理与低级物理动态预测在统一架构中深度融合的可行性。其混合合成-真实数据的数据构造策略为克服单一数据源局限性提供了有效路径。未来的研究可进一步探索更高效的动态表示方法，以及如何将此类架构扩展到更复杂的长期规划任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有视觉-语言-动作模型缺乏物理动态推理能力，而世界模型又缺乏语义基础的问题，提出InternVLA-A1模型。该模型采用统一的混合Transformer架构，集成了场景理解、视觉预见生成和动作执行三个专家模块。通过在混合合成-真实数据集上预训练，模型在12个真实机器人任务中表现优异，日常任务性能提升14.5%，动态场景（如传送带分拣）性能提升40%至73.3%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.02456" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

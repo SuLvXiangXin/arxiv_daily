@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Value Vision-Language-Action Planning & Search - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Value Vision-Language-Action Planning & Search</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.00969" target="_blank" rel="noreferrer">2601.00969</a></span>
+        <span>作者: Cyrus Neary Team</span>
+        <span>日期: 2026-01-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，大规模视觉-语言-动作模型已成为机器人操作领域强大的通才策略，但其本质上受限于对行为克隆的依赖，导致在分布偏移下表现脆弱。一种有前景的改进思路是在测试时结合规划搜索算法来探索可能的未来结果。现有工作VLAPS将预训练的VLA模型嵌入蒙特卡洛树搜索中，利用VLA先验来引导动作提议和探索。然而，该框架缺乏对期望未来回报的估计，仅依赖VLA先验和基于访问计数的探索启发式。当VLA先验不准确时，规划器只能通过大量模拟来进行探索性纠正，效率低下。本文针对这一关键痛点，提出为MCTS引入一个轻量级、可学习的价值函数，为搜索提供明确的成功信号，从而在VLA先验不准确时有效纠正搜索方向。本文核心思路是：在固定VLA主干网络上训练一个简单的多层感知机作为价值头，利用其预测的状态价值来偏置MCTS中的节点选择，引导搜索走向高价值区域。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>V-VLAPS的整体框架是在VLAPS的基础上，增加一个学习到的价值函数来引导MCTS。其流程分为三个阶段：首先，使用固定的VLA策略在环境中进行模拟，收集状态表征和对应的蒙特卡洛价值目标数据；其次，训练一个轻量级MLP价值头来预测该价值；最后，将学习到的价值估计整合到MCTS的节点选择评分规则中。</p>
+<p><img src="https://arxiv.org/html/2601.00969v1/VVLAPS.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：V-VLAPS方法整体框架。在每个MCTS节点，当前观测和语言指令通过冻结的VLA主干和价值头（MLP）处理，产生一个标量价值估计。该价值被附加到对应节点，并用于VLAPS的评分规则中以偏置节点选择。高预测价值节点（绿色）被更频繁地选择并倾向于导向任务成功，而低价值节点（红色）在搜索中被降权。</p>
+</blockquote>
+<p>核心模块包括数据收集、价值头训练和价值整合。</p>
+<ol>
+<li><strong>数据收集</strong>：使用固定的预训练VLA策略在LIBERO操作任务中进行无规划模拟。环境提供初始观测和语言指令，VLA（本文使用Octo）在每一步输出一个动作块并执行。每个回合以成功（奖励为1）或失败/超时（奖励为0）结束，中间奖励均为零。对于回合中的每个决策步状态，通过将稀疏的终端奖励按折扣因子γ向后传播，计算蒙特卡洛价值目标G_t。同时，提取VLA主干最后一层的表征向量（readout）h_t。由此构成训练对 (h_t, G_t)。</li>
+<li><strong>价值头训练</strong>：目标是学习一个函数 V_θ，将VLA的潜在表征h_t映射到标量价值估计。V_θ被参数化为一个轻量级的三层MLP，其参数量远小于底层VLA模型，以确保在规划时开销最小。训练目标是最小化预测值与蒙特卡洛目标G_t之间的均方误差损失。训练期间，VLA主干的参数被冻结，仅更新价值头的参数θ。</li>
+<li><strong>价值整合</strong>：将学习到的价值函数整合到MCTS的节点选择中。具体而言，修改了PUCT风格的评分规则。对于节点v和候选动作a^i，评分SCORE(v, a^i, s‘) 由两部分组成：一部分是探索项U(v, a^i)，沿用VLAPS的公式，基于VLA动作先验和访问计数；另一部分是利用项Q(v, a^i)，本文将其定义为价值函数在采取动作a^i到达的新状态s’上的预测值 V_θ(readout(s‘))。因此，最终的评分公式为：<code>SCORE(v, a^i, s’) = V_θ(readout(s‘)) + ψ_Φ(a^i | I_t, L_T) * sqrt(N(v, a^i)) / (1 + N(v, a^i))</code>。该公式引导搜索偏向于VLA先验概率高且预期价值高的动作。</li>
+</ol>
+<p>与现有方法VLAPS相比，核心创新点在于引入了显式的、学习到的价值估计来指导搜索。当VLA先验错误地赋予次优动作高概率时，价值信号能够提供纠正偏差的机制，减少了对纯探索的依赖，从而提高了搜索效率和最终成功率。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在模拟机器人操作基准LIBERO套件上进行，具体使用了Spatial（空间推理）和Object（物体中心操作）两个任务套件。对比的基线方法包括：基础的VLA策略（无规划）、VLAPS（无价值函数）、以及本文提出的V-VLAPS（分别使用仅在Spatial套件训练、仅在Object套件训练、以及在两个套件上联合训练的价值头）。每个方法在每个初始状态下进行10次模拟以评估成功率。</p>
+<p><img src="https://arxiv.org/html/2601.00969v1/vvlaps_tsne_plot.png" alt="t-SNE可视化"></p>
+<blockquote>
+<p><strong>图2</strong>：LIBERO任务中VLA Transformer readout向量的t-SNE二维投影，颜色表示价值目标。可视化显示成功与失败的轨迹在潜在空间中形成了可区分的模式，表明readout编码了可用于估计预期回报的信息。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.00969v1/vvlaps_value_plot.png" alt="定性评估示例"></p>
+<blockquote>
+<p><strong>图3</strong>：一个成功轨迹的定性评估示例，展示了预测价值随机器人接近成功完成状态而稳步增加。这说明了学习到的价值函数行为的合理性。</p>
+</blockquote>
+<p>关键定量结果总结如下：</p>
+<ul>
+<li><strong>成功率提升</strong>：如表2所示，在Spatial套件上，V-VLAPS（Spatial）相比VLAPS将整体成功率从82.0%提升至87.2%（+5.2个百分点）；在Object套件上，V-VLAPS（Object）相比VLAPS将整体成功率从79.8%提升至82.6%（+2.8个百分点）。特别地，在Spatial套件中Octo基础策略成功率为0的Task 9上，V-VLAPS取得了47%的成功率，显著优于VLAPS的16%，且训练数据中并未包含此任务，显示了良好的泛化能力。</li>
+<li><strong>搜索效率提升</strong>：如表3所示，引入价值头后，平均所需的MCTS模拟次数（从根节点重新开始搜索的次数）有所减少。在Spatial套件上减少了约5%，在Object套件上减少了约14%，表明价值引导使搜索更高效。</li>
+<li><strong>消融分析与发现</strong>：实验对比了不同训练集（单套件 vs 联合）的价值头性能。结果显示，在各自套件上训练的价值头（V-VLAPS (spatial) 和 V-VLAPS (object)）通常能取得最佳或接近最佳的性能，而联合训练的价值头（V-VLAPS (both)）性能并未进一步提升，有时甚至略有下降。这引发了关于价值函数泛化能力的讨论：是应该训练一个跨任务套件的通用价值估计器，还是需要为不同套件训练特定的估计器。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了V-VLAPS框架，首次为VLA引导的MCTS引入了一个轻量级、可学习的价值函数，弥补了现有方法缺乏对未来回报估计的缺陷；2）通过实验证明，即使在小规模数据集上训练一个简单的价值头，也能显著提升长视野规划的成功率和搜索效率；3）对VLA潜在表征的可视化分析表明，其编码的信息足以支持有意义的成功概率估计。</p>
+<p>论文自身提到的局限性包括：1）实验仅局限于LIBERO的两个任务套件及其子集，限制了价值估计器的泛化能力和结论的广泛性；2）用于训练价值头的数据完全来自基础VLA策略的模拟，该策略在某些任务上成功率极低或极高，导致数据质量不平衡，可能影响价值学习；3）方法依赖于一个精确的模拟器进行MCTS，且搜索过程中额外的VLA调用计算开销较大。</p>
+<p>本文对后续研究的启示在于：首先，探索更优的价值函数训练数据收集策略（例如，使用VLAPS自身规划产生的数据）可能获得更准确的价值估计。其次，需要深入研究价值函数在不同类型任务间的泛化能力，以确定通用与专用价值估计器的适用场景。最后，可以利用学习到的价值函数进行自适应计算，例如在搜索过程中动态剪枝低价值分支，从而更高效地分配计算预算。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>论文针对Vision-Language-Action (VLA)模型在机器人操作中因依赖行为克隆而导致的分布偏移脆弱性问题，提出Value Vision-Language-Action Planning and Search (V-VLAPS)框架。该方法通过为蒙特卡洛树搜索(MCTS)添加轻量级可学习价值函数，在固定VLA骨干(Octo)的潜在表示上训练多层感知机(MLP)，提供明确的成功信号以引导动作选择。实验在LIBERO机器人操作套件上表明，该方法将成功率提升超过5个百分点，同时平均MCTS模拟次数减少5–15%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.00969" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

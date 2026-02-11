@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Embodied Tree of Thoughts: Deliberate Manipulation Planning with Embodied World Model - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Embodied Tree of Thoughts: Deliberate Manipulation Planning with Embodied World Model</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.08188" target="_blank" rel="noreferrer">2512.08188</a></span>
+        <span>作者: Rui Chen Team</span>
+        <span>日期: 2025-12-09</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作规划领域，世界模型是关键组件，用于预测动作执行后的环境状态。当前主流方法采用视频生成模型作为前向预测器，但其缺乏严格的物理基础，容易产生幻觉，且在长时域任务中难以维持物理约束的一致性，限制了其在复杂、多步交互任务中的应用。另一类Real2Sim方法将真实场景重建到物理模拟器中，利用模拟器作为物理基础的世界模型，能确保刚体动力学和碰撞约束，但现有方法（如PWTF）通常将模拟器仅用于低级控制，高级规划仍局限于单一、固定的任务分解，一旦初始分解错误即导致失败。</p>
+<p>本文针对现有方法物理基础薄弱、长时域推理不可靠以及规划缺乏灵活性的痛点，提出了一个新视角：将基于视觉语言模型（VLM）的高级推理与基于物理模拟器的具身世界模型相结合，并将操作规划形式化为一个树状搜索过程。核心思路是提出一个名为“具身思维树”（EToT）的Real2Sim2Real规划框架，通过“先验分支”和“反思分支”两种协同机制，在物理模拟器中迭代地构建、搜索和修正规划树，最终将可行的计划在真实机器人上执行。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>EToT框架是一个Real2Sim2Real的闭环规划系统。其整体流程如下：给定任务指令和场景图像，系统首先将真实场景重建为物理模拟器中的交互式3D数字孪生（Real2Sim）；然后，基于此具身世界模型，通过先验分支和反思分支构建并搜索规划树，以找到物理上可行的行动序列；最后，执行该可行计划，并在真实执行中通过视觉反馈进行重规划（Sim2Real）。</p>
+<p><img src="https://arxiv.org/html/2512.08188v1/x2.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图2</strong>：Embodied Tree of Thoughts (EToT) 框架总览。给定任务指令，系统首先将真实场景重建为交互式3D数字孪生。然后通过<strong>先验分支</strong>（Priori Branching）和<strong>反思分支</strong>（Reflective Branching）构建基于世界模型的规划树。先验分支提出初始候选分支，反思分支分析模拟执行失败以扩展修订分支。通过迭代搜索和扩展规划树，系统识别出可行计划，最终以闭环方式在真实机器人上执行，并结合视觉反馈和重规划。</p>
+</blockquote>
+<p><strong>核心模块一：具身世界模型构建</strong><br>该模块旨在从单次RGB-D观测（对于铰接物体需要额外视角）高效重建物理模拟场景。流程如下：1）使用SAM-3从RGB图像提取物体掩码；2）使用SAM-3D-Objects生成带纹理的物体网格；3）使用DexSim2Real 2的尺寸估计模块从RGB-D数据恢复度量尺度，得到缩放后的网格；4）使用FoundationPose进行物体位姿估计；5）将重建的网格导入OmniGibson模拟器，生成与物理场景对齐的交互式数字孪生。对于铰接物体，需额外处理不同运动状态下的观测以恢复其铰接结构。</p>
+<p><strong>核心模块二：规划树构建与搜索（算法1）</strong><br>规划过程围绕一棵树展开，包含两个关键机制：</p>
+<ol>
+<li><strong>先验分支</strong>：在初始阶段，VLM解析场景和任务指令，基于物体实例和候选交互模式生成初步的规划树。具体包括：<strong>场景解析与任务理解</strong>（提取物体信息和空间关系）；<strong>候选分支生成</strong>（VLM在存在多个可行行动选择的分支点显式地生成不同分支，包括<strong>实例级分支</strong>（如选择不同的目标物体）和<strong>操作参数分支</strong>（如选择不同的抓取构型））；<strong>初始规划树构建</strong>（将行动序列作为节点插入树中，合并共享共同前缀的分支以形成紧凑的树表示）。</li>
+<li><strong>反思分支与树搜索</strong>：系统采用广度优先搜索遍历规划树。对每个节点，在模拟器中执行其关联的动作，并用VLM评估结果。若成功则继续搜索子节点或到达叶节点返回可行计划；若失败则触发反思分支。反思分支包含两个步骤：<strong>失败检测</strong>（VLM比较模拟执行前后所有物体的状态，判断行动是否成功且安全，例如是否导致物体掉落至不可达区域）；<strong>树修正与扩展</strong>（VLM诊断失败原因并提出修正策略，主要包括两类：i) <strong>碰撞引发的干扰</strong>：先将被影响的物体重新安置到安全位置，再重试原动作；ii) <strong>顺序相关的冲突</strong>：修订分支，对相关动作进行重新排序）。修正后生成的新分支会被合并到现有规划树中，并加入搜索队列。</li>
+</ol>
+<p>与现有方法相比，EToT的创新点具体体现在：1) <strong>物理基础的世界模型</strong>：使用物理模拟器而非视频生成模型，确保所有预测结果严格遵守物理定律；2) <strong>双分支协同规划机制</strong>：通过“先验分支”提供规划的广度（多样性），通过“反思分支”提供规划的深度（纠错与优化），克服了单一固定任务分解的局限性；3) <strong>模拟器内闭环诊断与修正</strong>：能够在执行前于模拟环境中诊断潜在的物理失败（如碰撞、不可达），并主动生成修正策略，避免了现实世界中不可逆的失败。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：硬件使用xArm6 6DoF机械臂和Azure Kinect DK RGB-D相机。在7个桌面操作任务上进行评估，涵盖短时域（≤3步）和长时域（&gt;3步）任务，以及一个包含人为干扰的任务（图4）。基准方法包括：ReKep（基于视觉关键点的VLM规划）、ReKep w/ CoT（增加思维链提示）、Reflect*（在ReKep w/ CoT基础上增加类似反思机制，但修正计划由人工指定）。所有方法使用GPT-4o作为VLM，评估指标为任务成功率（成功达成目标且未对环境造成有害改变）。</p>
+<p><img src="https://arxiv.org/html/2512.08188v1/x4.png" alt="任务示意图"></p>
+<blockquote>
+<p><strong>图4</strong>：所有任务的示意图，包括初始状态和正确目标状态，方框和箭头表示关键物体的位置变化。任务设计用于系统评估机器人对物体可操作性、三维空间关系、物理动力学预测以及抗干扰自动恢复能力的理解。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.08188v1/x5.png" alt="实验结果表"></p>
+<blockquote>
+<p><strong>表1</strong>：短时域和长时域任务上的成功率对比。EToT在所有任务上均一致优于基线方法，平均成功率高达88.8%。基线方法在长时域任务上（任务5-7）表现有限（最高不超过50%），而EToT保持了较高的成功率（分别为8/10, 9/10, 7/10）。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：如表1所示，EToT取得了最高的平均成功率（88.8%），在7个任务中的6个上取得了最佳或并列最佳成绩。ReKep由于缺乏细粒度空间和物理推理，表现最差（平均16.3%）。ReKep w/ CoT通过思维链提示有所改善（平均38.8%），尤其在任务1和4上。Reflect* 通过人工指定的反思机制进一步提升了表现（平均66.3%），在任务3和干扰任务上表现出色，但对于涉及不可逆失败的任务（如任务6）无能为力。EToT凭借其前瞻性的物理模拟和主动修正能力，在长短时域任务上均表现稳健。</p>
+<p><strong>消融实验</strong>：表2展示了各组件贡献的消融研究结果。</p>
+<ul>
+<li><strong>移除先验分支</strong>：平均成功率降至61.3%，在需要探索多种可能方案的任务（如任务2、3、5）上表现显著下降。</li>
+<li><strong>移除反思分支</strong>：平均成功率暴跌至35.0%，在涉及复杂物理约束或顺序依赖的任务（如任务1、4、5、6、7）上几乎完全失败，突显了基于模拟反馈进行动态修正是框架成功的关键。</li>
+<li><strong>移除重规划机制</strong>：在干扰任务上成功率降为0，证明了在真实执行中根据感知反馈进行重新规划的必要性。</li>
+<li><strong>用视频生成模型替代物理模拟器</strong>：性能最差（平均21.3%），验证了物理基础对于准确预测和规划至关重要。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2512.08188v1/x6.png" alt="消融实验表"></p>
+<blockquote>
+<p><strong>表2</strong>：消融研究结果。分别移除先验分支、反思分支、重规划机制，以及用视频生成模型（VGM）替换物理模拟器作为世界模型。结果显示，反思分支对整体性能贡献最大，物理模拟器相比视频生成模型具有显著优势。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了 <strong>Embodied Tree of Thoughts (EToT)</strong> 框架，一种新颖的Real2Sim2Real操作规划范式，将VLM的高级语义推理与物理模拟器的具身世界模型紧密结合。</li>
+<li>引入了 <strong>两种协同的分支机制</strong>（先验分支与反思分支），将规划形式化为树搜索问题，实现了对多样化候选计划的前瞻性评估和对执行失败的动态诊断与修正，显著提升了长时域复杂任务的规划可靠性和鲁棒性。</li>
+<li>通过系统的实验验证，<strong>明确了物理基础的世界模型相对于视频生成模型的优势</strong>，并量化展示了所提各组件（尤其是反思分支）对成功率的关键贡献。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，当前方法依赖于相对耗时的场景重建和模拟过程，可能影响实时性。模拟环境与真实世界之间仍存在差距（sim-to-real gap）。此外，行动技能集目前是预定义且有限的。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>效率优化</strong>：探索更轻量级的场景重建方法和并行模拟技术，以加速规划树的构建与搜索过程。</li>
+<li><strong>模拟与现实差距</strong>：研究如何利用在线感知数据持续校准和更新数字孪生模型，缩小sim-to-real差距。</li>
+<li><strong>技能扩展</strong>：将框架与技能学习相结合，扩展可用的行动原语库，以处理更广泛、更复杂的操作任务。</li>
+<li><strong>结合学习模型</strong>：未来可探索将学习型动力学模型与物理模拟器相结合，在保证物理一致性的同时，处理一些难以精确建模的物理交互（如柔体、流体）。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人长时域操作规划中，视频生成模型缺乏物理基础、易产生幻觉且难以保持物理一致性的问题，提出了一种名为Embodied Tree of Thoughts (EToT) 的Real2Sim2Real规划框架。该框架以基于物理的交互式数字孪生作为具身世界模型，其核心技术是通过两种协同机制在树中搜索可行计划：先验分支基于语义与空间分析生成候选路径，反思分支利用视觉语言模型诊断模拟执行失败并迭代优化规划树。实验表明，该方法在长短时域操作任务上能有效预测物理动态、适应潜在失败，性能持续优于基线模型。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.08188" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

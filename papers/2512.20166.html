@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LoLA: Long Horizon Latent Action Learning for General Robot Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>LoLA: Long Horizon Latent Action Learning for General Robot Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.20166" target="_blank" rel="noreferrer">2512.20166</a></span>
+        <span>作者: Baining Guo Team</span>
+        <span>日期: 2025-12-23</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人操纵领域的主流方法是视觉-语言-动作（VLA）模型，它们利用在大规模网络数据上预训练的视觉语言模型（VLM）来理解和执行语言指令。然而，现有方法大多聚焦于短时域任务，仅依赖单帧观察，忽略了历史信息。这导致在需要多步推理和连贯动作执行的长时域任务中存在三个关键局限性：1) 缺乏对时序上下文的理解，难以跟踪多步状态或保持动作一致性；2) 长时间交互中微小的扰动容易累积，导致机器人状态偏离训练分布；3) 处理长历史序列的计算开销巨大。</p>
+<p>本文针对VLA模型在长时域任务中因历史信息利用不足和感知-动作空间未对齐而导致性能下降的痛点，提出了整合长期多视角观察与机器人本体感知的新视角。其核心思路是：通过高效的视觉编码策略处理长时历史，并创新性地引入一个“状态感知潜在重表示”模块，将视觉语言特征显式地锚定在机器人本体状态上，从而构建一个与物理动作空间对齐的潜在表示，以指导生成连贯、精确的多步动作序列。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LoLA的整体目标是根据历史帧序列、当前多视角图像和语言指令，预测一个未来的动作序列 {a_t, a_t+1, ..., a_t+s} 来驱动机器人完成任务。其框架由三部分组成：预训练的VLM、状态感知潜在重表示（SALR）模块和动作专家。</p>
+<p><img src="https://arxiv.org/html/2512.20166v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：LoLA模型整体框架。左侧输入包括长时域历史帧、当前多视角图像和语言指令。预训练VLM编码后，其输出的Key/Value嵌入与机器人状态一同输入至核心的SALR模块，该模块构建了一个“具身锚定”的潜在空间。最终，动作专家基于该对齐后的潜在条件生成多步动作序列。</p>
+</blockquote>
+<p><strong>1. 预训练VLM视觉编码</strong>：该部分采用两种编码策略以平衡计算开销与信息完整性。</p>
+<ul>
+<li><strong>当前观察编码</strong>：处理当前时刻t的高分辨率主视角V_t和多视角图像𝒱_m（如次级视角、腕部视角），提取详细的当前空间关系嵌入F_coe，为精细动作生成提供精确的瞬时空间信息。</li>
+<li><strong>历史运动编码</strong>：采用选择性时空采样策略，将历史帧序列𝒱_hme下采样至较低分辨率后输入VLM，提取编码了关键运动信息和任务进程的历史嵌入F_hme。此举旨在保留必要的时序上下文同时显著降低计算负担。最终，F_coe、F_hme与语言指令嵌入F_l拼接，输入VLM的L层，每层产生中间Key和Value嵌入{K_i, V_i}，供后续SALR模块使用。</li>
+</ul>
+<p><strong>2. 状态感知潜在重表示（SALR）</strong>：这是LoLA的核心创新模块，旨在解决视觉语言嵌入与机器人动作空间之间的“模态鸿沟”。</p>
+<ul>
+<li><strong>问题与动机</strong>：现有方法通常简单地将机器人本体状态（如关节角）与VL嵌入拼接，这种“后期融合”迫使模型隐式学习物理对齐，容易受嵌入中无关信息（如背景）干扰。相反，机器人状态s_t与动作a_t在物理域中本质耦合（如s_t+1 = s_t ⊕ a_t），因此s_t是过滤未接地VL嵌入的理想“锚点”。</li>
+<li><strong>技术细节</strong>：SALR引入一个与VLM层数L平行的状态变换器。在每一层i，机器人状态s_t经投影和自注意力后生成查询向量Q_r。关键创新在于使用Q_r通过<strong>外积融合</strong>（element-wise product）来调制VLM对应层的{K_i, V_i}（公式4，5），从而生成扩展的潜在表示K*, V*。此操作将状态信息深度注入视觉语言特征。</li>
+<li><strong>学习掩码与压缩</strong>：为进一步提取动作相关线索，引入可学习掩码M_k, M_v对K*, V*进行自适应过滤（公式6）。最后，通过潜在空间压缩策略，将过滤后的特征压缩为紧凑的、动作专家可用的键值嵌入{K^a, V^a}。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2512.20166v1/x2.png" alt="SALR模块"></p>
+<blockquote>
+<p><strong>图2</strong>：状态感知潜在重表示（SALR）模块示意图。展示了通过状态嵌入与VLM的Key/Value进行外积融合，形成潜在空间(V, S, H)。虚线箭头表示将机器人夹爪的视觉观测映射到真实物理尺度（如平移和旋转值）的投影对。</p>
+</blockquote>
+<p><strong>3. 动作专家</strong>：该模块基于条件流匹配（CFM）实现，是一个M层Transformer解码器。它以SALR输出的对齐潜在条件{K^a, V^a}、采样的噪声动作轨迹以及噪声时间步为输入，通过交叉注意力注入多模态指导，并经由自注意力建模动作序列的时序结构。在推理时，通过多步去噪从纯噪声中解码出平滑的动作序列。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：LoLA在包含110万条真实机器人轨迹的OXE和AgiBot数据集上进行预训练。评估涵盖仿真基准（SIMPLER、LIBERO）和真实机器人平台（Franka Research 3、双手Aloha机器人）。对比的基线方法包括RT系列、Octo、OpenVLA、π₀、CogACT、Diffusion Policy等主流VLA或扩散策略模型。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><p><strong>SIMPLER基准</strong>：在Google机器人任务上（表1），LoLA在“视觉匹配”和“变体聚合”设置下的平均成功率分别达到61.5%和54.6%，显著优于π₀（52.7%， 46.0%）和RT-2-X（46.3%， 54.4%）。在更具挑战性的WidowX机器人多步任务上（表2），LoLA取得了71.9%的平均成功率，相对π₀（41.7%）有20.2个百分点的绝对提升，其中“Put Spoon on Towel”任务成功率高达95.8%。</p>
+</li>
+<li><p><strong>LIBERO基准</strong>：LoLA在四个任务套件（Goal, Object, Spatial, Long）上均达到最优，平均成功率为96.2%（表3）。尤其在测试长时域能力的LIBERO-Long套件上，取得了88.2%的成功率，优于π₀的85.4%，证明了其利用历史信息处理复杂多步任务的有效性。</p>
+</li>
+<li><p><strong>真实世界评估</strong>：</p>
+<ul>
+<li><strong>单步任务</strong>：在Franka平台的9个原子任务上（表4），LoLA平均成功率为46.1%，优于π₀的36.8%。</li>
+<li><strong>多步长时域任务</strong>：在由原子任务组成的序列任务（如T1,T2,T3）和连续长时域任务上（表6），LoLA优势更明显。例如，在任务序列“T4,T5,T6”和“T7,T8,T9”上，LoLA的成功率分别为33.1%和28.9%，显著高于π₀的12.4%和16.6%。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2512.20166v1/x3.png" alt="真实世界实验设置"></p>
+<blockquote>
+<p><strong>图3</strong>：真实世界实验设置，展示了Franka Research 3和双手Aloha机器人平台、多视角相机输入及对应的文本指令。任务1、2、3构成了一个顺序的长时域操纵任务：“将平底锅从桌子放到烤箱平台上”。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.20166v1/x4.png" alt="消融实验结果"></p>
+<blockquote>
+<p><strong>图4</strong>：消融实验结果（对应论文表5）。展示了冻结VLM权重（FrozenVL）、使用多历史帧（MF）以及SALR模块对WidowX机器人任务成功率的影响。完整模型（最后一行）性能最佳，而移除SALR（第一行）或仅使用单帧（第三行）均导致性能显著下降。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：消融实验（表5，图4）验证了各组件贡献。仅使用单帧且无SALR时，平均成功率仅为30.3%。引入多历史帧（MF）或SALR模块分别将平均成功率提升至41.7%和44.8%。同时使用二者但冻结VLM权重时，性能进一步提升至57.3%。而完整模型（使用多帧、SALR且VLM参与训练）取得了最高的71.9%成功率。这证明了历史信息、SALR的对齐能力以及VLM的微调对于长时域任务都至关重要。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>长时域历史信息的高效编码</strong>：提出了结合高保真当前观察编码与下采样历史运动编码的双路径策略，在保留关键时序上下文的同时，显著降低了处理长视频序列的计算负担。</li>
+<li><strong>状态感知潜在重表示（SALR）模块</strong>：创新性地通过状态变换器和外积融合，将机器人本体感知作为“锚点”，显式地将视觉语言特征对齐到物理动作空间，并利用可学习掩码过滤无关信息，有效缓解了状态漂移问题。</li>
+<li><strong>在长时域任务上的卓越性能</strong>：在仿真和真实世界的多种基准测试中，LoLA在长时域、多步操纵任务上显著超越了现有SOTA方法，证明了其框架在提升动作连贯性和任务成功率方面的有效性。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，处理长历史序列虽经优化，但仍会带来额外的计算开销。此外，该方法依赖于获取准确的机器人本体状态信息（关节角、末端位姿）。</p>
+<p><strong>后续研究启示</strong>：LoLA的工作表明，显式地建立感知与动作在物理尺度上的对齐是提升VLA模型在长时域任务中鲁棒性的关键方向。其SALR模块的设计为多模态融合提供了新思路。未来研究可探索更高效的历史信息压缩方法，或研究在部分状态信息缺失情况下的鲁棒对齐策略。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有视觉-语言-动作模型在长时程、语言引导的机器人操作任务中，难以利用历史信息和生成连贯动作序列的核心问题，提出了LoLA框架。其关键技术包括：利用视觉语言模型编码历史序列与多视角观测的上下文特征，并引入**状态感知潜在重表示模块**，通过可学习的“具身锚定”潜在空间，将视觉与语言指令显式地映射到物理尺度的机器人运动空间。实验在仿真与真实机器人平台进行，结果表明LoLA显著优于现有方法，在长时程操作任务上表现尤为突出。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.20166" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

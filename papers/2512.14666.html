@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>EVOLVE-VLA: Test-Time Training from Environment Feedback for Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>EVOLVE-VLA: Test-Time Training from Environment Feedback for Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.14666" target="_blank" rel="noreferrer">2512.14666</a></span>
+        <span>作者: Mike Zheng Shou Team</span>
+        <span>日期: 2025-12-16</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型主要通过监督微调在固定的专家演示数据集上进行训练。这种静态模仿学习范式存在两个根本性局限：一是高昂的人力成本，每个新任务都需要收集数百条演示数据进行微调，难以扩展至通用机器人；二是脆弱的记忆化，模型仅仅模仿演示，缺乏从执行偏差中恢复的能力，一旦偏离训练分布就容易失败。这些局限与人类通过实践和试错来学习与适应的方式严重不符。</p>
+<p>本文针对VLA模型在部署时无法适应新环境或新任务的具体痛点，提出了“测试时训练”的新视角。核心思路是：在仅需少量甚至零任务特定演示进行轻量级初始化后，模型在目标部署环境中通过主动交互持续学习，利用从环境中自主获取的反馈信号来优化策略，从而降低对演示数据的依赖并实现真正的自适应。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>EVOLVE-VLA框架旨在使经过监督微调预训练的VLA模型在部署阶段能够继续学习。其整体流程分为两个阶段：首先使用少量演示对VLA策略进行监督微调初始化；随后进入测试时训练阶段，策略与环境交互生成多样化的轨迹，一个任务进度估计模块为每条轨迹分配奖励值，该奖励随后用于通过GRPO优化策略。</p>
+<p><img src="https://arxiv.org/html/2512.14666v1/x2.png" alt="框架总览"></p>
+<blockquote>
+<p><strong>图2</strong>：EVOLVE-VLA框架总览。在测试时训练阶段，VLA模型与环境交互生成多样化的轨迹滚动。任务进度估计模块为每条轨迹分配一个进度值，该值将作为GRPO优化的奖励。进度估计采用累积策略以产生干净、稳定且平滑的奖励。训练策略采用渐进视野扩展计划，实现课程学习。</p>
+</blockquote>
+<p>核心模块包括在线强化学习交互、任务进度估计以及驯服噪声奖励信号的两个关键技术。</p>
+<ol>
+<li><strong>在线强化学习交互</strong>：对于给定任务，通过从策略的动作令牌分布中以温度T&gt;1进行采样，生成多条多样化轨迹。每条轨迹会获得一个奖励信号用于评估其质量。随后使用分组相对策略优化（GRPO）来更新策略，GRPO在批次内对轨迹奖励进行归一化以计算优势，并应用PPO风格的裁剪以实现稳定更新，无需单独的价值网络。</li>
+<li><strong>任务进度估计（奖励函数）</strong>：为解决测试时无法获得真实奖励信号（如模拟器中的成功标签）的关键挑战，框架采用一个学习到的进度估计器来提供密集反馈。具体使用基础评论家模型VLAC，它接收两张图像和任务指令，输出一个评论家值，指示第二张图像相比第一张图像在任务完成上的进展程度。轨迹的初始奖励计算为初始观察与最终观察之间的评论家值。</li>
+<li><strong>累积进度估计机制</strong>：为解决进度估计的噪声问题，该方法引入了“慢-快”哲学。它定期采样里程碑帧（间隔Δ_milestone），并在更细的粒度上（每Δ_check步）将当前帧与最近的里程碑帧进行比较，计算增量进度。这些增量值通过一个考虑收益递减的递归公式进行累积，得到最终的进度值。此机制通过减少长期漂移的影响和平滑局部波动，将噪声点估计聚合为稳定可靠的信号。</li>
+<li><strong>渐进视野扩展策略</strong>：针对长视野任务中早期成功轨迹稀少、信用分配困难的问题，该策略将训练过程分为多个阶段。每个阶段设定一个最大滚动视野H_max，并随着训练推进逐渐增加该视野。这使得策略能够先掌握较短的子目标（此时奖励信号更清晰），再学习组合这些行为以完成完整任务，形成了课程学习。</li>
+</ol>
+<p>与现有方法相比，创新点具体体现在：1）<strong>范式创新</strong>：首次系统性地提出并实现了VLA模型的测试时训练，无需真实奖励信号；2）<strong>信号驯服</strong>：通过累积进度估计和渐进视野扩展两项核心技术，有效地“驯服”了 inherently noisy 的自主反馈信号，使学习变得可行。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在LIBERO仿真基准上进行，该基准包含Spatial, Object, Goal, Long四个任务套件，每个套件10个任务。使用OpenVLA-OFT作为基础模型，VLAC作为进度估计器。对比的基线方法包括Octo, OpenVLA, Nora, π₀, UniVLA, VLA-RL, SimpleVLA等先进的VLA模型。</p>
+<p><img src="https://arxiv.org/html/2512.14666v1/x3.png" alt="主要结果"></p>
+<blockquote>
+<p><strong>图3/表1</strong>：LIBERO基准上的主要结果。EVOLVE-VLA在OpenVLA-OFT基线上应用测试时训练后，在所有任务套件上均取得显著提升，平均成功率从89.2%提升至95.8%（+6.5%），尤其在长视野任务上提升+8.6%。</p>
+</blockquote>
+<p>关键实验结果如下：</p>
+<ul>
+<li><strong>性能显著提升</strong>：在LIBERO基准上，应用TTT后平均成功率提升+6.5%（从89.2%至95.8%）。在最具挑战性的LIBERO-Long套件上提升最大（+8.6%），成功率从85.8%提升至94.4%。</li>
+<li><strong>少样本学习能力</strong>：在仅提供1条演示的情况下，EVOLVE-VLA通过测试时训练将成功率从30.8%提升至52.8%（+22.0%），显著优于仅进行SFT的基线。</li>
+<li><strong>零样本跨任务泛化</strong>：在完全未见过、且无任务特定演示训练的任务上，纯SFT模型成功率为0%。而经过测试时训练后，模型通过自主探索和适应，成功率达到了20.8%，首次展示了VLA模型通过测试时训练实现零样本跨任务泛化的能力。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2512.14666v1/x4.png" alt="消融与定性结果"></p>
+<blockquote>
+<p><strong>图4</strong>：左：消融研究表明累积进度估计（APE）和渐进视野扩展（PHE）都是有效提升性能的关键组件。右：定性结果展示了模型通过测试时训练演化出的新能力，例如从错误中恢复（上）和发现新的问题解决策略（下）。</p>
+</blockquote>
+<p>消融实验总结：</p>
+<ul>
+<li><strong>累积进度估计</strong>和<strong>渐进视野扩展</strong>两个组件均对性能有重要贡献。移除任一组件的变体性能均下降，其中移除APE对长视野任务影响尤为显著。</li>
+<li>定性分析揭示，模型通过测试时训练演化出了演示数据中不存在的<strong>新兴能力</strong>，包括从执行错误中恢复，以及发现新颖、高效的任务完成策略。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了<strong>EVOLVE-VLA框架</strong>，首次使VLA模型能够在测试时通过环境交互持续自适应，突破了静态SFT的脆性与可扩展性限制；2）通过引入<strong>学习到的进度估计器</strong>作为奖励，并创新性地设计了<strong>累积进度估计</strong>和<strong>渐进视野扩展</strong>两项技术来驯服其固有噪声，解决了测试时缺乏真实奖励信号的核心挑战；3）实验验证了该框架在<strong>性能提升、少样本学习、特别是零样本跨任务泛化</strong>方面的显著优势，展示了自主探索能产生如错误恢复等新兴能力。</p>
+<p>论文自身提到的局限性在于其性能依赖于进度估计器（VLAC）的质量，估计器的偏差或噪声会影响学习效率。这指明了未来改进的方向。</p>
+<p>这项工作对后续研究的启示是深远的：它标志着VLA模型从<strong>静态模仿</strong>向<strong>持续自改进</strong>的范式转变。未来的研究可以沿着以下方向深入：设计更鲁棒、通用的自主反馈信号；探索更高效的测试时优化算法；以及将这一范式应用于更复杂的真实世界机器人任务中，最终迈向真正通用的具身智能体。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对Vision-Language-Action (VLA) 模型依赖监督微调、缺乏测试时环境适应性的核心问题，提出EVOLVE-VLA测试时训练框架，使模型能通过交互持续学习。关键技术采用学习进度估计器提供密集反馈，并通过累积进度估计机制平滑噪声、渐进视野扩展策略逐步演化策略。实验表明，该框架在长视野任务上性能提升8.6%，1-shot学习提升22.0%，并在未见任务上实现20.8%成功率（纯SFT为0%），涌现出错误恢复和新策略等能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.14666" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Obstruction reasoning for robotic grasping - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Obstruction reasoning for robotic grasping</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.23186" target="_blank" rel="noreferrer">2511.23186</a></span>
+        <span>作者: Fabio Poiesi Team</span>
+        <span>日期: 2025-11-28</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，机器人要在杂乱无章的环境中（如箱内拣选、按自然语言指令进行物体组装）成功抓取目标物体，需要视觉语言模型（VLMs）不仅能够对目标物体进行视觉定位，还需理解物体间的物理依赖关系，特别是遮挡关系。然而，尽管现有的视觉语言具身推理模型展现出一定的空间理解能力，但在遮挡推理和可访问性规划方面仍存在局限。现有的基准测试（如EmbSpatial-Bench、Spatial457）主要测试静态感知，而非面向动作的遮挡推理（即规划清理动作）。此外，大多数数据集缺乏语言标注，限制了其在VLM研究中的应用。本文针对机器人抓取中目标物体被遮挡这一具体痛点，提出了“遮挡推理”的新视角，旨在识别源自目标物体的遮挡路径，并推断出清除遮挡所需的多步动作序列。本文的核心思路是：通过构建一个以目标物体为中心的有向遮挡图来形式化遮挡推理问题，并引入一个结合监督微调与基于可验证奖励的强化微调的两阶段训练方法，来提升模型的多步遮挡推理能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出了UNOGrasp模型和一个用于训练与评估的大规模基准数据集UNOBench。</p>
+<p><strong>整体框架与问题定义</strong>：给定一个RGB-D观测图像 $I = (I_{rgb}, I_d)$ 和一个自由形式的文本指令 $q$（例如“抓取最左边的白色盒子”），目标是产生一个清除遮挡的计划以抓取唯一指定的目标物体 $o_t$。$I_{rgb}$ 用于推理和动作序列规划，$I_d$ 用于估计3D抓取点。如果 $o_t$ 未被遮挡，则直接抓取；否则，需要识别出访问 $o_t$ 所需的最小动作序列，该序列始于识别所有“顶层遮挡物”——即那些遮挡 $o_t$ 但自身可被访问（即未被遮挡）的物体。</p>
+<p><img src="https://arxiv.org/html/2511.23186v1/x3.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：UNOGrasp的训练与推理流程。模型经过监督微调（SFT）学习结构化的遮挡路径推理，并通过基于GRPO的强化微调（RFT）利用结果驱动的IoU和格式奖励进一步提升推理能力。推理时，给定RGB图像和语言指令，模型通过多步推理（<code>&lt;reasoning&gt;</code> 轨迹）输出清除遮挡并抓取目标所需的动作序列（<code>&lt;answer&gt;</code>）。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><p><strong>目标中心遮挡图</strong>：模型首先根据指令 $q$ 在视觉场景中定位目标物体 $o_t$。随后，构建一个以 $o_t$ 为中心的遮挡有向图 $G_t = (V_t, E_t)$。节点集 $V_t$ 包含 $o_t$ 及其所有直接或间接遮挡它的物体。有向边 $(o_i, o_j) \in E_t$ 表示从相机视角看，物体 $o_i$ 被物体 $o_j$ 遮挡。边从被遮挡物体指向遮挡物，形成一条或多条源自 $o_t$、终止于可访问的顶层遮挡物的遮挡路径。目标物体 $o_t$ 的祖先对象集 $\mathcal{A}(o_t)$ 定义为图中所有存在从 $o_t$ 到该对象的路径的物体。顶层遮挡物集 $\mathcal{F}(o_t)$ 则是 $\mathcal{A}(o_t)$ 中那些自身没有出边（即未被遮挡）的物体。模型的推理目标是准确推断出 $\mathcal{F}(o_t)$，以指导机器人决定下一步的必要动作。</p>
+</li>
+<li><p><strong>两阶段训练流程</strong>：</p>
+<ul>
+<li><strong>监督微调（SFT）</strong>：在UNOBench数据集上微调模型，使其能够解释自由形式的语言指令并将其与视觉场景中的唯一目标物体关联。训练监督使用两种显式参考方法：物体的名称及其图像坐标，以及Set-of-Mark（SoM）视觉提示（为每个物体分配唯一ID）。微调引导模型识别三种情况：(i) $o_t$ 未被遮挡；(ii) $o_t$ 有单条遮挡路径；(iii) $o_t$ 有多条遮挡路径。模型生成逐步推理链，每一步都锚定在物理上相邻（接触）的邻居物体上，并鼓励量化遮挡水平作为辅助信号，以加强重建完整遮挡路径和识别顶层遮挡物 $\mathcal{F}(o_t)$ 的能力。</li>
+<li><strong>强化微调（RFT）</strong>：从SFT初始化的模型开始，采用分组相对策略优化（GRPO）进行RFT，以增强其基于视觉的推理能力。定义了一个新颖的任务特定奖励 $r = \lambda_{\text{fmt}} r_{\text{fmt}} + \lambda_{\text{task}} r_{\text{task}}$。其中，格式奖励 $r_{\text{fmt}}$ 是二元的（1或0），用于促进推理 <code>&lt;reasoning&gt;</code> 和动作 <code>&lt;answer&gt;</code> 上下文的正确存在和闭合的结构有效性。任务奖励 $r_{\text{task}}$ 使用集合级别的交并比（IoU）度量来监督最终输出的顶层遮挡物集 $\mathcal{F}(o_t)$，即预测集与真实集的交集大小除以并集大小。这种IoU奖励提供了比二元正确性更平滑的优化信号，奖励部分正确的预测以实现更稳定的学习。</li>
+</ul>
+</li>
+</ol>
+<p><strong>创新点</strong>：与现有方法（如构建覆盖所有物体对的复杂场景级图）不同，UNOGrasp的创新在于：1) 将语言锚定到目标物体，然后构建一个<strong>仅以该目标为根</strong>的紧凑遮挡图，使推理专注于决定目标可访问性的结构；2) 提出了结合<strong>遮挡感知视觉线索</strong>（如遮挡率）和图基配方的新型训练方法；3) 引入了用于训练和评估遮挡推理的<strong>首个大规模语言标注基准UNOBench</strong>。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>数据集/基准</strong>：UNOBench，基于MetaGraspNetV2构建，包含合成场景（6,255个场景，108,174条推理路径）和真实场景（520个场景，2,552条遮挡路径）。数据集提供人类标注的自由形式语言指令和每个箱子的遮挡图。</li>
+<li><strong>评估协议</strong>：将基准按难度分为四级（无遮挡、简单、中等、困难），并引入两种评估指标：1) <strong>结果级指标</strong>：成功率精度（SR-P）、召回率（SR-R）和F1分数，衡量最终动作输出的准确性；2) <strong>推理级指标</strong>：对象级推理（使用对象三元组精度OP、召回率OR和F1分数）和路径级推理（使用新提出的多路径归一化编辑距离MP_NED，衡量预测与真实推理路径的结构对齐程度，值越低越好）。</li>
+<li><strong>对比方法</strong>：以专有模型Gemini Robotics-ER 1.5和开源模型Qwen2.5-VL-3B作为基线，比较了它们的零样本、上下文学习（ICL）和监督微调（SFT）变体。UNOGrasp基于Qwen2.5-VL-3B，并进行了SFT和RFT。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2511.23186v1/x1.png" alt="合成场景路径级推理结果"></p>
+<blockquote>
+<p><strong>表1</strong>：UNOGrasp在合成测试集上的路径级推理结果。在“Oracle（带SoM）”和“自然语言提示”两种设置下，UNOGrasp在几乎所有难度级别上的SR-F1和MP_NED指标均显著优于基线模型。特别是在困难场景下，UNOGrasp的SR-F1（54.5%）远超Qwen2.5-VL (SFT)的34.3%和Gemini Robotics-ER 1.5 (ICL)的13.8%，且MP_NED（0.51）远低于基线（&gt;0.68），表明其推理路径与真实路径结构更接近。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.23186v1/x2.png" alt="合成场景对象级推理结果"></p>
+<blockquote>
+<p><strong>表2</strong>：UNOGrasp在合成测试集上的对象级推理结果（F1_rel）。在自然语言提示设置下，UNOGrasp的整体F1_rel达到57.2%，而Gemini和Qwen的ICL变体分别仅为3.5%和2.7%，显示出UNOGrasp在将多步推理与物体坐标进行空间对齐方面的巨大优势。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.23186v1/x9.png" alt="真实场景路径级推理结果"></p>
+<blockquote>
+<p><strong>表3</strong>：UNOGrasp在真实场景测试集上的路径级推理结果。即使在训练中未见的真实场景中，UNOGrasp依然保持领先。在困难场景下，其SR-F1（39.7%）远超Qwen2.5-VL (SFT)的1.7%和Gemini (ICL)的14.6%。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.23186v1/x10.png" alt="真实场景对象级推理结果"></p>
+<blockquote>
+<p><strong>表4</strong>：UNOGrasp在真实场景测试集上的对象级推理结果。趋势与合成场景一致，UNOGrasp在自然语言提示下的对象级推理能力（F1_rel 24.8%）远优于基线（均低于4.0%）。</p>
+</blockquote>
+<p><strong>消融实验与组件贡献</strong>：<br>论文通过消融实验验证了各训练组件的贡献。结果表明：</p>
+<ol>
+<li><strong>RFT奖励的有效性</strong>：仅使用SFT训练的模型，其推理路径质量（MP_NED）和最终动作准确性（SR-F1）均低于完整版UNOGrasp（SFT+RFT）。加入基于IoU的任务奖励 $r_{\text{task}}$ 和格式奖励 $r_{\text{fmt}}$ 的RFT阶段，能显著提升这两方面的性能。</li>
+<li><strong>推理监督的重要性</strong>：与仅进行SFT但不包含 <code>&lt;reasoning&gt;</code> 部分训练的Qwen2.5-VL (SFT)相比，UNOGrasp在复杂（困难）场景下的性能提升尤为明显（合成场景SR-F1提升+20.2%，真实场景提升+38.0%），证实了过程级（推理链）监督对于多路径推理至关重要。</li>
+<li><strong>模型局限性</strong>：基线模型（如Gemini和Qwen的ICL变体）在无遮挡场景下容易产生“幻觉”，错误地认为存在遮挡（成功率较低），且其多步推理的空间对齐经常失败，导致身份混淆和高MP_NED（&gt;0.8）。上下文学习（ICL）虽能提升某些情况下的推理性能，但往往会放大无遮挡情况下的幻觉。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>首次对挑战性杂乱场景中机器人抓取的空间遮挡推理进行了深入研究。</li>
+<li>引入了首个用于训练和测试遮挡推理的大规模基准UNOBench，提供了评估协议和量化推理准确性的指标。</li>
+<li>提出了UNOGrasp模型，采用一种新颖的基于图的训练方法，结合遮挡感知视觉线索，有效提升了遮挡推理能力，并在合成与真实环境中均取得了最先进的性能。</li>
+</ol>
+<p><strong>论文提到的局限性</strong>：本文的行动计划仅基于遮挡关系的存在性。不同的遮挡可能会以不同的方式阻碍抓取，因此量化遮挡严重程度极具挑战性且依赖于具体应用，这超出了本文的讨论范围。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>遮挡严重度建模</strong>：未来的工作可以探索如何量化遮挡的严重程度，并将其纳入推理和规划中，以生成更精细、更高效的动作序列。</li>
+<li><strong>泛化与可扩展性</strong>：UNOGrasp在未见过的真实场景中表现良好，但进一步测试其在更复杂、动态或非结构化环境中的泛化能力是一个重要方向。</li>
+<li><strong>多模态融合</strong>：当前主要利用RGB图像进行推理，深度图仅用于抓取点估计。如何更早、更深入地融合深度等3D信息以增强空间关系理解，值得探索。</li>
+<li><strong>开源促进研究</strong>：与专有模型不同，本文承诺公开数据、模型和代码，这将为遮挡推理领域的后续研究提供宝贵的基础资源。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对杂乱环境中机器人抓取需预先清除障碍的问题，提出UNOGrasp模型。该模型基于视觉语言进行多步障碍推理，通过目标物体产生的障碍路径、障碍感知视觉线索以及结合监督与强化学习的微调方法，推断抓取序列。实验表明，UNOGrasp在合成与真实环境中显著提升了障碍推理与抓取成功率，优于现有通用及专用模型。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.23186" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

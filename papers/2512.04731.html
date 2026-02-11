@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Bridging Simulation and Reality: Cross-Domain Transfer with Semantic 2D Gaussian Splatting - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Bridging Simulation and Reality: Cross-Domain Transfer with Semantic 2D Gaussian Splatting</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.04731" target="_blank" rel="noreferrer">2512.04731</a></span>
+        <span>作者: Xuguang Lan Team</span>
+        <span>日期: 2025-12-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作中的跨域迁移（尤其是从仿真到现实）因两者在视觉外观、物体多样性和环境复杂性上的显著差异而长期面临挑战。现有主流方法包括领域随机化、领域自适应以及仿真-现实标定。领域随机化在训练时引入纹理、光照和动力学的可变性以提升鲁棒性，但通常需要大规模随机化环境且可能产生过于保守的策略。领域自适应学习仿真域与现实域之间的映射，而仿真-现实标定方法则通过匹配传感器、材料和动力学属性来校准仿真器。然而，这些方法普遍存在局限性：领域随机化和自适应通常需要大量的超参数调优和多样化数据；标定方法则需要大量工程努力，且难以泛化到仿真调优未捕获的真实世界长尾变化。</p>
+<p>从表征学习的角度看，早期基于RGB的神经网络方法难以保持跨视角的语义和空间一致性。点云表征显式编码3D结构但稀疏且非结构化，难以嵌入高级语义。NeRF类方法能结合语义并保持多视角一致性，但其沉重的计算成本和缓慢的渲染速度使其不适用于实时机器人控制。总体而言，现有方法难以高效、准确地提取对鲁棒仿真到现实迁移至关重要的、领域不变的空间特征。</p>
+<p>本文针对上述痛点，提出了一个新的视角：如果在仿真策略训练中使用领域不变的特征，并且在现实世界部署时能够提取并提供相同类型的特征作为策略输入，那么领域鸿沟就能被有效弥合，从而显著提升策略的泛化能力。受人类通过神经元选择性提取稳定、不变的视觉表征以实现跨域泛化的认知神经科学启发，本文旨在从表征层面提取领域不变的空间特征。因此，本文提出了语义2D高斯泼溅（Semantic 2D Gaussian Splatting, S2GS）方法。其核心思路是：通过多视角图像构建2D语义场，并利用特征级的高斯泼溅将其投影到统一的3D语义空间，再通过语义检索机制过滤无关背景，提取出以目标物体为中心的、领域不变的空间特征，为下游策略学习提供干净、聚焦的输入。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>S2GS的整体目标是提取领域不变的空间特征以支持鲁棒的跨域策略迁移。其流程分为离线的场构建与优化阶段，以及在线的特征提取与动态更新阶段。</p>
+<p><img src="https://arxiv.org/html/2512.04731v1/x2.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：S2GS方法总览。S2GS旨在提取领域不变的空间特征以支持鲁棒的跨域策略迁移。在初始阶段，S2GS提取多视角图像的分层语义特征，并优化语义2D高斯泼溅场和解码器。在执行时，语义检索模块查询并过滤任务相关物体，同时移除背景干扰。生成的领域不变空间特征作为紧凑、干净的输入提供给下游扩散策略学习。操作后，S2GS支持动态场景更新以保持实时准确的场景表征，满足在线机器人控制的要求。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><p><strong>语义2D高斯泼溅场构建</strong>：方法以2D高斯泼溅（2DGS）为基础，将场景表示为3D空间中的一系列2D高斯图元（椭圆形圆盘）。每个图元除了位置、旋转、缩放、不透明度等几何外观属性外，还附加了一个可学习的高维语义特征向量。为了获取监督信号，方法从多视角输入图像中提取分层语义特征：首先使用CLIP和SAM模型获取图像的原始语义特征和不同区域的掩码；然后通过掩码池化获得全局语义特征；接着根据掩码裁剪图像并再次输入CLIP，获得物体级语义特征，并重映射回原图空间得到局部语义特征。在渲染时，语义特征通过与颜色渲染类似的α-blending过程进行融合。由于存储的语义特征维度较低，方法引入一个浅层MLP解码器将渲染后的特征映射回原始高维空间，并通过余弦相似度损失监督其预测的全局和局部语义特征。总损失函数结合了外观重建损失（L1 + D-SSIM）、语义蒸馏损失和几何正则化损失（法向和深度一致性）。</p>
+</li>
+<li><p><strong>任务目标物体空间特征提取</strong>：场构建完成后，可以通过自然语言（利用CLIP）查询特定物体。通过计算每个2D高斯图元的解码语义特征与查询语言的相似度，可以初步识别出目标物体对应的图元。为了提升分割质量并提取精确的物体姿态，采用两阶段细化过程：首先使用DBSCAN聚类过滤空间孤立的噪声图元；然后选择最大的聚类作为目标物体，并应用凸包补全来填充分割中可能存在的孔洞，确保物体的完整表示。最后，通过聚合属于该物体的所有高斯图元，计算其质心表征，作为该物体紧凑、稳定的空间特征（状态s），提供给下游策略。</p>
+</li>
+<li><p><strong>动态场景更新</strong>：在机器人操作过程中，场景是动态变化的。为了维持准确的场景表征，S2GS直接优化物体的运动参数。假设物体是刚性的，其运动用一个SE(3)变换（3D平移向量和4D旋转四元数）参数化。通过最小化渲染图像与带掩码的输入图像之间的L1损失，并结合已知的机器人操作作为强运动先验，来求解这些运动参数，从而实现实时更新，无需耗时重新扫描。</p>
+</li>
+<li><p><strong>下游策略集成</strong>：本文采用扩散策略作为下游学习算法。策略以S2GS提取的物体中心空间特征s和当前机器人状态（末端执行器位姿q）为条件。它通过反向扩散过程，从随机噪声动作序列开始，逐步去噪生成可行的动作序列。训练目标采用均方误差损失，预测前向扩散过程中每一步所添加的噪声。</p>
+</li>
+</ol>
+<p><strong>创新点</strong>：与现有方法相比，S2GS的创新性主要体现在：1) <strong>表征层面</strong>：首次将语义信息与高效的2D高斯泼溅结合，构建出能同时编码高质量几何、外观和分层语义的3D场。2) <strong>特征提取</strong>：提出了一套从该场中提取以物体为中心、领域不变空间特征的流程，包括开放词汇查询、聚类去噪和几何补全，能有效过滤背景干扰。3) <strong>系统实用性</strong>：实现了对动态场景的实时优化更新，并验证了其与扩散策略结合后，在仿真到现实迁移中的有效性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：仿真训练在ManiSkill2环境中进行，使用7自由度Franka Panda机器人。为促进向真实6自由度UR5机器人的迁移，策略输入中移除了关节角度信息。真实世界评估在UR5机械臂上进行，使用安装在夹爪上的Intel RealSense D435i相机进行初始全景扫描以构建S2GS场（仅优化7000步以追求效率），另一个固定的同款相机用于持续更新动态场景。</p>
+<p><strong>基线方法</strong>：以ManiSkill模仿学习基准中的扩散策略（Diffusion Policy, DP）为基础，对比了不同输入模态：原始RGB（DP-RGB）、添加了高斯渲染以过滤背景的RGB（DP-RGB+GS）、进一步添加了S2GS语义增强的RGB（DP-RGB+GS+S2GS）、以及完全使用S2GS提取的空间特征（DP-S2GS）。同时，以使用真实状态（ground-truth state）输入（DP-State）作为性能上界。</p>
+<p><strong>仿真实验结果</strong>：在PickCube、PushCube和StackCube三个任务上的成功率如表1所示。<br><img src="https://arxiv.org/html/2512.04731v1/x5.png" alt="仿真任务图示"></p>
+<blockquote>
+<p><strong>图5</strong>：仿真中的三个任务：PickCube、PushCube和StackCube。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="left">输入</th>
+<th align="left">方法</th>
+<th align="left">Pick</th>
+<th align="left">Push</th>
+<th align="left">Stack</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">RGB</td>
+<td align="left">DP-RGB</td>
+<td align="left">0.76</td>
+<td align="left">0.89</td>
+<td align="left">0.04</td>
+</tr>
+<tr>
+<td align="left">RGB</td>
+<td align="left">DP-RGB+GS</td>
+<td align="left">0.91</td>
+<td align="left">0.92</td>
+<td align="left">0.29</td>
+</tr>
+<tr>
+<td align="left">RGB</td>
+<td align="left">DP-RGB+GS+S2GS</td>
+<td align="left">1</td>
+<td align="left">1</td>
+<td align="left">0.94</td>
+</tr>
+<tr>
+<td align="left">S2GS</td>
+<td align="left"><strong>DP-S2GS</strong></td>
+<td align="left"><strong>1</strong></td>
+<td align="left"><strong>1</strong></td>
+<td align="left"><strong>0.97</strong></td>
+</tr>
+<tr>
+<td align="left">State</td>
+<td align="left">DP-State</td>
+<td align="left">1</td>
+<td align="left">1</td>
+<td align="left">0.97</td>
+</tr>
+</tbody></table>
+<p><strong>表1</strong>：不同方法在三个任务上的成功率。性能对比证明了我们的方法在仿真环境中不同操作任务上的有效性。</p>
+<p>关键发现：1) 纯RGB输入在需要多物体推理的StackCube任务上几乎失败（0.04）。2) 添加高斯渲染过滤背景（DP-RGB+GS）后性能显著提升，尤其是在Stack任务上（0.04→0.29）。3) 进一步引入S2GS语义增强（DP-RGB+GS+S2GS）带来了巨大飞跃，Stack任务成功率提升至0.94。4) <strong>最重要的是，完全抛弃传统视觉编码器，仅使用S2GS提取的空间特征（DP-S2GS）取得了最佳性能</strong>，并与使用真实状态的上界（DP-State）性能几乎持平。这证明S2GS提取的特征在功能上等价于真实状态，且避免了原始RGB引入的干扰。</p>
+<p><strong>真实世界结果</strong>：将仿真训练好的DP-S2GS策略直接部署到UR5机器人上，在形状、材质、外观与仿真物体均不同的多种家居物体上执行拾取、推动、堆叠任务。<br><img src="https://arxiv.org/html/2512.04731v1/x4.png" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界结果。我们的方法在真实世界操作任务中取得了高成功率，证明了S2GS表征的有效性。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="left">任务</th>
+<th align="left">具体物体</th>
+<th align="left">成功率</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left"><strong>Pick</strong></td>
+<td align="left">木头</td>
+<td align="left">5/5</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">草莓</td>
+<td align="left">3/5</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">鸡蛋</td>
+<td align="left">5/5</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left"><strong>平均</strong></td>
+<td align="left"><strong>86.7%</strong></td>
+</tr>
+<tr>
+<td align="left"><strong>Push</strong></td>
+<td align="left">鼠标</td>
+<td align="left">3/5</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">罐子</td>
+<td align="left">5/5</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">水桶</td>
+<td align="left">5/5</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left"><strong>平均</strong></td>
+<td align="left"><strong>86.7%</strong></td>
+</tr>
+<tr>
+<td align="left"><strong>Stack</strong></td>
+<td align="left">鸡蛋放入红罐</td>
+<td align="left">4/5</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">鸡蛋放入碗中</td>
+<td align="left">5/5</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">木头放在罐上</td>
+<td align="left">3/5</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left"><strong>平均</strong></td>
+<td align="left"><strong>80.0%</strong></td>
+</tr>
+</tbody></table>
+<p><strong>表2</strong>：DP-S2GS在真实世界拾取、推动、堆叠任务上的成功率（%）。我们的方法在真实世界基础操作原语上取得了持续的高性能。</p>
+<p>结果显示，S2GS方法在真实世界取得了 consistently high的成功率。性能下降主要源于物理层面的挑战，如草莓的不规则表面导致力闭合抓取困难，或鼠标推动时可能发生的滑动，而非视觉表征的失败。</p>
+<p><strong>消融实验</strong>：图6展示了不同组件对特征提取质量的影响。<br><img src="https://arxiv.org/html/2512.04731v1/x6.png" alt="消融研究"></p>
+<blockquote>
+<p><strong>图6</strong>：消融研究。从左至右：(a) 输入图像；(b) 仅使用CLIP相似度查询的初始分割，存在噪声和孔洞；(c) 应用DBSCAN聚类后，噪声被有效去除；(d) 进一步应用凸包补全后，获得了完整、准确的目标物体分割。</p>
+</blockquote>
+<p>该图直观展示了每个组件的贡献：1) <strong>初始查询</strong>：仅靠CLIP相似度能大致定位物体，但结果包含大量噪声且不完整。2) <strong>DBSCAN聚类</strong>：有效过滤了空间孤立的噪声点，使物体区域更加清晰。3) <strong>凸包补全</strong>：填补了因表面语义单一或遮挡导致的孔洞，形成了完整、准确的物体分割，为提取稳定的空间特征（如质心）奠定了基础。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 提出了<strong>语义2D高斯泼溅（S2GS）</strong>，一种新颖的表征方法，能够提取以物体为中心、领域不变的空间特征，有效缩小了仿真到现实策略迁移中的领域鸿沟。2) S2GS具备<strong>高可编辑性和实时能力</strong>，能够灵活移除任务无关的背景干扰，同时保持满足真实世界在线机器人控制要求的性能。3) 通过将S2GS与扩散策略结合，在仿真和真实机器人实验中<strong>验证了其在跨域仿真到现实迁移中的有效性</strong>，性能匹配甚至超越了使用真实状态输入的上界。</p>
+<p><strong>局限性</strong>：论文自身提到的局限性包括：1) 当前方法假设物体是<strong>刚性</strong>的，对于非刚性物体的动态更新需要进一步研究。2) 在真实世界实验中，性能瓶颈有时来自<strong>物理层面的挑战</strong>（如抓取接触几何、滑动），而非视觉表征。</p>
+<p><strong>对后续研究的启示</strong>：1) <strong>表征学习的新方向</strong>：证明了从高效、可编辑的3D语义场中提取高层任务特征，比直接使用原始RGB或点云更能促进跨域泛化，这为机器人表征学习提供了新思路。2) <strong>系统集成范例</strong>：S2GS与扩散策略的成功结合，展示了一种“感知（表征）+ 决策（策略）”的模块化系统设计范例，其中感知模块专注于提取领域不变的抽象状态，决策模块则基于此进行规划。3) <strong>迈向更复杂的交互</strong>：未来工作可以探索将S2GS应用于更复杂的非刚性物体操作、长视野任务规划，以及如何与大型语言/视觉-语言模型结合，实现更高层次的语义理解和任务分解。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决机器人操作中模拟到现实（Sim-to-Real）的跨域迁移难题。针对模拟与现实间的视觉差异，提出语义2D高斯泼溅（S2GS）方法，通过构建多视图2D语义场，利用特征级高斯泼溅将其投影至统一3D空间，并过滤无关背景，提取以物体为中心的领域不变特征。实验在ManiSkill仿真环境中进行，并部署至现实场景，结果表明S2GS显著提升了策略在现实世界的泛化性能，实现了高且稳定的任务完成率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.04731" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

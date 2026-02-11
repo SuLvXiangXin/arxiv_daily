@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>ActiveVLA: Injecting Active Perception into Vision-Language-Action Models for Precise 3D Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>ActiveVLA: Injecting Active Perception into Vision-Language-Action Models for Precise 3D Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.08325" target="_blank" rel="noreferrer">2601.08325</a></span>
+        <span>作者: Yanwei Fu Team</span>
+        <span>日期: 2026-01-13</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人操纵领域的主流方法之一是视觉-语言-动作模型。这类模型通常利用预训练的大规模视觉-语言模型作为骨干，以增强泛化能力。然而，现有VLA方法大多依赖于静态或腕部安装的摄像头，提供固定、以末端执行器为中心的视角。这种设置导致模型在执行任务时无法自适应地选择最优视角或调整分辨率，从而在长视野任务和需要精细操作的场景中性能受限。本文针对VLA模型缺乏“主动感知”能力这一具体痛点，提出将主动感知注入VLA框架的新视角。其核心思路是采用一个由粗到细的两阶段流程：首先在粗粒度阶段定位3D场景中的关键区域，然后在细粒度阶段围绕该区域进行主动的视角选择和3D放大，以获取信息更丰富的观测，从而实现高精度的3D机器人操纵。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>ActiveVLA的整体框架是一个两阶段、由粗到细的主动感知流程，其输入是3D点云观测和语言指令，输出是6自由度末端执行器位姿、夹爪状态和碰撞标志。</p>
+<p><img src="https://arxiv.org/html/2601.08325v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：ActiveVLA的整体流程。左侧为粗阶段：将3D场景投影为多视角正交图像，输入VLM骨干网络生成2D热图，并反投影定位最相关的3D关键区域。右侧为细阶段：基于关键区域，主动感知模块选择新视角并进行3D放大，精炼后的VLM预测末端执行器关键位置的热图，动作解码器输出最终的3D动作。</p>
+</blockquote>
+<p><strong>核心模块一：3D关键区域感知（粗阶段）</strong><br>该阶段的目标是从全局场景中定位出任务相关的核心3D区域。首先进行<strong>多视角渲染</strong>：给定RGB-D图像，系统重建场景点云，并将其渲染为三个正交投影视图（顶视、前视、右视）。每个视图渲染的图像包含7个通道：RGB、深度以及点在世界坐标系下的坐标。坐标通道用于建立不同视图间像素的对应关系。渲染过程使用PyTorch3D，并采用基于最小深度的遮挡处理。接着进行<strong>3D关键区域提取</strong>：将渲染的多视角图像与语言指令一同输入预训练的VLM骨干网络。为了从VLM的全局表示中恢复精细的空间定位信息，论文引入了一个热图预测模块。该模块将VLM输出的图像块令牌按其空间位置重排为特征网格，然后通过一个可学习的<strong>凸上采样块</strong>上采样至输入图像分辨率，生成每个视图的注意力热图。训练时使用交叉熵损失。最后，将所有视图预测的2D热图反投影回3D空间，通过在多视图离散网格上累积得分来确定关键的3D区域。</p>
+<p><strong>核心模块二：3D主动感知（细阶段）</strong><br>此阶段基于粗阶段定位的关键区域，通过主动调整感知来优化观测。</p>
+<ol>
+<li><strong>主动视角选择</strong>：以关键区域（如目标物体质心）为中心，在包围它的球面上生成一组候选相机位姿。采样采用基于正二十面体递归细分的测地线策略，以确保各向同性覆盖。每个候选位姿通过一个多目标评分函数进行评估，该函数平衡三个标准：<strong>可见性</strong>（视线是否被场景几何遮挡）、<strong>距离</strong>（与目标区域的适中距离）和<strong>多样性</strong>（与其它候选视角的视角方向差异）。三个分数经过Z归一化后加权求和，选择得分最高的前K个视角作为下一时刻的观测位姿。</li>
+<li><strong>主动3D放大</strong>：在选定的最优视角上，系统通过缩小渲染视场角来模拟光学放大效果，从而在不损失像素分辨率的前提下，提高关键局部区域的空间细节。放大因子z&gt;1，放大后图像覆盖的空间宽度W(z)按公式减小，而像素分辨率得以保持。这允许模型观察到小尺度结构，对于预测精确的夹爪位姿至关重要。</li>
+</ol>
+<p><strong>核心模块三：3D动作预测</strong><br>获得主动选择和放大的视图后，将其再次输入VLM生成新的热图。对于平移预测，这些2D热图被反投影并在3D网格上累积形成多视角得分体，得分最高的网格点被确定为平移目标。对于旋转预测，ActiveVLA使用欧拉角表示，每个角度离散化为72个区间。一个<strong>分层特征融合模块</strong>负责最终的动作解码：它通过最大池化获取每个正交投影的全局上下文令牌，同时使用ROI感知采样器提取局部细节令牌。这些令牌被拼接后送入一个MLP头，共同预测旋转、夹爪状态和碰撞标志。</p>
+<p><strong>创新点</strong>：与现有VLA方法相比，ActiveVLA的核心创新在于明确地将主动感知能力注入框架。它不再被动接受固定视角的输入，而是能够（1）主动选择能最大化任务相关信息（如无遮挡、视角多样）的观测视角；（2）主动对关键区域进行3D虚拟放大，以获取精细的视觉细节。这种与3D空间推理紧密结合的、闭环的由粗到细感知策略，是其实现高精度操纵的关键。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>论文在三个模拟基准测试和真实世界环境中对ActiveVLA进行了评估。</p>
+<ul>
+<li><strong>Benchmarks/平台</strong>：模拟基准包括RLBench（18个长视野任务）、COLOSSEUM（RLBench的泛化扰动版本，12类扰动）和GemBench（层次化组合任务）。真实实验使用KINOVA GEN2机器人和RealSense D455相机。</li>
+<li><strong>Baselines</strong>：对比了众多先进方法，包括Image-BC (CNN/ViT)、C2F-ARM-BC、PerAct、Act3D、RVT、RVT-2、3D Diffuser Actor以及最新的BridgeVLA。</li>
+<li><strong>关键实验结果</strong>：<ul>
+<li><strong>RLBench</strong>：ActiveVLA取得了<strong>91.8%</strong> 的平均成功率，在18个任务中的10个排名第一，平均排名为1.22（越低越好），显著优于其他方法。</li>
+<li><strong>COLOSSEUM</strong>：在具有挑战性的泛化场景中，ActiveVLA取得了<strong>65.9%</strong> 的最高平均成功率，比之前最好的方法（BridgeVLA，64.0%）高出1.9个百分点，展示了更强的鲁棒性。</li>
+<li><strong>GemBench</strong>：论文指出ActiveVLA在所有基线上 consistently 表现更优，显示出跨多样化任务的卓越适应性。</li>
+<li><strong>真实世界</strong>：评估证实了其强大的泛化能力，能够处理复杂环境中的遮挡和精确操作任务。</li>
+</ul>
+</li>
+</ul>
+<p><img src="https://arxiv.org/html/2601.08325v1/x2.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图2</strong>：精细操作任务的定性结果。虚线左侧展示粗阶段：(a) 3D模态投影为正交图像，(b) 预测热图标记关键区域。虚线右侧展示细阶段：基于关键区域进行 (c) 主动视角选择和 (d) 主动3D放大，以在复杂场景中实现精细操纵。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.08325v1/x3.png" alt="RLBench结果表"></p>
+<blockquote>
+<p><strong>图3/表1</strong>：RLBench上的量化结果。ActiveVLA在平均成功率和平均排名上均领先于所有基线方法，在多项任务中达到或接近100%成功率。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.08325v1/x4.png" alt="COLOSSEUM结果表"></p>
+<blockquote>
+<p><strong>图4/表2</strong>：COLOSSEUM基准上的结果。ActiveVLA在14种泛化扰动场景中的平均成功率最高，表明其对物体属性、场景外观和相机位姿变化具有出色的鲁棒性。</p>
+</blockquote>
+<p><strong>消融实验</strong>：论文通过消融研究验证了各核心组件的贡献（相关图表未在提供的链接中直接对应，但内容源于正文分析）。结果表明，完整的ActiveVLA框架（包含主动视角选择和3D放大）性能最佳。移除主动感知组件（即仅使用粗阶段）会导致性能显著下降，特别是在需要精细操作的任务上。这证明了主动视角选择和放大机制对于获取高质量观测、从而实现精确操作是至关重要的。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了集成主动感知的VLA框架</strong>：首次在视觉-语言-动作模型中系统性地引入了主动感知能力，使机器人能够自适应地选择视角和进行局部放大。</li>
+<li><strong>设计了一种新颖的由粗到细流程</strong>：通过3D到2D投影、热图预测定位关键区域，进而引导主动感知优化，实现了感知与行动的闭环。</li>
+<li><strong>实现了卓越的性能与泛化</strong>：在多个模拟基准上达到最先进水平，并成功迁移到真实机器人平台，验证了主动感知对长视野、高精度任务的实际价值。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提及的局限性包括：方法依赖于精确的3D点云重建和相机标定；主动视角选择与放大的计算开销高于静态观测方法；在极度混乱或动态变化的环境中，主动感知策略的有效性可能需要进一步验证。</p>
+<p><strong>对后续研究的启示</strong>：ActiveVLA的工作表明，将“主动寻求信息”的感知范式与基于大模型的任务理解相结合，是提升具身智能体在复杂环境中操作能力的关键方向。未来研究可以探索更高效的主动感知决策算法、将主动感知与物理交互更紧密地结合，以及降低其对精确3D感知依赖的轻量化方法。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出了ActiveVLA框架，旨在解决现有视觉-语言-动作模型依赖静态、末端执行器视角，缺乏主动感知能力，从而限制其在长时程和精细操作任务中性能的问题。其关键技术采用从粗到精的两阶段范式：首先进行关键3D区域定位，然后通过主动视角选择和3D放大进行感知优化。实验表明，该方法在三个仿真基准上超越了先进基线，并能迁移到现实场景中实现高精度操作。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.08325" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

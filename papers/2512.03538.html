@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AdaPower: Specializing World Foundation Models for Predictive Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>AdaPower: Specializing World Foundation Models for Predictive Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.03538" target="_blank" rel="noreferrer">2512.03538</a></span>
+        <span>作者: Kai Xu Team</span>
+        <span>日期: 2025-12-03</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>世界基础模型（WFMs）在视觉动态模拟方面展现出卓越能力，但其在精确机器人控制中的应用受到生成真实性与面向控制精度之间差距的限制。现有主流方法（如DreamGen）将WFMs用作合成数据生成器：先在有限的机器人数据上微调WFM，生成合成视频，通过逆动力学模型提取伪动作序列，最后用这些神经轨迹训练新的视觉运动策略。该范式存在三个关键局限：1）生成海量视频数据和训练新策略的计算成本过高；2）适应周期长，每个新任务或环境都需要重复整个流程；3）未充分利用强大的预训练视觉-语言-动作（VLA）策略，而是选择训练新的专用策略。</p>
+<p>本文针对“如何高效利用WFMs直接赋能现有预训练策略”这一具体痛点，提出了从“数据生成范式”转向“模型适配范式”的新视角。核心思路是：通过轻量级的参数优化，将通用WFMs转化为专用世界模型（SWM），并集成到模型预测控制（MPC）框架中，直接提升预训练VLA策略在未见任务上的零样本泛化能力，从而避免昂贵的策略重新训练。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>AdaPower的整体框架旨在高效地将一个基础世界模型（WFM）适配为适用于机器人操作的专用世界模型（SWM）。框架基于扩散变换器（DiT）架构，以Cosmos-Predict-2B作为基础WFM。适配过程中，基础WFM的参数被冻结，仅训练新引入的模块。整体Pipeline包含两个核心创新模块：时空测试时训练（TS-TTT）模块和记忆持久化（MP）模块。此外，为了支持动作条件预测，将原WFM的文本编码器替换为一个由多个感知层组成的动作编码器。</p>
+<p><img src="https://arxiv.org/html/2512.03538v1/x2.png" alt="整体架构"></p>
+<blockquote>
+<p><strong>图2</strong>：AdaPower整体架构。基于Cosmos-Predict-2B的扩散变换器架构，插入了两个关键组件：时空测试时训练（TS-TTT）模块和记忆持久化（MP）模块。TS-TTT在推理时通过跨时空维度的自监督损失优化部分参数；MP模块将历史信息整合为记忆特征，并通过交叉注意力与DiT特征交互以保持历史上下文。</p>
+</blockquote>
+<p><strong>时空测试时训练（TS-TTT）模块</strong>：该模块旨在解决测试时分布偏移问题，使模型能在推理过程中进行自监督优化。其关键洞察是视频特征存在两种低秩先验：a) 空间低秩（同一帧内相邻像素颜色纹理相似）；b) 时间低秩（连续帧间大部分背景内容静止或渐变）。传统TTT仅利用通道维度的低秩先验，而TS-TTT扩展为同时学习时空维度和通道维度的低秩先验。</p>
+<p>具体而言，给定视频输入特征 $\mathbf{v} \in \mathbb{R}^{T \times H \times W \times D}$，TS-TTT包含两个并行的自学习分支：</p>
+<ol>
+<li><strong>时空分支</strong>：将 $\mathbf{v}$ 展平为 $\mathbf{v}<em>{ts} \in \mathbb{R}^{D \times THW}$，对其应用低秩投影和重建。该分支通过优化参数 $W$ 最小化自监督损失 $\ell(W; v</em>{ts}^i) = | f(W; \Theta_K v_{ts}^i) - \Theta_V v_{ts}^i |^2$，其中 $f$ 是参数为 $W$ 的神经网络，$\Theta_K, \Theta_V$ 是可学习的投影矩阵（在训练阶段与基础网络一起优化）。推理时，根据历史上下文 $v_{ts}^i$ 迭代更新 $W$：$W^{i}=W^{i-1}-\eta\nabla\ell(W^{i-1}; v_{ts}^{i})$。</li>
+<li><strong>通道分支</strong>：将 $\mathbf{v}$ 重塑为 $\mathbf{v}<em>c \in \mathbb{R}^{THW \times D}$，并采用与时空分支类似但参数独立的过程进行低秩投影和重建。<br>两个分支的输出 $\mathbf{z}</em>{ts}$ 和 $\mathbf{z}<em>c$ 被重塑回原始形状，并通过残差连接与原始输入特征融合：$\mathbf{v}^{o} = \mathbf{v} + \mathbf{z}</em>{ts} + \mathbf{z}_c$。这种设计使模型能够跨时间、空间和通道维度进行自监督优化。</li>
+</ol>
+<p><strong>记忆持久化（MP）模块</strong>：该模块旨在解决长时域预测中的误差累积和知识遗忘问题，确保时序一致性。其核心思想是在每个预测步骤中，将历史帧的上下文信息整合到当前DiT块的特征中。</p>
+<p>具体实现是：使用视觉基础模型DINOv2作为编码器，将历史帧 $\mathbf{H} \in \mathbb{R}^{L \times H \times W \times 3}$ 编码为密集的patch tokens $\mathbf{m} \in \mathbb{R}^{L \times P \times D}$，并将其重塑为 $LP \times D$ 的2D序列作为记忆特征。随后，在DiT块中执行交叉注意力操作，其中记忆特征提供键和值，当前DiT特征提供查询。这使得模型能够在多步自回归展开中保持连贯的场景表示和关键物体关系。</p>
+<p><strong>与模型预测控制（MPC）的协同部署</strong>：适配后的专用世界模型被集成到一个协作式MPC框架中。</p>
+<p><img src="https://arxiv.org/html/2512.03538v1/x3.png" alt="MPC框架"></p>
+<blockquote>
+<p><strong>图3</strong>：MPC框架。预训练的VLA根据初始状态和任务指令生成候选动作序列。随后，专用世界模型将这些动作模拟为轨迹，由一个奖励模型（基于ReWind方法）进行评估，以选择最优序列执行。</p>
+</blockquote>
+<p>具体流程如下：给定初始状态和任务指令，预训练的VLA作为高级规划器生成多个候选动作序列。为了增加探索多样性，会用低方差高斯分布采样的噪声序列进行增强。接着，专用世界模型对这些动作序列进行模拟，生成想象的未来轨迹。一个基于ReWind方法的奖励模型根据任务指令和历史观测评估每条轨迹的任务完成进度。最终，选择预测奖励最高的动作序列执行。整个系统结合了VLA的通用推理能力和专用世界模型的精确物理模拟，且VLA始终保持零样本状态，无需微调。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：使用LIBERO-90数据集中采样的2000条轨迹进行仿真实验。评估在10个未见过的操作任务上进行（排除在微调集外），每个任务执行20次，以平均任务成功率作为主要指标。基础VLA策略采用CogACT。适配模块（TS-TTT、MP、动作编码器）并非插入每个DiT块，而是每7个块插入一次，共新增约1.5亿参数（小于基础模型大小的10%）。训练时，新增层的输出被零初始化以确保稳定性。</p>
+<p><strong>对比实验</strong>：将AdaPower与多种适配方法在赋能预训练VLA策略的MPC框架下进行比较。</p>
+<p><img src="https://arxiv.org/html/2512.03538v1/x4.png" alt="性能对比"></p>
+<blockquote>
+<p><strong>图4</strong>：不同专用世界模型生成的长时域展开的定性比较。评估在LIBERO-LONG的未见任务上进行。圆圈标出了本文方法的改进之处，可见其能保持更稳定的物体轨迹和物理一致性。</p>
+</blockquote>
+<p>表1结果显示，未经任何适配的预训练VLA成功率仅为0.5%。AdaPower将平均成功率大幅提升至41.5%，相对提高了41%。其性能优于参数高效适配方法VACE（20.5%）和LoRA（23.5%），也超过了需要大量计算资源的全参数监督微调（SFT，32.5%）。定性结果（图4）显示，对比方法在长时域预测中会产生模糊物体或物理不一致，而AdaPower能保持稳定的物体轨迹并正确建模接触动力学。</p>
+<p><strong>消融实验</strong>：<br>表2的消融研究表明，移除MP模块会导致成功率下降约1.5%，表明其缓解了展开过程中的性能退化。移除TS-TTT模块则导致成功率下降约3.5%，削弱了对未见物体和环境的泛化能力。两者结合才能取得最佳性能（41.5%），证实了时空记忆和测试时适应的互补作用。</p>
+<p>表3探索了TS-TTT模块的不同变体。将时间、空间和通道维度分开进行自学习（T+S+C）效果次优。将时空维度融合为一个分支，同时保留独立的通道分支（TS+C，即本文方法）效果最佳，测试MSE最低（0.0205），成功率最高（41.5%）。试图融合所有三个维度（TSC）会导致损失变为NaN，无法收敛。</p>
+<p><strong>跨策略评估</strong>：如表4所示，AdaPower适配的世界模型不仅能将CogACT的成功率提升41%，当与另一个VLA模型 $\pi_0$ 结合时，也能将其成功率从21.0%提升至48.0%，证明了该方法的架构无关兼容性和强泛化能力。</p>
+<p><strong>真实世界实验</strong>：将系统部署在7自由度Franka Research 3机械臂上，执行放置、抓取、堆叠等操作任务。</p>
+<p><img src="https://arxiv.org/html/2512.03538v1/x5.png" alt="真实世界设置"></p>
+<blockquote>
+<p><strong>图5</strong>：真实世界实验设置。使用7自由度机械臂执行操作任务。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.03538v1/x6.png" alt="真实世界轨迹"></p>
+<blockquote>
+<p><strong>图6</strong>：真实世界执行轨迹。专用世界模型增强了预训练VLA模型在多样化操作任务中的零样本泛化能力。</p>
+</blockquote>
+<p>实验表明，适配后的世界模型成功提升了预训练VLA在真实场景中的零样本性能，能够处理形状、材质各异的家庭物品，验证了框架的迁移能力。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了AdaPower，一种通过轻量级适配将通用世界基础模型转化为专用世界模型的新框架，建立了利用互联网规模视频先验进行机器人操作的新范式。</li>
+<li>设计了时空测试时训练（TS-TTT）和记忆持久化（MP）两个模块，有效解决了测试时分布偏移和长时域一致性的核心挑战。</li>
+<li>开发了一个协作式MPC系统，能够显著增强预训练VLA策略的零样本泛化能力，在仿真和真实世界中均取得了显著的性能提升。</li>
+</ol>
+<p><strong>局限性</strong>：论文虽未明确列出，但从方法描述可推断其性能依赖于所选基础WFM（如Cosmos）的质量和规模。此外，测试时的在线优化（TS-TTT）可能引入额外的计算延迟，在需要极低延迟的实时控制场景中可能面临挑战。</p>
+<p><strong>后续启示</strong>：本研究展示了一条高效利用大规模生成式世界模型赋能机器人控制的可行路径，即“轻量适配+协同规划”。这启示后续研究可以探索更高效的适配器结构、将适配过程扩展到多模态指令（如力觉、触觉），以及研究如何将此类系统应用于更复杂的动态和非结构化环境中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出AdaPower框架，旨在解决世界基础模型生成真实性与机器人控制所需精度之间的差距。通过时空测试时训练实现推理时适配，并利用记忆持久化保证长时程一致性，将通用世界模型转化为专用模型。该框架集成于模型预测控制中，赋能预训练VLA策略，在LIBERO基准上实现任务成功率超过41%的提升，且无需策略重训练，保持了计算效率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.03538" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

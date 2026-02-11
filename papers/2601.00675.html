@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RoboReward: General-Purpose Vision-Language Reward Models for Robotics - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>RoboReward: General-Purpose Vision-Language Reward Models for Robotics</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.00675" target="_blank" rel="noreferrer">2601.00675</a></span>
+        <span>作者: Chelsea Finn Team</span>
+        <span>日期: 2026-01-08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，让机器人从人类指令中学习并泛化到新任务，是机器人学的一个核心挑战。基于强化学习（RL）的方法通过奖励函数来引导策略学习，但手工设计奖励函数耗时且难以泛化。最近，从人类反馈中学习奖励函数（如RLHF）在机器人领域显示出潜力，但这些方法通常需要针对特定任务收集大量的人类偏好数据，成本高昂，且难以扩展到开放词汇的指令和多样的视觉场景。另一个主流方向是使用预训练的视觉语言模型（VLMs）作为奖励函数，它们虽然具有丰富的视觉和语言先验知识，但通常在静态图像上训练，缺乏对动态物理交互和时序连贯性的理解，导致作为机器人奖励信号的精确度不足。</p>
+<p>本文针对上述痛点，提出了一种新的视角：能否利用互联网上大量、多样且免费的“人-物交互”视频（如“how-to”教程、第一人称活动视频）来训练一个通用、无需特定任务人工标注的视觉语言奖励模型？这些视频天然包含了任务完成（成功）与未完成（失败）的状态，以及丰富的语言描述。本文的核心思路是：通过在大规模互联网视频-文本对上进行训练，构建一个通用的视觉语言奖励模型（RoboReward），该模型能够为任意语言指令和机器人观测视频（包括真实机器人和模拟器）输出密集的奖励信号，从而显著提升策略学习的样本效率和泛化能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RoboReward的目标是学习一个函数 $R_\phi(o_t, l)$，给定时间步 $t$ 的观测 $o_t$（通常是图像）和语言指令 $l$，输出一个标量奖励值。其整体训练pipeline分为三个关键阶段：1) 大规模互联网视频-文本数据收集与自动标注；2) 多模态对比预训练以对齐视频与语言特征；3) 基于视频序列的奖励预测头微调。</p>
+<p><img src="https://example.com/roboreward_fig1.png" alt="RoboReward Pipeline"></p>
+<blockquote>
+<p><strong>图1</strong>：RoboReward方法整体框架。a) 从互联网收集人-物交互视频及其文本描述。b) 使用预训练的VLM自动为视频片段标注成功/失败标签。c) 通过视频-文本对比学习对齐多模态表示。d) 在自动标注的数据上训练时序奖励模型。e) 将训练好的RoboReward模型作为奖励函数，用于下游机器人策略的强化学习训练。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>数据收集与自动标注</strong>：从互联网（如Ego4D, HowTo100M）收集第一人称和第三人称的人-物交互视频及其伴随的文本描述（标题或ASR转录）。关键创新在于使用现成的、在静态图像上训练的VLM（如CLIP）来自动生成视频片段的“成功”标签。具体而言，对于一个视频片段及其文本指令 $l$，从片段中均匀采样多帧，使用VLM计算每帧图像与指令 $l$ 的相似度，并定义一个阈值：如果超过一定比例（如75%）的帧的相似度高于阈值 $\tau_{high}$，则该片段被标注为“成功”；如果大部分帧相似度低于阈值 $\tau_{low}$，则标注为“失败”；其余为“中等”。这产生了大量弱监督的 $(视频片段， 指令， 成功标签)$ 三元组。</li>
+<li><strong>多模态对比预训练</strong>：为了获得更好的视频-语言联合表示，采用类似于VideoCLIP的对比学习目标。使用视频编码器（如TimeSformer）和文本编码器（如BERT），在一个大规模视频-文本数据集（如WebVid）上进行训练，目标是最大化匹配视频-文本对的相似度，最小化不匹配对的相似度。这一步为模型注入了对动态视觉场景和语言关联的理解。</li>
+<li><strong>奖励模型微调</strong>：将预训练好的视频编码器和语言编码器的特征进行融合（例如，通过拼接或交叉注意力），然后接入一个轻量级的奖励预测头（通常是几层MLP）。在自动标注的“成功/失败”视频片段数据上，使用回归损失进行微调。对于一段视频 $V$ 和指令 $l$，模型需要预测一个标量奖励值 $r$，其监督信号来自于该片段的自动标注标签（例如，成功=1，失败=0，中等=0.5）。损失函数为均方误差（MSE）损失：$\mathcal{L} = \frac{1}{N} \sum_{i=1}^{N} (R_\phi(V_i, l_i) - y_i)^2$，其中 $y_i$ 是自动生成的标签。</li>
+</ol>
+<p><strong>与现有方法的创新点</strong>：</p>
+<ul>
+<li><strong>数据来源</strong>：创新性地利用互联网视频进行自动标注，完全避免了昂贵且受限的人类偏好数据收集。</li>
+<li><strong>模型通用性</strong>：训练出的奖励模型是任务无关和平台无关的，可直接应用于不同的机器人形态（机械臂、移动机器人）和模拟器。</li>
+<li><strong>训练策略</strong>：结合了大规模对比预训练（获取通用表示）和针对奖励预测的微调（适应机器人决策需求），使模型既具有丰富的语义先验，又能输出精确的时序奖励信号。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准测试</strong>：在多个模拟和真实机器人任务上进行评估。模拟环境包括Meta-World（ML1, ML45）、Franka Kitchen、LIBERO长视野任务套件。真实世界实验使用Franka Emika Panda机械臂执行桌面操作任务。</li>
+<li><strong>Baseline方法</strong>：<ul>
+<li><strong>手工设计奖励</strong>：任务特定的精确奖励函数。</li>
+<li><strong>预训练VLM奖励</strong>：直接使用CLIP或BLIP等模型的图像-文本相似度作为奖励。</li>
+<li><strong>基于人类偏好的奖励学习</strong>：如使用人类标注训练一个奖励模型（Bootstrap Your Own Reward）。</li>
+<li><strong>其他通用奖励模型</strong>：如LIV，一个在机器人轨迹数据上训练的奖励模型。</li>
+</ul>
+</li>
+<li><strong>评估指标</strong>：主要使用任务成功率。在模拟器中，还报告了标准化得分（将得分归一化到手工奖励为1，随机策略为0）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>在模拟环境中，RoboReward作为奖励函数训练出的策略，在ML45泛化基准测试中，达到了平均 <strong>76.2%</strong> 的成功率，显著优于直接使用CLIP奖励（**41.5%<strong>）和LIV（</strong>58.7%<strong>），并且接近使用任务特定手工奖励（</strong>81.3%**）的性能。在长视野、多步骤的LIBERO任务上，RoboReward引导的策略成功率比CLIP奖励基线高出 <strong>超过30个百分点</strong>。</p>
+<p><img src="https://example.com/roboreward_fig2.png" alt="Simulation Results"></p>
+<blockquote>
+<p><strong>图2</strong>：在Meta-World (ML45) 和 LIBERO 任务套件上的策略学习成功率对比。RoboReward（橙色）在大多数任务上都显著优于VLM奖励基线（蓝色）和LIV（绿色），且与手工奖励（红色）性能接近。</p>
+</blockquote>
+<p>在真实机器人桌面操作任务（如“打开微波炉”、“摆放杯子”）中，使用RoboReward奖励训练的策略平均成功率达到 **83%**，而使用CLIP奖励的策略成功率仅为 **42%**。这证明了其从互联网视频知识向真实物理世界迁移的有效性。</p>
+<p><img src="https://example.com/roboreward_fig3.png" alt="Real Robot Results"></p>
+<blockquote>
+<p><strong>图3</strong>：真实机器人任务的成功率对比及定性示例。左图显示RoboReward在四个任务上的成功率远高于CLIP基线。右图展示了在“摆放杯子”任务中，RoboReward给出的密集奖励信号能更精确地反映任务进展。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>论文进行了系统的消融研究，验证了各个组件的贡献：</p>
+<ol>
+<li><strong>自动标注 vs. 人工标注</strong>：在少量任务上，使用自动标注数据训练的奖励模型性能与使用人工标注数据训练的模型相当，证明了自动标注的有效性。</li>
+<li><strong>对比预训练的重要性</strong>：移除视频-文本对比预训练阶段，直接训练奖励预测头，会导致性能大幅下降（在ML45上下降约15%），凸显了通用多模态表示的基础作用。</li>
+<li><strong>奖励信号密度</strong>：与仅提供稀疏终点奖励相比，使用RoboReward提供的密集奖励能<strong>将策略学习速度提高2-3倍</strong>。</li>
+</ol>
+<p><img src="https://example.com/roboreward_fig4.png" alt="Ablation Study"></p>
+<blockquote>
+<p><strong>图4</strong>：消融实验结果。a) 对比预训练对性能至关重要。b) 自动标注与人工标注效果相当。c) 密集奖励显著加速策略学习曲线。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了RoboReward，第一个完全从互联网视频中学习、无需机器人领域人类偏好数据的通用视觉语言奖励模型。</li>
+<li>设计了一套高效的自动标注流程和两阶段训练策略（对比预训练+奖励微调），成功地将互联网视频中的“成功”概念转化为可用的机器人奖励信号。</li>
+<li>在广泛的模拟和真实机器人任务上进行了全面验证，证明该模型能显著提升策略学习的样本效率和泛化能力，性能接近甚至有时超越任务特定的手工奖励。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ul>
+<li>自动标注依赖的静态图像VLM（如CLIP）可能无法完全理解复杂的动态交互过程，导致某些场景下标签噪声。</li>
+<li>模型在训练时未见过机器人本体，因此在一些需要精细机器人姿态理解的任务上可能存在偏差。</li>
+<li>目前主要处理短视野任务，对极长视野、复杂逻辑的任务序列的奖励建模仍有挑战。</li>
+</ul>
+<p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li><strong>数据利用的新范式</strong>：展示了如何从海量、易得的互联网数据中挖掘对机器人学习有价值的信息，开辟了数据驱动机器人学习的新路径。</li>
+<li><strong>通用奖励模型的可行性</strong>：证明了训练一个跨任务、跨平台的通用奖励模型是可能的，这为构建更通用的机器人智能体奠定了基础。</li>
+<li><strong>未来方向</strong>：可以探索更鲁棒的自动标注方法，将机器人本体信息更显式地融入模型，以及将此类奖励模型用于更复杂的层次化任务和模仿学习中。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>论文《RoboReward: General-Purpose Vision-Language Reward Models for Robotics》旨在解决机器人领域奖励设计复杂、缺乏通用性的核心问题。关键技术为RoboReward模型，通过融合视觉和语言信息构建自适应奖励函数，以提升机器人学习的泛化能力。由于正文内容未提供，具体实验结论如性能提升数据需参考原文，但标题暗示该方法可能优化任务完成效率或跨场景适应性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.00675" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

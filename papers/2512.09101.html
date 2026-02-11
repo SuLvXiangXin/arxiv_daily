@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Masked Generative Policy for Robotic Control - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Masked Generative Policy for Robotic Control</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.09101" target="_blank" rel="noreferrer">2512.09101</a></span>
+        <span>作者: Paul Henderson Team</span>
+        <span>日期: 2025-12-09</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，从视觉输入直接学习机器人控制策略的模仿学习领域，主要存在两类生成式策略方法：扩散策略与自回归策略。扩散策略将动作合成视为条件去噪过程，需要多次迭代采样，导致推理速度慢；加速版本如一致性策略或流策略则往往需要额外蒸馏或牺牲采样质量。自回归策略将动作视为离散令牌，通过类似GPT的变换器进行逐个令牌预测，其延迟随序列长度线性增长，且由于缺乏记忆，对观测缺失和非马尔可夫任务（即当前决策依赖于历史状态的任务）的鲁棒性不足。</p>
+<p>本文针对现有方法在推理速度瓶颈和非马尔可夫长时程任务鲁棒性方面的核心痛点，提出了一种新的掩码生成视角。核心思路是将机器人动作表示为离散令牌，训练一个条件掩码变换器来并行生成令牌，并仅对低置信度令牌进行快速细化，从而同时实现快速推理和适应动态环境的长时程、全局一致性预测。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>MGP的整体框架分为两个训练阶段和一个包含两种范式的推理阶段。首先，使用VQ-VAE将连续动作序列离散化为令牌。随后，训练一个掩码生成变换器（MGT），学习在给定观测条件下重建被掩码的动作令牌序列。推理时，针对不同任务类型采用两种采样范式：MGP-Short用于马尔可夫任务，进行快速并行生成与细化；MGP-Long用于非马尔可夫任务，通过自适应令牌细化实现长时程动态规划。</p>
+<p><img src="https://arxiv.org/html/2512.09101v2/x2.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图2</strong>：MGP训练与MGP-Short推理流程。左：训练阶段1 - 动作分词器（VQ-VAE）将连续动作编码为离散令牌。中：训练阶段2 - 掩码生成变换器（MGT）学习在观测条件下重建被掩码的令牌序列。右：短时程采样（MGP-Short）推理过程，包含并行生成和基于置信度的细化步骤。</p>
+</blockquote>
+<p><strong>核心模块1：动作分词器</strong>。采用VQ-VAE将长度为 $T$ 的连续动作序列 $\mathbf{a}$ 编码为 $N$ 个离散动作令牌 $\mathbf{y}$。编码器为两个残差一维CNN块，解码器为对称的上采样Conv1D块。训练目标包括重构损失和承诺损失（公式1），并使用指数移动平均更新码本。</p>
+<p><strong>核心模块2：掩码生成变换器</strong>。MGT采用编码器-仅变换器架构，包含感知编码器和变换器本体。感知编码器将观测 $O_t$ 和状态 $s_t$ 编码为条件嵌入。变换器由2层交叉注意力层（关注条件嵌入与令牌嵌入）和2层自注意力层构成。训练时，随机掩码部分动作令牌并用 <code>[MASK]</code> 替换，MGT学习预测被掩码令牌的概率（公式2），目标是最小化负对数似然。</p>
+<p><strong>创新采样范式1：MGP-Short</strong>。针对马尔可夫任务，该范式仅基于当前观测 $c_t$ 进行推理。过程包含2次迭代：1）将所有未来令牌初始化为 <code>[MASK]</code>，与条件一同输入MGT，通过Gumbel-Max技巧（公式3）并行采样所有令牌；2）根据预测的归一化概率（置信度得分）对令牌排序，将置信度最低的部分令牌重新掩码，并进行第二次细化生成。这实现了高质量并行生成，仅需极少迭代。</p>
+<p><strong>创新采样范式2：MGP-Long</strong>。针对非马尔可夫长时程任务，该范式集成了自适应令牌细化策略。</p>
+<p><img src="https://arxiv.org/html/2512.09101v2/x3.png" alt="长时程采样流程"></p>
+<blockquote>
+<p><strong>图3</strong>：长时程采样（MGP-Long）通过自适应令牌细化实现。模型基于初始观测预测整个任务时程的令牌序列并开始执行；在执行过程中，根据新到达的观测，利用后验置信度估计有选择地掩码和细化尚未执行的低置信度令牌，同时保留已执行的历史令牌。</p>
+</blockquote>
+<p>其核心是<strong>后验置信度估计</strong>。在每一步 $i$，机器人已执行前 $n$ 个令牌 $\mathbf{y}<em>{i-1}^{0:n}$，并获得新观测 $c_i$。MGT计算在 $c_i$ 和已执行历史 $\mathcal{H}</em>{i-1}$ 条件下，剩余未执行令牌 $\mathbf{y}_{i-1}^{n:N}$ 的新概率分布（公式4），作为更新后的置信度得分。随后，仅对这些未执行令牌的得分进行归一化排序，并将低分令牌重新掩码（公式5）。最后，将包含已执行令牌和重新掩码的未执行令牌的序列，连同新条件输入MGT进行细化，采样出更新后的剩余令牌（公式6）。此过程实现了在保留历史执行记忆的基础上，对剩余计划进行动态、有针对性的调整，保证了长时程动作的全局一致性。</p>
+<p>与现有方法相比，MGP的主要创新在于：1）<strong>并行生成</strong>：不同于自回归的序列生成，MGT一次性预测所有未来令牌。2）<strong>动态细化</strong>：基于置信度得分进行选择性重掩码和细化，而非扩散模型的全程迭代去噪或自回归模型的完全重新生成。3）<strong>全局一致性预测</strong>：MGP-Long通过保留已执行令牌作为条件，并在新观测下更新未执行部分，实现了对长时程任务的连贯规划与动态适应。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在三个标准基准上进行：Meta-World（50个任务）、LIBERO-90（90个短时程任务）和LIBERO-Long（长时程任务）。对比了十种基线方法，包括扩散策略（DP， DP3， CP， FlowPolicy）、自回归策略（ACT， VQ-BeT， PRISE， QueST， ResNet-T）以及为对比设计的DP3-Full Seq.。此外，还设置了观测缺失、动态环境和非马尔可夫任务的专项评估。</p>
+<p><strong>标准基准结果</strong>：在Meta-World单任务训练中，MGP-Short在50个任务上平均成功率达0.637，优于所有基线（如DP3的0.599， FlowPolicy的0.571），且每步推理时间仅3毫秒，比DP3快约49倍。对于Hard/Very Hard任务，MGP-Long平均成功率达0.563，显著优于一次性生成全序列的DP3-Full Seq.（0.270）和MGP-Full Seq.（0.340）。</p>
+<p><img src="https://arxiv.org/html/2512.09101v2/x4.png" alt="Meta-World单任务结果"></p>
+<blockquote>
+<p><strong>图4</strong>：Meta-World单任务训练的成功率与推理时间对比。左图显示MGP-Short在平均成功率上领先，右图显示其在保持高成功率的同时，拥有最低的每步推理延迟。</p>
+</blockquote>
+<p>在多任务训练的LIBERO-90上，MGP-Short取得了0.889的平均成功率，与最佳自回归基线QueST（0.886）相当，但每步推理时间从17毫秒降至5毫秒。在更长的LIBERO-Long任务上，MGP-Long取得了82.0%的平均成功率，优于MGP-Short的77.0%和QueST的68.0%，且序列级推理时间从225毫秒（MGP-Short）降至78毫秒。</p>
+<p><strong>专项评估结果</strong>：</p>
+<ol>
+<li><strong>观测缺失环境</strong>：在观测随机丢失的设定下，MGP-Long在Hard/Very Hard任务上平均成功率为0.484/0.566，比短时程方法（如DP3和MGP-Short）高出约22%-31%，展示了其对部分可观测性的鲁棒性。</li>
+<li><strong>动态环境</strong>：在目标或障碍物持续移动的任务中，MGP-Long平均成功率达0.436，优于MGP-Short（0.430）和DP3（0.360），更远超一次性开环规划的方法（DP3-Full Seq. 0.04），证明了其动态适应能力。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2512.09101v2/x5.png" alt="动态与观测缺失环境结果"></p>
+<blockquote>
+<p><strong>图5</strong>：在动态环境和观测缺失环境下的成功率。MGP-Long在这两种具有挑战性的设置下均表现出了最强的鲁棒性和适应性。</p>
+</blockquote>
+<ol start="3">
+<li><strong>非马尔可夫任务</strong>：在两个设计的非马尔可夫任务（需记忆历史状态）中，MGP-Long是唯一能够成功解决的方法，而包括QueST、DP3在内的其他先进方法均告失败。</li>
+</ol>
+<p><strong>消融实验</strong>：论文通过变体对比验证了MGP-Long各组件的作用。MGP-Full Seq.（一次性生成全序列无细化）性能显著下降，说明了动态细化的必要性。MGP-w/o SM（新观测下掩码所有剩余令牌并重新生成）性能（80.5%）低于完整MGP-Long（82.0%），说明了基于置信度的选择性掩码对于保持计划稳定性和效率的重要性。</p>
+<p><img src="https://arxiv.org/html/2512.09101v2/x6.png" alt="消融实验与模型效率"></p>
+<blockquote>
+<p><strong>图6</strong>：左：MGP-Long及其消融变体在LIBERO-Long上的性能对比，显示了自适应细化和基于置信度掩码的价值。右：MGP与基线模型的参数量与训练时间对比，显示MGP更加轻量高效。</p>
+</blockquote>
+<p><strong>模型效率</strong>：MGP参数量约7M，远少于DP3（约262M）；在相同硬件上训练时间约55分钟，远少于DP3的约3小时。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了首个用于机器人模仿学习的掩码生成策略框架，通过并行令牌生成和置信度驱动的细化，同时解决了扩散模型推理慢和自回归模型序列约束强的问题。2）针对不同任务类型设计了MGP-Short和MGP-Long两种采样范式，前者实现了高速闭环控制，后者通过自适应令牌细化实现了对长时程、非马尔可夫、动态及部分可观测任务的鲁棒且连贯的控制。3）在涵盖150个任务的广泛实验中，MGP在取得更高成功率的同时，显著降低了推理延迟（最高达35倍），并展示了卓越的适应性与鲁棒性。</p>
+<p>论文提及的局限性包括：在极端长序列（&gt;1000步）任务中，VQ-VAE的压缩可能引入误差；对于极其复杂和快速变化的动态环境，当前的细化频率和策略可能仍不足。</p>
+<p>本文的启示在于：将掩码生成建模引入机器人控制，为平衡推理速度、规划质量和环境适应性提供了一个富有潜力的新方向。其“并行预测-动态编辑”的思想可启发更多在长时程决策中保持全局一致性与局部灵活性的工作。轻量化的模型设计也表明，高效策略未必需要极大参数量。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出掩码生成策略（MGP），以解决现有生成策略在机器人视觉运动模仿学习中存在的推理速度慢、对非马尔可夫任务鲁棒性不足的核心问题。方法将动作离散化为令牌，利用条件掩码变换器并行生成令牌，并快速细化低置信度部分；针对不同任务提出了MGP-Short（并行掩码生成与基于分数的细化）和MGP-Long（单次预测整条轨迹并动态细化）两种采样范式。在150项机器人操作任务上的实验表明，MGP平均成功率提升9%，推理速度加快最高达35倍，在动态与缺失观测环境中成功率提升60%，并能解决其他方法失败的非马尔可夫任务。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.09101" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
