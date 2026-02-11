@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>APEX: Action Priors Enable Efficient Exploration for Robust Motion Tracking on Legged Robots - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>APEX: Action Priors Enable Efficient Exploration for Robust Motion Tracking on Legged Robots</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2505.10022" target="_blank" rel="noreferrer">2505.10022</a></span>
+        <span>作者: Sood, Shivam, Nakhwa, Laukik, Ge, Sun, Cao, Yuhong, Cheng, Jin, Zargarbashi, Fatemah, Yoon, Taerim, Choi, Sungjoon, Coros, Stelian, Sartoretti, Guillaume</span>
+        <span>日期: 2025/05/15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，从演示中学习自然、类动物的步态已成为腿式机器人领域的核心范式。以DeepMimic为代表的主流运动跟踪方法，通过在奖励函数中设置密集的跟踪项来复现参考轨迹。然而，这些方法存在关键局限性：1）在部署时严重依赖演示数据，通常需要在策略的观测中显式提供参考状态或相位变量，这限制了策略在速度和地形上的适应性；2）需要大量精细的奖励工程和课程学习，导致高昂的工程开销和对奖励缩放的高度敏感。本文针对这两个具体痛点，提出了一种新的视角：如何在训练阶段利用演示高效地引导探索，同时避免在运行时产生依赖并减少调参工作量。本文的核心思路是：通过引入衰减的动作先验（Action Priors），在训练初期将探索偏向专家演示，随后逐渐衰减，使策略最终独立运行；并结合多评论家（Multi-critic）框架来平衡任务性能与运动风格。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>APEX的整体框架是一个即插即用的强化学习（RL）扩展，旨在提升现有运动跟踪算法（如DeepMimic）的效率和鲁棒性。</p>
+<p><img src="https://arxiv.org/html/2505.10022v3/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：APEX框架概述。虚线部分仅在部署时需要。1）演示数据可来自特权教师策略、动作捕捉数据或动画等；2）动作先验根据演示的关节运动学数据计算，并添加到策略动作中以引导探索；3）使用多评论家PPO算法，结合风格奖励和任务+正则化奖励训练最终策略；4）训练好的策略最终零样本迁移到硬件。</p>
+</blockquote>
+<p>核心模块包括<strong>衰减的动作先验</strong>和<strong>多评论家架构</strong>。</p>
+<p><strong>1. 衰减的动作先验</strong>：该模块是引导探索的关键。策略输出期望的关节位置，通过PD控制器转换为扭矩，记作策略动作 $a_t \sim \pi_{\tau}(s_t)$。动作先验 $\beta_t$ 根据演示的参考关节角度 $\hat{q}_t$ 和机器人当前关节角度 $q_t$ 计算：$\beta_t = K_p(\hat{q}_t - q_t)$，其中 $K_p$ 与机器人的比例增益相同。最终发送给机器人的扭矩为：$\tau_t = a_t + \lambda^{t/k}\beta_t$，其中 $0 &lt; \lambda &lt; 1$，$k &gt; 1$ 控制衰减速度。$\lambda^{t/k}\beta_t$ 即为动作先验。其工作原理是：在训练初期，神经网络策略的输出接近零，动作先验主导，使机器人状态接近专家行为，获得高模仿奖励，稳定早期学习。随着先验衰减（例如，$\lambda=0.99, k=100$，1000次迭代后贡献小于1.5%），策略必须逐步增大自身贡献，最终完全独立完成任务。论文从理论上证明了，只要先验分布 $p_\beta$ 和衰减系数 $c_t$ 与策略参数 $\theta$ 无关，APEX的策略梯度就是真实目标梯度的一个无偏估计量，同时有望在实践中降低方差。</p>
+<p><strong>2. 多评论家架构</strong>：为了简化奖励调优并平衡模仿与探索，APEX集成了两个独立的评论家：<strong>风格评论家</strong> $V_{\text{style}}$ 和<strong>任务与正则化评论家</strong> $V_{\text{task}}$。它们根据表I中分组的奖励进行更新。风格奖励组包含关节位置、足端位置和基座方向的跟踪误差奖励；任务奖励组包含线速度/角速度跟踪、足滑、扭矩、动作变化率和参考高度惩罚。这种分离为策略提供了“像专家一样移动”和“完成任务”的清晰信号，减少了对奖励权重调整的敏感性。两个评论家通过标准的时序差分（TD）损失独立更新，并集成到PPO算法中。</p>
+<p><strong>3. 在单一策略中学习多种运动</strong>：为了学习多种步态（如小跑、溜蹄、蹦跳、慢跑），APEX在行动者的观测中添加了一个标量运动选择器 $s \in {m/n | m=0,..., n-1}$，其中 $n$ 是运动总数。每个离散值对应一种特定运动，从而让同一个网络编码多种行为。在部署时，切换步态只需将 $s$ 设置为所需值。</p>
+<p>与现有方法相比，APEX的创新点具体体现在：1) <strong>部署时独立</strong>：策略的观测中不包含模仿参考数据或相位变量，消除了运行时对演示的依赖；2) <strong>引导式课程学习</strong>：通过衰减的动作先验，在单一、端到端的训练阶段实现了从模仿到强化学习的平滑过渡，无需分阶段训练；3) <strong>奖励鲁棒性</strong>：多评论家架构显著降低了对奖励权重和灵敏度参数的调优需求。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在仿真和Unitree Go2四足机器人上进行。使用了来自动物动作捕捉数据（重定向到机器人）以及其他来源（如Margolis等人和Yoon等人的数据）的演示，涵盖了多种步态（Canter, Trot, Hopturn, Pronk, Sidestep, Pace）。训练在一张NVIDIA RTX 4090 GPU上进行，APEX策略最多训练2000次迭代（约30分钟）。</p>
+<p><strong>基线方法</strong>：选择广泛使用的DeepMimic（DM）作为代表性基线。具体比较了三个变体：<strong>DM-Full</strong>（行动者观测中包含模仿数据和相位变量，使用参考状态初始化）、<strong>DM-NIA</strong>（No Imitation data in Actor，仅行动者观测中排除模仿数据，其他与DM-Full相同）、<strong>APEX-Full</strong>（采用与DM-Full相同的优化）和<strong>APEX</strong>（简化版，行动者观测中排除模仿数据、相位变量和参考状态初始化，使用固定超参数集训练2000次迭代）。</p>
+<p><img src="https://arxiv.org/html/2505.10022v3/x3.png" alt="训练过程可视化对比"></p>
+<blockquote>
+<p><strong>图3</strong>：DeepMimic（DM）与APEX在训练迭代过程中的运动跟踪视觉对比。APEX策略（蓝色）从早期阶段就表现出精确的运动跟踪，样本效率优于DM-Full（粉色）。到2000次迭代时，APEX已有效收敛，而DM-Full虽收敛但未能学好任务（见最终姿态）。所有序列均在动作先验设为零的情况下评估，确保公平比较。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.10022v3/APEXvsDM_Rew.png" alt="奖励趋势"></p>
+<blockquote>
+<p><strong>图4</strong>：小跑步态奖励随迭代变化的平均趋势。APEX-Full比DM-Full收敛更快，而APEX在部署时无需模仿参考的情况下，性能显著优于DM-NIA。其他运动也观察到相同趋势。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>运动跟踪性能与样本效率</strong>：如表III所示，在多种步态上，APEX-Full的跟踪误差（关节位置、高度、足端位置、速度的RMSE）与DM-Full相当或更优，且平均奖励更高（提升0.87%至6.4%）。更重要的是，简化版的APEX仅用2000次迭代，其性能就大幅优于需要更多迭代的DM-NIA，奖励提升幅度高达87.5%（Trot）。图3和图4直观展示了APEX更快的收敛速度和更高的样本效率。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.10022v3/all_gait_rmse_comparison.png" alt="多步态RMSE对比"></p>
+<blockquote>
+<p><strong>图5</strong>：APEX的多评论家变体在所有指标和奖励量级下均保持了高跟踪精度，而单评论家变体在强速度奖励下性能下降。这突显了多评论家学习的互补作用。</p>
+</blockquote>
+<ol start="2">
+<li><strong>泛化能力</strong>：APEX策略在训练时未见过斜坡、楼梯等地形，但部署后能成功在±15°斜坡上行走，并上下楼梯，展示了超越演示数据的适应性。</li>
+<li><strong>模拟到真实的迁移</strong>：APEX策略成功零样本部署到Unitree Go2机器人上，能够执行多种步态及步态间的动态切换（如图7所示），尽管演示数据中并不包含这些切换。</li>
+<li><strong>奖励鲁棒性</strong>：如图6所示，APEX对奖励灵敏度参数 $\sigma$ 的变化（高达10倍）和奖励权重缩放（高达30倍）表现出极强的鲁棒性，而基线方法（尤其是DM-NIA）的性能则急剧下降。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.10022v3/sigma_comparison.png" alt="奖励灵敏度分析"></p>
+<blockquote>
+<p><strong>图6</strong>：APEX对奖励灵敏度参数σ的变化（高达10倍）表现出鲁棒性，而基线方法（尤其是DM-NIA）的性能下降严重。这证明了APEX在奖励调优方面的优势。</p>
+</blockquote>
+<ol start="5">
+<li><strong>消融实验</strong>：论文通过消融实验验证了各组件贡献。<strong>多评论家架构</strong>（图5）对于在保持运动风格的同时完成强任务目标（如高速跟踪）至关重要，单评论家版本则容易失败。<strong>衰减的动作先验</strong>是高效探索和稳定学习的基础，移除后（即纯RL）DM-NIA性能很差。两者结合使得APEX在奖励鲁棒性和收敛速度上均获得最佳表现。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.10022v3/gait_change_pattern_compress.png" alt="真实机器人步态切换"></p>
+<blockquote>
+<p><strong>图7</strong>：在Unitree Go2机器人上部署的单一APEX策略中，通过改变技能选择器 $s$，实现了小跑、溜蹄、蹦跳、慢跑四种步态间的动态切换。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.10022v3/uneven_gaits_comp.png" alt="不平坦地形泛化"></p>
+<blockquote>
+<p><strong>图8</strong>：APEX策略泛化到训练中未见的斜坡和楼梯地形。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了APEX框架</strong>：通过衰减的动作先验和多评论家架构，实现了在训练阶段利用演示高效引导强化学习探索，同时消除了策略在运行时对任何演示数据的依赖。</li>
+<li><strong>实现了高效的即插即用增强</strong>：APEX可作为插件显著提升现有运动跟踪算法（如DeepMimic）的样本效率、奖励鲁棒性和泛化能力，且调参工作量小。</li>
+<li><strong>展示了强大的泛化与集成能力</strong>：单一APEX策略可以学习多种运动并实现动态切换，并且能够泛化到训练未见的地形和速度指令。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，动作先验的计算依赖于关节级的演示数据（运动学信息）。虽然这比需要完全状态参考的方法限制更少，但仍需要一定形式的专家数据。此外，衰减计划引入了两个超参数（$\lambda$, $k$），尽管论文发现一组值对所有测试运动都有效。</p>
+<p><strong>对后续研究的启示</strong>：APEX将演示作为探索的“临时支架”而非硬性约束的思路，为引导式强化学习开辟了新途径。这种方法可推广到更广泛的机器人技能学习领域，如操纵任务。未来工作可以探索更灵活的先验形式（如从视频等更弱监督信号中推导），或将此框架与扩散模型等生成模型结合，以处理更复杂的多模态技能学习。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对足式机器人运动跟踪中依赖参考数据、样本效率低且调参工作量大的问题，提出APEX方法。该方法通过衰减动作先验将专家演示融入强化学习，初始引导探索并逐步独立，结合多批评框架平衡任务性能与运动风格。在仿真和Unitree Go2机器人上的实验表明，APEX提升了学习稳定性、效率和泛化能力，无需部署时参考数据，显著减少了参数调优需求。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2505.10022" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

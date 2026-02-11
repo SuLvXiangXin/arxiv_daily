@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning Long-Context Diffusion Policies via Past-Token Prediction - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Learning Long-Context Diffusion Policies via Past-Token Prediction</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2505.09561" target="_blank" rel="noreferrer">2505.09561</a></span>
+        <span>作者: Torne, Marcel, Tang, Andy, Liu, Yuejiang, Finn, Chelsea</span>
+        <span>日期: 2025/05/14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人模仿学习中，许多任务本质上是非马尔可夫的，合适的动作选择不仅依赖于当前观察，还依赖于过去的观察和动作。然而，从演示中学习有效的长上下文策略面临两大挑战：首先，随着上下文长度增加，训练数据中与动作虚假相关的特征增多，可能导致策略泛化性能下降；其次，基于高维图像序列进行条件化会带来急剧增长的内存和计算负担，使得端到端训练成本过高。为应对这些挑战，现有主流方法通常通过截断上下文长度或将过去的观察压缩为紧凑表示（如关键帧）来限制策略看到的历史信息量，但这可能丢弃对后续决策至关重要的信息。</p>
+<p>本文针对现代扩散策略在长上下文设置下暴露出的一个具体痛点：与专家演示相比，学习到的策略生成的动作序列往往表现出更弱的时间依赖性，即未能有效捕捉过去与未来动作之间的关键依赖关系。这与此前模仿学习中常见的“模仿猫”问题（过度依赖先前动作）形成了相反的失效模式。本文提出了一个正则化历史信息保留的新视角。</p>
+<p>本文的核心思路是：通过引入一个名为“过去令牌预测”的辅助任务，让策略在预测未来动作的同时也预测过去的动作令牌，从而显式地正则化模型保留历史信息；并设计了一个多阶段训练策略，将视觉编码器预训练与基于缓存嵌入的长上下文策略头微调解耦，以大幅降低训练开销。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文方法的整体目标是提升基于扩散模型的长上下文策略的性能和训练效率。其核心创新在于Past-Token Prediction和多阶段训练流程。</p>
+<p><img src="https://arxiv.org/html/2505.09561v2/x1.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图1</strong>：本文提出的长上下文扩散策略学习框架概览。该方法通过过去令牌预测（PTP）正则化策略，并采用多阶段训练，实现了3倍的性能提升和超过10倍的训练开销降低。</p>
+</blockquote>
+<p><strong>核心模块1：过去令牌预测</strong><br>PTP是一个辅助训练目标。与仅预测未来动作令牌（如下一令牌或未来动作块）的标准做法不同，PTP要求策略在给定观测序列 $\mathbf{o}<em>{t-k:t}$ 的条件下，联合预测从过去时刻 $t-k$ 到未来时刻 $t+h$ 的全部动作令牌：$\hat{\mathbf{a}}</em>{t-k:t+h} = \pi_{\theta}(\mathbf{o}_{t-k:t})$。如图3所示，这扩展了预测窗口的时间范围，显式地鼓励策略从历史上下文中保留关于过去动作的信息，从而增强其对时间依赖性的建模能力。</p>
+<p><img src="https://arxiv.org/html/2505.09561v2/x3.png" alt="过去令牌预测示意图"></p>
+<blockquote>
+<p><strong>图3</strong>：过去令牌预测示意图。策略头被训练来联合预测过去和未来的动作令牌，鼓励模型捕捉原本可能在过去与未来动作之间丢失的时间依赖性。</p>
+</blockquote>
+<p><strong>核心模块2：基于嵌入缓存的高效多阶段训练</strong><br>为了在享受PTP益处的同时克服长上下文端到端训练的内存瓶颈，本文提出了一个三阶段训练方案：</p>
+<ol>
+<li><strong>编码器训练</strong>：使用短观察上下文但长预测视野预训练视觉编码器，鼓励其提取对预测后续步骤至关重要的表征。</li>
+<li><strong>特征缓存</strong>：冻结编码器，并预计算数据集中所有帧的嵌入表示进行缓存。这消除了策略训练期间重复处理视觉输入的计算。</li>
+<li><strong>策略训练</strong>：使用缓存的、代表长上下文观测的嵌入表示作为条件，训练策略头（即扩散去噪网络）。这使得策略能够建模长程依赖，而无需反复处理图像。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.09561v2/x4.png" alt="多阶段训练与嵌入缓存"></p>
+<blockquote>
+<p><strong>图4</strong>：多阶段训练与嵌入缓存概述。由于PTP作用于解码器（策略头），缓存嵌入可以大幅提高训练速度而不牺牲性能。训练时使用缓存嵌入，测试时使用原始编码器。</p>
+</blockquote>
+<p><strong>核心模块3：基于PTP的测试时自验证</strong><br>在部署时，PTP可被用作一种自验证机制以提升推理鲁棒性。在每一步推理中，策略从同一观测条件采样 $B$ 个候选动作序列 $\mathcal{A} = {\hat{\mathbf{a}}^{(1)}, \dots, \hat{\mathbf{a}}^{(B)}}$。每个候选序列都包含重建的过去动作和预测的未来动作。由于前 $k-1$ 个动作已被执行，可作为真实参考，算法选择其重建的过去动作与已执行动作最匹配的候选：$\hat{\mathbf{a}}^{*} = \arg\min_{\hat{\mathbf{a}} \in \mathcal{A}} \sum_{\tau=t-k}^{t-1} |\hat{a}<em>{\tau} - a</em>{\tau}|^{2}$。如图5所示，此过程可在GPU上完全并行化。</p>
+<p><img src="https://arxiv.org/html/2505.09561v2/x5.png" alt="测试时验证"></p>
+<blockquote>
+<p><strong>图5</strong>：测试时验证。从同一观测采样多个动作序列，策略选择与真实先前动作一致性最高的序列。</p>
+</blockquote>
+<p><strong>创新点总结</strong><br>与现有方法相比，本文的创新点具体体现在：1) 首次明确指出并量化了现代扩散策略在时间动作依赖性上的不足（与“模仿猫”问题相反）；2) 提出了PTP这一简单而有效的辅助任务，显式正则化策略保留历史动作信息；3) 设计了高效的多阶段训练策略，将视觉表征学习与长上下文策略优化解耦，大幅降低了长上下文策略的训练成本。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：使用了六个模拟任务和四个真实世界任务。模拟任务包括来自RoboMimic的square、tool hang、transport，来自Chi et al.的Push-T，以及本文新引入的long-horizon square和long-horizon aloha。真实世界任务在Franka和ALOHA机器人平台上进行，包括需要历史感知的块交换、堆叠等任务。</li>
+<li><strong>实验平台</strong>：模拟实验在RoboMimic环境等进行，真实实验在实体机器人上执行。</li>
+<li><strong>对比方法</strong>：主要对比了两种策略范式：经典的回归策略和现代的扩散策略。针对扩散策略，设置了两个关键基线：<code>no-history</code>（仅以当前和过去单帧为输入）和<code>no-PTP</code>（使用长上下文但无PTP训练）。默认上下文长度为16个时间步。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>PTP有效改善了时间动作依赖性</strong>：如图6所示，增加过去令牌监督的数量（从<code>no-PTP</code>到<code>half-PTP</code>再到<code>full-PTP</code>）使学习者的动作可预测性比率越来越接近专家水平。<code>no-PTP</code>基线表现出比专家行为弱10倍到100倍的动作可预测性，而<code>full-PTP</code>则产生了与演示相当的时间依赖性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.09561v2/x6.png" alt="PTP对时间依赖性和性能的影响"></p>
+<blockquote>
+<p><strong>图6</strong>：PTP对时间动作依赖性和策略性能的影响。增加过去令牌监督使学习者的动作依赖性更接近专家，从而获得更高的成功率。</p>
+</blockquote>
+<ol start="2">
+<li><strong>PTP显著提升了策略性能</strong>：如图9所示，在六个模拟任务上，采用PTP的长上下文扩散策略平均比<code>no-history</code>扩散策略性能提升超过30%，比<code>no-PTP</code>扩散策略提升超过60%。在历史关键的长视野任务上，优势尤为明显，<code>no-history</code>和<code>no-PTP</code>基线成功率低于30%，而本文方法接近完美性能。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.09561v2/x9.png" alt="不同策略在模拟任务上的对比"></p>
+<blockquote>
+<p><strong>图9</strong>：不同策略在六个模拟任务上的对比。本文方法在历史关键任务上表现突出，平均性能大幅提升。</p>
+</blockquote>
+<ol start="3">
+<li><strong>更长上下文带来收益</strong>：如图7所示，对于PTP训练的策略，增加观察历史长度通常能提升性能。在复杂任务上，更长的上下文提供了显著的性能提升。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.09561v2/x7.png" alt="历史观察对PTP训练策略的影响"></p>
+<blockquote>
+<p><strong>图7</strong>：历史观察对PTP训练扩散策略的影响。增加上下文长度逐步增强了策略性能，尤其在历史关键任务上。</p>
+</blockquote>
+<ol start="4">
+<li><strong>嵌入缓存加速训练</strong>：如图8所示，与不使用缓存的原始训练方法相比，基于缓存的方法仅用20%的训练时间就能达到相当性能，并在40%的计算预算内超越前者。在复杂任务上，无缓存的长上下文策略甚至在训练两天后仍无法有效执行。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.09561v2/x8.png" alt="特征缓存的效果"></p>
+<blockquote>
+<p><strong>图8</strong>：特征缓存的效果。缓存使训练加速超过5倍且不损害性能。在复杂任务上，无缓存的长上下文策略训练困难。</p>
+</blockquote>
+<ol start="5">
+<li><strong>测试时自验证进一步提升性能</strong>：如图10所示，在具有挑战性的任务上，通过PTP进行样本选择（增加采样预算）能带来约5%的成功率提升。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.09561v2/x10.png" alt="PTP自验证的效果"></p>
+<blockquote>
+<p><strong>图10</strong>：PTP自验证的效果。增加采样预算在具有挑战性的闭环设置中带来了约5%的性能增益。</p>
+</blockquote>
+<ol start="6">
+<li><strong>真实世界任务验证</strong>：如图11所示，在四个历史关键的真实世界任务上，本文方法相比基线带来了超过55%的性能改进。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.09561v2/x11.png" alt="真实世界任务上的策略对比"></p>
+<blockquote>
+<p><strong>图11</strong>：在四个严重依赖历史上下文的真实世界任务上，不同策略的对比。本文方法相比基线有超过55%的提升。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：<br>实验系统地消融了PTP监督程度（无、半、全）、上下文长度以及训练策略（有无缓存）。结果表明，PTP是改善时间依赖性和最终性能的关键组件；更长的上下文在复杂任务中至关重要；而特征缓存是多阶段训练策略有效性的核心，它使高效的长上下文策略训练成为可能。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>问题发现</strong>：识别并量化了现代扩散策略在模仿学习中存在的一个与经典“模仿猫”问题相反的关键缺陷——对历史动作信息的利用不足，导致生成动作序列的时间依赖性弱于专家演示。</li>
+<li><strong>方法提出</strong>：提出了过去令牌预测这一简单而有效的辅助任务，通过让策略同时预测过去和未来动作令牌，显式正则化其对历史信息的保留，从而显著改善时间建模。</li>
+<li><strong>高效训练框架</strong>：设计了一个多阶段训练方案，结合视觉编码器预训练和基于缓存嵌入的策略头微调，在保持PTP优势的同时，将长上下文策略训练的开销降低了10倍以上，并进一步将PTP扩展为测试时的自验证机制。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文在讨论测试时自验证时提到，虽然该方法能提升性能，但增加采样预算（候选动作序列数量$B$）会带来额外的计算成本，这构成了一个权衡。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>正则化方向</strong>：为长上下文策略学习提供了一个新的正则化方向——显式地建模和保留历史动作信息，而非简单地丢弃或压缩历史观察。</li>
+<li><strong>训练效率</strong>：提出的多阶段训练与缓存策略为大规模、长序列的视觉模仿学习提供了一种高效可行的训练范式，可能启发其他序列模型训练方法的改进。</li>
+<li><strong>推理优化</strong>：将训练目标转化为测试时的自验证机制，展示了如何利用模型内部知识进行推理时优化，这一思路可扩展到其他需要时序一致性的决策任务中。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人长上下文策略学习中，因历史信息截断导致性能下降、训练成本高昂的问题，提出**Past-Token Prediction (PTP)** 方法。该方法通过一个辅助任务，强制策略同时预测过去与未来的动作标记，以此正则化策略对历史信息的保留，并配合**多阶段训练策略**（短上下文预训练视觉编码器，长上下文微调解码器）大幅降低计算开销。实验表明，该方法在10个真实与模拟任务中，将长上下文扩散策略性能提升**3倍**，训练速度加快**10倍以上**。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2505.09561" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

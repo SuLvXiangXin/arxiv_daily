@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Vision-Language Model Predictive Control for Manipulation Planning and Trajectory Generation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Vision-Language Model Predictive Control for Manipulation Planning and Trajectory Generation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2504.05225" target="_blank" rel="noreferrer">2504.05225</a></span>
+        <span>作者: Chen, Jiaming, Zhao, Wentao, Meng, Ziyu, Mao, Donghui, Song, Ran, Pan, Wei, Zhang, Wei</span>
+        <span>日期: 2025/04/07</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>模型预测控制（MPC）是一种广泛采用的控制范式，它利用预测模型估计未来系统状态并相应优化控制输入。然而，MPC虽然在规划和控制方面表现出色，但缺乏环境感知能力，导致其在复杂和非结构化场景中失败。为解决这一局限性，现有研究尝试将基础模型（如大语言模型LLMs和视觉语言模型VLMs）融入机器人学。早期工作集中于利用LLMs进行任务规划，将高级指令分解为预定义的低级技能，但这缺乏视觉感知能力，限制了规划的灵活性。近期工作通过集成VLMs来提升场景感知并自适应生成轨迹，但此类方法的决策循环未充分考虑机器人的未来状态，其推理主要基于当前观察，导致前瞻性规划不足。例如，在打开抽屉的任务中，现有VLM方法因缺乏对未来状态的预测而无法直接生成精确的轨迹。</p>
+<p>与此同时，传统的MPC通常构建与任务和环境对应的确定性动态模型，难以适应现实世界中的复杂场景。基于视觉的预测模型从视觉输入中学习动态模型，但其有效性受限于在有限数据集上训练的模型的泛化能力，难以准确预测未见过场景或物体的交互。</p>
+<p>因此，本文的核心痛点是：如何结合VLM强大的开放域感知与推理能力，以及MPC的前瞻性规划优势，以应对复杂、开放世界的机器人操作任务。本文提出了视觉语言模型预测控制（VLMPC）及其增强变体Traj-VLMPC。核心思路是：利用VLM根据任务输入和当前观察初始化条件动作采样分布，生成候选动作序列；通过预测模型（视频预测或轨迹生成）模拟未来状态；最后设计基于VLM的分层代价函数评估候选序列，选择并执行最优动作，实现“三思而后行”的规划。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出了两个框架：VLMPC和其高效变体Traj-VLMPC。</p>
+<p><strong>VLMPC整体框架</strong>：输入为目标图像G或语言指令L。框架迭代运行，在每个时间步t，执行以下步骤：1）条件动作采样模块利用VLM分析当前观察O_t和任务输入，生成一个条件采样分布，从中采样N条长度为T的候选动作序列S_t。2）动作条件视频预测模型接收历史图像观察和候选动作序列，预测对应的未来帧序列（视频）。3）分层代价函数对每个预测视频进行评估，计算一个综合代价。4）选择代价最低的动作序列，将其第一个动作发送给机器人执行，后续动作则通过加权元素求和的方式反馈到下一轮的条件动作采样分布中，以引导后续采样。</p>
+<p><img src="https://arxiv.org/html/2504.05225v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：VLMPC整体框架。输入为目标图像或语言指令。首先提示VLM生成条件采样分布，并从中采样动作序列。然后，动作序列被输入一个轻量级的动作条件视频预测模型以预测一组未来帧。评估通过一个由像素距离代价和VLM辅助代价组成的分层代价函数进行。最后选择最优动作序列执行。</p>
+</blockquote>
+<p><strong>核心模块1：条件动作采样</strong>：该模块旨在利用VLM的视觉推理和 grounding 能力，为动作采样提供有意义的先验。如图2所示，设计提示词φ_s驱使VLM分析当前观察O_t和任务输入（G或L），让其识别和定位待交互物体，推理交互方式，并输出未来移动方向。VLM输出为每个动作维度（末端执行器在x, y, z轴的移动d^，绕各轴的旋转r^，以及夹爪开合状态g_t）预测一个方向（+1, 0, -1）。将这些离散方向映射为采样均值μ_t^VLM（乘以缩放权重w_m和w_r），并以此均值和固定方差进行高斯采样，得到N条候选动作序列。</p>
+<p><img src="https://arxiv.org/html/2504.05225v1/x2.png" alt="条件动作采样"></p>
+<blockquote>
+<p><strong>图2</strong>：条件动作采样流程。VLM接收当前观察和任务指令，输出未来动作在各个维度上的预期方向（+1, 0, -1），这些方向被转换为高斯采样的均值。</p>
+</blockquote>
+<p><strong>核心模块2：动作条件视频预测</strong>：采用一个轻量化的卷积神经网络作为预测模型f_pred。如图3所示，模型以最近k帧的历史观察图像（O_t-k+1, ..., O_t）和一条候选动作序列S_t^n为输入，预测执行该序列后对应的未来T帧图像（Ô_t+1, ..., Ô_t+T）。该模型在大型机器人操作数据集（如ManiSkill2）上进行训练，学习动作与视觉结果之间的动态关系。</p>
+<p><img src="https://arxiv.org/html/2504.05225v1/x3.png" alt="视频预测模型"></p>
+<blockquote>
+<p><strong>图3</strong>：动作条件视频预测模型结构。输入为历史图像帧堆叠和候选动作序列，通过卷积编码器-解码器结构预测未来图像帧序列。</p>
+</blockquote>
+<p><strong>核心模块3：分层代价函数</strong>：用于评估预测视频的质量，包含两个子代价和一个切换器（图4）。1）<strong>像素级代价C_pixel</strong>：计算预测的最后一帧Ô_t+T与目标图像G（若输入为语言指令L，则G为空白图像）之间的均方误差（MSE），衡量像素层面的相似度。2）<strong>知识级代价C_VLM</strong>：使用VLM（如图文匹配模型CLIP）评估预测视频与任务指令之间的一致性。具体地，将预测视频的所有帧平均池化为一个特征向量，并与指令的文本特征计算余弦相似度。3）<strong>VLM切换器</strong>：一个轻量级网络，根据当前观察O_t和任务输入判断使用哪个代价函数主导。若输入是目标图像，则倾向于信任像素级代价；若是复杂语言指令，则更依赖知识级代价。总代价C_total = α * C_pixel + (1-α) * C_VLM，其中α由切换器输出。</p>
+<p><img src="https://arxiv.org/html/2504.05225v1/x4.png" alt="分层代价函数"></p>
+<blockquote>
+<p><strong>图4</strong>：分层代价函数结构。包含像素级代价（MSE）、知识级代价（VLM特征匹配）和一个决定两者权重的VLM切换器。</p>
+</blockquote>
+<p><strong>增强变体：Traj-VLMPC</strong>：为了提升长视野任务和实时应用的效率，提出了Traj-VLMPC。其核心思想是用3D运动轨迹生成替代视频预测，并用基于VLM的3D价值图进行轨迹评估。</p>
+<p><img src="https://arxiv.org/html/2504.05225v1/extracted/6342682/images/image_TrajVLMPC.png" alt="Traj-VLMPC框架"></p>
+<blockquote>
+<p><strong>图5</strong>：Traj-VLMPC整体框架。利用VLM驱动的GMM生成多样化的3D轨迹，并通过基于VLM的3D价值图评估轨迹，选择价值最高的轨迹执行。</p>
+</blockquote>
+<ol>
+<li><strong>VLM驱动的GMM轨迹生成器</strong>：不再采样离散动作序列，而是直接生成末端执行器的3D运动轨迹。一个高斯混合模型（GMM）用于建模轨迹分布，其参数（每个高斯分量的均值、协方差和权重）由VLM条件化。VLM根据当前观察和任务指令，输出对轨迹关键点（如起始点、途经点、目标点）的语义理解，这些信息用于调整GMM参数，从而采样出多样且与任务相关的3D轨迹。</li>
+<li><strong>基于VLM的3D价值图</strong>：为了高效评估轨迹，构建一个体素化的3D价值图。如图6所示，VLM被用来分析当前3D场景（如点云）和任务指令，为场景中的每个空间位置（体素）分配一个“上下文相关性”分数。这个分数反映了该位置对于实现任务目标的重要性，综合考虑了目标物体、障碍物和指令语义。轨迹的代价通过对其路径点所在体素的负价值求和来计算，价值越高的轨迹越优。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2504.05225v1/extracted/6342682/images/image_valuemap.png" alt="3D价值图生成"></p>
+<blockquote>
+<p><strong>图6</strong>：基于VLM的3D价值图生成。VLM根据任务指令和3D场景（点云）信息，为场景中的每个空间位置分配一个相关性分数，形成价值图，用于评估轨迹。</p>
+</blockquote>
+<p><strong>创新点总结</strong>：</p>
+<ol>
+<li><strong>感知与规划深度融合</strong>：首次将VLM无缝集成到MPC循环中，利用其开放域知识增强动作采样和代价评估，解决了传统MPC预测模型泛化性差和代价函数设计困难的问题。</li>
+<li><strong>分层评估机制</strong>：设计了像素级与知识级相结合的分层代价函数，并引入可学习的切换器，实现了从粗到细、适应不同任务输入的评估。</li>
+<li><strong>高效的轨迹级变体</strong>：提出Traj-VLMPC，用VLM条件化的GMM进行3D轨迹采样和生成，并用3D价值图进行快速评估，显著降低了计算复杂度，更适合长视野任务。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>模拟基准测试</strong>：在RLBench的10个复杂操作任务上进行评估，任务涉及多物体、长视野和需旋转的操作。</li>
+<li><strong>真实世界测试</strong>：在6个真实机器人操作任务上验证，包括开门、开抽屉、堆叠杯子等。</li>
+<li><strong>对比基线</strong>：包括基于VLM的规划器（VLM-Planner）、基于视觉的行为克隆方法（RVT, PerAct）、以及经典的MPC方法（Visual Foresight）。</li>
+<li><strong>评估指标</strong>：任务成功率。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>在RLBench模拟实验中，VLMPC和Traj-VLMPC均显著优于基线方法。</p>
+<p><img src="https://arxiv.org/html/2504.05225v1/extracted/6342682/images/fig.png" alt="模拟实验结果对比"></p>
+<blockquote>
+<p><strong>图7</strong>：在RLBench 10个任务上的成功率对比。VLMPC和Traj-VLMPC在平均成功率上均优于所有基线方法。</p>
+</blockquote>
+<p>具体而言，VLMPC达到了75.8%的平均成功率，Traj-VLMPC达到了78.3%，而最好的基线方法VLM-Planner为68.3%，RVT为56.7%。在需要复杂交互和长视野规划的任务（如“Open Drawer”和“Stack Cups”）上，优势尤为明显。</p>
+<p><img src="https://arxiv.org/html/2504.05225v1/x5.png" alt="真实世界实验结果"></p>
+<blockquote>
+<p><strong>图8</strong>：真实世界6个操作任务的成功率。VLMPC和Traj-VLMPC在真实场景中同样表现出色，成功完成了所有任务。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：<br>论文对VLMPC的关键组件进行了消融研究（图9）。移除条件动作采样（即使用均匀随机采样）导致成功率大幅下降（从75.8%降至52.5%），证明了VLM引导采样的重要性。移除分层代价函数中的VLM切换器（固定权重）或知识级代价C_VLM，性能也有明显损失，表明自适应评估的必要性。完全使用像素级代价（仅适用于目标图像输入）在语言指令任务上失败。</p>
+<p><img src="https://arxiv.org/html/2504.05225v1/x6.png" alt="消融实验结果"></p>
+<blockquote>
+<p><strong>图9</strong>：VLMPC各组件消融实验。条件动作采样和分层代价函数（尤其是知识级代价和切换器）对性能提升至关重要。</p>
+</blockquote>
+<p><strong>效率对比</strong>：<br>图10显示了Traj-VLMPC相对于VLMPC在计算效率上的优势。在长视野（T=15）任务中，Traj-VLMPC的每步规划时间远低于VLMPC，同时保持了更高的成功率，证明了其在高效率和高性能之间的平衡。</p>
+<p><img src="https://arxiv.org/html/2504.05225v1/x7.png" alt="效率对比"></p>
+<blockquote>
+<p><strong>图10</strong>：VLMPC与Traj-VLMPC在规划时间和成功率上的对比（视野T=15）。Traj-VLMPC在显著减少计算时间的同时，取得了更高的成功率。</p>
+</blockquote>
+<p><strong>定性结果</strong>：<br>图11展示了Traj-VLMPC在真实世界任务中生成的价值图和轨迹示例。价值图能清晰突出与任务相关的关键区域（如门把手、抽屉把手），而生成的轨迹能有效避开障碍并精确导向目标。</p>
+<p><img src="https://arxiv.org/html/2504.05225v1/extracted/6342682/images/image_TrajVLMPC_demo.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图11</strong>：Traj-VLMPC在真实任务中的定性结果。左列显示生成的3D价值图（暖色表示高价值区域），右列显示基于价值图评估后选择的最优轨迹（绿色路径）。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了VLMPC框架，首次将视觉语言模型（VLM）与模型预测控制（MPC）深度结合，为机器人操作规划提供了一个兼具开放域感知能力和前瞻性规划的通用框架。</li>
+<li>设计了条件动作采样模块和分层代价函数，使VLM能够有效地引导动作空间搜索并提供语义层面的评估，实现了无需预定义技能库的灵活规划。</li>
+<li>引入了高效的变体Traj-VLMPC，利用VLM驱动GMM进行3D轨迹生成和基于价值图的快速评估，显著提升了长视野任务的规划效率和稳定性。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文提到，VLMPC的性能在一定程度上依赖于所使用VLM的视觉推理和 grounding 能力。此外，尽管Traj-VLMPC提升了效率，但构建和查询3D价值图仍需要一定的计算资源。视频预测模型的准确性也受限于训练数据的规模和多样性。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>框架通用性</strong>：VLMPC展示了将基础模型作为“感知先验”与经典控制框架结合的强大潜力，此范式可扩展至其他需要复杂感知与决策的领域，如自动驾驶、具身智能。</li>
+<li><strong>效率优化</strong>：Traj-VLMPC指出的轨迹级规划方向是一个有前景的效率提升路径。未来可探索更高效的轨迹表示、价值图构建方法，或模型蒸馏技术以进一步降低对大型VLM的实时依赖。</li>
+<li><strong>模型改进</strong>：可以探索专为机器人动态预测而微调或设计的VLM，以提升其对物理交互和长期后果预测的准确性。同时，如何更好地将语言指令与空间价值映射结合，也是一个值得深入的方向。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对模型预测控制（MPC）缺乏环境感知能力、在复杂非结构化场景中易失败的问题，提出了视觉语言模型预测控制（VLMPC）框架。该框架集成视觉语言模型（VLM）的感知能力与MPC，通过条件动作采样模块生成候选动作序列，并利用视频预测模型模拟未来状态；其增强变体Traj-VLMPC用运动轨迹生成替代视频预测以降低计算复杂度。两种方法均采用基于VLM的分层成本函数优化动作选择。实验表明，VLMPC和Traj-VLMPC在公共基准测试中优于现有先进方法，并在多种现实机器人操作任务中取得优异性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2504.05225" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

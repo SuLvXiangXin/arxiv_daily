@@ -186,6 +186,9 @@ const loadPapers = async () => {
     paperCountEl.textContent = String(sorted.length);
     lastUpdatedEl.textContent = formatDate(data.generatedAt);
 
+    // Dynamic hero panel stats
+    updateHeroPanel(sorted);
+
     // Render LaTeX math after first page cards are in DOM
     if (typeof renderMathInElement === "function") {
       renderMathInElement(document.body, {
@@ -219,5 +222,50 @@ const filterPapers = () => {
 };
 
 searchInput.addEventListener("input", filterPapers);
+
+/* ── dynamic hero panel ────────────────────────────────── */
+
+const updateHeroPanel = (papers) => {
+  const todayCountEl = document.getElementById("today-count");
+  const totalCountEl = document.getElementById("total-count");
+  const hotTagsEl = document.getElementById("hot-tags");
+
+  // Count today's papers (by date field, compare date string prefix)
+  const today = new Date().toISOString().slice(0, 10);
+  const todayPapers = papers.filter((p) => {
+    const d = p.date || p.updatedAt || "";
+    return d.startsWith(today);
+  });
+
+  // If no papers match today, count the most recent date
+  let recentCount = todayPapers.length;
+  if (recentCount === 0 && papers.length > 0) {
+    const latestDate = (papers[0].date || "").slice(0, 10);
+    recentCount = papers.filter((p) => (p.date || "").startsWith(latestDate)).length;
+  }
+
+  if (todayCountEl) todayCountEl.textContent = String(recentCount);
+  if (totalCountEl) totalCountEl.textContent = String(papers.length);
+
+  // Extract top category tags
+  if (hotTagsEl) {
+    const freq = {};
+    papers.forEach((p) => {
+      const cat = p.category || "";
+      if (cat) freq[cat] = (freq[cat] || 0) + 1;
+    });
+    const topTags = Object.entries(freq)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map((e) => e[0]);
+
+    hotTagsEl.innerHTML = "";
+    topTags.forEach((tag) => {
+      const el = document.createElement("span");
+      el.textContent = tag;
+      hotTagsEl.appendChild(el);
+    });
+  }
+};
 
 loadPapers();

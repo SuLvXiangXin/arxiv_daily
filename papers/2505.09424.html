@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Exploring Pose-Guided Imitation Learning for Robotic Precise Insertion - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Exploring Pose-Guided Imitation Learning for Robotic Precise Insertion</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2505.09424" target="_blank" rel="noreferrer">2505.09424</a></span>
+        <span>作者: Sun, Han, Wang, Yizhao, Zhou, Zhenning, Wang, Shuai, Yang, Haibo, Sun, Jingyuan, Cao, Qixin</span>
+        <span>日期: 2025/05/14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人精确插入任务的主流方法主要包括基于强化学习（RL）结合力/触觉信息的方法，以及基于原始RGB或点云输入的端到端模仿学习方法。前者面临稀疏奖励、仿真到现实（sim-to-real）差距大、对物体姿态变化泛化能力差以及数据收集效率低下的挑战；后者虽然降低了工程复杂性，但通常需要数十或数百个演示数据，数据利用效率低，且难以泛化到不同视角或空间配置，在处理高精度操作时尤为困难。</p>
+<p>本文针对精确插入任务中，现有模仿学习方法数据效率低、对姿态扰动鲁棒性差、难以从少量演示中学习的问题，提出了引入SE(3)物体姿态的新视角。核心思路是：利用源物体相对于目标物体的SE(3)姿态作为观察-动作对，构建扩散策略来预测未来的相对姿态轨迹，从而以极少的演示（7-10次）实现高精度插入；并进一步设计了一个门控RGBD增强模块，以补偿在姿态估计噪声较大时的性能损失。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出了两种方法：纯姿态扩散策略（Pose-Only Diffusion Policy）和门控RGBD增强姿态扩散策略（Gated RGBD-Augmented Pose Diffusion Policy）。整体流程是：从人类演示视频中提取并规范化源物体相对于目标物体的姿态轨迹作为训练数据；在推理时，根据当前相对姿态（以及可能的RGBD图像）预测未来一段时长的相对姿态轨迹；最后将该物体轨迹转换为机器人末端执行器的运动轨迹并执行。</p>
+<p><img src="https://arxiv.org/html/2505.09424v1/x3.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：姿态引导模仿学习方法的整体流程。(a) 纯姿态扩散策略：以当前相对姿态 <code>{T_t^s}_t</code> 为观察，经解耦姿态编码器提取特征，由扩散策略预测未来相对SE(3)轨迹 <code>{T_t^s}_{t+1:t+h}</code>。(b) 门控RGBD增强姿态扩散策略：在纯姿态分支基础上，增加一个目标条件RGBD图像编码器处理当前与目标RGBD图像块，并通过残差门控融合模块用图像特征辅助姿态特征，最终由扩散策略预测轨迹。</p>
+</blockquote>
+<p><strong>核心模块1：解耦姿态编码器</strong><br>该模块用于提取SE(3)姿态的特征。与之前工作不同，它设计了一个平移网络和一个旋转网络，分别处理姿态中的平移向量 <code>t ∈ R^3</code> 和旋转矩阵 <code>R ∈ R^{3×3}</code>。两个网络均为三层MLP，使用LayerNorm和GELU激活函数，各自输出64维特征 <code>F_t</code> 和 <code>F_r</code>。将两者拼接后送入一个Transformer层，通过自注意力机制捕捉姿态分量间的隐式关联，最后通过线性投影输出128维的姿态特征 <code>F_pose</code>。</p>
+<p><strong>核心模块2：扩散策略</strong><br>该方法建立在条件去噪扩散模型之上。观察 <code>O_t</code> 定义为当前相对姿态 <code>{T_t^s}_t</code>，动作 <code>A_t</code> 定义为未来 <code>h</code> 步的相对姿态轨迹 <code>{T_t^s}_{t+1:t+h}</code>。策略通过一个去噪网络 <code>ε_θ</code>，在 <code>K</code> 次迭代中，将从一个高斯噪声 <code>A_t^k</code> 开始，逐步去噪得到无噪声的动作 <code>A_t^0</code>（即预测的轨迹）。训练时采用均方误差（MSE）损失，监督网络对添加噪声的预测。旋转采用R6D表示，并使用DDIM作为噪声调度器。</p>
+<p><strong>核心模块3：目标条件RGBD图像编码器与残差门控融合模块</strong><br>为缓解姿态估计噪声的影响，引入了RGBD信息。<br><img src="https://arxiv.org/html/2505.09424v1/x4.png" alt="RGBD编码与融合模块"></p>
+<blockquote>
+<p><strong>图4</strong>：(a) 目标条件RGBD图像编码器：使用FoundationPose的refinenet，将其双分支输入分别改为当前RGBD图像块和目标RGBD图像块，以捕捉当前状态与目标状态之间的差异，输出图像特征 <code>f_img</code>。(b) 姿态引导残差门控融合模块：以姿态特征 <code>f_pose</code> 为骨干，通过一个自适应门控机制（由MLP和Sigmoid函数实现）生成权重，让图像特征 <code>f_img</code> 有选择性地补偿姿态特征的不足，输出融合特征 <code>f_fusion</code> 给扩散策略。</p>
+</blockquote>
+<p><strong>创新点</strong></p>
+<ol>
+<li><strong>观察-动作表示创新</strong>：首次在模仿学习中系统性地使用相对SE(3)物体姿态作为观察和动作，提供了紧凑、几何意义明确且对感知变化鲁棒的表征。</li>
+<li><strong>轨迹规范化与泛化</strong>：将所有演示中的源物体姿态转换到目标物体坐标系下，得到规范化的相对姿态轨迹，忽略绝对位姿，增强了模型对物体初始位置变化的泛化能力。</li>
+<li><strong>自适应多模态融合</strong>：提出的残差门控融合机制不是简单拼接特征，而是以姿态特征为主干，让RGBD特征通过学得的门控权重进行选择性补偿，优雅地处理了不同传感器信息的可靠性问题。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在6个不同的机器人精确插入任务上进行评估，包括金属零件、USB Type-C、芯片等，间隙约为0.01毫米。使用类似ALOHA的具备被动合规性的机械臂。实验平台涉及真实机器人系统。</p>
+<p><strong>对比方法</strong>：与多种基线方法对比，包括：1) <strong>ACT</strong>：基于Transformer的模仿学习方法；2) **Diffusion Policy (RGB)**：原始图像输入的扩散策略；3) <strong>RISE</strong>：基于点云输入的模仿学习方法；4) **Pose-GT (Oracle)**：使用真实姿态（非估计）作为输入的理想情况。</p>
+<p><strong>关键实验结果</strong>：<br><img src="https://arxiv.org/html/2505.09424v1/x5.png" alt="定量结果对比"></p>
+<blockquote>
+<p><strong>图5</strong>：在6个任务上的成功率定量对比。本文的纯姿态方法（Pose-Only）和RGBD增强方法（Gated RGBD-Augmented）在仅使用7-10个演示的情况下，性能显著优于ACT、Diffusion Policy (RGB)和RISE等基线方法，与使用真实姿态的Oracle方法性能接近。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.09424v1/x6.png" alt="泛化能力测试"></p>
+<blockquote>
+<p><strong>图6</strong>：目标物体位置扰动下的泛化性能。在“金属零件插入”任务中，当目标位置在X/Y/Z轴发生扰动时，本文方法（蓝色）相比基于图像的Diffusion Policy（红色）保持了高且稳定的成功率，展示了优异的泛化能力。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.09424v1/x7.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图7</strong>：不同姿态表示和编码器的消融研究。对比了四元数、R6D等旋转表示，以及不同编码器结构。结果表明，使用R6D表示并结合本文提出的解耦姿态编码器（Disentangled）能取得最佳性能。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：</p>
+<ol>
+<li><strong>姿态表示与编码器</strong>：使用R6D旋转表示配合解耦编码器效果最好（图7）。</li>
+<li><strong>RGBD增强模块的有效性</strong>：在姿态估计噪声较大的任务（如USB插入）中，引入门控RGBD融合模块能大幅提升成功率（从约40%提升至80%以上，参见正文表I及图5）。</li>
+<li><strong>演示数据量</strong>：方法仅需7-10个演示即可达到高性能，远超需要大量演示的基线方法。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.09424v1/x8.png" alt="轨迹可视化与误差分析"></p>
+<blockquote>
+<p><strong>图8</strong>：预测轨迹与真实演示轨迹的对比可视化。在X/Y/Z平移和旋转分量上，本文方法预测的轨迹（红色）与真实演示轨迹（蓝色）高度吻合。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.09424v1/x9.png" alt="噪声鲁棒性"></p>
+<blockquote>
+<p><strong>图9</strong>：在人为添加不同程度旋转噪声下，纯姿态方法与RGBD增强方法的性能对比。随着噪声增大，纯姿态方法性能下降，而RGBD增强方法保持了较强的鲁棒性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.09424v1/x10.png" alt="实际执行序列"></p>
+<blockquote>
+<p><strong>图10</strong>：“芯片插入”任务的实际执行序列截图，展示了方法在真实场景中完成高精度操作的过程。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个基于相对SE(3)物体姿态的模仿学习框架，用于机器人精确插入任务，该框架数据效率极高（仅需7-10次演示），并对物体初始位姿扰动具有强泛化能力。</li>
+<li>设计了一个门控RGBD增强模块，通过目标条件编码和残差门控融合机制，动态补偿姿态估计噪声，增强了系统的鲁棒性和实用性。</li>
+<li>通过详实的实验，在多个高精度插入任务上验证了方法的有效性，成功处理了约0.01毫米间隙的任务，并系统分析了不同组件的作用。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>方法性能在一定程度上依赖于底层6D姿态估计（如FoundationPose）的准确性。在纹理缺失、严重遮挡或快速运动导致姿态估计完全失效的情况下，性能会受损。</li>
+<li>当前工作专注于轨迹建模，并未集成力/触觉反馈信息，对于需要精细力控的极端精密插入可能存在限制。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>物体中心表征的潜力</strong>：证明了在结构化操作任务中，使用紧凑、几何化的物体中心表征（如相对姿态）可以极大提升模仿学习的数据效率和泛化性能，这为其他精密操作任务提供了新思路。</li>
+<li><strong>多模态融合策略</strong>：提出的“主干+选择性补偿”融合范式，为结合不同精度和可靠性的传感器信息（如精确但易失效的姿势与冗余但稳定的RGBD）提供了有效参考。</li>
+<li><strong>迈向实际应用</strong>：该方法显著降低了数据收集成本和策略学习难度，并利用相对姿态坐标变换减轻了对机器人绝对定位精度的依赖，向高精度任务的实用化迈出了重要一步。未来可探索与力控的结合以及更强大的姿态估计器的集成。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人精确插入任务中模仿学习精度不足的问题，提出**位姿引导的模仿学习方法**。核心创新包括：1）采用**相对SE(3)位姿**作为观测-动作对的扩散策略；2）设计**目标条件RGBD编码器**及**位姿引导残差门控融合**机制，增强感知。实验在6项插入任务中验证，仅需**7-10次演示**，即可成功完成**间隙约0.01毫米**的精确插入，在效率与泛化性上优于基线方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2505.09424" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>EnerVerse-AC: Envisioning Embodied Environments with Action Condition - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>EnerVerse-AC: Envisioning Embodied Environments with Action Condition</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2505.09723" target="_blank" rel="noreferrer">2505.09723</a></span>
+        <span>作者: Jiang, Yuxin, Chen, Shengcong, Huang, Siyuan, Chen, Liliang, Zhou, Pengfei, Liao, Yue, He, Xindong, Liu, Chiming, Li, Hongsheng, Yao, Maoqing, Ren, Guanghui</span>
+        <span>日期: 2025/05/14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人模仿学习已从解决静态任务发展到处理动态交互场景，但其测试和评估仍然成本高昂且具有挑战性，因为需要与动态环境进行实时交互。当前主流评估方法依赖于在物理机器人上直接部署或构建大规模3D仿真环境，两者均成本高、劳动密集且难以扩展。近年来，使用视频生成模型作为世界模拟器成为一个有前景的方向，它们通过学习视觉动态使智能体能够观察和交互。然而，现有世界建模技术主要侧重于根据语言指令生成视频或根据生成的视频预测动作，未能创建出能够响应智能体动作、模拟环境动态的真正世界模拟器，从而无法实现真实且可控的测试。</p>
+<p>本文针对这一痛点，提出了一个动作条件的世界模型，旨在根据机器人预测的动作直接生成未来的视觉观察。本文核心思路是构建一个名为EnerVerse-AC (EVAC) 的动作条件世界模型，通过引入多级动作条件注入机制和射线图编码，实现对动态多视图图像的真实、可控生成，并将其同时用作策略学习的数据引擎和训练后策略模型的评估器，以低成本、高保真地支持机器人操作评估。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>EVAC 是一个基于动作条件的视频生成世界模型。其整体框架基于 UNet 的视频扩散模型，旨在根据观察到的历史帧和机器人动作序列，预测未来的视觉帧。</p>
+<p><img src="https://arxiv.org/html/2505.09723v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：EVAC 框架总览。给定参考图像（其特征向量作为参考风格引导）和机器人动作序列，计算 Delta 动作向量并与参考风格引导拼接，通过交叉注意力注入扩散模型。同时，动作信息被投影为动作图，其特征图与来自记忆和视觉观察的特征图拼接后输入扩散网络。扩散模型通过去噪过程生成视频帧，最后由视频解码器产生最终输出。为简化，此处仅展示单视图情况。</p>
+</blockquote>
+<p>模型输入为 RGB 视频集 $O \in \mathbb{R}^{V \times (H+K) \times 3 \times h \times w}$，其中 $V$ 是视图数，$H$ 是历史帧数，$K$ 是待预测帧数。首先通过编码器 $\varepsilon$ 获得潜在表示 $z$。使用潜在扩散模型预测 $z_t = p_\theta(z_{t-1}, c, t)$，其中条件信号 $c$ 来源于机器人动作轨迹 $A \in \mathbb{R}^{(H+K) \times d}$（$d=7$ 表示末端执行器位姿，包含 $[x, y, z, roll, pitch, yaw, openness]$）。</p>
+<p>核心模块包括多级动作条件注入和多视图条件注入：</p>
+<ol>
+<li><p><strong>多级动作条件注入</strong>：</p>
+<ul>
+<li><strong>空间感知位姿注入</strong>：为了将动作条件与图像精确对齐，论文将末端执行器在世界坐标系中的 6D 位姿（位置和朝向）通过标定相机参数投影到对应的像素坐标。使用单位向量表示朝向，使用单位圆（颜色深浅表示开合程度）编码夹爪动作，并将这些可视化提示渲染在黑色背景上形成动作图。该动作图经由 CLIP 视觉编码器处理，得到的特征图与 RGB 图像的特征图沿通道维度拼接。</li>
+<li><strong>Delta 动作注意力模块</strong>：该模块计算连续帧之间的动作增量（Delta Motion）以近似末端执行器位置和朝向的变化。这些增量动作通过线性投影器编码为固定长度的潜在表示令牌，然后与参考图像特征融合，通过交叉注意力机制注入到 UNet 中。这有助于模型理解运动动态（如速度和加速度），从而生成更真实、多样的视频。</li>
+</ul>
+</li>
+<li><p><strong>多视图条件注入</strong>：为支持对具身任务至关重要的多视图（特别是动态手腕相机视图）生成，EVAC 引入了空间交叉注意力模块以实现视图间交互，并拼接了编码相机参数的射线方向图以提供空间上下文。针对动态手腕相机视图，传统的末端执行器位姿投影方法会失效（投影点保持静态，无法传达手部运动）。因此，EVAC 采用射线图 $r = (o_r, d_r)$ 来编码相机运动，其中 $o_r$ 和 $d_r$ 分别是射线原点和方向。由于手腕相机随机械臂移动，其射线图可以隐式编码末端执行器位姿的运动信息。射线图与轨迹图拼接，提供了更丰富的轨迹信息，改善了跨视图一致性。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.09723v1/x3.png" alt="EEF投影与射线图可视化"></p>
+<blockquote>
+<p><strong>图3</strong>：末端执行器投影与射线图可视化。底行显示手腕相机视图，其投影几乎相同。而射线图提供了额外的空间上下文来表示运动。射线图的值用 RGB 值可视化。</p>
+</blockquote>
+<p>与现有方法（如 EnerVerse）相比，EVAC 的创新点具体体现在：1) 提出了结合空间投影动作图和时序 Delta 动作编码的多级动作条件注入机制，实现了对生成视频更精细的动作控制；2) 扩展了多视图生成能力，特别通过射线图编码解决了动态手腕相机视图的位姿投影难题，从而能更好地模拟真实机器人操作场景。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>数据集与实验平台</strong>：训练数据主要来源于 AgiBot World 数据集，包含超过 210 个任务和 100 万条轨迹。论文还额外收集了大量失败轨迹以增强泛化能力。模型基于 UNet 视频扩散模型实现，在 32 张 A100 GPU 上训练（单视图约2天，多视图约8天）。策略模型使用 GO-1 的单视图版本。</p>
+<p><strong>评估基准与基线</strong>：实验主要评估 EVAC 本身作为视频生成模型、策略评估器和数据引擎的性能，并未直接与其他视频生成模型进行量化对比，而是通过其下游应用效果来证明有效性。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>可控操作视频生成</strong>：EVAC 能够合成复杂机器人-物体交互的真实视频，并准确遵循输入动作轨迹。其分块自回归扩散架构和稀疏记忆机制能在连续推理中维持视觉稳定性与场景一致性。生成视频在单视图场景下可保持清晰可靠长达 30 个连续块，在多视图设置下可达 10 个块。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.09723v1/x5.png" alt="多视图视频生成定性结果"></p>
+<blockquote>
+<p><strong>图5</strong>：多视图视频生成的定性结果，展示了模型生成复杂交互场景的能力。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.09723v1/x6.png" alt="分块推理中的环境一致性"></p>
+<blockquote>
+<p><strong>图6</strong>：分块推理中的环境一致性。在不同推理阶段（块1, 3, 5, 7, 9）的截图显示了模型在长时间内保持视觉保真度和场景连贯性的鲁棒性能。</p>
+</blockquote>
+<ol start="2">
+<li><strong>作为策略评估器</strong>：在四个操作任务上，比较了基于 EVAC 的评估与真实世界评估的成功率。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.09723v1/x7.png" alt="跨任务和训练步数的成功率比较"></p>
+<blockquote>
+<p><strong>图7</strong>：（左）尽管任务差异很大，EVAC模拟器的评估结果与真实世界结果保持一致趋势。（右）同一策略模型在不同训练步数下的评估显示，EVAC与真实世界测试呈现出相似的性能梯度。</p>
+</blockquote>
+<ol start="3">
+<li><strong>作为数据引擎</strong>：在一个从纸箱中取水瓶的挑战性任务上，对比了仅使用20条专家演示轨迹（基线）和使用 EVAC 额外增强30%合成数据训练的策略。</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th align="left">训练数据</th>
+<th align="left">成功率 (SR)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">基线</td>
+<td align="left">0.28</td>
+</tr>
+<tr>
+<td align="left">增强数据集（增加30%合成数据）</td>
+<td align="left">0.36</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表1</strong>：数据增强对策略训练成功率的影响。加入EVAC生成的合成数据后，成功率从0.28提升至0.36。</p>
+</blockquote>
+<ol start="4">
+<li><strong>消融实验（失败数据的重要性）</strong>：对比了使用包含失败轨迹的数据集和不包含失败轨迹的数据集训练的模型。在模拟抓取一个不存在的水瓶的场景中，没有失败数据的模型会“幻觉”出成功抓取的画面，而包含失败数据的 EVAC 能够准确识别并区分失败的抓取尝试。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.09723v1/x8.png" alt="失败数据对轨迹生成的影响"></p>
+<blockquote>
+<p><strong>图8</strong>：失败数据对轨迹生成的影响。没有失败数据时，模型过拟合于成功轨迹，错误地“幻觉”出机械臂已抓取瓶子。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个新颖的、多级动作条件注入的具身世界模型 EVAC，能够根据机器人动作序列生成高质量、可控的未来多视图视觉观察。</li>
+<li>引入了射线图编码来有效处理动态手腕相机视图的投影问题，增强了多视图生成的一致性和真实性。</li>
+<li>系统性地展示了 EVAC 在机器人学习 pipeline 中的双重应用价值：作为数据引擎增强策略训练数据，以及作为低成本、高保真的策略评估器替代部分真实机器人测试。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>当前使用单位圆颜色强度表示夹爪开合度的方法可能难以泛化到更复杂的末端执行器（如灵巧手）。</li>
+<li>手腕相机常捕捉到无关的背景噪声（如工作人员走动），增加了视频生成的复杂性，这限制了多视图推理的长度（最多10块），低于单视图的30块，降低了多视图场景的整体效率。</li>
+<li>一些潜在应用（如与 actor-critic 强化学习方法的结合）尚未探索。</li>
+</ol>
+<p><strong>启示</strong>：EVAC 为构建低成本、可扩展的机器人测试和仿真环境提供了一条新路径，显著降低了机器人策略开发和评估对物理硬件和复杂仿真资产的依赖。其成功证明了利用大规模视频数据学习物理交互动态的可行性。未来工作可探索其与强化学习框架的更深层次结合，并致力于提升对复杂末端执行器和嘈杂环境的鲁棒性，进一步推动具身世界模型的发展。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人模仿学习中动态交互场景测试评估成本高、扩展难的问题，提出动作条件世界模型EnerVerse-AC（EVAC）。该模型基于智能体预测动作生成未来多视角视觉观测，关键技术包括多级动作条件机制与射线图编码，并通过融入失败轨迹数据提升泛化能力。实验表明，EVAC可作为数据引擎与评估器，生成高保真、动作条件的视频以替代真实机器人或复杂仿真，显著降低测试成本。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2505.09723" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Wavelet Policy: Imitation Policy Learning in the Scale Domain with Wavelet Transforms - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Wavelet Policy: Imitation Policy Learning in the Scale Domain with Wavelet Transforms</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2504.04991" target="_blank" rel="noreferrer">2504.04991</a></span>
+        <span>作者: Yang, Changchuan, Dong, Yuhang, Tian, Guanzhong, Ge, Haizhou, Zhu, Hongrui</span>
+        <span>日期: 2025/04/07</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前模仿学习策略通常被构建为时间序列预测任务，直接将高维视觉数据和本体感知等机器人观察映射到动作空间。这类方法主要依赖2D或3D空间域建模来捕捉数据关系，但传统的3D点云和2D图像直接映射存在固有的信息瓶颈，难以直接优化这些表征以提升性能。论文指出，在机器人操作轨迹预测中，频率域分析未被充分利用，导致忽略了动作序列中嵌入的固有节奏信息，进而在关键时刻产生误差。具体分析发现，如ACT等序列建模架构在模型开始过拟合后，整体成功率下降约10%，其关节角度误差显著下降，但基于小波变换的多尺度误差仅边际改善，且在关键瞬时的多尺度误差显著大于稳态操作期间，表明网络过度关注时间线索，而对不同空间尺度的误差缺乏足够敏感性。</p>
+<p>本文针对上述痛点，提出了从时-频域（time-scale domain）视角重构模仿学习策略的新思路。核心思路是引入小波变换进行多尺度频率域处理，并设计相应的网络架构（SE2MD）和可学习滤波器（LSDF），以高效提取并利用嵌入在动作序列中的多尺度节奏信息，从而提升策略性能，尤其是在复杂、长程任务及关键时刻的鲁棒性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Wavelet Policy的整体目标是根据当前时间步的多视角RGB图像观察，预测机器人机械臂未来40步的关节角度序列。其框架由三个核心组件构成，如图2所示。</p>
+<p><img src="https://arxiv.org/html/2504.04991v3/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：Wavelet Policy的模块化设计，包含三个关键组件：用于初始视觉处理的特征提取模块、基于小波的编码器-解码器框架SE2MD结构用于多尺度表征，以及用于任务特定特征精炼的LSDF模块。</p>
+</blockquote>
+<p><strong>1. 特征提取模块</strong>：该模块旨在快速、高效地压缩来自视觉主干网络的特征信息，以适应下游处理。具体而言，使用截断的ResNet-18处理输入图像，得到尺寸为15×20×728的空间特征图。随后通过1×1卷积将通道数从728压缩至512，并将空间网格展平为L=300个补丁令牌。接着使用两个轻量级的一维卷积进行令牌压缩和函数投影：第一个卷积（kernel_size=3）将补丁维度从300压缩至39；第二个卷积（kernel_size=3）将通道宽度从512投影至64，得到形状为B×39×64的张量。最后使用一个多头自注意力层进行早期跨令牌融合。对于多视角设置，各视角管道并行运行，最终将得到的序列沿最后一个令牌轴拼接。该流程移除了原始ResNet中约93%的对机械臂操作非必需冗余特征。</p>
+<p><strong>2. 单编码器到多解码器架构</strong>：为了充分利用多尺度域信息，首先使用离散小波变换分解来自FE模块的输入张量。在论文框架中，使用Haar小波变换将输入信号x分解为一个低频平均趋势分量t_J,k和一组多尺度细节分量d_j,k (j=0,1,2)。SE2MD架构的核心是一个基于Transformer的编码器和多个解码器。编码器处理来自FE的特征序列，输出一个共享的潜在表示H∈ℝ^(T×D)。随后，针对每个尺度j∈{0,1,2,3}，一个专用的Transformer解码器以(t_J,k, H)或(d_j,k, H)作为输入，生成该尺度的预测输出y_t^(j)。趋势解码器输出低频预测t<del>_J,k，各细节解码器输出尺度特定的细节预测d</del><em>j,k。最后，从最粗糙的级别J开始，递归应用一维合成滤波器组（即逆Haar变换）合并每对系数：t<del>_j,k = SFB1D(t</del>_(j+1),k, d~</em>(j+1),k; g0, g1)，最终得到融合了所有多尺度组件的统一轨迹预测x^_k = t~_0,k用于下游控制。</p>
+<p><strong>3. 可学习尺度域滤波器</strong>：为了增强尺度域的特征映射并可控地增加模型容量，在SE2MD架构的每个解码器后引入了LSDF模块。LSDF包含基于残差的滤波、基于残差的线性滤波和增强块滤波等变体，能够动态精炼每个尺度带的小波变换后特征。该可学习滤波器被集成到每个解码器中，处理其输出的系数y_t^(j)，产生精炼后的表征，再传递给对应的全连接层进行运动预测。通过指定参数N的值，可以可控地增加模型容量。</p>
+<p><strong>创新点</strong>：与现有方法相比，本文的主要创新在于：1) 将小波变换引入模仿学习策略，进行时-频域的多尺度特征分析；2) 设计了参数高效的SE2MD架构，用单个编码器共享表征，多个解码器分别处理不同尺度分量；3) 引入了可学习的尺度域滤波器，动态适应不同视觉条件。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在四个模拟机械臂任务和六个真实世界任务上评估Wavelet Policy。模拟任务包括来自ACT的<code>Transfer Cube</code>和<code>Bimanual Insertion</code>，以及新设计的更具挑战性的<code>Transfer Plus</code>和<code>Stack Two Blocks</code>。真实任务在Airbot Play和UFactory xArm6平台上进行，涉及堆叠块、存储物品和辅助缝纫等。实验平台使用NVIDIA RTX 3090进行训练，NVIDIA GTX 1650测量推理时间。结果通常基于10个随机种子的平均。</p>
+<p><strong>基线方法</strong>：对比了五种基线方法：Diffusion Policy (DDPM, CNN)、ACT、NL-ACT、InterACT和HACT-VQ。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>模拟任务性能</strong>：如表II所示，在具有挑战性的任务上，Wavelet Policy（未使用LSDF）优于SOTA模型。例如，在<code>Bimanual Insertion</code>和<code>Stack Two Blocks</code>上，成功率分别达到97.8%和87.6%，表现优异。在长程任务<code>Transfer Plus</code>中，当压缩任务执行时间并加入堆叠操作时，ACT的成功率下降28%和9%，而Wavelet Policy仅下降19%和8%，表明其性能随任务复杂性增加而下降更慢。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2504.04991v3/x4.png" alt="多尺度误差对比"></p>
+<blockquote>
+<p><strong>图4</strong>：在四个任务上，Wavelet Policy与ACT模型的多尺度误差（第1尺度）对比。Wavelet Policy的误差更低，表明其能更好地捕捉关键的控制节奏信息。</p>
+</blockquote>
+<ol start="2">
+<li><p><strong>模型效率与推理速度</strong>：如表I所示，Wavelet Policy参数数量显著少于可比方法（单摄像头约17.22M，仅为ACT的约1/5）。如表III所示，使用ONNX Runtime时，Wavelet Policy的单帧推理延迟（单摄像头0.0308秒）低于ACT（0.0390秒），更适用于边缘部署。</p>
+</li>
+<li><p><strong>特征融合维度实验</strong>：如图5所示，将结果转化为渐进累积成功率，展示了随着任务复杂性增加，各模型性能的演变。结果表明，在嵌入维度进行特征融合（Wavelet Policy）始终优于在长度维度进行融合（ACT）。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2504.04991v3/x5.png" alt="累积成功率"></p>
+<blockquote>
+<p><strong>图5</strong>：不同模型在子任务上的渐进累积成功率对比，显示了随着任务复杂性增加，Wavelet Policy（嵌入维度融合）的性能衰退优于ACT（长度维度融合）。</p>
+</blockquote>
+<ol start="4">
+<li><strong>可学习滤波器效果</strong>：引入LSDF可以可控地提升模型性能，尤其在需要精细运动调整的挑战性任务中。如图6所示，任务成功率与滤波器参数N的值相关。在表V列出的滤波器中，RBLF在多数任务中取得了最高的成功率，而EBF在<code>Stack Two Blocks</code>任务中表现优异。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2504.04991v3/x6.png" alt="滤波器参数N与成功率关系"></p>
+<blockquote>
+<p><strong>图6</strong>：任务成功率与LSDF中参数N值的关系。添加可学习滤波器可以提升性能，但提升幅度受限于单任务数据集的训练。</p>
+</blockquote>
+<ol start="5">
+<li><p><strong>真实世界评估</strong>：如表IV所示，在六项真实世界操作任务中，Wavelet Policy相比ACT基线 consistently 取得了更高的成功率，特别是在涉及复杂接触阶段和多步骤物体放置的任务上。</p>
+</li>
+<li><p><strong>消融实验</strong>：表VI的消融研究至关重要。</p>
+<ul>
+<li><strong>小波变换的重要性</strong>：完全移除小波变换（DWT和IDWT）会使延迟略微降低至0.0585秒/帧，但性能急剧下降：<code>Bimanual Insertion</code>平均成功率从83%暴跌至32%，<code>Transfer Plus</code>从73%跌至20%。这凸显了小波变换提供精细时序控制所需的多尺度时-频表征。</li>
+<li><strong>SE2MD架构的重要性</strong>：将多解码器结构替换为单个解码器（拼接所有小波特征后输入）会导致所有任务的成功率显著下降，尤其是在<code>Transfer</code>任务中性能退化最为明显。这表明SE2MD在提取和分配层次化时间特征方面起关键作用。</li>
+<li><strong>不同小波基对比</strong>：Haar小波在推理速度（0.0608秒/帧）和所有子阶段成功率上均表现最佳。更复杂的小波基（如db5, coif3）会导致训练不收敛或带来高实时成本而无性能回报。</li>
+</ul>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>高效特征提取</strong>：设计了一个轻量级的基于ResNet的前端，快速将原始视觉特征压缩为紧凑的令牌序列。</li>
+<li><strong>多尺度域分析与SE2MD架构</strong>：提出了一种基于小波变换的尺度域分析流程，并配套提出了具有多个解码器和单个编码器的模型架构，用于高效的多尺度特征处理。</li>
+<li><strong>可学习尺度域滤波器</strong>：设计了可训练滤波器，以动态调整不同视觉条件下的特征表征，增强尺度域的特征映射并可控地增加模型容量。</li>
+<li><strong>边缘部署验证</strong>：在真实机械臂上部署模型，相比ACT模型任务完成率显著提升。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身指出，当前系统主要依赖视觉驱动，可能对遮挡敏感。此外，模型在单任务数据集上训练，限制了其捕获任务无关特征的能力，从而约束了LSDF带来的整体性能提升幅度。</p>
+<p><strong>后续研究启示</strong>：为解决部分可观测性和提高接触鲁棒性，未来工作可将本体感知信号（关节角度/速度）通过跨模态注意力与SE2MD中的视觉特征融合。此外，可以探索更精确的多模态集成方案，并尝试在更大规模、更多样化的数据集上训练，以进一步提升模型泛化能力和滤波器效能。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对模仿学习策略中频率域分析未充分利用、导致动作序列节奏信息缺失及关键时刻错误的问题，提出Wavelet Policy方法。该方法采用小波变换（WT）和特征提取器（FE）进行预处理，基于单编码器到多解码器（SE2MD）架构提取多尺度特征，并在每个解码器后引入可学习尺度域滤波器（LSDF）以增强特征映射。实验表明，在参数数量相当的情况下，该方法在四个挑战性模拟机器人臂任务和真实任务上优于当前最先进的端到端方法，尤其在关键时刻和远程设置中性能更优。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2504.04991" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

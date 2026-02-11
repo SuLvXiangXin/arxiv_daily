@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Tool-as-Interface: Learning Robot Policies from Observing Human Tool Use - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Tool-as-Interface: Learning Robot Policies from Observing Human Tool Use</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2504.04612" target="_blank" rel="noreferrer">2504.04612</a></span>
+        <span>作者: Chen, Haonan, Zhu, Cheng, Liu, Shuijing, Li, Yunzhu, Driggs-Campbell, Katherine</span>
+        <span>日期: 2025/04/06</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人学习工具使用技能对于执行复杂现实任务至关重要，但学习此类技能通常需要大量数据集。目前主流的数据收集方法包括遥操作（如SpaceMouse、Gello）和手持夹爪（如UMI、LEGATO）。这些方法虽然能提供精确监督，但存在关键局限性：需要昂贵或专用的硬件、数据收集速度慢、对延迟敏感，且难以处理高速或动态任务（如翻锅）。另一方面，人类操作视频为数据收集提供了一种自然且无需专用硬件的方式，数据丰富。然而，直接利用这类视频训练机器人策略面临两大挑战：视角差异（人类视频与机器人摄像头视角不同）和形态差异（人与机器人身体结构不同）。</p>
+<p>本文针对从人类视频进行可扩展、低成本数据收集这一具体痛点，提出了“工具即接口”的新视角。核心思路是利用工具作为人与机器人交互的共享接口，通过三维场景重建与视图合成解决视角差异，通过分割观察和使用任务空间工具中心动作表示来缩小形态差异，从而直接从人类工具使用视频中学习鲁棒的机器人视觉运动策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架旨在将人类操作数据转化为可部署的机器人策略，其流程如下图所示。</p>
+<p><img src="https://arxiv.org/html/2504.04612v2/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：策略设计整体框架。使用两个摄像头收集人类操作数据，通过基础模型MASt3R进行三维重建。利用3D高斯溅射采样新视角以增强数据集。分割人手以创建与形态无关的观察作为策略输入。使用FoundationPose估计工具在相机坐标系中的位姿，并将其转换到任务空间作为动作标签。最终训练一个扩散模型作为视觉运动策略。</p>
+</blockquote>
+<p><strong>1. 数据收集与预处理</strong>：使用两个RGB相机从不同视角录制人类操作工具的视频，无需已知相机内外参。每个时间步的观测 $\mathcal{O}^{h}$ 包含两张RGB图像 $I_{v1}^{h}, I_{v2}^{h}$。</p>
+<p><strong>2. 三维重建与视图增强</strong>：为克服单视角的尺度模糊性和对视角变化的敏感性，使用MASt3R模型仅从两张RGB图像重建高质量的三维点云。随后，利用3D高斯溅射技术从重建场景中合成新视角，以增加训练数据的视觉多样性，提高策略的视角不变性。在策略训练前还会应用随机裁剪以进一步增强鲁棒性。</p>
+<p><strong>3. 感知对齐（缩小形态差异）</strong>：为桥接人与机器人的形态差异，使用Grounded-SAM对图像进行分割，在训练阶段将“人手”区域掩蔽，在部署阶段将“机械臂”区域掩蔽。这样，策略的输入图像中只保留任务相关的视觉信息（工具和物体），最小化了形态特异性特征带来的偏差。</p>
+<p><strong>4. 工具中心动作表示</strong>：这是方法的核心创新之一。动作被定义为工具在任务空间中的SE(3)位姿 $T_{\text{tool}}^{\text{task}}$。具体流程（见图3）是：首先使用6D姿态估计模型（如FoundationPose）从单张图像中估计工具在相机坐标系中的位姿 $T_{\text{tool}}^{\text{camera}}$，然后通过相机到任务坐标系的变换 $T_{\text{camera}}^{\text{task}}$ 将其转换到任务空间：$T_{\text{tool}}^{\text{task}}=T_{\text{camera}}^{\text{task}}T_{\text{tool}}^{\text{camera}}$。任务空间是一个与场景相关的坐标系（例如，对于静态机器人，可与基座坐标系对齐），此表示独立于人类或机器人的形态、相机位姿或基座配置。</p>
+<p><img src="https://arxiv.org/html/2504.04612v2/x3.png" alt="坐标系图示"></p>
+<blockquote>
+<p><strong>图3</strong>：坐标系示意图。展示了相机、工具、任务空间、末端执行器（EEF）和基座坐标系。动作表示为 $T_{\text{tool}}^{\text{task}}$。</p>
+</blockquote>
+<p><strong>5. 策略部署</strong>：训练一个扩散策略网络，将单视角RGB图像映射到预测的SE(3)动作 $T_{\text{tool}}^{\text{task}}$。在部署时，机器人通过已知的固定变换 $T_{\text{eef}}^{\text{tool}}$（工具到末端执行器）和当前基座到任务空间的变换 $T_{\text{task}}^{\text{base}}$，将预测的动作转换为末端执行器在基座坐标系下的目标位姿：$T_{\text{eef}}^{\text{base}}=T_{\text{task}}^{\text{base}}T_{\text{tool}}^{\text{task}}T_{\text{eef}}^{\text{tool}}$。此公式使得策略能够自动补偿机器人基座的移动。</p>
+<p>与现有方法相比，本工作的主要创新在于：1) <strong>数据来源</strong>：完全从人类视频学习，无需任何机器人演示数据；2) <strong>视角处理</strong>：利用双视图重建和高效的高斯溅射进行视图增强，而非依赖大量数据增强或复杂模拟器；3) <strong>动作表示</strong>：提出任务空间工具中心动作，使其对视角、基座移动和形态变化具有不变性，实现了真正的跨形态策略迁移。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在真实世界中使用Kinova Gen3和UR5e机器人评估了五个工具使用任务：钉钉子、舀肉丸、翻锅（包含鸡蛋、汉堡面包、肉饼不同对象）、平衡葡萄酒瓶、踢足球。使用RealSense D415相机提供RGB输入。测试时引入了物体初始空间配置随机化和相机位置变化以评估泛化与鲁棒性。</p>
+<p><strong>基线方法</strong>：1) <strong>DP</strong>：基于遥操作（SpaceMouse或Gello）收集的机器人演示数据训练的扩散策略。2) <strong>UMI</strong>：基于手持夹爪收集数据的方法。</p>
+<p><strong>关键实验结果</strong>：<br>表1总结了主要任务的成功率和完成时间。本文方法在所有任务上都取得了高成功率，而基于遥操作的扩散策略在多个动态任务（翻锅、平衡、踢球）上完全失败。在钉钉子任务中，本文方法13/13成功，而DP为0/13。</p>
+<p><img src="https://arxiv.org/html/2504.04612v2/x1.png" alt="任务成功率与完成时间表"></p>
+<blockquote>
+<p><strong>表1</strong>：各任务成功率和完成时间对比。“DP”为基于遥操作训练的扩散策略；“Not Feasible”表示失败。本文方法在各项任务上均表现优异。</p>
+</blockquote>
+<p>与手持夹爪基线UMI的对比（表2）显示，在相同数据收集时间（180秒）下，UMI（25条演示）成功率为0/13，而本文方法（40条演示）为13/13。UMI需要4倍时间（720秒，100条演示）才能达到同等性能。</p>
+<p><img src="https://arxiv.org/html/2504.04612v2/x12.png" alt="与UMI对比表"></p>
+<blockquote>
+<p><strong>表2</strong>：钉钉子任务上，本文方法与手持夹爪方法UMI的成功率对比。在相同时间预算下，本文方法显著更优。</p>
+</blockquote>
+<p><strong>消融实验与鲁棒性分析</strong>：</p>
+<ul>
+<li><strong>视图增强与随机裁剪</strong>：图4显示，在钉钉子任务中，同时使用随机裁剪（RC）和视图增强（VA）能最大程度地扩展策略可适应的相机位姿范围。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2504.04612v2/x4.png" alt="相机位姿测试"></p>
+<blockquote>
+<p><strong>图4</strong>：钉钉子任务中，在不同相机位姿下测试策略性能。(a)数据收集与评估使用的相机位姿。(b-d)使用不同数据增强（RC和VA）训练的策略的性能范围。</p>
+</blockquote>
+<ul>
+<li><strong>对相机与基座移动的鲁棒性</strong>：如图5所示，策略能够处理人为引入的相机抖动和机器人基座摇晃，甚至在两者同时发生时也能完成任务。在基座低频晃动时，末端执行器表现出类似“鸡头稳定”的效应。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2504.04612v2/x5.png" alt="相机与基座移动鲁棒性"></p>
+<blockquote>
+<p><strong>图5</strong>：策略对相机和基座移动的鲁棒性验证。(a)相机抖动下的任务执行。(b)基座摇晃下的补偿。(c)鸡头稳定效应。(d)相机和基座同时摇晃下的表现。</p>
+</blockquote>
+<ul>
+<li><strong>对人类扰动的鲁棒性</strong>：如图6所示，策略能应对实时的人类扰动，例如跟踪被移动的钉子、舀起新扔进的肉丸、重新翻动被 reposition 的鸡蛋。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2504.04612v2/x6.png" alt="人类扰动鲁棒性"></p>
+<blockquote>
+<p><strong>图6</strong>：策略对人类引入扰动的鲁棒性。展示了在钉钉子、舀肉丸、翻鸡蛋任务中，机器人成功应对实时干扰。</p>
+</blockquote>
+<p><strong>数据收集效率</strong>：<br>图7和图8定量比较了数据收集方法。人类徒手演示在效率和可靠性上具有显著优势。例如，在钉钉子任务中，相比遥操作（Gello/SpaceMouse），数据收集时间减少73%；相比手持夹爪UMI，时间减少41%，且能成功收集遥操作和UMI难以处理的高速翻锅等动态任务数据。</p>
+<p><img src="https://arxiv.org/html/2504.04612v2/x7.png" alt="数据收集方法对比"></p>
+<blockquote>
+<p><strong>图7</strong>：不同数据收集方法的定性对比。(a)人手操作的自然高效性。(b)遥操作工具（Gello/SpaceMouse）的典型失败案例。(c)手持夹爪（如UMI）的典型失败案例。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2504.04612v2/x8.png" alt="数据收集时间定量对比"></p>
+<blockquote>
+<p><strong>图8</strong>：数据收集方法的定量比较。显示了在钉钉子和舀肉丸任务中，不同方法所需的时间及方差。人手演示在速度和稳定性上均占优。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个可扩展、直观且低成本的数据收集与策略学习框架，利用双视角人类操作视频，无需遥操作或专用硬件，即可训练机器人工具使用策略。</li>
+<li>方法在多种复杂的真实世界工具使用任务上实现了高性能（成功率相比遥操作基线提升71%）和强鲁棒性（对视角变化、基座移动、人类扰动均具有适应性）。</li>
+<li>证明了人类演示在数据收集效率上的巨大优势，相比遥操作减少77%时间，相比手持夹爪减少41%时间，且能覆盖更动态的任务范围。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>感知流程依赖FoundationPose进行工具姿态估计，估计误差可能导致需要重新收集数据。</li>
+<li>视图增强时，若合成视角与原始视角偏离过大，会产生噪声并降低真实感，可能影响策略性能。</li>
+<li>假设工具与机器人末端执行器刚性连接，未考虑接触密集任务中可能发生的微小滑动，也未处理柔性或软体工具。</li>
+</ol>
+<p><strong>启示</strong>：<br>本工作展示了“工具作为接口”在跨形态模仿学习中的巨大潜力。它为实现大规模、低成本机器人技能学习指明了一条可行路径：即通过精心设计的表征（如任务空间工具中心动作）和利用现成的计算机视觉技术（如三维重建、分割）来桥接人类与机器人数据之间的鸿沟。未来工作可着眼于提升姿态估计的鲁棒性、改进视图合成的真实感，并将此框架扩展至非刚性工具或更广泛的操作任务。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人学习复杂工具使用技能时数据收集效率低、视角差异和具身鸿沟等挑战，提出一个从人类工具使用视频中学习机器人策略的框架。关键技术包括：使用双RGB摄像头进行3D场景重建和高斯泼溅新视角合成，以提升策略对视角变化的鲁棒性；采用分割观察和以工具为中心的任务空间动作，实现具身不变的视觉运动策略学习。实验表明，该方法在多种工具任务中具有强泛化能力和鲁棒性，任务成功率比基于遥操作的扩散策略提高71%，数据收集时间较遥操作和最先进接口分别减少77%和41%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2504.04612" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
