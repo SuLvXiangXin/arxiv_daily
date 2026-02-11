@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Restoring Noisy Demonstration for Imitation Learning With Diffusion Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Restoring Noisy Demonstration for Imitation Learning With Diffusion Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.14467" target="_blank" rel="noreferrer">2510.14467</a></span>
+        <span>作者: Shao-Hua Sun Team</span>
+        <span>日期: 2025-10-16</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>模仿学习旨在通过专家演示学习策略，无需环境交互或奖励信号。然而，现有方法大多假设演示数据是完美且干净的，而现实中的专家演示常因人为错误或传感器/控制系统不精确而包含噪声。从含噪演示中学习会显著限制所学策略的性能。现有处理含噪演示的方法存在局限：一类方法（如BCND）直接过滤掉或降低被判定为噪声的演示权重，未能从中提取有用信息；另一类数据恢复方法（如DDRM）则需要已知的线性退化模型，这在模仿学习中通常无法获取。此外，不加区分地恢复整个数据集可能会错误地修改本已干净的演示，导致性能下降。本文针对如何充分利用含噪演示中的信息这一痛点，提出了一个“过滤-恢复”的新视角。其核心思路是：首先从含噪演示中过滤出干净的样本子集，然后基于这些干净样本学习条件扩散模型，用以恢复剩余的噪声样本，最终聚合所有数据用于策略学习。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法称为基于扩散模型的演示恢复（DMDR），是一个两阶段学习框架。给定含噪演示数据集 D，第一阶段（演示过滤）识别并标记出干净的狀態和动作；第二阶段（演示恢复）利用标记的干净数据训练模型，以恢复被标记为噪声的部分。</p>
+<p><img src="https://arxiv.org/html/2510.14467v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：DMDR方法整体框架示意图。首先从含噪演示中过滤出干净样本，然后利用这些干净样本学习扩散模型来恢复噪声样本，最终聚合所有数据用于策略学习。</p>
+</blockquote>
+<p><strong>1. 演示过滤阶段</strong><br>该阶段目标是将演示数据中的每个状态和动作独立地标记为“干净”或“噪声”。方法结合了自编码器和局部离群因子算法。</p>
+<p>首先，训练一对自编码器（分别用于状态和动作），通过重建损失（公式1、2）学习数据分布。然而，仅凭重建误差可能将低频但关键的行为样本误判为异常。因此，进一步使用自编码器瓶颈层得到的特征表示 z_s 和 z_a 来计算每个样本的局部离群因子分数。LOF算法通过比较样本与其k近邻的局部密度来识别异常，分数越高表明越可能是离群点。</p>
+<p>遵循异常检测的通用假设（即数据集中至少一半是正常样本），本文将LOF分数较低的一半样本标记为干净（记为 ŝ 或 â），另一半标记为噪声（记为 s‘ 或 a’）。据此，原始数据集被过滤为四个子集：完全干净的对 D_(ŝ,â)、干净状态搭配噪声动作 D_(ŝ,a‘)、噪声状态搭配干净动作 D_(s‘,â)，以及完全噪声的对 D_(s‘,a’)。</p>
+<p><img src="https://arxiv.org/html/2510.14467v1/x2.png" alt="演示过滤"></p>
+<blockquote>
+<p><strong>图2</strong>：演示过滤流程。(a) 训练：训练自编码器并基于其瓶颈特征计算LOF分数。(b) 推理：根据LOF分数为每个状态和动作分配伪标签，并将数据集划分为四个子集。</p>
+</blockquote>
+<p><strong>2. 演示恢复阶段</strong><br>此阶段旨在恢复被标记为噪声的状态或动作。由于模仿学习中噪声的退化过程未知，本文采用条件去噪扩散概率模型，并引入噪声时间步预测器来指导恢复过程。</p>
+<ul>
+<li><p><strong>条件扩散模型</strong>：使用完全干净的子集 D_(ŝ,â) 训练一对条件DDPM。状态扩散模型 θ_s 学习在给定对应干净动作 â 的条件下，从加噪状态 s_t 预测噪声（公式4）；动作扩散模型 θ_a 则学习在给定对应干净状态 ŝ 的条件下，从加噪动作 a_t 预测噪声（公式5）。这两个模型分别用于恢复 D_(s‘,â) 中的噪声状态和 D_(ŝ,a’) 中的噪声动作。完全噪声的子集 D_(s‘,a’) 因缺乏可靠条件信息而被丢弃。</p>
+</li>
+<li><p><strong>噪声时间步预测器</strong>：为了在推理时更有效地利用噪声样本（其信息量高于各向同性高斯噪声），本文训练了噪声时间步预测器 ψ_s 和 ψ_a。它们同样在 D_(ŝ,â) 上训练，目标是预测施加在干净样本上的噪声所对应的时间步 t（公式6、7）。这使得扩散模型能够根据预测的噪声程度进行针对性的去噪。</p>
+</li>
+</ul>
+<p><img src="https://arxiv.org/html/2510.14467v1/x3.png" alt="演示恢复训练"></p>
+<blockquote>
+<p><strong>图3</strong>：演示恢复阶段的训练过程。(a) 训练条件扩散模型：状态扩散模型以干净动作为条件，学习恢复加噪状态。(b) 训练噪声时间步预测器：状态噪声预测器以干净动作为条件，预测加噪状态对应的噪声时间步。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.14467v1/x4.png" alt="演示恢复推理"></p>
+<blockquote>
+<p><strong>图4</strong>：演示恢复阶段的推理流程。以恢复噪声状态为例：给定噪声状态 s‘ 和干净动作 â，先用预测器估计噪声时间步 t<em>。若 t</em> 小于预设阈值 t_thres，则直接将其视为干净样本；否则，使用状态扩散模型 θ_s，以 â 为条件，从时间步 t* 开始执行反向扩散过程，逐步去噪得到恢复的状态 s*。</p>
+</blockquote>
+<p><strong>创新点</strong>：与现有方法相比，DMDR的创新在于：1) 提出了完整的“过滤-恢复”管道，既避免了直接丢弃噪声数据的信息损失，又防止了对干净数据的错误修改；2) 利用状态-动作间的相关性，设计了成对的条件扩散模型进行恢复，无需已知退化模型；3) 引入了噪声时间步预测器，使恢复过程能够自适应噪声水平。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在多个领域进行评测，包括机器人手臂操作（Pick、Push）、灵巧手操作（Hand）以及运动（Walker）。使用MuJoCo等模拟环境。向专家演示数据中独立注入噪声以模拟含噪数据集，噪声水平 p 表示状态或动作被污染的概率。</p>
+<p><strong>基线方法</strong>：对比了三种主流模仿学习方法：行为克隆（BC）、隐式行为克隆（IBC）、扩散策略（DP），以及专门处理含噪演示的方法BCND。DMDR作为预处理框架，可与BC、IBC、DP结合（记为DMDR(BC)等）。</p>
+<p><strong>关键结果</strong>：实验以任务成功率为评估指标。如图16所示，在不同噪声水平下，结合了DMDR的模仿学习方法在几乎所有任务和设置上都显著优于直接使用原始含噪数据的基线方法。例如，在Hand任务中，当噪声水平p=0.5时，BC的成功率约为20%，而DMDR(BC)将其提升至约80%。与专门处理噪声的BCND相比，DMDR也展现出明显优势。</p>
+<p><img src="https://arxiv.org/html/2510.14467v1/x6.png" alt="主要结果"></p>
+<blockquote>
+<p><strong>图16</strong>：在不同噪声水平（p）下，各方法在四个任务上的成功率对比。DMDR与不同IL方法结合后，性能 consistently 优于对应的基线方法和BCND。</p>
+</blockquote>
+<p><strong>消融实验</strong>：图17的消融研究表明：1) <strong>过滤的必要性</strong>：仅使用恢复步骤（无过滤）或仅使用过滤步骤（无恢复）的性能均不及完整的DMDR框架，验证了“先过滤后恢复”流程的有效性。2) <strong>噪声预测器的作用</strong>：使用噪声预测器指导恢复，比使用固定时间步或随机时间步能获得更好的性能。3) <strong>条件信息的重要性</strong>：在恢复阶段使用状态-动作条件（条件扩散模型）至关重要，无条件模型的性能大幅下降。4) <strong>阈值的影响</strong>：分析表明，将预测噪声时间步低于阈值的样本直接视为干净的设计是合理的，且性能对阈值选择相对鲁棒。</p>
+<p><img src="https://arxiv.org/html/2510.14467v1/img/legend_main.png" alt="消融研究"></p>
+<blockquote>
+<p><strong>图17</strong>：消融实验结果。(a) 验证过滤和恢复两个阶段均不可或缺。(b) 展示噪声时间步预测器优于固定或随机时间步。(c) 表明条件扩散模型明显优于无条件模型。(d) 显示成功率对过滤阈值（用于决定多少样本被标记为干净）的变化相对不敏感。</p>
+</blockquote>
+<p><strong>噪声类型分析</strong>：论文还测试了DMDR在不同噪声类型（轻尾、重尾、有偏、多源混合噪声）下的鲁棒性。结果表明，DMDR在各种噪声类型下均能保持显著优势，突出了其对现实世界中复杂噪声的实用鲁棒性。</p>
+<p><strong>定性结果</strong>：图11-14展示了在Pick任务中，噪声状态和动作经过DMDR恢复前后的对比。可以直观看到，恢复后的轨迹更平滑、更接近真实的专家行为。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 提出了DMDR，一个用于从含噪演示中进行模仿学习的通用“过滤-恢复”两阶段框架。2) 设计了结合自编码器与LOF的过滤方法，以及利用状态-动作相关性的条件扩散恢复模型，并引入了噪声时间步预测器以自适应噪声水平。3) 通过大量实验证明，该框架是IL方法无关的，能显著提升多种模仿学习方法在含噪数据上的性能，并对多种噪声类型具有鲁棒性。</p>
+<p><strong>局限性</strong>：论文提到，对于状态和动作同时被标记为噪声的样本对（D_(s‘,a’)），由于缺乏可靠的条件信息，当前框架选择直接丢弃，未能利用其中的任何信息。</p>
+<p><strong>后续启示</strong>：本文展示了扩散模型在模仿学习数据预处理方面的强大潜力。其“过滤-恢复”的思想可扩展到其他存在数据质量问题的离线学习场景。如何利用双重噪声样本中的微弱信号，或是设计更精细的过滤与恢复机制，是值得探索的未来方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对模仿学习（IL）中专家示范常含噪声（如传感器误差或控制不准确）导致策略性能下降的问题，提出一种过滤-恢复框架。该方法首先从噪声示范中筛选干净样本，然后利用条件扩散模型学习并恢复噪声示范，最后聚合示范以训练策略。实验在机器人手臂操作、灵巧操作和运动等多领域进行，结果显示该框架在所有任务上均一致优于现有方法，消融研究验证了各组件有效性及对不同噪声类型和水平的鲁棒性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.14467" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

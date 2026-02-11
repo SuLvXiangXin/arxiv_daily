@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AsyncVLA: Asynchronous Flow Matching for Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>AsyncVLA: Asynchronous Flow Matching for Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.14148" target="_blank" rel="noreferrer">2511.14148</a></span>
+        <span>作者: Biqing Qi Team</span>
+        <span>日期: 2025-11-18</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，构建通用机器人的主流范式是视觉-语言-动作模型。在动作生成方面，许多基于流匹配的VLA模型采用同步流匹配方法，即为所有动作令牌分配一个刚性、均匀的时间表，从噪声同步生成最终动作。SFM的主要局限性在于其生成过程是“整体性”的，缺乏对动作上下文的感知，也没有自我校正机制。这使得模型在长时序或高精度要求的任务中变得不稳定，单个不准确的动作预测可能导致级联错误，最终导致任务失败。</p>
+<p>本文针对上述痛点，提出了一种新视角：将动作生成重新定义为一种具有异步时间表的、审慎的去噪过程。核心思路是打破传统SFM的刚性同步时间表，通过引入异步流匹配，使模型能够基于第一轮生成动作的上下文信息，有选择性地重新生成置信度较低的动作令牌，从而实现自我校正。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>AsyncVLA框架包含三个顺序部分：同步流匹配、置信度评估器和异步流匹配。SFM和AFM共享同一个模型参数，通过统一的训练流程实现。</p>
+<p><strong>整体流程</strong>：首先，模型通过SFM以均匀时间表生成第一轮动作。随后，置信度评估器根据视觉-语言上下文和第一轮生成的动作，评估每个动作令牌的置信度。根据预设阈值，将低置信度的动作令牌标记为“需重新生成”。最后，进入AFM阶段，模型仅对标记为需重新生成的动作令牌进行异步去噪（从噪声开始），而高置信度的动作令牌则保持不变，作为上下文信息辅助校正。AFM的输出是经过自我校正后的最终动作序列。</p>
+<p><img src="https://arxiv.org/html/2511.14148v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：AsyncVLA框架总览。包含三个组件：(a) SFM使用均匀时间表 t 同步生成所有动作令牌。(b) 置信度评估器估计动作的令牌级置信度，并为低置信度动作选择异步噪声用于AFM。(c) AFM为每个动作令牌动态分配独立的FM时间，实现基于置信度的选择性、非均匀重新生成。SFM和AFM共享同一模型参数，使得SFM产生的VL KV缓存可在AFM中复用。</p>
+</blockquote>
+<p><strong>核心模块1：异步流匹配推理</strong><br>AFM推理的核心是选择性去噪。模型接收一个掩码向量 m，指示哪些动作令牌需要重新生成。对于需重新生成的令牌，其AFM起始点被设置为高斯噪声；对于高置信度令牌，其起始点则直接使用SFM生成的结果。在AFM的去噪迭代中，只有被掩码的令牌会通过前向欧拉规则进行更新，未被掩码的令牌则保持其初始值不变。这使得模型能够利用已生成的高置信度动作作为上下文，来修正低置信度动作。</p>
+<p><strong>核心模块2：异步时间嵌入</strong><br>为了在模型内部区分需重新生成和无需重新生成的动作令牌，本文提出了异步时间嵌入模块。该模块将FM时间 τ 与掩码 m 相乘后进行正弦编码，得到异步时间嵌入矩阵。该矩阵与噪声动作的线性投影拼接后，再通过一个MLP映射到与VLM骨干网络隐藏层相同的维度，从而可以输入Transformer进行处理。</p>
+<p><strong>核心模块3：置信度评估器</strong><br>由于基于FM的VLA模型没有直接输出动作令牌的对数概率，难以直接估计置信度。因此，本文设计了一个独立的置信度评估器。它由若干Transformer层和一个线性评分头组成。评估器以VL令牌嵌入和SFM生成的第一轮动作为输入，通过全注意力机制综合上下文信息，为每个动作令牌输出一个介于0到1之间的置信度分数。随后，通过一个预设阈值生成最终的掩码 m，实现自适应数量的令牌选择。</p>
+<p><strong>创新点</strong></p>
+<ol>
+<li><strong>异步生成范式</strong>：打破了VLA中SFM的刚性同步时间表，引入了非均匀、动态的AFM，这是实现自我校正的关键。</li>
+<li><strong>置信度驱动的选择性校正</strong>：通过专门的置信度评估器识别潜在错误，仅对低置信度部分进行重新生成，提高了校正的效率和针对性。</li>
+<li><strong>统一的训练与高效的推理</strong>：通过将SFM视为AFM完全掩码的特例，设计统一训练流程，使单个模型具备两种生成模式。推理时，SFM阶段计算的VL KV缓存可在AFM阶段复用，极大提升了效率。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：模型基于Qwen2.5-VL-3B-Instruct构建，在Open X-Embodiment数据集上预训练，并在LIBERO、Bridge-V2和Fractal数据集上针对不同基准进行微调评估。实验在仿真机器人任务中进行。</p>
+<p><strong>对比基线</strong>：包括基于SFM的经典方法，以及近期引入自我校正机制的先进方法，如 π0、OpenVLA-OFT、Discrete Diffusion VLA、dVLA、UD-VLA等。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>LIBERO基准</strong>：AsyncVLA在空间推理、物体操作、目标导向和长时序四个任务套件上均取得了最高成功率，平均成功率达到97.4%，超越了所有对比基线。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.14148v1/fig/success_rate_comparison.png" alt="LIBERO结果"></p>
+<blockquote>
+<p><strong>图4</strong>：LIBERO基准上的性能对比。AsyncVLA在四个任务套件上均取得了最高的成功率。</p>
+</blockquote>
+<ol start="2">
+<li><strong>自我校正能力展示</strong>：如图3所示，在LIBERO-Long任务中，SFM首轮生成了一个错误的“立即放下”动作。置信度评估器给予该低置信度，使其在AFM阶段被重新生成。AFM利用其他高置信度动作（如“保持抓取”、“向前推”）作为上下文，成功将动作校正为“保持抓取”，从而完成了任务。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.14148v1/x2.png" alt="自我校正示例"></p>
+<blockquote>
+<p><strong>图3</strong>：在LIBERO-Long任务上展示AsyncVLA的自我校正能力。顶行是SFM生成的首轮动作，底行是后续AFM重新生成的动作。低置信度的“立即放下”动作被校正为“保持抓取”。</p>
+</blockquote>
+<ol start="3">
+<li><p><strong>WidowX Robot基准</strong>：在4个泛化类别任务中，AsyncVLA取得了70.8%的平均成功率，表现最佳。尤其在“将胡萝卜放到盘子”和“堆叠方块”任务上领先。</p>
+</li>
+<li><p><strong>Google Robot基准</strong>：在视觉匹配和变体聚合两种评估协议下，AsyncVLA分别取得了74.9%和63.3%的平均成功率，综合表现最优。在“移动靠近”和“放入抽屉”任务上成功率最高。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.14148v1/fig/loss_comparison.png" alt="Google Robot结果"></p>
+<blockquote>
+<p><strong>图5</strong>：Google Robot基准上的性能对比。AsyncVLA在视觉匹配和变体聚合两种设置下，平均成功率领先。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了AsyncVLA框架，首次将异步流匹配引入VLA模型的连续动作生成过程，实现了基于动作上下文感知的非均匀、选择性自我校正。</li>
+<li>设计了置信度评估器，为基于FM的VLA模型提供了一种估计动作置信度并驱动自我校正的机制。</li>
+<li>提出了一种统一的训练流程，使单一模型同时具备SFM和AFM能力，并利用KV缓存复用显著提升了推理效率。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，置信度评估器的训练依赖于根据SFM生成动作的均方误差构造的伪标签，这种间接的监督信号可能并非完美。</p>
+<p><strong>启示</strong>：</p>
+<ol>
+<li><strong>异步生成范式</strong>：为连续动作生成提供了新思路，其“首轮生成-评估-选择性修正”的流程可扩展到其他基于生成模型的决策框架中。</li>
+<li><strong>置信度与校正</strong>：如何在无直接监督信号下准确评估模型内部置信度，并设计更高效的校正机制，是提升模型可靠性的重要研究方向。</li>
+<li><strong>训练与推理协同设计</strong>：统一的训练方案和KV缓存复用展示了通过算法设计来优化大模型推理效率的有效路径。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对传统视觉-语言-动作（VLA）模型采用同步流匹配时，因固定时间表缺乏动作上下文感知与自校正能力，在长时程任务中容易累积错误的问题，提出了异步流匹配框架AsyncVLA。其关键技术包括：1）采用非均匀时间表的异步流匹配，实现基于上下文的动作生成；2）引入置信度评估器，使模型能在执行前选择性修正低置信度动作令牌；3）设计了同步与异步模式的统一训练流程，提升KV缓存利用率。实验表明，AsyncVLA具有高效的数据利用和自校正能力，在机器人操作基准测试中取得了最先进的性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.14148" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

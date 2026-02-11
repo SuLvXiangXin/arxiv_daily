@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RM-RL: Role-Model Reinforcement Learning for Precise Robot Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>RM-RL: Role-Model Reinforcement Learning for Precise Robot Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.15189" target="_blank" rel="noreferrer">2510.15189</a></span>
+        <span>作者: Jianfei Yang Team</span>
+        <span>日期: 2025-10-16</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人精确操作主要依赖于模仿学习（IL）或离线强化学习（RL）。模仿学习需要高质量的人类专家演示，但在毫米级精度的任务中，获取此类演示既困难又耗时。离线RL虽然可以利用已有数据，但通常面临分布偏移和数据效率低的问题。另一方面，直接在真实世界应用在线RL则存在数据效率低下（每个交互样本仅使用一次）和因策略过时导致的经验数据与当前策略分布不匹配（分布偏移）的问题，这会破坏优化稳定性并阻碍收敛。</p>
+<p>本文针对在真实世界中高效、稳定地训练高精度机器人操作策略这一具体痛点，提出了一个统一在线与离线训练的“角色模型”新视角。其核心思路是：在在线交互中，通过一种角色模型策略，自动为采集到的数据生成近似最优的动作标签，从而将策略学习转化为监督训练范式，并设计混合训练方案重用这些标注数据，最终实现数据效率和训练稳定性的双重提升。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RM-RL框架采用混合在线-离线训练范式，主要由三个部分组成：在线真实世界RL训练、角色模型在线标注和数据回放。</p>
+<p><img src="https://arxiv.org/html/2510.15189v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：RM-RL框架总览。主要包括在线真实世界RL训练、角色模型在线标注和数据回放三部分。在线部分在相似场景和初始状态下采样动作，通过策略梯度更新策略网络。角色模型标注部分选择近似最优动作作为标签，构建标注数据集。数据回放部分从数据集中采样，以监督方式更新策略网络。</p>
+</blockquote>
+<p><strong>整体流程</strong>：任务被形式化为一步马尔可夫决策过程。状态 $s$ 包括环境图像 $I$ 和机械臂的估计抓取位姿 $P^e$。动作 $a = [\Delta x, \Delta y, \Delta\psi]$ 是对 $P^e$ 的位姿调整量。策略网络 $\pi_\theta$ 根据状态预测动作，机械臂执行最终抓取位姿 $P^{pick} = P^e + a$，放置后得到最终位姿 $P^{final}$。奖励 $r$ 根据 $P^{final}$ 与目标位姿 $P^{target}$ 的偏差计算，用于在线策略梯度更新。同时，在线采集的数据通过角色模型策略进行标注，存入数据集 $\mathcal{D}$，用于后续的离线监督训练。</p>
+<p><strong>核心模块1：角色模型在线标注</strong>。这是方法的关键创新。在在线训练过程中，将具有相似初始状态 $s_i$ 的步骤分组为一个“场景”。在每个场景 $i$ 中，根据奖励选择最优的动作作为该场景的“角色模型”动作 $a_i^*$。然后，使用 $a_i^*$ 作为近似最优解，去标注该场景内所有其他状态 $s_{i,k}$。由于动作被离散化为固定候选值，预测问题被转化为多分类任务，因此 $a_i^*$ 对应的离散索引 $\mathcal{I}_i = [ind_x, ind_y, ind_\psi]$ 即可作为监督标签。标注后的数据构成子数据集 $\mathcal{D}_i$，并逐步累积成总数据集 $\mathcal{D}$。</p>
+<p><strong>核心模块2：混合在线-离线训练</strong>。在线训练采用策略梯度方法，最小化损失 $\mathcal{L}(\theta)=-\mathbb{E}<em>{s,a}[\log\pi_\theta(a|s)R(a)]$。离线训练则以监督学习方式进行，分为两个阶段：1）在收集完一个场景的数据 $\mathcal{D}<em>i$ 后立即进行训练，让策略学习该场景内的局部最优解；2）定期从总数据集 $\mathcal{D}$ 中随机采样数据进行回放训练，确保策略能周期性地从全局经验中学习。离线训练的损失函数为交叉熵损失：$\mathcal{L}</em>{\theta}=-\sum</em>{i=0}^{2}\log\pi_\theta(a^*[i]|s)$，其中 $a^*$ 是由标签 $\mathcal{I}_j$ 确定的确定性最优动作。此框架还可用于预训练，利用历史标注数据初始化策略，以加速后续在线RL的收敛。</p>
+<p><strong>网络与奖励设计</strong>：策略网络结构如图3所示，以图像和估计位姿为输入，使用ResNet和MLP提取特征，融合后通过三个独立的输出头预测$\Delta x$、$\Delta y$和$\Delta\psi$的离散概率分布。奖励函数综合衡量平移误差$e_{trans}=||t^{final}-t^{target}||<em>2$和旋转误差$e</em>{rot}=1-\cos(\psi^{final}-\psi^{target})$，计算为$r=\exp(-(e_{trans}+e_{rot}))$，范围在[0,1]内。</p>
+<p><strong>与现有方法的创新点</strong>：与传统使用重放缓冲区的在线RL相比，RM-RL的核心创新在于通过“角色模型”机制为在线数据自动生成高质量的近似最优动作标签。这使得离线训练转变为稳定的监督学习，从根本上缓解了因策略迭代导致的<strong>分布不匹配</strong>问题。同时，标注数据被多次重复用于离线训练，显著提升了<strong>数据效率</strong>。</p>
+<p><img src="https://arxiv.org/html/2510.15189v1/x3.png" alt="策略网络"></p>
+<blockquote>
+<p><strong>图3</strong>：策略网络架构。输入为全局图像和估计抓取位姿，通过特征提取与融合，由三个独立的头部输出$\Delta x$、$\Delta y$和$\Delta\psi$的概率分布，从中采样得到最终位姿调整量。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在真实世界平台进行（图4），使用Ufactory X-ARM 6机械臂和RealSense D435 overhead相机。任务是将细胞培养板精确抓取并放置到目标位置（桌面或架子插槽），要求毫米级精度。</p>
+<p><img src="https://arxiv.org/html/2510.15189v1/x4.png" alt="实验设置"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界实验设置。包括机械臂、细胞培养板、培养板架和顶置相机。红色星标表示精确抓放任务的目标位置。</p>
+</blockquote>
+<p><strong>对比方法</strong>：为了验证有效性，论文对比了以下方法：1) 标准RL（策略梯度）；2) 带重放缓冲区的标准RL；3) 提出的RM-RL；4) 预训练的RM-RL（使用约200个历史标注样本预训练）。</p>
+<p><strong>关键实验结果</strong>：<br><img src="https://arxiv.org/html/2510.15189v1/x5.png" alt="训练曲线与最终性能"></p>
+<blockquote>
+<p><strong>图5</strong>：训练曲线与最终性能对比。(a) 训练过程中的平均奖励曲线，显示RM-RL收敛更快更稳定。(b) 最终策略在平移和旋转精度上的表现，RM-RL显著优于基线。</p>
+</blockquote>
+<p>如图5所示，在训练过程中，RM-RL（尤其是预训练版本）的平均奖励收敛速度更快，且曲线更平滑稳定，这表明其训练效率更高且更稳定。在最终性能评估上，RM-RL在平移精度上相比标准RL提升了53%，在旋转精度上提升了20%。带重放缓冲区的RL虽然有一定提升，但效果远不如RM-RL。预训练的RM-RL展现了最佳的初始性能和最终性能。</p>
+<p><strong>消融实验分析</strong>：实验本质上对比了不同训练机制。结果表明：1) <strong>角色模型标注与监督训练</strong>是性能提升的关键，它解决了分布偏移问题；2) <strong>混合训练与数据重用</strong>显著提高了数据效率，使每个在线样本能多次贡献于策略改进；3) <strong>预训练</strong>进一步利用了历史数据，提供了更好的策略初始化，加速了在线收敛。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>角色模型机制</strong>，能够在在线RL训练中自动为真实世界样本生成近似最优动作标签，从而将离线学习转化为监督范式，增强了训练稳定性。</li>
+<li>设计了一个<strong>混合在线-离线RL框架</strong>，其中在线采集的数据通过角色模型标注后，在离线阶段被多次重复利用，极大地提升了数据效率。</li>
+<li>通过真实的机器人精确操作实验，验证了所提方法能实现更快、更稳定的收敛，并在平移和旋转精度上取得显著提升，成功完成了此前方法难以完成的精密任务（如将细胞板精确放入架子）。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，角色模型策略依赖于对“相似初始状态”进行分组以构建场景。如何更智能、更鲁棒地定义和识别“相似状态”，可能是一个潜在的挑战。此外，定期的离线训练回放会引入额外的计算开销。</p>
+<p><strong>后续研究启示</strong>：RM-RL的核心思想——<strong>在在线交互中自动生成监督信号以稳定训练</strong>——具有普适性。该方法与具体的策略梯度算法正交，未来可尝试与PPO、Actor-Critic等更先进的RL算法结合。此外，该框架可扩展至更复杂的多步决策任务，探索在动态环境或非稳态任务中的应用潜力。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人精确操作任务中专家演示数据获取困难、离线强化学习存在分布偏移和数据效率低的问题，提出角色模型强化学习框架。其核心是采用角色模型策略，自动为在线交互数据生成近似最优动作标签，从而无需人类演示，并将策略学习重构为监督训练以提升稳定性。实验表明，该方法比现有强化学习方法收敛更快更稳，在真实操作任务中实现了53%的平移精度和20%的旋转精度提升。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.15189" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

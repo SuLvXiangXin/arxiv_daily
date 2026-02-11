@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Differentiable Model Predictive Control on the GPU - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Differentiable Model Predictive Control on the GPU</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.06179" target="_blank" rel="noreferrer">2510.06179</a></span>
+        <span>作者: Thomas Lew Team</span>
+        <span>日期: 2025-10-07</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>可微分优化工具允许将优化算法的结构化、精确输出作为机器学习中的归纳偏置，从而减少数据需求并强制执行约束。可微分模型预测控制（MPC）在运动规划、参数估计、强化学习和模仿学习等领域有广泛应用。然而，可微分优化的采用受到优化工具顺序性本质的阻碍：在图形处理器（GPU）上进行高效并行化仍然很困难，无论是求解优化问题（前向传播）还是计算梯度（后向传播）。现有的可微分最优控制方法通常仅在中央处理器（CPU）上运行，以利用最优控制问题（OCP）的时间诱导稀疏性。克服这一计算瓶颈可以扩展到大型数据集和富有表现力的架构，充分利用现代深度学习的优势。本文针对传统可微分MPC求解器因顺序计算难以在GPU上高效并行化的痛点，提出了一种名为DiffMPC的GPU加速可微分优化工具。其核心思路是利用序列二次规划和一种定制的、采用三对角预条件的预条件共轭梯度法来利用最优控制问题的结构，从而实现高效并行化。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>DiffMPC旨在求解和微分具有特定形式的最优控制问题（OCP），其成本、等式约束和初始条件均由参数θ参数化。整体框架基于序列二次规划（SQP）进行前向求解，并利用隐函数定理（IFT）进行后向梯度计算。</p>
+<p><img src="https://arxiv.org/html/2510.06179v1/figs/method/suprafig.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：DiffMPC架构：展示了前向传播和后向传播的数据流及主要步骤。前向传播通过SQP求解OCP，输出解(z, λ)及计算好的矩阵(S, Φ⁻¹)；后向传播复用前向的KKT矩阵，通过PCG求解另一个线性系统来计算梯度∂ℓ/∂θ。</p>
+</blockquote>
+<p><strong>前向传播：通过SQP求解OCP</strong><br>对于一般非凸的OCP，采用带线搜索的SQP方案（算法1）。在每次SQP迭代中，给定当前解猜测，将OCP的成本近似为线性二次函数，并对动力学约束进行线性化，从而得到一个参数化二次规划（QP）。该QP的KKT矩阵具有块对角矩阵G和块带状矩阵H的结构。求解QP等价于求解一个形如<code>[G Hᵀ; H 0][z; λ] = [-b; d]</code>的线性系统。为了提高效率，DiffMPC首先形成舒尔补<code>S = -H G⁻¹ Hᵀ</code>和<code>γ = d + H G⁻¹ b</code>，然后顺序求解<code>Sλ = γ</code>和<code>z = -G⁻¹(b + Hᵀλ)</code>。</p>
+<p><strong>后向传播：通过隐函数定理计算灵敏度</strong><br>给定通过SQP得到的解z，DiffMPC使用公式(3)计算关于参数θ的梯度。其中最昂贵的步骤是求解线性系统<code>[G Hᵀ; H 0][z̃; λ̃] = [∂ℓ/∂z; 0]</code>。该系统的矩阵与前向传播中求解QP的KKT矩阵完全相同，因此可以复用前向传播中已计算好的矩阵。</p>
+<p><strong>核心创新：利用并行化的线性系统求解</strong><br>DiffMPC效率的核心在于一种高效且GPU友好的线性系统求解例程，它利用了KKT矩阵的结构。该方法使用预条件共轭梯度（PCG）法配合三对角预条件（对称阶梯预条件Φ⁻¹）来求解舒尔补系统<code>Sλ = γ</code>。S矩阵具有块三对角结构，而预条件子Φ⁻¹的设计旨在降低S的条件数，同时保留其便于并行的块三对角结构。在PCG迭代中，矩阵-向量乘法等操作可以在时间步t上并行进行。求解出λ后，状态和控制变量<code>z_t = (x_t, u_t)</code>可以根据公式(11)在<code>t = 0, …, T</code>上完全并行地计算出来。</p>
+<p><strong>与现有方法的对比</strong><br>经典算法如iLQR使用Riccati递归，需要按时间步<code>t=0,…,T</code>顺序求解OCP。而DiffMPC在多个层面实现了并行化：1）每个SQP迭代中的所有矩阵（如<code>Q_t, R_t, A_t</code>等）以及<code>S</code>和<code>Φ⁻¹</code>的块都可以并行计算；2）PCG例程虽然迭代，但其内部操作（如矩阵-向量乘）可在时间步上并行。此外，PCG的预热启动能力使其在MPC应用中能快速求解，而iLQR的Riccati递归则无法在问题实例间利用预热启动。</p>
+<p><img src="https://arxiv.org/html/2510.06179v1/figs/differentiable_opt.jpg" alt="可微分优化示意图"></p>
+<blockquote>
+<p><strong>图1</strong>：可微分优化示意图。求解变量z的优化问题（前向传播），并计算关于参数θ的灵敏度（后向传播），沿着由优化问题定义的损失表面ℓ移动。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在强化学习和模仿学习任务上评估DiffMPC。实验平台使用JAX实现。对比的基线方法包括：PyTorch-based非线性最小二乘求解器Theseus、PyTorch-based iLQR求解器mpc.pytorch，以及JAX-based iLQR求解器trajax。</p>
+<p><strong>基准测试结果</strong>：考虑具有二次成本和仿射动力学约束的随机生成MPC问题。在批量大小为64的随机环境中，通过优化MPC的二次成本参数来最大化50个环境时间步的累积奖励。</p>
+<p><img src="https://arxiv.org/html/2510.06179v1/x1.png" alt="计时比较图"></p>
+<blockquote>
+<p><strong>图5</strong>：不同求解器在CPU和GPU上的前向+后向传播计算时间比较（问题维度：状态nx=12，控制nu=6，时间步T=50）。DiffMPC在GPU上表现出显著优势，比最快的基线快4倍以上。</p>
+</blockquote>
+<p>关键实验结果总结：</p>
+<ol>
+<li>Theseus速度最慢（CPU上超过80秒），因其未充分利用OCP的时间稀疏结构。</li>
+<li>mpc.pytorch和trajax在GPU上相比CPU没有显著加速，这归因于其基于顺序Riccati递归的设计。</li>
+<li>在CPU上，DiffMPC速度介于mpc.pytorch和trajax之间，此时trajax因更适合CPU顺序执行而占优。</li>
+<li>在GPU上，DiffMPC显著快于其他求解器，对于该测试问题实现了超过4倍的加速比（相较于最快的基线）。附录中的其他问题也显示出一致的加速趋势。</li>
+</ol>
+<p><strong>消融实验与组件贡献</strong>：<br><img src="https://arxiv.org/html/2510.06179v1/figs/speedup_warm_start.png" alt="预热启动速度提升"></p>
+<blockquote>
+<p><strong>图11</strong>：预热启动对DiffMPC速度的影响。在MPC滚动时域应用中，使用先前解作为初始猜测（预热启动）可比冷启动快2-5倍。</p>
+</blockquote>
+<p>消融实验表明：</p>
+<ul>
+<li><strong>预条件子</strong>：使用定制的三对角预条件子对于PCG的快速收敛至关重要，它通过降低条件数减少了迭代次数。</li>
+<li><strong>预热启动</strong>：利用先前问题实例的解来初始化SQP和PCG循环，在MPC设置中能带来2-5倍的额外速度提升（图11）。</li>
+<li><strong>并行设计</strong>：避免顺序递归，在时间步和问题批次上进行并行计算，是GPU上获得加速的根本原因。</li>
+</ul>
+<p><strong>应用展示：极限操控下的车辆强化学习</strong><br>使用DiffMPC，通过领域随机化和强化学习自动调整MPC控制器，用于车辆在附着极限下的驾驶（如漂移），并确保对模型失配（如路面水洼）的鲁棒性。在非线性动力学上进行领域随机化，通过强化学习学习控制器的成本和车辆参数。得益于GPU加速框架支持的大批量训练，该方法成功使丰田Supra在通过水洼时实现了鲁棒的漂移控制（图8）。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了DiffMPC：一个专为GPU执行设计的、新颖的可微分模型预测控制工具，显著加速了可微分最优控制问题的求解和梯度计算。</li>
+<li>设计了一种利用最优控制问题时间稀疏结构的定制预条件共轭梯度（PCG）求解器，通过避免顺序的Riccati递归，实现了在时间维度上的高效并行化，并支持有效的预热启动。</li>
+<li>在强化学习和模仿学习基准任务上展示了相比现有最先进方法的显著速度提升（4倍以上），并在一项具有挑战性的车辆极限操控强化学习任务中验证了其有效性。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，与iLQR类似，在SQP中构建QP时，忽略了动力学约束的曲率（即使用成本函数的Hessian而非拉格朗日函数的Hessian）。这虽然简化了实现且在许多应用中工作良好，但可能导致梯度准确性下降。更精确的方案需要考虑约束的曲率，但这会带来额外的计算开销。</p>
+<p><strong>后续研究启示</strong>：</p>
+<ol>
+<li><strong>计算效率方向</strong>：DiffMPC展示了通过精心设计算法以匹配硬件特性（GPU并行性）来突破可微分优化计算瓶颈的路径。后续工作可探索其他优化问题结构的类似并行化策略。</li>
+<li><strong>学习与控制融合</strong>：该工具使大规模、批量的可微分MPC训练变得可行，促进了将物理模型提供的归纳偏置与数据驱动学习更紧密结合的框架发展，特别是在需要高样本效率或安全约束的机器人学和自动驾驶领域。</li>
+<li><strong>算法扩展</strong>：未来可以研究将方法扩展到处理不等式约束、更复杂的动力学模型，或者探索更精确但保持并行性的二阶信息近似方法。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对可微分模型预测控制（MPC）因传统优化算法顺序执行而难以在GPU上并行化的瓶颈，提出了一种GPU加速的可微分优化工具DiffMPC。其核心技术是采用序列二次规划及自定义的三对角预处理共轭梯度方法，以利用最优控制问题的结构实现高效并行。实验表明，该方法相比CPU和GPU基线实现了显著加速，大幅提升了在强化学习与模仿学习基准任务上的训练效率，并成功应用于极限工况下的车辆漂移控制。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.06179" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

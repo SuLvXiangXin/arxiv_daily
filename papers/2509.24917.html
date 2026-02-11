@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>From Code to Action: Hierarchical Learning of Diffusion-VLM Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>From Code to Action: Hierarchical Learning of Diffusion-VLM Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.24917" target="_blank" rel="noreferrer">2509.24917</a></span>
+        <span>作者: Daniel Dijkman Team</span>
+        <span>日期: 2025-09-29</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作领域的模仿学习在复杂、长视野任务中常受限于泛化能力不足和数据稀缺。当前主流方法主要聚焦于学习单一的语言条件策略，例如通过扩散策略结合预训练语言编码器，或构建视觉-语言-动作模型。这些方法面临几个关键局限性：1) 获取高质量、多样化的语言标注和专家演示数据成本高昂；2) 自然语言指令往往对最终状态描述不够精确，不利于鲁棒的技能组合；3) 处理长视野任务时，规划难度大。</p>
+<p>本文针对这些痛点，提出了一个新颖的视角：将开源机器人控制API不仅视为执行接口，更视为结构化监督的来源。其核心思路是利用代码生成视觉语言模型将高级任务分解为可执行的子程序代码，再通过一个以代码为条件的扩散策略来模仿相应的机器人低级动作，从而构建一个可解释、泛化能力更强的分层策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架分为两个独立的训练阶段，如图1所示。第一阶段，利用脚本化策略（Oracle）收集包含对应API代码片段的演示数据，并训练一个VLM来生成这些代码。第二阶段，使用VLM生成的代码作为条件，训练一个扩散策略来模仿Oracle的低级动作。</p>
+<p><img src="https://arxiv.org/html/2509.24917v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：分层学习方法的整体流程。左侧Oracle策略收集包含代码片段的演示数据；中间的视觉问答阶段训练VLM生成底层API代码；右侧的扩散模型以生成的代码为条件，学习模仿Oracle的低级动作。</p>
+</blockquote>
+<p><strong>核心模块一：代码生成VLM</strong>。该模块基于LLaVA框架，使用Phi-3语言模型骨干。其作用是将基础摄像头图像和自然语言任务指令，映射到能完成当前子任务的API调用代码。为了处理API策略的非马尔可夫性（如需要记忆物体之前的位置），VLM引入了一个轻量级记忆机制。该机制维护一个记忆缓冲区，仅当生成的代码是关键步骤时才将其加入历史，并在后续预测时作为条件输入。训练损失包括代码生成损失和辅助损失（如物体边界框预测），以增强场景理解。</p>
+<p><strong>核心模块二：分层扩散策略</strong>。这是一个定制的语言条件扩散策略，其架构如图3所示。关键修改在于如何编码冗长的代码指令和记忆信息。代码指令和经过预处理的记忆信息被一个冻结的T5语言模型编码为词元嵌入。视觉（基础/腕部相机）和本体感知特征则通过ResNet-18和线性层编码，并与语言词元一同输入一个注意力池化层进行聚合，最终输出给扩散UNet头生成动作序列。训练时，将演示数据中的真实代码替换为VLM生成的代码，以匹配推理时的数据分布。</p>
+<p><img src="https://arxiv.org/html/2509.24917v1/x2.png" alt="代码轨迹示例"></p>
+<blockquote>
+<p><strong>图2</strong>：<code>PlaceNextTo</code>任务上的代码轨迹示例。关键步骤构成唯一的子任务标签，其间的步骤则对应最近的关键步骤。通过提取写入内部字典<code>pose_dict</code>的指令来维护缓存信息，用于状态跟踪。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.24917v1/x3.png" alt="分层扩散策略架构"></p>
+<blockquote>
+<p><strong>图3</strong>：低级策略架构。策略以本体感知、相机图像以及Python代码（当前指令的<code>task_info</code>和用于状态跟踪的<code>cache_info</code>）为条件。观测嵌入被视作词元，并通过注意力池化机制与语言嵌入进行交叉注意力。</p>
+</blockquote>
+<p><strong>创新点</strong>：1) <strong>代码作为结构化监督</strong>：利用API代码的精确性、层次性，自动化生成子任务标签，避免了模糊的自然语言标注问题。2) <strong>分层设计解耦规划与控制</strong>：VLM负责高层任务分解（“思考模仿”），扩散策略负责低层动作执行（“动作模仿”），使两者可独立评估和优化。3) <strong>记忆机制</strong>：使模型能够处理非马尔可夫任务和代码执行的状态性。4) <strong>训练分布对齐</strong>：在训练扩散策略时使用VLM生成的代码而非真实代码，有效缓解了推理时的分布偏移问题。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在ClevrSkills基准测试上进行评估。将任务分为L0（原始行为，如<code>PlaceNextTo</code>）和L1（复杂长视野任务，如<code>SingleStack</code>）。为VLM生成500条轨迹/任务，为扩散策略生成2000条轨迹/任务。对比了三种方法：1) <strong>DP</strong>：扁平扩散策略，仅以自然语言任务指令为条件；2) <strong>VLM+DP</strong>：本文提出的分层策略；3) <strong>VLM+Oracle</strong>：使用VLM的关键步骤模式调用Oracle API执行的性能上界。</p>
+<p><strong>关键实验结果</strong>：如表1所示，本文方法（VLM+DP）在大多数任务上显著优于扁平基线（DP）。例如，在联合L0+L1数据集上训练的策略，其平均成功率达到63.95%，远高于扁平基线的28.19%。对于需要组合技能的新任务（如<code>SingleStack</code>），分层方法取得了43.9%的成功率，而扁平方法为0%。这验证了方法在组合泛化上的优势。VLM+Oracle的结果（平均80.78%）则揭示了高层规划的性能上限。</p>
+<p><img src="https://arxiv.org/html/2509.24917v1/x4.png" alt="消融实验：动作分块与再生"></p>
+<blockquote>
+<p><strong>图4</strong>：动作分块与再生策略的消融研究。展示了在<code>PlaceNextTo</code>任务上，是否允许在预测到关键步骤指令时停止并重新生成动作分块（Regen）对性能的影响。结果表明，再生机制能带来显著提升。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.24917v1/x5.png" alt="消融实验：低层策略训练数据生成策略"></p>
+<blockquote>
+<p><strong>图5</strong>：低层策略训练数据生成策略的消融研究。比较了使用Oracle真实代码、VLM生成代码以及两者混合进行训练的效果。使用VLM生成代码进行训练（匹配推理分布）能获得最佳性能。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.24917v1/x6.png" alt="数据缩放曲线"></p>
+<blockquote>
+<p><strong>图6</strong>：在<code>PlaceNextTo</code>任务上的数据缩放曲线。显示了随着低层策略训练数据量的增加，VLM+DP与扁平DP的性能变化。分层方法的数据效率更高，且性能饱和点更高。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：1) <strong>动作分块再生</strong>（图4）：当预测的动作序列跨越多个子任务时，允许在检测到关键步骤指令时中断并重新生成动作，能大幅提升性能。2) <strong>训练数据生成策略</strong>（图5）：使用VLM生成的代码（而非真实Oracle代码）来训练扩散策略，是性能提升的关键，因为它确保了训练与推理条件的一致性。3) <strong>数据缩放</strong>（图6）：分层方法比扁平方法具有更高的数据效率，且性能随数据量增长的上限更高。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 提出了一个利用机器人API代码作为精确、结构化监督信号的分层模仿学习框架，实现了任务分解与动作执行的解耦。2) 设计了包含记忆机制的代码生成VLM和专用的代码条件扩散策略，有效处理了非马尔可夫任务和分布偏移问题。3) 该方法不仅提升了在ClevrSkills基准上的泛化性能，还允许对高层规划和低层控制进行分离评估。</p>
+<p><strong>局限性</strong>：论文提到，该方法依赖于脚本化API来生成演示数据，这可能限制了其在更复杂、未见过任务上的泛化能力。此外，当前框架假设可以访问细粒度的API代码标注。</p>
+<p><strong>对后续研究的启示</strong>：1) <strong>代码作为中间表示</strong>：展示了代码在连接高层规划与低层控制中的潜力，其精确性优于自然语言。2) <strong>自动化数据收集</strong>：利用现有脚本化策略自动生成标注数据，为规模化机器人学习提供了新思路。3) <strong>可解释性与模块化</strong>：分层设计使策略行为更易于理解和调试，为构建更复杂、可靠的机器人系统奠定了基础。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人模仿学习在复杂长程任务中泛化能力有限和数据稀缺的问题，提出了一种分层学习框架。该方法结合代码生成视觉语言模型与低层扩散策略：VLM将任务描述分解为可执行的API子程序，扩散策略则根据生成的代码模仿对应的机器人行为。为解决代码执行与任务（如物体交换）的非马尔可夫性，架构引入了跨时间维护子任务上下文的记忆机制。实验表明，该设计实现了可解释的策略分解，相比扁平策略提升了泛化能力，并支持对高层规划与低层控制的分别评估。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.24917" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

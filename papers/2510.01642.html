@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FailSafe: Reasoning and Recovery from Failures in Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>FailSafe: Reasoning and Recovery from Failures in Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.01642" target="_blank" rel="noreferrer">2510.01642</a></span>
+        <span>作者: Bihan Wen Team</span>
+        <span>日期: 2025-10-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，机器人操作领域通过将低级机器人控制集成到视觉语言模型（VLM）中，发展出了视觉-语言-动作（VLA）模型。尽管最先进的VLA模型在大规模众包机器人训练数据的支持下，在下游机器人应用中表现出色，但在执行过程中仍不可避免地会遇到失败。让机器人能够对不可预测的突发失败进行推理和恢复，仍然是一个关键挑战。现有的机器人操作数据集，无论是在仿真中还是现实世界中收集的，主要只提供真实轨迹，导致机器人在发生失败后无法恢复。此外，少数涉及失败检测的数据集通常只提供文本解释，难以直接在VLA模型中利用。针对这一空白，本文提出了FailSafe，一种新颖的失败生成和恢复系统，能够自动生成多样化的失败案例及与之配对的可执行恢复动作。本文核心思路是：构建一个可扩展的自动化流程，在任何仿真器的任何操作任务中生成包含失败推理和可执行恢复动作的数据集，并利用此数据集微调VLM，得到一个能够辅助VLA模型实时检测和纠正失败的专家模型。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>FailSafe的整体框架分为两个主要部分：自动生成失败-动作数据对的流程（训练数据生成），以及利用该数据微调得到的FailSafe-VLM如何与VLA模型协作（部署应用）。</p>
+<p><img src="https://arxiv.org/html/2510.01642v2/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图1</strong>：FailSafe流程示意图。上方展示了FailSafe生成失败场景和对应可执行恢复动作的流程。下方展示了利用这些数据训练的FailSafe-VLM如何帮助机器人臂从失败中恢复，并泛化到不同的空间配置、视角、物体和机器人本体。</p>
+</blockquote>
+<p>FailSafe的数据生成流程包含三个核心模块：失败生成、动作收集和系统验证。</p>
+<p><strong>1. 失败生成</strong>：为了模拟机器人操作任务中常见的失败，定义了三种基本失败模式：平移失败（沿笛卡尔轴x, y, z扰动）、旋转失败（绕轴的角度偏差）和无操作失败（机械臂在一段时间内卡住不动）。在ManiSkill等仿真器中，运动规划器将任务分解为多个阶段，并按顺序移动机械臂通过各阶段的预设姿态。FailSafe利用一个YAML配置文件和环境包装器，在任务执行的任意阶段随机注入这些失败模式，并施加随机采样的扰动幅度。这导致机械臂的 rollout 运动从正确的 <code>A -&gt; B -&gt; C -&gt; D</code> 变为失败的 <code>A -&gt; B&#39; -&gt; C -&gt; D</code>（其中B&#39;是受扰动阶段）。如果引入的扰动最终导致任务失败，系统会自动记录图像观察、失败轨迹和失败类型。</p>
+<p><strong>2. 动作收集</strong>：与仅提供文本解释的先前工作不同，FailSafe旨在收集机器人可直接执行的恢复动作。对于每个特定阶段的正确轨迹和失败轨迹对，FailSafe旨在收集多个候选纠正动作 ΔA。轨迹中的每一步由一个7自由度姿态表示。搜索从失败轨迹的第10步开始，直到最后一步（对应失败姿态Pd）。每个Pd被映射到正确轨迹中的一个纠正姿态Pc，该映射被限制在正确轨迹开始后10步到结束前3步的窗口内，以避免潜在的碰撞。通过顺序遍历所有候选Pd并随机匹配Pc，生成多个(Pd, Pc)对，并计算两者之间的7自由度差值作为纠正动作ΔA。</p>
+<p><strong>3. 系统验证</strong>：为确保收集的恢复动作ΔA的鲁棒性和有效性，需要进行严格的系统验证。验证过程重放轨迹：运动规划器先将机械臂移动到偏离姿态Pd，然后移动到纠正姿态Pc，最后继续任务的后续姿态（即 <code>A -&gt; Pd -&gt; Pc -&gt; B -&gt; C -&gt; D</code>）。如果应用纠正姿态Pc后，原本失败的操作被成功完成，则该纠正动作ΔA连同失败生成阶段收集的图像观察、失败类型等信息被添加到数据集中。</p>
+<p><img src="https://arxiv.org/html/2510.01642v2/x2.png" alt="详细流程与数据集格式"></p>
+<blockquote>
+<p><strong>图2</strong>：FailSafe的详细流程与数据集格式。顶部是整体流程，包括失败轨迹的自主生成（I）和增量恢复动作的收集（II）。失败-动作数据对只有在系统验证（III）确保恢复动作有效后，才会传递到下一步。底部展示了FailSafe数据集（IV）随后用于微调FailSafe-VLM（V），使其能够帮助机器人臂从失败案例中恢复。</p>
+</blockquote>
+<p><strong>创新点</strong>：与现有方法相比，FailSafe的关键创新在于同时生成高层失败推理（失败类型）和低层可直接执行的纠正动作（7-DoF末端执行器位姿变化），并通过系统验证确保动作的有效性，从而直接有益于VLA控制。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在ManiSkill仿真环境中进行，主要评估了三个任务：拾取立方体、推动立方体、堆叠立方体。对比的基线包括三个先进的VLM模型（Qwen2.5-VL, Gemini-2.5-flash, GPT-4o）以及三个先进的VLA模型（πo-FAST, OpenVLA, OpenVLA-OFT）。</p>
+<p><strong>1. 在 rollout 测试种子上的性能</strong>：在包含1,712个条目的测试集上，使用二元成功率（区分失败/成功）、准确率（识别具体失败类型）和余弦相似度（预测恢复动作与真实动作的匹配度）三个指标评估。结果如表II所示，FailSafe-VLM在所有指标上均显著优于其他VLM。</p>
+<table>
+<thead>
+<tr>
+<th align="left">VLM 模型</th>
+<th align="left">二元成功率 ↑</th>
+<th align="left">准确率 ↑</th>
+<th align="left">余弦相似度 ↑</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">Qwen2.5-VL</td>
+<td align="left">0.2401</td>
+<td align="left">0.2401</td>
+<td align="left">0.0000</td>
+</tr>
+<tr>
+<td align="left">Gemini-2.5-flash</td>
+<td align="left">0.6229</td>
+<td align="left">0.1412</td>
+<td align="left">-0.0121</td>
+</tr>
+<tr>
+<td align="left">GPT-4o</td>
+<td align="left">0.7007</td>
+<td align="left">0.1960</td>
+<td align="left">0.0117</td>
+</tr>
+<tr>
+<td align="left"><strong>FailSafe-VLM</strong></td>
+<td align="left"><strong>0.9094</strong></td>
+<td align="left"><strong>0.8368</strong></td>
+<td align="left"><strong>0.6522</strong></td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表II</strong>：FailSafe-VLM与其他先进VLM模型在失败推理和恢复任务上的对比。FailSafe-VLM在所有指标上均大幅领先。</p>
+</blockquote>
+<p><strong>2. 对VLA模型性能的提升</strong>：FailSafe-VLM作为外部助手，每10步接管一次VLA模型的控制权以检测潜在失败并执行恢复动作。如表III所示，在三个VLA模型上，集成FailSafe-VLM后，所有模型在三个任务上的平均成功率均得到提升。其中OpenVLA提升最为显著，平均提升了22.6%。即使对于基线性能已经很强的OpenVLA-OFT和πo-FAST，也分别获得了8.0%和4.0%的提升。</p>
+<table>
+<thead>
+<tr>
+<th align="left">VLA 模型</th>
+<th align="left">FailSafe-VLM</th>
+<th align="left">拾取立方体</th>
+<th align="left">推动立方体</th>
+<th align="left">堆叠立方体</th>
+<th align="left">平均</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">πo-FAST</td>
+<td align="left">✗</td>
+<td align="left">88.0%</td>
+<td align="left">52.0%</td>
+<td align="left">96.0%</td>
+<td align="left">78.7%</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">✓</td>
+<td align="left">88.0%</td>
+<td align="left">64.0%</td>
+<td align="left">96.0%</td>
+<td align="left">82.7%</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">Δ</td>
+<td align="left">+0.0%</td>
+<td align="left"><strong>+12.0%</strong></td>
+<td align="left">+0.0%</td>
+<td align="left">+4.0%</td>
+</tr>
+<tr>
+<td align="left">OpenVLA</td>
+<td align="left">✗</td>
+<td align="left">28.0%</td>
+<td align="left">4.0%</td>
+<td align="left">12.0%</td>
+<td align="left">14.7%</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">✓</td>
+<td align="left">48.0%</td>
+<td align="left">24.0%</td>
+<td align="left">40.0%</td>
+<td align="left">37.3%</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">Δ</td>
+<td align="left"><strong>+20.0%</strong></td>
+<td align="left"><strong>+20.0%</strong></td>
+<td align="left"><strong>+28.0%</strong></td>
+<td align="left"><strong>+22.6%</strong></td>
+</tr>
+<tr>
+<td align="left">OpenVLA-OFT</td>
+<td align="left">✗</td>
+<td align="left">84.0%</td>
+<td align="left">88.0%</td>
+<td align="left">100.0%</td>
+<td align="left">90.7%</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">✓</td>
+<td align="left">96.0%</td>
+<td align="left">100.0%</td>
+<td align="left">100.0%</td>
+<td align="left">98.7%</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">Δ</td>
+<td align="left"><strong>+12.0%</strong></td>
+<td align="left"><strong>+12.0%</strong></td>
+<td align="left">+0.0%</td>
+<td align="left">+8.0%</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表III</strong>：VLA模型在有/无FailSafe-VLM辅助下，在三个ManiSkill任务上的成功率对比。实验视角对VLA模型是训练视角，但对FailSafe-VLM是未见过的。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.01642v2/x4.png" alt="VLA协作示意图"></p>
+<blockquote>
+<p><strong>图3</strong>：FailSafe-VLM与VLA模型协作进行失败推理和恢复的示意图。为模拟真实场景，VLA模型和FailSafe-VLM共享同一相机视角，该视角在VLA训练中使用，但对FailSafe-VLM是新的。</p>
+</blockquote>
+<p><strong>3. 泛化能力</strong>：实验还测试了FailSafe-VLM对未见过的物体类别（球体、充电器）和机器人本体（xArm 6）的泛化能力。如表IV和表V所示，即使面对训练中未出现的新物体或新机械臂，FailSafe-VLM仍能有效辅助VLA模型，带来显著的性能提升（物体泛化平均+17.4%，本体泛化在堆叠任务上+20%）。</p>
+<p><strong>4. 定性分析</strong>：图4通过可视化末端执行器在x轴和z轴上的轨迹，展示了FailSafe-VLM如何帮助OpenVLA从失败中恢复。图中绿色高亮部分显示了FailSafe-VLM做出的纠正。在初始阶段，机械臂近乎卡住（无操作失败），FailSafe-VLM检测到潜在失败，并有效地将机械臂“轻推”回接近真实轨迹的位置，之后OpenVLA恢复控制并成功完成任务。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了FailSafe，首个可扩展的、能无缝构建于任何仿真器任务之上的自动化框架，用于同时生成失败推理解释和机器人可直接执行的精确恢复动作。</li>
+<li>证明了FailSafe数据集能够使现有VLM具备失败推理能力，并显著提升多种VLA模型在不同视角、空间配置、物体类别和机器人本体上的性能。</li>
+<li>计划开源FailSafe以支持社区探索失败推理，构建更智能、可解释的具身AI系统。</li>
+</ol>
+<p><strong>局限性</strong>：论文在讨论中指出，当前工作主要在仿真环境中进行。虽然FailSafe的设计旨在泛化，但将其直接应用于现实世界机器人部署仍面临挑战，例如传感器噪声、物理交互的不确定性以及更复杂的失败模式。</p>
+<p><strong>后续启示</strong>：</p>
+<ol>
+<li><strong>失败恢复数据的重要性</strong>：研究表明，将失败及恢复数据纳入训练，对于构建鲁棒的、能够自主处理意外情况的机器人系统至关重要。</li>
+<li><strong>模块化与协作</strong>：FailSafe-VLM作为VLA模型的“助手”而非替代品的设计是有效的，这种模块化方法允许在不重新训练核心VLA模型的情况下增强其鲁棒性。</li>
+<li><strong>跨任务泛化潜力</strong>：FailSafe-VLM展现出的对新物体和新本体的泛化能力表明，失败模式在不同操作任务中可能存在共性模式，学习这些底层原则有助于实现更广泛的泛化。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对Vision-Language-Action (VLA) 模型在机器人操作中执行时不可避免遇到失败、且缺乏有效恢复机制的核心问题，提出了FailSafe系统。该技术能自动生成多样化的失败案例与可执行恢复动作，可扩展地创建失败-动作数据，并基于LLaVa-OV-7B微调构建FailSafe-VLM。实验表明，FailSafe-VLM成功帮助机器人检测和恢复失败，将πo-FAST、OpenVLA等三个先进VLA模型在Maniskill多任务上的平均性能提升高达22.6%，并能泛化至不同空间配置、视角及对象。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.01642" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

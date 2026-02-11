@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning to Ball: Composing Policies for Long-Horizon Basketball Moves - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Learning to Ball: Composing Policies for Long-Horizon Basketball Moves</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.22442" target="_blank" rel="noreferrer">2509.22442</a></span>
+        <span>作者: C. Karen Liu Team</span>
+        <span>日期: 2025-09-26</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在基于物理的角色控制和强化学习领域，为多阶段、长视野任务（如篮球动作）学习控制策略仍然具有挑战性。这类任务通常包含具有明确目标的子任务（如运球、投篮）和定义不清但关键的过渡子任务（如“收球”）。现有主流方法如专家混合和技能链，要求子策略共享大量共同探索的状态，或具有明确定义的初始和终止状态，这在处理动作模式迥异、中间状态模糊的任务时存在局限。例如，从运球到投篮，两者状态分布可能完全不同，而中间的“收球”动作没有明确的起止状态定义，难以独立训练。</p>
+<p>本文针对上述“定义模糊的中间子任务”这一具体痛点，提出了一个新颖的策略整合框架。核心思路是：利用已训练好的、目标明确的子策略（如前驱的运球、后继的投篮），来指导训练模糊的中间子任务（收球），即用前驱策略提供初始状态分布，用后继策略的状态价值函数来塑造奖励，并同时微调后继策略以适应新状态。最后，引入一个高层软路由策略来实现子策略间的平滑、实时切换。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文方法的核心是分阶段训练并组合策略，以完成“运球后投篮”等长视野任务。整体流程分为三步：1) 从非结构化数据中独立学习基础子策略（如运球、投篮）；2) 对于最困难的C类过渡，利用策略整合框架训练中间策略（如收球）；3) 训练一个高层软路由策略，根据用户指令实时组合并切换这些子策略。</p>
+<p><img src="https://arxiv.org/html/2509.22442v1/x1.png" alt="策略与过渡类型总览"></p>
+<blockquote>
+<p><strong>图2</strong>：方法整体框架与过渡类型。模拟角色能够执行七种不同的篮球技能（黑色方框）。技能间的过渡被分为三类，按难度递增：A. 直接执行；B. 相互适应；C. 需要中间策略。最难的C类过渡需要一个额外的中间策略（绿色方框）来桥接两个不兼容的策略。</p>
+</blockquote>
+<p><strong>核心模块1：从非结构化数据学习原始策略</strong><br>该方法不依赖具有对应全身、手部及篮球轨迹的结构化数据，而是整合了多种来源的非结构化数据：来自网络的视频提取姿势、无手部的全身动捕数据（如跑步）、以及单独录制的手部动捕数据。训练采用基于PPO的对抗模仿学习框架。以运球策略为例，它将身体姿态分为下半身、上半身和双手三个组别进行模仿，并辅以导航和运球的任务奖励，使策略能在物理模拟中自主探索与球的交互。</p>
+<p><img src="https://arxiv.org/html/2509.22442v1/x3.png" alt="原始策略学习系统架构"></p>
+<blockquote>
+<p><strong>图4</strong>：从非结构化数据学习原始策略的系统架构。左侧展示了不同来源的参考数据（视频、身体动捕、手部动捕）。训练时，策略模仿部分可观测的动作，并通过任务奖励学习技能。右侧展示了用于策略适应的网络结构（AdaptNet）。</p>
+</blockquote>
+<p><strong>核心模块2：策略整合框架训练中间子任务（关键创新）</strong><br>这是本文解决模糊中间子任务的核心。以训练“收球”策略（B）来连接“运球”（A）和“投篮”（C）为例：</p>
+<ol>
+<li><strong>初始状态分布</strong>：从预训练的运球策略A的 rollout 中随机采样状态，作为收球策略B的初始状态，避免了手动定义终止状态。</li>
+<li><strong>奖励塑造</strong>：收球策略B的奖励函数包含一个关键项：后继投篮策略C的状态价值函数估计值 V̄_shoot。这引导B努力到达一个对C而言“有价值”（即容易投篮成功）的状态。奖励公式为：r_gather = r_pose + 0.25 * Clip(V̄_shoot(s_t, g_t), -v, v)。其中r_pose是评估持球姿态的启发式奖励。</li>
+<li><strong>策略共同适应</strong>：在训练B的同时，使用B产生的“好”状态（价值估计高于阈值）作为初始状态，来微调（适应）预训练的投篮策略C。随着C被适应，其价值函数V̄_shoot也同步更新，并反馈给B用于奖励计算。这种双向、并行的优化是确保过渡成功的关键。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.22442v1/x2.png" alt="三种过渡类型示意图"></p>
+<blockquote>
+<p><strong>图3</strong>：三种过渡类型图解。本文聚焦于最难的C类过渡（右上），它需要一个中间策略（绿色）。训练时，利用前驱策略（红色）提供初始状态分布，后继策略（蓝色）提供状态价值函数V̄_shoot进行奖励塑造，并同时使用中间策略产生的状态来适应后继策略。</p>
+</blockquote>
+<p><strong>核心模块3：高层软路由策略</strong><br>为避免基于启发式规则切换策略导致的僵硬或失败，本文引入了一个高层路由策略。它接收用户指令、当前状态和目标向量，输出一组权重，用于对各个子策略（运球、收球、投篮等）的动作进行线性组合。</p>
+<p><img src="https://arxiv.org/html/2509.22442v1/x4.png" alt="高层路由策略结构"></p>
+<blockquote>
+<p><strong>图5</strong>：高层软路由策略结构。它学习如何组合子策略以执行长视野任务。输入包括用户命令、当前状态和目标向量，输出是用于线性组合各子策略动作的权重。⊕表示逐元素相加，⊗表示拼接，⊙表示点积。</p>
+</blockquote>
+<p>与传统的硬路由（每次只激活一个策略）不同，软路由通过加权平均实现平滑过渡。同时，通过鼓励在任一时刻有一个策略的权重占主导，避免了因平均过多而产生不自然动作，确保了过渡的流畅性和自然性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：研究在物理模拟环境中进行，评估了包括运球后投篮、接球投篮、抢篮板后得分等多种篮球长视野任务。使用了一个专业篮球场尺寸的测试环境。</p>
+<p><strong>对比方法</strong>：论文与多种基线进行了对比，包括：1) <strong>技能链</strong>方法；2) <strong>没有中间策略</strong>的直接过渡；3) <strong>没有策略适应</strong>的版本（即收球策略使用固定的、未微调的投篮价值函数）；4) <strong>硬路由</strong>策略切换。</p>
+<p><strong>关键定量结果</strong>：</p>
+<ul>
+<li><strong>投篮成功率</strong>：在最具挑战性的“运球后投篮”任务中，本文方法实现了 <strong>91.8%</strong> 的投篮成功率。</li>
+<li><strong>方法对比</strong>：如图12所示，本文的完整方法（Ours (Full)）显著优于所有基线方法。技能链方法成功率仅为15.3%，没有中间策略的方法为41.7%，没有策略适应的方法为66.1%，硬路由方法为73.6%。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2509.22442v1/images/shot_test.png" alt="投篮成功率对比"></p>
+<blockquote>
+<p><strong>图12</strong>：不同方法在运球后投篮任务上的成功率对比。完整方法（Ours (Full)）取得了91.8%的最高成功率，显著优于技能链、无中间策略、无策略适应和硬路由等基线。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br><img src="https://arxiv.org/html/2509.22442v1/x5.png" alt="消融实验分析"></p>
+<blockquote>
+<p><strong>图35</strong>：消融实验分析。(a) 展示了不同组件对成功率的影响，完整方法最优。(b) 展示了在训练中间（收球）策略时，是否同时适应后继（投篮）策略对最终投篮阶段成功率的影响，共同适应能显著提高投篮阶段的性能。</p>
+</blockquote>
+<p>消融实验验证了各核心组件的贡献：</p>
+<ol>
+<li><strong>中间策略与策略适应</strong>：移除中间策略（收球）或移除对后继策略的适应，都会导致成功率大幅下降（分别降至41.7%和66.1%），证明了这两者对处理模糊过渡的必要性。</li>
+<li><strong>软路由</strong>：将软路由替换为硬路由，成功率从91.8%下降至73.6%，且动作切换显得更突兀，证明了软路由对平滑过渡的重要性。</li>
+<li><strong>价值函数引导</strong>：在训练收球策略时，使用投篮策略的价值函数进行奖励塑造至关重要。</li>
+</ol>
+<p><strong>定性结果</strong>：<br>论文展示了智能体能够执行复杂的连贯动作，如背对篮筐运球后转身投篮、接传球后快速出手、多人场景下的传球配合与防守等，动作流畅且符合物理规律。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个<strong>策略整合框架</strong>，能够利用定义明确的子策略来指导训练定义模糊的中间过渡子任务，解决了多阶段任务中状态分布不匹配或目标不清晰的策略组合难题。</li>
+<li>设计了一种<strong>高层软路由策略</strong>，实现了多个异构子策略间的平滑、自然过渡，并能实时响应用户指令。</li>
+<li>演示了从<strong>非结构化、异构的运动数据</strong>（视频、身体动捕、手部动捕）中成功学习复杂物理交互策略的可行性，降低了对稀缺的结构化全轨迹数据的依赖。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文提到，方法仍然依赖于相当数量的高质量运动数据来训练基础策略。此外，训练过程涉及多个阶段的策略训练和微调，可能需要较高的计算成本。</p>
+<p><strong>启发</strong>：<br>本文为解决长视野任务中的策略组合问题提供了一种系统化的方案（A/B/C三类过渡）。其核心思想——利用前后任务的“已知”信息（初始分布、价值函数）来约束和引导“未知”的中间任务学习，并可推广到其他需要串联异构技能的领域，如机器人操作、自动驾驶等。软路由机制也为实现响应式、柔顺的多策略控制提供了新思路。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>这篇论文针对篮球等长时程任务中策略组合的挑战，提出了一个**策略集成框架**和**高层软路由器**，以解决子任务间（如运球、收球、投篮）因中间状态不明确而难以无缝过渡的问题。该方法能组合差异巨大的运动技能，实现鲁棒的策略切换。实验表明，基于该框架训练的策略能使模拟角色有效完成复杂的组合篮球动作，且无需依赖球轨迹参考。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.22442" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

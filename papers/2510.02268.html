@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Do You Know Where Your Camera Is? View-Invariant Policy Learning with Camera Conditioning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Do You Know Where Your Camera Is? View-Invariant Policy Learning with Camera Conditioning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.02268" target="_blank" rel="noreferrer">2510.02268</a></span>
+        <span>作者: Matthew R. Walter Team</span>
+        <span>日期: 2025-10-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前基于模仿学习的机器人策略通常直接处理固定第三人称视角的RGB图像。为实现视角不变性，主流方法主要分为两类：一是隐式方法，通过在训练期间随机化相机视角来学习不变性，或通过自监督学习视角鲁棒的表征；二是显式方法，利用深度信息将感知数据提升为体素网格、点云等3D表示，这些表示天然对相机位姿具有鲁棒性。然而，隐式方法在数据稀缺的机器人领域面临学习效率的权衡，期望单一模型同时推断相机位姿和学习复杂操作策略是困难的。而基于3D的方法则依赖昂贵且非普适的深度传感器。本文发现，在固定场景中，没有相机位姿信息的策略往往会利用静态背景等视觉线索来隐式推断相机相对于机器人的位姿，一旦工作空间几何或相机放置位置发生变化，这种“捷径”就会失效，导致策略崩溃。</p>
+<p>本文针对上述痛点，提出了一个核心问题：当相机几何信息（外参）易于获取时，机器人策略模型是否应显式地以此作为条件输入？本文主张采用显式相机条件化的新视角，旨在将困难的位姿推断任务与学习操作策略的主要目标解耦，从而为视角不变性提供一条更直接、数据效率更高的路径。核心思路是：通过将相机外参编码为像素级的Plücker射线图并输入给策略，使策略明确知晓相机相对于机器人的几何关系，从而显著提升其在视角变化下的泛化能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文方法的整体框架是为标准的模仿学习策略（如ACT、Diffusion Policy、SmolVLA）增加一个相机几何条件输入。输入是RGB图像和相机内参矩阵K、外参（位姿）(R, t)，输出是机器人动作。核心模块是将相机几何信息编码为与图像像素对齐的Plücker射线图（ray-map）。</p>
+<p>具体而言，对于图像中的每个像素(u, v)，根据相机内参和外参计算其在世界坐标系下的对应光线，并使用六维Plücker坐标r=(d, m)表示。其中d是单位方向向量，m=p×d是矩向量（p是光线上的任意点，如相机中心）。这种表示是齐次的，满足双线性约束d^T m=0，能统一、连续地捕捉有向3D直线。给定相机参数，通过公式计算世界坐标系下的光线方向d_w和相机中心C，最终得到Plücker射线r=(d_w, C×d_w)。这样就得到了一个H×W×6的射线图，其每个“像素”对应一条3D空间中的射线，与场景内容无关。</p>
+<p><img src="https://arxiv.org/html/2510.02268v1/figures/arch_2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：提出的两种Plücker射线图编码方式。(a) 针对使用预训练视觉编码器的策略：使用一个小型卷积网络将Plücker图编码到与图像潜特征相同的维度，然后进行通道拼接。(b) 针对不使用预训练编码器的策略：直接将Plücker图与RGB图像在通道维度拼接，并修改编码器第一层以接受9通道输入。</p>
+</blockquote>
+<p>集成几何条件的一个挑战是与使用预训练视觉编码器的策略兼容。如图2所示，本文提出了两种编码方式：对于没有预训练编码器的策略（如Diffusion Policy），将Plücker图与图像在通道维度拼接，并相应修改编码器第一层的输入通道数；对于有预训练编码器的策略（如ACT、SmolVLA），则使用一个独立的小型卷积网络将Plücker图编码到与图像潜特征相同的维度，然后在潜特征层面进行通道拼接（即“晚期融合”）。</p>
+<p>与现有方法相比，本文的创新点具体体现在：首次将这种源自3D视觉社区的像素级相机几何嵌入（Plücker射线图）引入到基于RGB的机器人控制策略中，提供了一种轻量、有效的显式条件化方案，使策略无需隐式推断相机位姿。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：本文在模拟环境和真实机器人上进行了实验。模拟实验引入了六个新的基准任务：RoboSuite中的Lift、Pick Place Can、Assembly Square，以及ManiSkill中的Push、Lift Upright、Roll Ball。每个任务都有“固定”和“随机化”两个变体（如图3所示），随机化变体改变了机器人、工作台相对于地面的位置和朝向，以消除策略可利用的静态背景线索。数据收集采用“阶梯”式策略，确保相机位姿的多样性。评估时，对每个设置进行大量rollout（ACT和Diffusion Policy为1500次，SmolVLA为500次）以计算平均成功率。</p>
+<p><img src="https://arxiv.org/html/2510.02268v1/figures/arch_1.png" alt="任务可视化"></p>
+<blockquote>
+<p><strong>图3</strong>：六个自定义任务的可视化。上排为固定设置，下排为随机化设置。左侧三个在RoboSuite中，右侧三个在ManiSkill中。每个子图叠加了三个不同初始化种子的图像以展示环境变化。</p>
+</blockquote>
+<p><strong>对比方法</strong>：本文在相同设置下训练并评估了三种主流模仿学习策略：ACT、Diffusion Policy (DP) 和 SmolVLA，分别比较其使用和不使用相机位姿条件化（Plücker conditioning）的性能。</p>
+<p><strong>关键结果</strong>：</p>
+<ol>
+<li><strong>相机条件化普遍提升性能</strong>：如表I所示，在模拟的所有六个任务上，为ACT、DP和SmolVLA添加相机位姿条件化均能提高成功率。提升幅度显著，例如ACT在Lift任务上提升了27.0个百分点，DP在Pick Place Can任务上提升了16.2个百分点，SmolVLA在Lift任务上提升了34.8个百分点。</li>
+<li><strong>随机化背景下收益更大</strong>：图18显示，基线ACT策略在随机化设置下性能下降，表明其依赖固定背景推断位姿。而相机条件化在随机化设置下带来了最大的性能提升，不过在固定设置下也有益处。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.02268v1/figures/fixed_vs_rand_plot.png" alt="固定vs随机化结果"></p>
+<blockquote>
+<p><strong>图18</strong>：ACT策略在固定和随机化设置下，有/无Plücker条件化的成功率对比。条件化在随机化设置下收益最大，在固定设置下也有提升。</p>
+</blockquote>
+<ol start="3">
+<li><strong>动作空间与数据增强的影响</strong>：图19显示，使用Delta末端执行器位姿作为动作空间性能最佳，且相机条件化对所有四种测试的动作空间（绝对/Delta末端执行器位姿、绝对/Delta关节位置）均有提升。图20表明，对图像和Plücker图进行一致的随机裁剪能进一步提升所有任务的性能，可视为增加了虚拟相机。</li>
+<li><strong>编码方式与预训练的影响</strong>：图21的消融实验表明，将外参矩阵线性投影为token的方法无效；早期融合（像素级拼接）效果通常不如本文采用的晚期融合，可能是因为早期融合的输入超出了预训练编码器的分布。图22显示，图像编码器的预训练（ImageNet或R3M）对最终成功率影响甚微。</li>
+<li><strong>数据缩放效率</strong>：图23显示，要达到相同的性能，不使用相机位姿条件化需要数倍于使用条件化的相机视图数量。即使视图数量继续增加，条件化仍能带来小幅但一致的提升。</li>
+<li><strong>真实机器人实验</strong>：在UR5机械臂上进行的Pick Place、Plate Insertion、Hang Mug三个任务实验（图27）表明，相机条件化同样能提升ACT和Diffusion Policy的成功率和“半成功率”（用于衡量部分完成度）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.02268v1/figures/real_robot_plot.png" alt="真实机器人结果"></p>
+<blockquote>
+<p><strong>图27</strong>：（上）ACT和（下）Diffusion Policy在三个真实世界任务中有/无相机位姿条件化的性能（成功率和半成功率）。条件化对所有策略和任务均有改善。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) 提出了一种新颖的相机条件化方法，通过像素级Plücker射线图将相机几何信息有效集成到常见的模仿学习策略中；2) 进行了全面的实证分析，证明了显式相机条件化对视角泛化的益处，并揭示了影响性能的关键因素（如动作空间、数据增强、编码方式、数据缩放规律）；3) 引入了六个针对挑战性视角泛化的新基准任务及对应演示数据。</p>
+<p>论文自身提到的局限性在于，当前的位姿估计方法仍不完美，在特征缺失表面、视野重叠有限或高度动态场景中可能出错，此类误差若不加缓解可能会影响下游控制。</p>
+<p>本文对后续研究的启示在于：首先，方法可自然扩展至支持不同内参相机的泛化。其次，显式几何信息为数据增强（如合成新视角）提供了新思路。最后，所提出的基准任务为系统评估视角鲁棒性提供了原则性方法。这项工作为开发能够在真实世界多样化视角下可靠泛化的机器人策略奠定了基础。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文研究视图不变的模仿学习，旨在解决机器人策略在固定视角训练后，因摄像头位置变化导致性能下降的核心问题。提出显式相机条件化方法，通过Plücker嵌入将相机外参融入策略，应用于ACT、Diffusion Policy等标准行为克隆模型。实验在RoboSuite和ManiSkill的六个任务上进行，结果显示，未条件化的策略依赖静态背景线索推断相机姿态，在视角变化时失效；而条件化方法能显著提升泛化能力，恢复性能，实现鲁棒的仅RGB控制。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.02268" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

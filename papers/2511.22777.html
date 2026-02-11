@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Improving Robotic Manipulation Robustness via NICE Scene Surgery - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Improving Robotic Manipulation Robustness via NICE Scene Surgery</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.22777" target="_blank" rel="noreferrer">2511.22777</a></span>
+        <span>作者: Amir Rasouli Team</span>
+        <span>日期: 2025-11-27</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在真实世界中部署机器人操作策略时，跨视觉多样化环境的鲁棒性是关键。然而，通过模仿学习（行为克隆）在演示数据集上训练的策略，在面对训练时未曾见过的视觉干扰物和场景变化时，常常出现显著的性能和安全退化。为了缩小这种分布外（OOD）差距，直接的解决方案是收集更多数据以覆盖缺失的经验，但这通常耗时且资源密集。现有方法包括利用物体中心表示、注意力引导策略等模型级解决方案，或依赖基于物理的渲染器、领域随机化技术和程序化合成场景的大规模模拟器来多样化训练数据。然而，这些方法通常依赖于计算昂贵的模拟器，并假设能获得大规模合成资产和渲染基础设施，这对许多实践者而言并不容易获得。</p>
+<p>本文针对模仿学习中因视觉多样性不足导致的OOD差距这一痛点，提出了一种数据中心的解决方案。核心思路是：不依赖模拟器或额外机器人数据收集，而是直接对现有的真实机器人演示图像进行“场景手术”，通过生成式模型对场景中的非目标干扰物进行编辑，从而低成本地生成大量视觉多样化的新数据，以增强策略对干扰物的鲁棒性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>NICE（Naturalistic Inpainting for Context Enhancement）框架旨在通过对真实演示图像中的干扰物进行编辑，生成视觉上多样化且逼真的新训练数据。其核心设计原则是保持动作标签一致性，即编辑后图像对应的机器人操作动作应与原始演示一致，因此不会删除或遮挡目标物体，并确保新插入的干扰物不会与记录的机器人轨迹冲突。</p>
+<p><img src="https://arxiv.org/html/2511.22777v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：NICE框架概览。方法从检测所有物体、识别目标并分割干扰物开始。然后对选定的干扰物执行移除、重风格化或替换操作。</p>
+</blockquote>
+<p>整体流程分为两个阶段：场景分解与角色分配、场景编辑。</p>
+<p><strong>1. 场景分解与角色分配</strong></p>
+<ul>
+<li><strong>对象解析</strong>：首先使用多任务视觉语言模型Florence-2检测场景中的所有物体，获取其边界框和类别标签。随后，将边界框输入Segment Anything模型 v2 (SAM-2)，为每个物体生成精确的分割掩码和置信度分数。</li>
+<li><strong>目标与干扰物识别</strong>：根据任务指令（如“拾取蓝色方块”）识别目标物体。利用对象解析步骤预测的类别，将目标物体从后续编辑操作中排除。此外，为保持场景一致性，会排除边界框尺寸超过图像高度或宽度40%的过大物体。所有剩余物体被视为可编辑的候选干扰物。</li>
+</ul>
+<p><strong>2. 场景编辑</strong><br>对于每个候选干扰物，NICE在原始图像的副本上执行以下三种编辑操作之一：</p>
+<ul>
+<li><strong>物体移除</strong>：随机选择0到n个物体掩码（n为排除大物体和目标后的物体数），合并为一个掩码。对该掩码进行膨胀以平滑边缘并覆盖原始物体的阴影。最后，使用基于傅里叶卷积的大掩码图像修复模型LaMa，将掩码区域填充为合理的背景内容。</li>
+<li><strong>物体重风格化</strong>：在不改变物体形状或姿态的前提下，改变其外观、纹理或颜色。采用与移除相同的掩码策略，然后从可描述纹理数据集（DTD）中采样纹理贴片，通过叠加并调整亮度、色调和饱和度，将新纹理投影到物体掩码上。</li>
+<li><strong>物体替换</strong>：每次操作替换一个物体。首先对目标区域进行掩码和膨胀处理，然后使用Stable Diffusion修复模型，根据包含新物体名称的结构化提示生成新物体。为确保场景一致性，采用两种策略：1）生成同类别但外观不同的物体实例；2）生成语义相关但类别不同的物体。对于第二种策略，使用小型语言模型Deepseek-r1:7b生成与原始物体尺寸相似的家居物体描述，再输入Stable Diffusion模型。</li>
+</ul>
+<p>与现有方法相比，NICE的创新性在于：1）无需额外的机器人数据收集、模拟器访问或定制模型训练，可直接应用于现有机器人数据集；2）直接在真实图像上进行编辑，保持了原始场景的逼真度，避免了模拟到真实的鸿沟；3）通过三种编辑操作系统性地引入干扰物多样性，同时严格保持任务相关特征（目标物体及其空间关系）不变。</p>
+<p><img src="https://arxiv.org/html/2511.22777v1/pic/nice_raw.jpg" alt="对象解析示例"></p>
+<blockquote>
+<p><strong>图3</strong>：对象解析步骤示例：（左）原始输入图像，（中）使用Florence-2的物体检测结果，（右）使用SAM-2的分割结果。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.22777v1/pic/nice_detection.jpg" alt="编辑操作示例"></p>
+<blockquote>
+<p><strong>图4</strong>：在Bridge数据上使用NICE进行数据增强的示例。每个图像对中，左侧为原始图像，右侧为编辑后的图像。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>评估设置</strong>：实验使用了Bridge数据集中的真实演示图像。评估分为两部分：1）生成数据的质量评估（背景一致性与逼真度）；2）下游任务性能评估，包括空间可供性预测和物体操作。操作任务评估了四种核心技能：拾取物体、移动物体靠近另一个、将一个物体放到另一个上、堆叠两个物体。实验设置了6种杂乱程度（0,1,2,4,8,16个干扰物），共216个场景变体，进行了864次真实世界试验。</p>
+<p><strong>基线方法</strong>：在操作任务中，对比了使用不同数据集微调视觉-语言-动作模型π0的策略：</p>
+<ul>
+<li><strong>Base</strong>：仅使用无干扰物的目标物体演示数据微调。</li>
+<li><strong>+8-Dist</strong>：在Base基础上，增加仅包含8个干扰物场景的演示数据微调。</li>
+<li><strong>+Full</strong>：在Base基础上，增加包含所有杂乱程度场景的完整演示数据微调。</li>
+<li><strong>+NICE</strong>：在Base基础上，增加使用8-Dist数据作为输入、通过NICE框架生成的增强数据微调。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>数据质量</strong>：通过结构相似性指数（SSIM）和弗雷歇起始距离（FID）评估。移除操作生成的图像与真实移除图像相比SSIM值很高（见图6），表明背景重建准确。三种编辑操作生成的图像FID分数均较低，表明其与真实图像在感知和统计上接近，其中替换操作的逼真度最高（见图7）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.22777v1/x3.png" alt="SSIM分布"></p>
+<blockquote>
+<p><strong>图6</strong>：在真实世界数据上使用NICE进行移除操作的SSIM值分布。高SSIM值表明生成图像背景重建准确。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.22777v1/x4.png" alt="FID分数"></p>
+<blockquote>
+<p><strong>图7</strong>：三种增强策略在真实世界图像上的FID分数。较低的FID分数表示生成图像更逼真。</p>
+</blockquote>
+<ol start="2">
+<li><strong>空间可供性预测</strong>：使用RoboPoint模型在低（LC）、中（MC）、高（HC）三种杂乱程度场景中评估。如表I所示，使用NICE增强数据后，预测准确率（APA）显著提升，在低、中杂乱场景中提升超过15%，在高杂乱场景中提升高达21.36%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.22777v1/x5.png" alt="杂乱场景示例"></p>
+<blockquote>
+<p><strong>图8</strong>：不同杂乱程度场景的样本。从左至右：低杂乱度（1-2个物体）、中杂乱度（5-8个物体）、高杂乱度（11-15个物体）。</p>
+</blockquote>
+<ol start="3">
+<li><strong>机器人操作</strong>：<ul>
+<li><strong>成功率</strong>：如图9（左）所示，使用NICE数据微调的策略，在不同干扰物数量下的平均成功率显著优于Base和8-Dist策略。尽管NICE数据仅基于8个干扰物的场景生成，但其性能与使用完整手工制作场景数据（Full）微调的策略持平，平均成功率提升11%。</li>
+<li><strong>失败率分析</strong>：如表II所示，NICE策略显著降低了碰撞率（CR）和目标混淆率（TCR），分别比8-Dist降低了7%和6%，比Full降低了12%和4%。这表明NICE通过多样化干扰物，有效提升了策略的安全性和目标识别准确性。</li>
+<li><strong>不同任务分析</strong>：如表III所示，任务越复杂（如涉及两个目标物体的“放置”和“堆叠”任务），NICE在降低碰撞率方面的优势越明显。虽然在仅涉及抓取的“拾取”任务中成功率略低于Full（因未改变目标物体姿态，对抓取鲁棒性提升有限），但其碰撞率仍然大幅降低。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.22777v1/x6.png" alt="操作结果与场景"></p>
+<blockquote>
+<p><strong>图9</strong>：（左）在不同数据集上微调的操纵策略π0的性能对比。（右）实验中使用的具有不同数量干扰物的示例场景。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：实验通过比较不同数据配置（Base, +8-Dist, +Full, +NICE）微调策略的效果，验证了NICE各组件（三种编辑操作）的整体贡献。结果表明，仅使用有限干扰物场景（8-Dist）进行微调已有一定效果，但NICE通过编辑操作进一步多样化这些数据，带来了显著的额外性能提升，尤其是在降低碰撞率和目标混淆率方面，其效果甚至优于包含更多手工配置但多样性可能不足的完整数据集（Full）。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了NICE框架，一种无需额外机器人数据收集、模拟器或定制模型训练，即可通过“场景手术”对现有机器人演示数据进行增强，以提高策略对干扰物鲁棒性的新方法。</li>
+<li>通过实证评估验证了NICE生成数据的逼真度（高SSIM、低FID），证明其能有效缩小模拟到真实的差距。</li>
+<li>系统性地展示了NICE增强数据对下游任务（空间可供性预测和物体操作）的显著提升效果，包括提高成功率、降低目标混淆率和碰撞率。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>目前主要关注移除、重风格化和替换三种编辑操作。诸如重新排列或添加物体等操作，需要对机器人三维空间动作有更好理解以保持真实性，尚未涉及。</li>
+<li>在编辑过程中未改变目标物体的位置和姿态，因此可能无法提升策略对抓取姿态变化的鲁棒性。</li>
+<li>评估的任务范围有限，不同复杂度的任务受干扰物影响的程度和方式可能不同。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li>数据中心的增强方法，特别是直接操作真实图像以引入可控多样性的方法，是提升视觉-运动策略鲁棒性的一种有效且可扩展的途径，尤其适用于数据或计算资源有限的情况。</li>
+<li>将场景编辑技术从通用计算机视觉领域适配到机器人学，为解决机器人特有的鲁棒性挑战（如动作一致性约束）提供了新思路。</li>
+<li>未来的工作可以探索更复杂的场景编辑操作（如物体添加、位姿变化），并将其影响扩展到更广泛的机器人技能集合上进行评估。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人模仿学习中因视觉干扰物导致的分布外（OOD）性能下降问题，提出NICE框架。该方法利用图像生成与大型语言模型，对现有演示场景进行对象替换、重风格化及干扰物移除三种编辑，以低成本增强视觉多样性。实验表明，NICE能有效缩小OOD差距：在高度杂乱场景中，空间可供性预测准确率提升超20%；操作任务在干扰环境下的平均成功率提高11%，目标混淆率降低6%，碰撞率减少7%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.22777" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

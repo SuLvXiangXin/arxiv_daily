@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VLA-0: Building State-of-the-Art VLAs with Zero Modification - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>VLA-0: Building State-of-the-Art VLAs with Zero Modification</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.13054" target="_blank" rel="noreferrer">2510.13054</a></span>
+        <span>作者: Fabio Ramos Team</span>
+        <span>日期: 2025-10-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前构建视觉-语言-动作模型的主流方法可分为三类：1）<strong>离散令牌VLA</strong>（如RT-2、OpenVLA），将连续动作离散化为有限个区间，并将每个区间映射到VLM词汇表中的一个令牌。这种方法限制了动作空间的分辨率，并可能损害VLM预训练的语言理解能力。2）<strong>生成动作头VLA</strong>（如π0、SmolVLA），在VLM之上附加一个动作生成头，将VLM输出的潜在向量解码为连续动作。这引入了需要调优的新神经网络，可能导致VLM的语言基础和泛化能力下降。3）<strong>自定义架构VLA</strong>（如OpenVLA-OFT、π-FAST），涉及专门的架构修改或自定义分词器，通常需要复杂的训练流程。</p>
+<p>这些方法普遍增加了模型的复杂性。本文针对这一痛点，提出了一个全新的、极简的视角：<strong>为什么不直接将动作表示为文本？</strong> 具体而言，本文探索了将机器人动作（如坐标、关节角度）编码为数字字符串，并直接利用VLM原生的文本生成能力来预测这些字符串的方法，该方法无需修改VLM的词汇表或添加任何新组件。本文的核心思路是：通过精心设计的训练和推理配方，这种最简单的、无需任何修改的VLA设计（VLA-0）能够达到甚至超越现有复杂方法的性能。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>VLA-0的整体框架极其简洁：它直接使用一个基础VLM，通过特定的提示工程，使其能够接收视觉和语言指令，并输出代表动作的文本字符串，从而完成从感知到动作的端到端映射。</p>
+<p><img src="https://arxiv.org/html/2510.13054v1/x3.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：VLA-0的整体框架。它不对底层VLM做任何改变。输入包括系统提示、语言指令和图像（例如来自左、右相机的画面），输出是表示为空格分隔整数的动作序列。</p>
+</blockquote>
+<p><strong>输入与输出</strong>：VLA-0的输入继承自基础VLM，包括：1）<strong>系统提示</strong>，用于设定VLM的高级目标；2）<strong>图像</strong>，在仿真实验中采用第三人称和腕部相机图像，在真实实验中使用左右相机图像；3）<strong>任务指令</strong>，例如“把香蕉放到盘子上”。输出是代表未来H个时间步、每个动作D个维度的 <code>H×D</code> 个整数序列，以空格分隔。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>动作解码</strong>：VLA-0将动作生成为文本。为简化任务，将原始的连续动作值归一化到一个固定的整数范围（如[0, 1000]），然后要求VLM为每个动作维度生成一个整数。这种方法允许任意高的动作分辨率，且无需改变模型词汇表。</li>
+<li><strong>集成预测</strong>：在推理时，VLA-0采用动作集成技术。在每个时间步t，模型预测未来n个动作。因此，对于当前要执行的动作，有n个可用的预测值（分别来自当前步及之前n-1步的预测序列中对应的位置）。最终执行的动作是这n个预测的平均值，这提高了动作的稳定性。</li>
+<li><strong>掩码动作增强</strong>：这是一种训练时数据增强方法。由于VLM以自回归方式生成文本，每个生成的令牌都依赖于之前生成的令牌。在训练时，随机掩码目标动作字符串中的字符，迫使VLM必须基于视觉观察和指令来推理动作，而不是简单地自动完成已开始的数字序列。</li>
+</ol>
+<p><strong>训练细节</strong>：对基础VLM（本文使用Qwen-VL-2.5-3B）进行全参数微调，使用标准的交叉熵损失来优化动作文本的生成。优化器为Adam，训练64个epoch，批量大小为192，学习率为5e-6。</p>
+<p><strong>创新点</strong>：与现有方法相比，VLA-0的核心创新在于其极简的设计理念。它<strong>完全避免了</strong>对VLM架构、词汇表或输出头的任何修改，纯粹通过提示工程和训练技巧，将动作预测任务转化为VLM原生擅长的文本生成任务。其性能提升的关键在于上述精心设计的训练与推理配方。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>仿真评估</strong>：使用广泛采用的LIBERO基准测试，包含Spatial、Object、Goal、Long四个套件，每个套件10个任务，每个任务测试50回合。</li>
+<li><strong>真实世界评估</strong>：使用SO-100机器人和LeRobot框架，在四个不同的操作任务上（重新定向积木、推苹果、抓放香蕉、抓放纸杯蛋糕）进行测试，每个任务收集100条演示用于训练。</li>
+<li><strong>对比基线</strong>：涵盖了前述三大类VLA方法，包括OpenVLA（离散令牌）、SmolVLA、π0、GR00T-N1（生成动作头）、OpenVLA-OFT、π-FAST（自定义架构），以及经典的Diffusion Policy。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2510.13054v1/x1.png" alt="仿真结果表"></p>
+<blockquote>
+<p><strong>表I</strong>：在LIBERO上的性能对比。VLA-0（未进行大规模动作预训练）的平均成功率为**94.7%**，排名第一，超过了所有同级别（未预训练）的基线方法。更令人惊讶的是，即使与那些经过大规模动作预训练的模型（如π0.5-KI、π0、GR00T-N1）相比，VLA-0（未预训练）也超越了其中多数，平均排名第二（2.8），仅次于经过预训练的OpenVLA-OFT（排名1.5）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.13054v1/x4.png" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>图4</strong>：在四个真实世界任务上的成功率对比。VLA-0（从零开始训练）的平均成功率比经过大规模SO-100数据集预训练的SmolVLA高出<strong>12.5个百分点</strong>，证明了该方法从仿真到真实世界的有效迁移。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：<br>表II展示了关键设计选择的消融研究结果：</p>
+<ul>
+<li><strong>动作集成</strong>：禁用后，平均成功率下降2.0点，表明这是提升性能的关键组件。</li>
+<li><strong>掩码动作增强</strong>：移除后，成功率下降1.2点，证明其能带来稳定但适度的收益。</li>
+<li><strong>动作分辨率</strong>：将分辨率从1000降低到250会导致性能下降1.5点，而提高到4000则没有额外收益，说明1000对于LIBERO任务已足够。</li>
+<li><strong>图像拼接</strong>：将多张图像拼接为一张输入，与作为独立实体输入相比，性能差异可以忽略不计（仅差0.2点）。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>证明了极简VLA设计的有效性</strong>：本文令人信服地表明，无需修改VLM架构、仅将动作表示为文本的简单策略，在精心设计的配方下，能够达到甚至超越当前更复杂VLA方法的性能。</li>
+<li><strong>提出了一套高效的训练与推理配方</strong>：明确了动作解码、集成预测和掩码动作增强等关键技术，是解锁这种简单设计高性能的关键。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>本文未探索VLA-0在进行大规模动作数据预训练后的性能潜力。</li>
+<li>当前基于标准PyTorch实现的推理速度约为4 Hz，论文指出通过量化、蒸馏等技术有望进一步提升，但这留待未来工作。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：<br>本文挑战了“构建高性能VLA必须增加模型复杂性”的普遍假设，为社区提供了一个强大的基线和一个新的研究方向。它提示研究者应更深入地探索如何更充分地利用基础VLM的原生能力，而非急于添加复杂模块。同时，其成功的训练配方（如掩码动作增强）也为改进其他序列生成模型的训练提供了思路。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出VLA-0，旨在解决构建视觉-语言-动作模型时方法复杂、可能损害基础模型性能的问题。其核心方法是将动作直接表示为文本，通过提示视觉语言模型预测动作文本，无需修改模型架构或添加额外模块。实验表明，在LIBERO基准测试中，VLA-0超越了所有使用相同机器人数据训练的现有方法（如π0.5-KI、OpenVLA-OFT等），且在没有大规模机器人特定训练的情况下，性能优于经过大规模数据训练的模型。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.13054" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>ViReSkill: Vision-Grounded Replanning with Skill Memory for LLM-Based Planning in Lifelong Robot Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>ViReSkill: Vision-Grounded Replanning with Skill Memory for LLM-Based Planning in Lifelong Robot Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.24219" target="_blank" rel="noreferrer">2509.24219</a></span>
+        <span>作者: Yang You Team</span>
+        <span>日期: 2025-09-29</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>基于强化学习（RL）或模仿学习（IL）的传统机器人运动生成方法通常需要大量演示或试错，难以快速适应新任务或未见过的条件。近期的大语言模型（LLM）和视觉语言模型（VLM）展现出利用外部知识库、以最少任务数据生成计划的潜力。然而，直接将LLM/VLM用于运动规划面临两大关键障碍：其一，符号化的计划通常难以“接地”（grounding），即无法充分考虑场景几何和物体物理约束；其二，模型输出可能不稳定（如幻觉和运行间差异），损害了运动计划执行的可靠性。本文针对这两个痛点，提出了一个结合视觉接地重规划与技能记忆积累和复用的新视角。其核心思路是：当任务失败时，系统基于当前视觉观察进行重规划，生成贴合实际状态的新动作序列；当任务成功时，将执行过的计划作为可重用技能存储，后续遇到相同任务时无需再次调用LLM/VLM即可直接回放，从而形成一个能够自主持续学习、扩展技能库并稳定执行的闭环。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>ViReSkill框架旨在解决基于LLM的机器人操作中的终身技能学习挑战。其整体是一个“规划-执行-反思-存储”的闭环学习过程。</p>
+<p><img src="https://arxiv.org/html/2509.24219v1/figure/overview1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：ViReSkill框架概览。给定一个语言指定的操作任务，LLM在规划阶段提出分步控制计划。如果该任务之前已成功解决，则直接回放技能记忆中的计划，无需额外调用LLM。若执行失败，则进入重规划阶段：VLM通过分析执行视频定位首个失败步骤并解释原因；LLM据此修复计划。成功后，经验证的计划/代码被提交到按任务索引的技能记忆中。通过在失败时进行视觉接地重规划、在成功时进行零推理回放的交替，技能库得以增长，模型调用和方差得以减少，成功率随时间提高。</p>
+</blockquote>
+<p><strong>核心模块1：LLM任务规划</strong>。该方法沿用VoxPoser的设计，使用LLM生成可执行的Python代码。流程分为三步：1) <strong>规划器</strong>将自然语言任务指令分解为一系列结构化子任务指令序列；2) <strong>组合器</strong>针对每个子任务指令，构建一组语言模型程序，分别负责物体检测、功能预测、运动规划等不同功能；3) <strong>执行器</strong>运行这些低层LMP，生成子轨迹并串联成完整轨迹。一个任务对应的技能被定义为所有子任务对应的LMP模块序列。</p>
+<p><strong>核心模块2：技能记忆与终身学习执行框架</strong>。系统维护一个任务特定的技能记忆，存储成功执行过的高层计划和底层控制代码。训练过程（见算法1）旨在平衡探索与利用：训练共10次迭代，分为2轮，每轮5次迭代。每轮开始时，若记忆中存在当前任务的技能，则直接初始化控制代码以进行利用；否则，由LLM根据任务描述生成新代码。在一轮的5次迭代中，收集成功指标和视觉证据（视频）。若迭代成功，代码不变；若失败，则触发基于视觉的重规划来探索新计划。每轮最多进行4次重规划尝试，之后更有效的策略是开启新一轮，并从记忆中最新的成功版本重新初始化。这种设计使系统能迭代式地积累和精炼技能。</p>
+<p><strong>核心模块3：视觉接地的重规划与技能迁移</strong>。这是实现失败恢复和探索的关键。当计划失败时，系统从技能记忆中检索相关成功经验以辅助重规划。检索采用双路策略（公式9）：一半示例基于整个任务描述的嵌入向量余弦相似度（任务相似性）；另一半基于失败计划中每个子任务指令与记忆中子任务指令的最大代码行级相似度的平均值。检索到的示例会被注入到代码生成或重规划提示中，以促进技能迁移。</p>
+<p><img src="https://arxiv.org/html/2509.24219v1/figure/video_reflection_v2.png" alt="分层视频反思机制"></p>
+<blockquote>
+<p><strong>图2</strong>：分层视频反思机制概述。将文本计划和执行视频按逻辑块分割（以“打开夹爪”作为启发式分割点）。每个块被总结为高层自然语言描述，并与对应视频片段对齐，由VLM评估以定位失败。VLM提供明确的失败原因，该原因与原始计划一同用于引导LLM生成修正。</p>
+</blockquote>
+<p>重规划的核心是一个<strong>分层视频反思机制</strong>。为了解决VLM处理长时程任务、复杂计划代码和有限视觉帧数的挑战，该机制首先将高层计划和执行视频分割成逻辑块（使用“打开夹爪”作为简单启发式）。每个块被单独总结并拼接，形成计划的简明描述，以减轻VLM的混淆。VLM比较总结后的计划与原始视频，识别第一个失败块，并分析该块的计划代码和视频以提供接地的失败解释。对于“计划级逻辑错误”（每一步执行正确但整体逻辑错误导致失败），系统会明确指示所有动作执行成功，从而触发LLM对高层计划进行逻辑反思。最后，LLM根据检测到的失败原因和原始计划代码生成修订计划。重规划过程还受DROC系统启发，基于相关物体的属性（如尺度）来接地，例如确定合适的偏移和避障策略。</p>
+<p><strong>创新点</strong>：与现有工作（如SayCan、VoxPoser、Reflexion、REFLECT）相比，ViReSkill的主要创新在于将<strong>视觉接地的重规划</strong>与<strong>技能记忆的零推理回放</strong>统一在一个闭环中。这不仅实现了基于实时观察的失败恢复，还通过系统性地重用成功经验，减少了LLM/VLM调用，稳定了执行，并实现了能力的持续扩展。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：评估在仿真和真实世界两种环境下进行。仿真基准使用了<strong>LIBERO</strong>（评估了Object, Spatial, Goal, 10四个子集，各10个任务）和<strong>RLBench</strong>（选择了9个任务）两个广泛采用的机器人操作基准。真实机器人平台为<strong>UR5</strong>，配备Robotiq 2F夹爪和RealSense RGB-D相机，评估了4个代表性任务。对比的基线方法包括：<strong>VoxPoser</strong>（无重规划的基础规划）、<strong>Retry</strong>（失败后完全重新生成）、<strong>Reflexion</strong>（基于最终失败帧的反思）、<strong>REFLECT</strong>（分层多感官反思）。主要评估指标为任务成功率。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>LIBERO基准</strong>：ViReSkill在最终迭代的平均成功率上全面优于基线（平均0.78 vs. VoxPoser 0.45, Retry 0.46, Reflexion 0.71, REFLECT 0.66）。在更具挑战性的、需要时序推理的LIBERO-10复合任务上，ViReSkill优势明显（0.66），显著超过了其他方法。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.24219v1/figure/libero_object_paper.png" alt="LIBERO-Object结果"></p>
+<blockquote>
+<p><strong>图3</strong>：LIBERO-Object子集上各方法成功率随迭代变化。ViReSkill与Reflexion性能相当且优异，均达到约0.94。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.24219v1/figure/libero_spatial_paper.png" alt="LIBERO-Spatial结果"></p>
+<blockquote>
+<p><strong>图4</strong>：LIBERO-Spatial子集结果。ViReSkill（0.80）略优于Reflexion（0.72）和REFLECT（0.78）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.24219v1/figure/libero_goal_paper.png" alt="LIBERO-Goal结果"></p>
+<blockquote>
+<p><strong>图5</strong>：LIBERO-Goal子集结果。ViReSkill、Reflexion和REFLECT性能相当（0.70）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.24219v1/figure/libero_10_paper.png" alt="LIBERO-10结果"></p>
+<blockquote>
+<p><strong>图6</strong>：LIBERO-10子集结果。ViReSkill（0.66）显著优于其他所有基线，展示了其在复杂多阶段任务中的优势。</p>
+</blockquote>
+<ol start="2">
+<li><strong>RLBench基准</strong>：ViReSkill取得了最高的平均成功率（0.82），优于VoxPoser（0.47）、Retry（0.58）和Reflexion（0.78）。</li>
+<li><strong>真实机器人评估</strong>：ViReSkill在真实任务上的成功率（75%）大幅超越VoxPoser基线（30%），证明了其从仿真到现实的泛化能力。例如，在“将两个杯子放在托盘上”的任务中，VoxPoser生成的计划是顺序放置到托盘中心上方，而ViReSkill通过重规划后生成的计划能指定将杯子分别放置到托盘的前左和后右部分，避免了碰撞，展示了其基于视觉观察调整计划细节的能力。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.24219v1/figure/ur5_2tasks.png" alt="UR5执行多任务"></p>
+<blockquote>
+<p><strong>图7</strong>：UR5机器人使用ViReSkill执行多样真实世界任务的演示。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.24219v1/figure/ur5_bowl_task1.png" alt="UR5执行碗碟任务"></p>
+<blockquote>
+<p><strong>图8</strong>：UR5执行“拿起碗放在盘子上”任务的演示。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 提出了一种<strong>视觉接地的重规划策略</strong>，能够通过分析执行视频定位失败并生成贴合当前场景的可行运动计划，实现失败恢复。2) 设计了一个<strong>技能记忆执行框架</strong>，将成功计划存储为零推理可重用的技能，随时间扩展技能集，提高稳定性并减少LLM/VLM调用。3) 在LIBERO、RLBench仿真基准和真实UR5机器人上进行了全面的<strong>实证评估</strong>，证明了该方法在提升任务成功率（如LIBERO平均从45%提升至78%）和实现终身学习方面的有效性。</p>
+<p><strong>局限性</strong>：论文自身未明确列出局限性，但从方法描述中可推断，其性能依赖于VLM的视频理解与失败诊断能力、LLM的规划与代码生成质量，以及技能记忆检索的准确性。技能的记忆和重用可能受任务相似性度量的影响，对于全新或差异过大的任务，仍需依赖基础的LLM规划。</p>
+<p><strong>研究启示</strong>：ViReSkill展示了一种将大模型规划、实时感知反馈与经验积累相结合的闭环终身学习范式。其对后续研究的启示在于：1) <strong>闭环学习的重要性</strong>：将执行结果（尤其是视觉反馈）纳入规划循环对于在动态物理世界中实现可靠操作至关重要。2) <strong>减少对大模型的依赖</strong>：通过构建和复用本地技能记忆，可以在不牺牲性能的前提下，显著减少对计算成本高、可能不稳定的云端大模型的调用，这对机器人实际部署具有实用价值。3) <strong>经验复用与组合</strong>：如何更高效地检索、组合和泛化技能记忆中的经验，以解决更广泛的新任务，是一个富有前景的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对基于LLM/VLM的机器人运动规划中符号计划缺乏物理基础性和输出不稳定的问题，提出ViReSkill框架。该方法结合视觉基础的重新规划与技能记忆：失败时基于当前视觉场景生成新的动作序列，成功时将执行计划存储为可重用技能以供后续直接调用。在LIBERO、RLBench模拟器和物理机器人上的实验表明，ViReSkill在任务成功率上 consistently outperforms conventional baselines，并实现了 robust sim-to-real generalization。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.24219" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

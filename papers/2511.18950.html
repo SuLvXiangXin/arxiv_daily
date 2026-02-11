@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Compressor-VLA: Instruction-Guided Visual Token Compression for Efficient Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Compressor-VLA: Instruction-Guided Visual Token Compression for Efficient Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.18950" target="_blank" rel="noreferrer">2511.18950</a></span>
+        <span>作者: Wenjing Qian Team</span>
+        <span>日期: 2025-11-24</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）模型已成为具身智能中强大的范式，其通过预训练大型多模态数据集，直接将原始感官输入和语言指令映射为底层机器人动作。然而，这类模型通常采用高容量视觉Transformer（ViT）将图像编码为数百甚至数千个视觉令牌，这些冗长的序列在后续由大语言模型（LLM）处理时会产生巨大的计算开销，成为实时机器人部署的关键瓶颈。现有的高效处理方法，如令牌剪枝、合并或基于查询的聚合，虽然能减少令牌数量，但其本质上是任务无关的，无法根据具体指令动态保留任务关键信息，在压缩过程中可能丢失对机器人操作至关重要的视觉信息。</p>
+<p>本文针对VLA模型中视觉令牌冗余且任务无关压缩效率低下的痛点，提出了一种新颖的、指令引导的混合令牌压缩框架。核心思路是摒弃直接的“硬”剪枝，转而通过一个由自然语言指令动态调制的双通路压缩器，重构出一组紧凑的视觉令牌，旨在同时保留任务相关的整体语义上下文和精确动作所需的细粒度空间细节。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Compressor-VLA的整体框架是一个插入在预训练视觉编码器和LLM主干之间的令牌压缩模块，它接收视觉特征和语言指令嵌入，输出压缩后的视觉令牌序列供LLM生成动作。</p>
+<p><img src="https://arxiv.org/html/2511.18950v1/fig-2.png" alt="方法整体架构"></p>
+<blockquote>
+<p><strong>图2</strong>：Compressor-VLA架构。模块包含两个指令引导的并行通路：语义任务压缩器（STC）使用语言调制其查询，空间细化压缩器（SRC）将语言信息直接注入局部视觉令牌。</p>
+</blockquote>
+<p>具体数据流如下：输入为来自视觉编码器的视觉特征 (X \in \mathbb{R}^{N \times D})（N为令牌数，D为嵌入维度）以及来自VLA自身LLM主干的语言指令嵌入。语言嵌入经过均值池化得到固定大小的向量 (L_{pooled})，作为整个压缩过程的调节信号。压缩过程通过两个并行组件完成：</p>
+<ol>
+<li><strong>语义任务压缩器（STC）</strong>：负责提炼全局的、任务导向的场景摘要。它使用一组少量的可学习查询 (Q \in \mathbb{R}^{k \times D})（(k \ll N)）。关键创新在于使用特征线性调制（FiLM）根据语言指令动态调制这些查询。首先通过一个MLP从 (L_{pooled}) 计算任务语义表示 (E_L)，再用另一个MLP生成每个查询的仿射变换参数（缩放 (\gamma) 和偏移 (\beta)），从而得到条件化查询 (Q_{con} = \gamma \odot Q + \beta)。这些条件化查询通过交叉注意力与全部视觉令牌 (X) 交互，生成全局摘要 (Z_G \in \mathbb{R}^{k \times D})。这使得STC的查询能够作为抽象的“概念检测器”，根据指令自适应地寻找场景中的相关概念。</li>
+<li><strong>空间细化压缩器（SRC）</strong>：负责在减少令牌数量的同时保留细粒度的、任务相关的局部细节。它将视觉特征 (X&#39; \in \mathbb{R}^{H \times W \times D}) 划分为不重叠的局部窗口（大小为 (w \times w)）。对于每个窗口的特征 (X_w)，先通过下采样生成一个“原始”查询 (q_{raw})，然后与一个由独立MLP从 (L_{pooled}) 变换得到的指令嵌入 (E&#39;_L) 直接相加，形成条件化查询 (q_w)。该查询随后通过注意力机制与原始窗口令牌交互，生成该窗口的摘要 (z_w)。所有窗口摘要拼接后形成局部表示 (Z_L \in \mathbb{R}^{N&#39; \times D})。这种简单的直接注入方式旨在为局部查询提供“提示”，使其注意力偏向于任务相关特征，同时最小化对高保真空间信息的扭曲。</li>
+</ol>
+<p>最终，压缩后的视觉令牌序列为 (Z = \text{Concat}([Z_G; Z_L]))，然后输入LLM主干。与现有方法相比，本工作的核心创新在于：1) <strong>指令引导的压缩</strong>：整个压缩过程由任务指令动态调制，实现目标导向的信息过滤；2) <strong>混合重构架构</strong>：通过STC和SRC双通路协同工作，分别保留全局语义和局部空间信息，而非简单地丢弃令牌。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在仿真和真实世界两个场景中进行。主要使用<strong>LIBERO</strong>基准测试（包括Spatial, Object, Goal, Long四个任务套件，共40个任务），并在<strong>Mobile ALOHA</strong>双臂机器人平台上进行真实部署验证。对比方法包括通用VLA模型（OpenVLA-OFT, CogACT, π0）和高效VLA方法（SP-VLA, FastV, SparseVLM, SpecPrune-VLA, VLA-Cache）。评估指标包括任务成功率、FLOPs和压缩后的令牌数量。</p>
+<p>关键实验结果总结如下：在LIBERO基准上，Compressor-VLA取得了97.3%的平均成功率，与基线OpenVLA-OFT（97.1%）相当，同时将FLOPs降低了59%（从3.95T降至1.62T），并将视觉令牌数量压缩了超过3倍（从512个降至160个）。与其他高效VLA方法相比，Compressor-VLA在成功率和计算效率之间取得了更好的平衡。</p>
+<p><img src="https://arxiv.org/html/2511.18950v1/fig-1.png" alt="实验结果表"></p>
+<blockquote>
+<p><strong>图1</strong>：三种视觉信息处理流程对比。(a)标准VLA处理所有令牌；(b)先验的剪枝方法以任务无关方式丢弃低分令牌；(c)所提出的Compressor-VLA通过双机制方法进行指令引导的压缩，重构出紧凑的令牌集。该图直观展示了本文方法与基线及传统剪枝方法的区别。</p>
+</blockquote>
+<p>消融实验（表2）验证了各组件贡献：完整的“STC+SRC”架构性能最佳；移除任一路径（STC-Only或SRC-Only）或移除指令引导（No Guidance）均导致性能显著下降，证明了双通路和指令引导的必要性；在SRC中使用更复杂的FiLM调制（STC+SRC-FiLM）反而略逊于简单的直接注入，表明后者更利于保留空间细节。超参数敏感性分析（表3）表明，全局查询数k=16和局部窗口大小w=2是最佳设置，且模型对局部窗口大小更为敏感。</p>
+<p><img src="https://arxiv.org/html/2511.18950v1/fig-5-1-0.png" alt="真实世界执行示例"></p>
+<blockquote>
+<p><strong>图3</strong>：在真实世界任务上的执行示例。展示了模型在空间感知和语义理解任务中的实际表现，验证了其从仿真到现实的迁移能力。</p>
+</blockquote>
+<p>真实机器人实验（表4）显示，Compressor-VLA在“空间感知”和“语义理解”任务上分别取得了100%和83.3%的成功率，与原基线性能相当甚至更优，证明了其实际应用价值。</p>
+<p>定性分析通过可视化进一步阐明了方法机理。指令条件注意力可视化（图4）显示，对于同一初始场景，当语言指令改变时，STC的注意力焦点会动态地转移到新指令指定的目标物体上，证明了压缩过程是目标导向且具有时序感知能力的。</p>
+<p><img src="https://arxiv.org/html/2511.18950v1/fig-3.png" alt="指令条件注意力可视化"></p>
+<blockquote>
+<p><strong>图4</strong>：指令条件注意力可视化。相同初始场景下，STC模块针对不同语言指令的注意力图。左图指令关注“字母汤罐头”，右图指令则关注“奶油奶酪盒”，注意力焦点成功切换。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.18950v1/fig-4.png" alt="混合架构协同可视化"></p>
+<blockquote>
+<p><strong>图5</strong>：混合架构在多个任务上的协同作用可视化。展示了STC（全局规划，如定位不同杯子）和SRC（局部细化，如聚焦杯子把手或边缘）在不同任务中的互补角色。</p>
+</blockquote>
+<p>混合架构协同可视化（图5）表明，STC扮演高级规划者角色，定位与指令相关的关键物体；而SRC则专注于保留对精确操作至关重要的细粒度细节（如物体的把手、边缘）。两者协同工作，验证了架构设计的有效性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了Compressor-VLA，首个为VLA模型设计的、指令引导的混合令牌压缩框架，通过STC和SRC双通路实现任务导向的高效视觉信息压缩；2）在LIBERO基准上实现了性能与效率的优异权衡，大幅降低计算开销的同时保持了高成功率，并成功迁移至真实机器人平台；3）通过详实的定性与定量分析，验证了指令引导机制和双通路架构的有效性与协同作用。</p>
+<p>论文自身提到的局限性包括：压缩模块需要针对特定的VLA基座模型进行微调；实验主要集中于桌面物体操纵任务，在更复杂、动态环境中的泛化能力有待进一步验证。</p>
+<p>本工作对后续研究的启示在于：为VLA模型的高效化提供了一个新颖的、基于指令感知的重构式压缩思路，而非简单的丢弃。未来可探索将此类压缩机制更深度地集成到VLA的预训练过程中，或将其应用于更广泛的具身任务（如导航、人机交互），并研究其对模型决策可解释性的潜在提升作用。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作（VLA）模型处理冗余视觉令牌时计算开销大、阻碍实时机器人部署的核心问题，提出Compressor-VLA框架。该方法采用指令引导的混合压缩机制，包含语义任务压缩器（STC）提取整体任务上下文和空间细化压缩器（SRC）保留细粒度空间细节，实现自适应视觉信息压缩。实验表明，在LIBERO基准上模型保持竞争性成功率的同时，计算量（FLOPs）减少59%，视觉令牌数量降低超过3倍，真实机器人部署验证了其模拟到现实的迁移性和实用性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.18950" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

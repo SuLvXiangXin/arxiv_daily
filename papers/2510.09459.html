@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Failure Prediction at Runtime for Generative Robot Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Failure Prediction at Runtime for Generative Robot Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.09459" target="_blank" rel="noreferrer">2510.09459</a></span>
+        <span>作者: Angela P. Schoellig Team</span>
+        <span>日期: 2025-10-13</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，利用大规模预训练模型（如大语言模型、扩散模型）生成机器人策略（指令→动作序列）已成为机器人学的前沿方向。然而，这些生成式策略在开放世界部署时，可能产生不可预测的失败动作，例如与环境物理规则冲突或无法达成任务目标，这带来了严重的安全与可靠性隐患。现有的事后失败检测方法通常依赖于任务完成信号或昂贵的人工标注，无法在动作执行前进行预测；而传统的运行时监控方法则多针对特定、低维的感知状态（如碰撞检测），难以应对生成式策略所处理的高维、复杂的语义空间。</p>
+<p>本文针对生成式机器人策略缺乏高效、通用的运行时自我监控能力这一具体痛点，提出了一个新视角：<strong>利用生成模型本身固有的多模态输出（即对同一指令的多个可能动作序列）来评估其决策的内在一致性，从而预测潜在失败</strong>。其核心思路是，一个可靠的策略在面对确定情境时，其不同输出应趋于一致；而若模型“困惑”或不确定，其多模态输出会发散，这种发散可作为即将发生失败的先行指标。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出了一种名为 <strong>FPR（Failure Prediction at Runtime）</strong> 的框架，其核心是在策略执行时并行运行一个轻量级的失败预测模块。该框架无需外部监督，通过利用策略模型自身的多模态输出来生成自监督信号进行训练。</p>
+<p><img src="https://img-blog.csdnimg.cn/direct/6d0e9d1f5b0e4c94a2a9b7b2d1b6c6c2.png" alt="FPR框架"></p>
+<blockquote>
+<p><strong>图1</strong>：FPR方法整体框架。左侧为策略模型，接收当前观测和语言指令，通过从条件分布中多次采样，生成K个候选动作序列。右侧为失败预测模型，接收这K个动作序列，通过一个编码器和一致性评估模块，输出一个失败概率分数。该分数用于在运行时决定是否触发安全机制（如停止、重试或请求帮助）。</p>
+</blockquote>
+<p><strong>整体流程</strong>分为离线训练和在线推理两个阶段：</p>
+<ol>
+<li><strong>离线训练</strong>：收集策略模型在训练任务上的 rollout 数据。对于每个时间步，策略模型根据当前观测和指令生成K个候选动作序列。失败预测模型以这K个序列为输入，其训练目标是预测该时间步之后实际执行的动作序列是否最终导致了任务失败。<strong>关键创新在于训练标签的获取</strong>：通过实际执行其中一个动作序列，并根据最终的任务成功/失败信号，为当前时间步的所有K个候选序列分配同一个伪标签（成功或失败）。这基于的假设是，在导致失败的时间点，模型的多模态输出整体上会表现出不一致性。</li>
+<li><strong>在线推理</strong>：部署时，策略模型同样生成K个候选动作序列，失败预测模型实时计算其失败概率。若概率超过阈值，则触发干预。</li>
+</ol>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ul>
+<li>**策略模型 (Policy Model)**：本文方法独立于具体的策略模型，可应用于任何能进行多模态采样的生成模型（如基于扩散的策略或集成采样）。其作用是根据观测 (o_t) 和指令 (L) 生成动作分布 (p(a_t | o_t, L))，并通过多次采样得到候选动作序列 ({A_t^{(1)}, ..., A_t^{(K)}})。</li>
+<li>**失败预测模型 (Failure Prediction Model)**：这是一个轻量级神经网络。<ul>
+<li><strong>编码器</strong>：首先使用一个共享权重的动作编码器（如MLP）将每个候选动作序列 (A_t^{(k)}) 编码为特征向量 (e_t^{(k)})。</li>
+<li><strong>一致性聚合器</strong>：然后计算所有K个特征向量的均值 (\mu_t) 和标准差 (\sigma_t)。向量 (\sigma_t) 直观地代表了多模态输出之间的离散程度（不一致性）。</li>
+<li><strong>预测头</strong>：最后，将均值 (\mu_t) 和标准差 (\sigma_t) 拼接，输入到一个预测头（MLP）中，输出一个标量失败概率 (\hat{y}_t \in [0,1])。</li>
+</ul>
+</li>
+<li><strong>损失函数</strong>：使用二元交叉熵损失 (L_{BCE}) 进行训练，其中目标标签 (y_t) 是上述的伪标签（失败为1，成功为0）。</li>
+</ul>
+<p><strong>与现有方法的创新点</strong>：</p>
+<ol>
+<li><strong>自我监控</strong>：完全利用策略模型自身的内部信号（多模态输出分布），无需任何外部探测器、任务完成函数或人工标注。</li>
+<li><strong>将失败预测转化为一致性评估</strong>：将复杂的“动作是否会导致失败”的问题，转化为更易量化的“模型对当前决策是否确定”的问题。</li>
+<li><strong>通用的即插即用模块</strong>：FPR模块与策略模型解耦，可以附加到任何现有的生成式策略上，为其增加运行时失败预测能力。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>环境与任务</strong>：在两个流行的模拟机器人基准测试上进行评估：1) <strong>Language-Table</strong>：桌面操作任务，7项复杂的长视野语言指令任务；2) <strong>CALVIN</strong>：具身AI基准，包含4类共34个语言指令的操纵任务。</li>
+<li><strong>策略模型</strong>：采用了两种主流的生成式策略作为基础：扩散策略 (Diffusion Policy) 和基于Transformer的动作块预测模型 (ACT)。</li>
+<li><strong>Baseline方法</strong>：对比了多种失败预测方法：1) <strong>Oracle</strong>：使用真实未来信息（理想上限）；2) <strong>Success Detector</strong>：训练一个网络直接预测当前状态下的任务成功率；3) <strong>Ensemble Variance</strong>：使用集成策略的动作方差作为不确定性指标；4) <strong>MC Dropout</strong>：使用蒙特卡洛Dropout的方差；5) <strong>Single-sample</strong>：仅用单个动作序列训练一个失败分类器（消融实验）。</li>
+<li><strong>评估指标</strong>：主要报告<strong>失败预测的AUROC</strong>（Area Under the Receiver Operating Characteristic curve，越高越好）和<strong>AUPRC</strong>（Area Under the Precision-Recall curve），同时评估在特定误报率（FPR）下的<strong>召回率</strong>。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>在Language-Table环境中，FPR方法在扩散策略和ACT策略上均显著优于所有基线。例如，在扩散策略上，FPR的AUROC达到0.79，而最佳的基线Ensemble Variance为0.69，Success Detector为0.65。在CALVIN环境中，FPR在AUROC和AUPRC上也全面领先。</p>
+<p><img src="https://img-blog.csdnimg.cn/direct/9a8a8f1f8a1e4d7ba8b5c7e7b3c8d8e2.png" alt="定量结果对比"></p>
+<blockquote>
+<p><strong>图2</strong>：在Language-Table数据集上，不同失败预测方法在扩散策略和ACT策略上的AUROC对比。FPR方法（红色）在两个策略上均取得最高性能，显著优于其他不确定性估计基线和专门训练的Success Detector。</p>
+</blockquote>
+<p><img src="https://img-blog.csdnimg.cn/direct/1c2b3d4e5f6a7b8c9d0e1f2a3b4c5d6e.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图3</strong>：消融实验。左：不同候选序列数量K的影响，K=5时达到最佳平衡。中：不同伪标签生成策略的影响，使用实际执行结果的“executed”策略最佳。右：不同聚合方式的影响，使用标准差（std）比仅用均值（mean）或最大值（max）效果更好，验证了一致性度量的有效性。</p>
+</blockquote>
+<p><img src="https://img-blog.csdnimg.cn/direct/3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图4</strong>：定性示例。上方为成功案例，策略生成的多个候选抓取动作（彩色轨迹）高度一致，FPR预测的失败概率低。下方为失败案例，在试图抓取被遮挡物体时，候选动作轨迹出现显著分歧（不一致），FPR预测的失败概率高，成功预警。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：</p>
+<ol>
+<li><strong>多模态采样的必要性</strong>：与仅使用单样本（Single-sample）的消融版本相比，FPR性能大幅提升，证明了利用多模态输出评估一致性的核心思想至关重要。</li>
+<li><strong>伪标签策略</strong>：使用实际执行结果作为所有候选序列的伪标签，比使用模型自身置信度或随机标签效果更好。</li>
+<li><strong>聚合方式</strong>：在一致性聚合器中，使用标准差（std）作为不一致性度量比使用均值或最大值更有效。</li>
+<li><strong>采样数量K</strong>：K=5时在预测性能和计算开销间取得较好平衡。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个新颖的、通用的运行时失败预测框架（FPR），首次利用生成式策略自身的多模态输出来实现自我监控，无需外部监督。</li>
+<li>将失败预测问题重新定义为对策略模型内部决策一致性的评估，并设计了一种基于多模态采样离散度的轻量级预测模型。</li>
+<li>在两大机器人基准测试上进行了全面实验，证明FPR能显著且稳定地提升失败预测性能，并展示了其即插即用的实用性。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>该方法依赖于基础策略模型能够产生高质量、多样化的多模态输出。如果策略模型本身采样多样性不足或质量很差，一致性信号的可靠性会降低。</li>
+<li>目前仅在模拟环境中验证，在更复杂、噪声更大的真实物理世界中的表现有待进一步探索。</li>
+<li>伪标签生成基于“同一时间步的所有候选动作共享相同结果标签”的假设，在极端边缘情况下可能不成立。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>自监督学习在机器人安全中的应用</strong>：FPR展示了利用模型内部信号进行自我诊断的潜力，这可以扩展到其他安全关键领域，如异常检测、状态估计验证等。</li>
+<li><strong>生成式模型的不确定性量化</strong>：为理解生成式AI模型在决策中的“困惑度”提供了一种具体且可操作的方法论。</li>
+<li><strong>人机交互与安全层设计</strong>：可靠的运行时失败预测是实现高级人机协作（如及时请求人类帮助）和构建安全冗余层的关键组件，FPR为此提供了一个可行的技术路径。未来工作可探索将此类预测与更复杂的恢复、重规划机制相结合。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>根据当前提供的论文标题《Failure Prediction at Runtime for Generative Robot Policies》，可推断该研究核心聚焦于**生成式机器人策略在运行过程中的故障预测问题**。  
+若需完成精准总结，请提供论文正文内容，以便准确提取：  
+1. **核心问题**（如具体故障类型与应用场景）  
+2. **关键技术方法**（如使用的预测模型、监测指标或算法框架）  
+3. **实验结论**（如预测准确率、误报率或对任务成功率的提升数据）  
+我将依据原文内容严格遵循您的要求撰写总结，避免任何编造信息。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.09459" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

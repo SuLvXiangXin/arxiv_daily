@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Rethinking Intermediate Representation for VLM-based Robot Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Rethinking Intermediate Representation for VLM-based Robot Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.19315" target="_blank" rel="noreferrer">2511.19315</a></span>
+        <span>作者: Chi-Wing Fu Team</span>
+        <span>日期: 2025-11-24</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于视觉语言模型（VLM）的机器人操作方法主要分为两类。一类是<strong>高层表示方法</strong>，使用预定义的高级技能词（如<code>pick</code>、<code>place</code>）构建中间表示。这种方法易于VLM理解和生成，但泛化性差，面对新任务（如“用刀切胡萝卜”）需要繁琐地手动设计新技能。另一类是<strong>底层表示方法</strong>，使用关键点、轴等几何基元构建表示。这种方法在动作层面泛化性强，但生成的表示过于复杂（如需要显式计算约束和成本的代码），超出了VLM可靠理解和生成的能力。</p>
+<p>本文针对现有方法在<strong>动作泛化性</strong>和<strong>VLM可理解性</strong>之间难以两全的关键痛点，提出了一个全新的视角：借鉴<strong>上下文无关文法</strong>的思想，将中间表示分解为<strong>词汇</strong>和<strong>语法</strong>两部分进行设计。本文的核心思路是：设计一个语义丰富、VLM友好的紧凑词汇表，并通过一套组合规则（语法）将其灵活组装，以同时实现对新任务的良好泛化以及对VLM的易理解性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>方法的整体流程如图2所示。给定当前场景观察和任务指令，首先利用VLM生成<strong>语义组装表示</strong>；然后将该表示转化为可执行的中间代码；接着，通过检索增强生成（RAG）的少样本学习分割流程，定位指令中指定的细粒度物体部件；最后，通过优化求解生成机器人的抓取器轨迹并执行。</p>
+<p><img src="https://arxiv.org/html/2511.19315v1/x2.png" alt="方法整体流程"></p>
+<blockquote>
+<p><strong>图2</strong>：方法整体流程。给定观察和指令，(a) 生成语义组装表示（SEAM），(b) 翻译为中间表示，(c) 从RAG数据库中检索支持图像和掩码，(d) 分割场景中的目标物体部件，(e) 求解抓取器轨迹并执行。</p>
+</blockquote>
+<p><strong>核心模块一：语义组装表示（SEAM）设计</strong><br>SEAM由词汇表 $\mathcal{V}$ 和语法 $\mathcal{G}$ 构成，其设计遵循VLM可读性、适当抽象、简洁性、可靠性、最小化和可组合性六大原则。</p>
+<ul>
+<li><strong>词汇表 $\mathcal{V}$</strong>: 包含一系列语义丰富的操作，如 <code>get_axis</code>（获取物体轴）、<code>get_centroid</code>（获取质心）、<code>move_cost</code>（移动成本）、<code>perpendicular_cost</code>（垂直成本）等。这些词汇抽象了底层实现（如用PCA计算轴），仅暴露必要的参数。</li>
+<li><strong>语法 $\mathcal{G}$</strong>: 定义了词汇的组合规则和数据类型，例如 <code>cost -&gt; cost + cost</code>，<code>get_axis(object) -&gt; vec</code>，<code>move_cost(pt, pt) -&gt; cost</code>。这约束了VLM的输出格式，确保其语法有效、语义合理。</li>
+</ul>
+<p>这种设计使得VLM能够像组装句子一样，将词汇组合成复杂的表示。例如，对于任务“用握住的刀切胡萝卜”，VLM可生成：</p>
+<pre><code>perpendicular_cost(get_axis(&quot;carrot&quot;), get_axis(&quot;knife blade&quot;))
++ move_cost(get_centroid(&quot;knife&quot;), get_centroid(&quot;knife blade&quot;), offset=[0,0,0.1])
+</code></pre>
+<p>其创新点在于通过<strong>分解与组合</strong>，用一个紧凑的词汇集覆盖广泛的任务，在保持VLM可理解性的同时获得了强大的动作泛化能力。</p>
+<p><strong>核心模块二：RAG驱动的少样本开放词汇分割</strong><br>为了精确定位<code>get_centroid(&quot;knife blade&quot;)</code>等指令中提到的细粒度物体部件（如壶嘴、刀锋），论文提出了一种新的分割范式。</p>
+<ol>
+<li><strong>构建数据库</strong>：建立一个开放词汇图像数据库 $\mathcal{D}$，包含物体部件描述的关键短语集 $\mathcal{K}_i$（如 <code>{cup opening, cup rim, cup edge}</code>）和对应的支持图像-掩码对集合 $\mathcal{P}_i$。</li>
+<li><strong>检索与生成</strong>：给定查询图像和指令描述，通过计算莱文斯坦距离检索匹配关键短语的支持对。然后，使用一个少样本分割网络（如Mapper），根据支持特征和查询特征的相似性（注意力分数），将支持掩码映射生成查询掩码。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.19315v1/x3.png" alt="开放词汇分割定性比较"></p>
+<blockquote>
+<p><strong>图3</strong>：开放词汇分割的定性性能比较。现有SOTA方法（OV-Seg, Grounded SAM2, LISA）在分割机器人交互相关的部件（如铰链、开口）时表现不佳，而本文方法能实现精确分割。</p>
+</blockquote>
+<p><strong>轨迹生成</strong><br>将SEAM表示转化为机器人动作的过程被构建为一个优化问题。SEAM表示是Python可执行的，其执行结果是一个数值成本，用于评估点云匹配该表示的程度。通过优化抓取器的目标旋转 $\mathbf{R}$ 和平移 $\mathbf{t}$，最小化该成本以及鼓励最小移动的正则项，从而求解出最终的运动轨迹。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在真实世界中使用UR5机械臂和双RealSense D435相机搭建平台。使用Qwen3-VL-30B作为VLM。评估了8个不同的操作任务（涉及刚体和关节物体），每个任务进行10次试验，以成功率作为主要指标。</p>
+<p><strong>对比方法</strong>：与四种主流方法对比：VoxPoser、CoPa、ReKep和OmniManip。</p>
+<p><img src="https://arxiv.org/html/2511.19315v1/x5.png" alt="真实世界任务执行序列"></p>
+<blockquote>
+<p><strong>图5</strong>：真实世界环境中三个任务的执行序列示例。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>整体性能</strong>：如表2所示，SEAM方法在开环和闭环规划下平均成功率分别达到83.8%和63.8%，显著优于其他方法。相比表现次优的OmniManip，平均成功率提升了15%。</li>
+<li><strong>SEAM表示优势</strong>：图6展示了任务“将笔放入笔筒”的中间表示生成对比。ReKep和OmniManip需要VLM从图像中选择正确关键点或轴并计算，过程复杂易错；而SEAM通过<code>get_axis</code>等语义词汇，让VLM能轻松生成正确的对齐表示。</li>
+<li><strong>RAG分割优势</strong>：图7展示了任务“将茶壶盖盖在茶壶上”的部件定位对比。其他方法只能定位茶壶中心或内部点，易导致错位；本文方法能精确定位茶壶开口边缘，从而准确完成盖合动作。此外，如表3所示，本文分割方法的推理时间（0.6秒）短于其他SOTA方法，效率最高。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2511.19315v1/x6.png" alt="SEAM表示生成对比"></p>
+<blockquote>
+<p><strong>图6</strong>：任务“将笔放入笔筒”的中间表示生成对比。SEAM能利用语义词汇轻松生成对齐笔轴的表示，而ReKep和OmniManip的方法则复杂且容易出错。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.19315v1/x7.png" alt="部件定位与执行结果对比"></p>
+<blockquote>
+<p><strong>图7</strong>：任务“将茶壶盖盖在茶壶上”中“茶壶开口”的开放词汇定位及执行结果对比。只有本文方法能精确定位开口边缘，确保成功盖合。</p>
+</blockquote>
+<p><strong>量化研究（动作泛化性与VLM可理解性）</strong>：<br>论文首次提出了两个量化指标来评估中间表示：</p>
+<ol>
+<li><strong>动作泛化性</strong>：$AG = 1 - \frac{|\mathcal{V}|}{T}$，词汇量越小，泛化性越高。</li>
+<li><strong>VLM可理解性</strong>：$VC = \frac{N_{\text{succ}}}{T}$，VLM成功生成并执行的任务比例。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.19315v1/x8.png" alt="AG与VC指标对比"></p>
+<blockquote>
+<p><strong>图8</strong>：各方法在动作泛化性（AG）和VLM可理解性（VC）上的统计。高层方法（Instruct2Act）VC高但AG低；底层方法（ReKep， OmniManip）AG高但VC低；SEAM在两者间取得了更好的平衡。</p>
+</blockquote>
+<p>在33个随机生成的任务上评估（使用DeepSeek辅助判断任务可行性），结果如图8所示。高层表示方法Instruct2Act词汇量大，泛化性低但可理解性高；底层表示方法ReKep和OmniManip词汇量小，泛化性高但可理解性低。SEAM则在两者之间取得了更优的平衡，验证了其设计有效性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>语义组装表示（SEAM）</strong>，通过借鉴上下文无关文法将中间表示分解为词汇和语法，首次在VLM可理解性和动作泛化性之间取得了良好平衡。</li>
+<li>提出了一种<strong>基于RAG的少样本开放词汇分割范式</strong>，能够高效、精确地定位细粒度物体部件，显著提升了需要精细对齐的操作任务的成功率。</li>
+<li>首次系统分析了VLM机器人操作的中间表示问题，并提出了<strong>动作泛化性和VLM可理解性两个定量评估指标</strong>，为未来研究提供了新的评估维度。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，其方法依赖外部VLM（Qwen3-VL）生成表示，并且RAG分割数据库的构建需要收集支持图像-掩码对。</p>
+<p><strong>启示</strong>：SEAM的设计范式表明，将程序语言的严谨性与自然语言的语义性相结合，是设计机器人任务表示的有效途径。后续研究可探索如何自动化构建或扩展RAG数据库，以及将SEAM思想应用于更复杂的多步骤任务或动态场景中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>这篇论文针对基于视觉语言模型（VLM）的机器人操作，其核心问题是：如何设计一种中间表示，以同时实现**VLM易于理解**和**动作泛化能力强**这两个常需权衡的目标。
+
+为此，作者提出了名为**SEAM**的中间表示。其关键技术是受上下文无关文法启发，将表示分解为**语义丰富的操作词汇**和**VLM友好的语法规则**，并设计了**开放词汇分割**与**检索增强的少样本学习**策略来精准定位物体部件。
+
+实验表明，SEAM在VLM可理解性和动作泛化性上均优于主流方法，且在所有并行工作中实现了**最短的推理时间**，在多样化的真实世界任务中取得了SOTA性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.19315" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VER: Vision Expert Transformer for Robot Learning via Foundation Distillation and Dynamic Routing - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>VER: Vision Expert Transformer for Robot Learning via Foundation Distillation and Dynamic Routing</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.05213" target="_blank" rel="noreferrer">2510.05213</a></span>
+        <span>作者: Masayoshi Tomizuka Team</span>
+        <span>日期: 2025-10-06</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人学习领域，利用预训练的视觉基础模型（VFMs，如DINOv2、CLIP、ViT）为策略提供丰富的视觉表征已成为主流趋势。然而，单个VFM通常只在特定领域表现出色，难以全面覆盖多样化的机器人任务需求。现有方法尝试将多个VFMs的知识蒸馏到一个统一的表征中，但存在三个关键局限：1) 异构VFM特征未对齐，统一表征会稀释或丢弃模型特有的能力；2) 策略头需从融合表征中提取任务相关信息，限制了跨任务灵活利用最相关VFM的能力，导致次优结果；3) 现有蒸馏模型通常需要昂贵的完全重新训练来融入机器人领域知识，且难以根据任务复杂度灵活缩放计算量。</p>
+<p>本文针对上述痛点，提出了一种通过基础蒸馏和动态路由进行机器人学习的新视角。核心思路是：将多个VFMs蒸馏到一个视觉专家库中，并在下游任务中仅微调一个轻量级路由网络，动态选择与任务最相关的专家，从而实现高效、灵活且可扩展的视觉表征利用。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>VER框架分为预训练和机器人策略学习两个主要阶段，整体结构如下图所示。</p>
+<p><img src="https://arxiv.org/html/2510.05213v1/x1.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图2</strong>：VER的整体结构。包含基础视觉变换器（BVT）和视觉专家库（VEL）两个核心组件。框架分为两阶段：(1) 预训练阶段，从多个基础模型（DINOv2， ViT， CLIP）蒸馏知识到VER；(2) 下游机器人任务阶段，冻结所有专家，仅训练一个轻量级机器人路由器（&lt;0.4%参数）来动态选择任务相关的视觉特征，以指导策略头生成机器人动作。</p>
+</blockquote>
+<p><strong>模型架构</strong>：VER基于改进的视觉变换器架构。输入图像首先由基础视觉变换器（BVT）处理，生成统一的基础特征。在最后的N层（论文中N=3）中，传统的FFN被替换为混合专家（MoE）模块，构成视觉专家库（VEL）。每层MoE包含L个专家（论文中L=6），每个专家是一个多层感知机（MLP）。</p>
+<p><strong>预训练与蒸馏</strong>：在预训练阶段，目标是让VER模仿多个教师VFMs。为此，为每个教师模型i引入一个教师特定路由器（TS Router）ℛ_i^n。该路由器根据输入特征为每个专家打分，并选择Top-K（K=2）个得分最高的专家激活，计算加权输出（公式1）。蒸馏损失ℒ_distill（公式2）是余弦损失和平滑L1损失的加权组合，用于对齐VER输出与各教师模型输出。同时，引入教师级互信息损失ℒ_mi（公式3），以鼓励专家在模仿不同教师时得到均衡利用，防止专家崩溃。总预训练目标为ℒ_pretrain = ℒ_distill + γℒ_mi。</p>
+<p><strong>机器人策略训练与动态路由</strong>：预训练后，冻结BVT和VEL中的所有专家。在下游机器人任务中，仅训练一个轻量级的机器人路由器ℛ_robot^n来选择专家，其输出送给新训练的策略头以产生动作。论文探索了两种路由模式：</p>
+<ol>
+<li><strong>教师路由（TR）</strong>：机器人路由器学习一个在预训练的教师特定路由器（TS Routers）上的分类分布，从而间接选择专家。可分为每帧共享选择的帧级教师路由（FTR）和每层独立选择的层级教师路由（LTR）。训练时使用Gumbel-Softmax估计器优化离散选择。</li>
+<li><strong>逐块专家路由（PER）</strong>：机器人路由器直接对每个图像块（patch）令牌执行标准的MoE路由（公式1），为每个令牌独立选择专家，提供了对局部内容的最大适应性，且仅增加&lt;0.4%的参数。</li>
+</ol>
+<p><strong>核心创新：课程Top-K退火（CTA）</strong>：针对PER可能过早收敛到次优专家组合的问题，提出了课程Top-K退火策略（公式6）。训练初期激活所有专家（K0 = L），随着训练步数增加，逐渐减少激活专家数至目标K_min。此策略鼓励早期探索更多专家组合，后期稳定训练，并在推理时保持目标K_min的高效性。</p>
+<p><strong>参数高效微调</strong>：VER支持通过添加新的可训练专家来融入机器人领域知识，或通过调整激活专家数量（K值）来缩放计算，实现了参数高效的适应性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在ImageNet-1K上使用DeiT-Tiny/Small和ViT-Base架构，从DINOv2、ViT和CLIP三个VFMs进行蒸馏。在多达17个机器人任务上评估，涵盖多个基准数据集：Franka Kitchen（5个任务）、Meta-World（4个任务）、Adroit（2个任务）、LIBERO（4个任务，含OOD测试）以及Robomimic中的拾放任务和真实世界倒水任务。对比了VC-1、MVP、R3M、RADIO、VIP和Theia等先进的预训练视觉编码器。策略头包括与Theia相同的对比头、ViLT头、流匹配头和扩散头。</p>
+<p><strong>主要性能对比</strong>：<br><img src="https://arxiv.org/html/2510.05213v1/sec/images/teaser.png" alt="任务性能对比表"></p>
+<blockquote>
+<p><strong>图1</strong>：VER与先前蒸馏框架的对比。我们的方法不仅增强了从VFMs到视觉专家的知识蒸馏，还具备两大优势：训练轻量级路由器动态选择专家；允许集成额外的可训练专家以适应机器人领域知识。</p>
+</blockquote>
+<p>如表1所示，在11个多样化操作任务上，VER-B取得了74.7%的平均成功率，显著优于所有基线方法。</p>
+<p><img src="https://arxiv.org/html/2510.05213v1/sec/images/vfmoe_vs_theia_cosine_loss.png" alt="不同策略头性能"></p>
+<blockquote>
+<p><strong>图3</strong>：DINOv2蒸馏的余弦损失对比图。圆圈大小表示总参数量（TP）。VER在参数量相近或更少的情况下，取得了更低的蒸馏损失（更好的知识保留）。</p>
+</blockquote>
+<p>如表2所示，在ViLT、流匹配和扩散多种策略头下，VER consistently超越了最强的蒸馏基线Theia，在仿真和真实世界任务中均表现更优。</p>
+<p><strong>消融实验与分析</strong>：<br><img src="https://arxiv.org/html/2510.05213v1/sec/images/exp_freq_base_compact.png" alt="路由策略消融"></p>
+<blockquote>
+<p><strong>图4</strong>：在ImageNet-1K上蒸馏期间，三个MoE层中各专家被不同教师模型激活的频率热力图。可见教师特定路由器动态分配专家，ViT激活的专家较少，而DINOv2和CLIP激活更多，表明对不同教师的模仿难度不同。</p>
+</blockquote>
+<p>表3对比了不同的机器人路由策略。结果表明，依赖单个VFM（DINOv2、ViT或CLIP路由器）性能不稳定；而结合了课程Top-K退火（CTA）的逐块专家路由（PER）在大多数任务上取得了最佳或次佳性能，证明了动态自适应路由的有效性。</p>
+<p><img src="https://arxiv.org/html/2510.05213v1/sec/images/cta.png" alt="特征可视化对比"></p>
+<blockquote>
+<p><strong>图6</strong>：使用与不使用CTA的PER特征可视化（最后一层块特征范数）。行1：pen任务；行2：relocate任务。不使用CTA时，路由器广泛关注手、物体等；使用CTA后，路由器抑制了任务无关区域（背景）的异常高范数值，将注意力集中在任务关键、物体中心的区域。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.05213v1/sec/images/task_mi.png" alt="互信息分析"></p>
+<blockquote>
+<p><strong>图7</strong>：视觉专家库（VEL）处理前后块特征之间的互信息。PER+CTA抑制了背景块的信息，同时保留了任务相关区域（如pen任务中目标笔的位姿区域）的信息，产生了更紧凑的视觉表征。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.05213v1/sec/images/multiobj.png" alt="特征范数对比"></p>
+<blockquote>
+<p><strong>图8</strong>：在“将十字放入箱子”任务中，与Theia的特征范数可视化对比。Theia和VER在路由前广泛关注各种物体和背景；路由后，VER的特征专注于任务相关物体（十字和箱子），并抑制了机器人自身和背景块。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.05213v1/sec/images/vfmoe_vs_theia_trainable_params.png" alt="参数量与性能"></p>
+<blockquote>
+<p><strong>图9</strong>：可训练参数量与平均成功率的关系。VER（PER+CTA）以极少的可训练参数量（仅机器人路由器）取得了高性能，体现了其参数高效性。</p>
+</blockquote>
+<p><strong>真实世界验证</strong>：<br><img src="https://arxiv.org/html/2510.05213v1/sec/images/realworld.png" alt="真实世界实验"></p>
+<blockquote>
+<p><strong>图5</strong>：真实世界倒水任务可视化。即使在训练数据中未出现的人类干扰下，VER仍能成功完成任务，展示了其鲁棒性。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>动态路由机制</strong>：提出了VER框架，通过预训练从多个VFMs蒸馏出视觉专家库，并在下游任务中仅微调一个轻量级路由器来动态选择任务相关专家，解决了静态融合表征不灵活的问题。</li>
+<li><strong>课程退火策略</strong>：针对逐块专家路由引入了课程Top-K退火（CTA）策略，有效缓解了早期收敛问题，鼓励探索并稳定训练，使路由器能学习抑制任务无关信息、聚焦关键区域。</li>
+<li><strong>参数高效与可扩展性</strong>：框架支持参数高效的微调，可通过添加新专家融入领域知识，或通过调整激活专家数（K）灵活缩放计算，适应不同复杂度的任务。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，虽然VER引入了动态路由，但其计算开销仍略高于静态编码器。此外，专家数量在预训练后是固定的，可能限制了对全新任务模式的适应性。</p>
+<p><strong>启示</strong>：VER的工作表明，在机器人学习中，将大规模预训练模型的丰富知识“封装”为可灵活调用的专家模块，并通过轻量级控制机制（路由）进行动态组合，是一条高效且富有前景的技术路径。这为未来构建更通用、更自适应且计算高效的具身智能感知系统提供了新思路。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出VER模型，以解决机器人学习中单一视觉基础模型（VFM）泛化能力有限、多VFM融合后特征选择不灵活且重新训练成本高的问题。关键技术包括：通过基础蒸馏将多个VFM知识压缩为视觉专家库，并设计轻量级动态路由网络（参数量<0.4%）按任务需求自适应选择专家；进一步引入块级专家路由与课程Top-K退火机制提升选择精度。实验表明，VER在17项多样机器人任务上达到SOTA性能，能有效抑制任务无关区域（如背景）的异常值，聚焦于关键区域。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.05213" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

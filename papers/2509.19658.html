@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RoboSSM: Scalable In-context Imitation Learning via State-Space Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>RoboSSM: Scalable In-context Imitation Learning via State-Space Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.19658" target="_blank" rel="noreferrer">2509.19658</a></span>
+        <span>作者: Peter Stone Team</span>
+        <span>日期: 2025-09-24</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>上下文模仿学习（ICIL）使机器人能够仅通过少量演示组成的提示来学习新任务，无需在部署时更新模型参数，实现了对新任务的少样本适应。然而，当前的ICIL方法主要依赖Transformer架构，该架构存在计算复杂度随序列长度呈二次方增长的问题，并且在处理比训练时更长的提示时，其性能往往会显著下降。本文针对ICIL在可扩展性和长上下文处理方面的痛点，提出用状态空间模型（SSM）替代Transformer作为模型主干的新视角。本文的核心思路是：利用SSM（特别是Longhorn模型）的线性时间推理和强大的长上下文外推能力，构建一个能够高效处理远超训练时长度提示的、可扩展的ICIL框架。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RoboSSM的目标是学习一个ICIL策略πθ，使其在给定少量演示提示的条件下，能在未见任务上最大化成功率。其整体流程分为训练和推理两个阶段。</p>
+<p><img src="https://arxiv.org/html/2509.19658v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：RoboSSM整体框架。左侧为训练过程：Longhorn接收来自训练任务集𝒫_train的N_train条轨迹以及一条相同任务的查询轨迹，预测动作并进行监督学习。右侧为推理过程：给定包含未见任务的测试任务集𝒫_test的N_test条轨迹作为提示，模型从初始观测嵌入开始，迭代地预测动作并更新环境状态。</p>
+</blockquote>
+<p><strong>架构</strong>：RoboSSM首先通过多模态编码器处理观测信息，然后将每一步编码后的观测嵌入输入Longhorn状态空间块以生成动作。</p>
+<ol>
+<li><strong>输入编码</strong>：模型编码演示中每一步的多模态观测。视觉数据由卷积神经网络处理，本体感知数据由多层感知机嵌入。每个模态的每步特征被拼接并通过一个MLP投影，生成观测嵌入。为了迫使模型关注上下文演示而非简单地复制动作，输入表示中排除了动作信息；同时排除了任务语言指令，以强制模型仅依赖演示进行推理。</li>
+<li><strong>Longhorn状态空间块</strong>：观测嵌入序列 {x_t} 被输入Longhorn，它递归地更新一个记忆状态矩阵 s_t ∈ ℝ^(d×m)。在每一步，输入被解释为一个键值对 (k_t, x_t)，其中 k_t 由 x_t 线性投影得到。Longhorn执行递归更新：s_t = A_t ⊙ s_t-1 + B_t，其中 ⊙ 是逐元素乘积，A_t 和 B_t 是 x_t 的函数。从更新后的状态中，计算一个上下文向量 r_t = s_t q_t ∈ ℝ^d，其中 q_t 是由 x_t 线性投影得到的查询向量。最后，该上下文向量通过一个输出头产生对应的动作 a_t。</li>
+<li><strong>Longhorn用于ICIL</strong>：从在线学习的视角看，上述递归形式可推导为在线凸规划目标的解：s_t = arg min_s {‖s - s_t-1‖_F^2 + ‖s k_t - x_t‖_diag(β_t)^2}。该目标平衡了两个目标：第一项鼓励更新后的状态 s_t 接近先前状态 s_t-1（保持记忆），第二项强制当前状态 s_t 准确反映新输入（整合新信息）。权重向量 β_t 调节这一权衡。为了在ICIL中鼓励模型关注演示提示，我们在测试时对 β 进行缩放：β‘_t = γ β_t，其中 γ ∈ (0, 1]。</li>
+</ol>
+<p><strong>ICIL流程</strong>：遵循标准ICIL公式，RoboSSM在训练和推理时都以演示轨迹的上下文为条件。每个策略输入包含一个提示 𝒫 和一个查询轨迹。提示 𝒫 包含 N 条提供任务上下文的轨迹。在训练时，提示和查询轨迹采样自同一任务的演示，两者的输出动作均使用真实动作进行监督。在推理时，查询轨迹用第一个观测嵌入初始化，策略利用提示 𝒫 中的上下文信息迭代输出下一个动作并应用于环境，逐步构建后续观测直至任务完成。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：在LIBERO基准上进行实验，主要使用LIBERO-Object套件，并将LIBERO-90按场景类型划分为厨房、客厅和书房套件。确保测试集任务与训练集完全不相交。</li>
+<li><strong>基线方法</strong>：主要对比ICRT（一种基于Transformer的ICIL方法，使用LLaMA2-Base作为主干）。为确保公平对比，两者主干参数量相近。同时实现了不使用上下文学习的多任务学习基线（MTL-TF和MTL-SSM）。</li>
+<li><strong>平台</strong>：使用单个NVIDIA A100 GPU。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>提示长度外推（增加演示数量）</strong>：当训练演示数 N_train=2 时，RoboSSM在测试演示数 N_test 增加至32（训练长度的16倍）时，性能仍能维持甚至略有提升。而ICRT一旦 N_test &gt; N_train，性能便急剧下降，在长提示上完全失效。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.19658v1/figure/figure3.png" alt="长度外推性能对比"></p>
+<blockquote>
+<p><strong>图3</strong>：RoboSSM与ICRT在不同测试演示数量下的性能对比（两者均以 N_train=2 训练）。ICRT在 N_test &gt; N_train 后性能骤降。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.19658v1/figure/figure4.png" alt="固定测试提示数8下的性能"></p>
+<blockquote>
+<p><strong>图4</strong>：在固定测试提示 N_test=8 下，不同训练演示数 N_train 对模型性能的影响。RoboSSM即使在训练演示较少时也能保持较高性能。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.19658v1/figure/figure5.png" alt="固定测试提示数32下的性能"></p>
+<blockquote>
+<p><strong>图5</strong>：在固定测试提示 N_test=32 下，不同训练演示数 N_train 对模型性能的影响。ICRT在所有 N_train 下成功率均为零，而RoboSSM表现稳健。</p>
+</blockquote>
+<ol start="2">
+<li><strong>时间拉伸外推</strong>：通过重复观测嵌入来模拟演示速度变化（时间拉伸因子α最大为16）。RoboSSM在拉伸因子增加时仍能保持有竞争力的成功率，而ICRT性能则持续衰减。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.19658v1/figure/figure6.png" alt="时间拉伸外推性能"></p>
+<blockquote>
+<p><strong>图6</strong>：在时间拉伸的测试提示下，RoboSSM与ICRT的性能对比。RoboSSM展现出对时间拉伸的鲁棒性。</p>
+</blockquote>
+<ol start="3">
+<li><strong>分布内ICIL性能</strong>：当 N_train = N_test 时，RoboSSM在大多数场景下的成功率高于或与ICRT相当，尤其在LIBERO-90的客厅和书房场景中优势明显。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.19658v1/figure/figure7.png" alt="分布内性能对比"></p>
+<blockquote>
+<p><strong>图7</strong>：在训练与测试演示数量相同的分布内设置下，RoboSSM与ICRT的性能对比。</p>
+</blockquote>
+<ol start="4">
+<li><p><strong>与多任务学习对比</strong>：RoboSSM和ICRT在各自主干架构上，均 consistently 超越了对应的多任务学习基线（MTL），证明了上下文学习框架处理未见任务的有效性。</p>
+</li>
+<li><p><strong>β缩放消融实验</strong>：测试时降低β缩放因子γ（即减小β），通过偏向依赖先前状态信息，可以提高RoboSSM在多个任务套件上的性能。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.19658v1/figure/figure8.png" alt="Beta缩放效果"></p>
+<blockquote>
+<p><strong>图8</strong>：测试时β缩放因子γ对RoboSSM性能的影响。减小γ（降低β）能提升多个任务套件的性能。</p>
+</blockquote>
+<ol start="6">
+<li><strong>潜在空间分析</strong>：可视化显示，RoboSSM预测的轨迹在潜在空间中紧邻提示演示簇，表明其长上下文外推的稳定性；而ICRT预测的轨迹则偏离提示流形，且偏离程度随提示演示增加而加剧。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.19658v1/figure/figure9_a.png" alt="潜在空间可视化"></p>
+<blockquote>
+<p><strong>图9</strong>：潜在空间可视化（左：ICRT，右：RoboSSM）。蓝色点为提示演示，红色点为预测轨迹。RoboSSM的预测轨迹更贴近演示簇。</p>
+</blockquote>
+<ol start="7">
+<li><strong>运行时分析</strong>：RoboSSM的推理时间随提示长度近乎线性增长，而基于Transformer的ICRT的运行时则随提示长度快速增长，在长提示下效率差距显著。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.19658v1/figure/figure10.png" alt="推理运行时分析"></p>
+<blockquote>
+<p><strong>图10</strong>：ICRT与RoboSSM在LIBERO-Object上的推理运行时对比。RoboSSM展现出近乎线性的可扩展性。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）首次将先进的状态空间模型（Longhorn）系统地应用于上下文模仿学习，构建了RoboSSM框架，实现了对长上下文提示的高效（线性时间）处理。2）通过大量实验证明，RoboSSM具备强大的长度外推能力，能够有效处理演示数量或时间长度远超训练分布的测试提示，性能显著优于Transformer基线。3）从在线学习角度阐释了Longhorn的递归更新公式，并通过β缩放使其更好地适应ICIL任务。</p>
+<p>论文自身提到的局限性包括：研究覆盖的任务复杂性有限，未涉及更复杂的组合任务；要全面应对新颖任务，需要更大规模和多样性的训练数据。</p>
+<p>这项工作为机器人学习领域提供了重要启示：状态空间模型作为一种高效且可扩展的序列建模骨干，在处理需要长上下文理解和外推的机器人学习问题（如终身学习中的持续适应）上具有巨大潜力。未来的研究方向可以包括：扩展数据集的规模和多样性以提升泛化能力，以及将RoboSSM框架应用于更复杂、更具组合性的任务场景。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对基于Transformer的上下文模仿学习方法存在计算复杂度高、难以处理长提示序列的问题，提出RoboSSM框架。其核心技术是采用状态空间模型（SSM），特别是具有线性推理时间和强外推能力的Longhorn架构，替代Transformer作为序列建模主干，并通过β缩放调整使其关注演示提示。在LIBERO基准上的实验表明，RoboSSM能有效外推到不同数量的演示，在未见任务上取得高性能，并在长时域场景中保持鲁棒性，证明了SSM作为ICIL可扩展骨干的潜力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.19658" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

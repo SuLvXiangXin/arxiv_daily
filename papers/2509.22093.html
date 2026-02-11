@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Action-aware Dynamic Pruning for Efficient Vision-Language-Action Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Action-aware Dynamic Pruning for Efficient Vision-Language-Action Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.22093" target="_blank" rel="noreferrer">2509.22093</a></span>
+        <span>作者: Chang Xu Team</span>
+        <span>日期: 2025-09-26</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，将大规模视觉语言模型扩展为视觉-语言-动作模型已成为机器人操作的主流范式。该范式通常使用视觉编码器从场景和腕部摄像头视图生成密集的视觉令牌，经过投影对齐后与语言指令一起输入大语言模型以预测动作。然而，这种多模态设计引入了包含大量视觉令牌的长输入序列，其中许多令牌与当前操作弱相关，导致计算量、内存占用和延迟增加，并可能稀释对真正任务相关线索的注意力。现有方法通过架构轻量化（如RoboMamba）和模态感知压缩（如DeeR-VLA的结构化剪枝、Mole-VLA的条件层激活、VLA-Cache的缓存重用、EfficientVLA的基于注意力的视觉令牌剪枝）来追求效率。但这些方法的一个关键且未被充分探索的局限性在于，它们忽略了机器人操作不同阶段视觉冗余度的动态变化特性：在粗粒度操作阶段全局运动占主导，冗余令牌较多可被剪枝；在细粒度操作阶段局部几何和细节线索占主导，需要保留完整视觉信息。此外，视觉补丁的相关性不仅受文本条件（指令语义）影响，也受动作条件（瞬时末端执行器运动和夹持器状态）影响。对所有步骤采用统一处理或仅基于混合注意力分数对令牌排序，会导致次优的剪枝调度，要么剪枝不足（节省有限），要么剪枝过度（精度损失）。</p>
+<p>本文针对上述痛点，提出了动作感知动态剪枝的新视角。核心思路是：提出一种即插即用的动作感知动态剪枝框架，通过结合文本驱动的令牌选择与基于动作轨迹的门控机制，根据机器人运动动态自适应地调整视觉令牌保留比例，从而在操作的不同阶段平衡计算效率与感知精度。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>ADP方法是一个即插即用的策略，旨在减少计算量同时保持操作保真度。它建立在两个互补的思想上：文本驱动剪枝评估视觉补丁的相关性；动作感知动态根据末端执行器轨迹决定是否启用剪枝。</p>
+<p><img src="https://arxiv.org/html/2509.22093v1/figs/main2.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图2</strong>：ADP方法整体框架概览。(a) 动作感知门控：根据最近的末端执行器轨迹自适应决定是否启用剪枝。(b) 前瞻性剪枝：通过基于注意力的相关性选择任务相关的视觉令牌，冗余补丁在进入VLA骨干网络前被丢弃。</p>
+</blockquote>
+<p><strong>整体流程</strong>：给定多模态输入（场景图像、夹持器视图图像、任务指令文本），经过视觉编码器和文本分词器得到嵌入表示。在进入LLM进行深度融合和动作预测之前，ADP框架介入。首先，<strong>动作感知门控模块</strong>根据过去一个动作窗口内的末端执行器轨迹动态，决策当前步骤是启用剪枝状态还是使用完整视觉状态。如果决策为启用剪枝，则执行<strong>文本驱动前瞻性剪枝模块</strong>，根据视觉令牌与文本指令的跨模态相关性得分，仅保留最相关的Top-K个视觉令牌，形成缩短的多模态序列输入LLM；如果决策为使用完整视觉，则直接将所有视觉令牌输入LLM。</p>
+<p><strong>核心模块1：文本驱动前瞻性剪枝</strong><br>该模块的目标是在进入LLM之前识别并保留与任务指令最相关的视觉令牌。具体而言，在第 l 层，将隐藏状态分割为视觉子集和文本子集。使用投影矩阵分别得到文本查询和视觉键表示，计算跨模态注意力相似度矩阵。通过跨注意力头和文本查询平均，得到每个视觉令牌的全局重要性分数。然后根据预设的保留比例 ρ，保留重要性得分最高的 k = ⌊ρ·L_vis⌋ 个视觉令牌。在多视图场景下，总保留配额会根据一个权重向量 α 分配到各个视图。</p>
+<p><img src="https://arxiv.org/html/2509.22093v1/figs/prune3.png" alt="文本驱动剪枝细节"></p>
+<blockquote>
+<p><strong>图3</strong>：文本驱动前瞻性剪枝示意图。步骤1：从预训练的第 l 层检索权重计算相关性分数。步骤2：以文本为指导，根据排名对视觉令牌进行剪枝。</p>
+</blockquote>
+<p><strong>核心模块2：动作感知动态策略</strong><br>该模块的核心是设计一个轻量级的决策信号，根据机器人运动状态自适应地开关剪枝。首先，将解码出的动作块视为一个长度为 ω 的时间窗口，窗口内包含 ω 个7自由度动作。通过定义窗口内的前向运动学，可以计算出窗口内每个时间步的末端执行器位置。进而，通过累加窗口内相邻步之间的欧几里得位移，定义<strong>窗口化轨迹距离</strong> δ_i，用以量化该窗口的整体运动幅度。<br>基于 δ_i，设计动态决策函数。一种方法是与历史平均运动幅度比较：若当前窗口距离 δ_i 大于等于历史平均值，则下一窗口启用剪枝；反之则禁用。另一种是相邻极值函数：基于最近 τ 个窗口的极大值 U^(i) 和极小值 V^(i) 设定阈值。若 δ_i ≥ U^(i) 则启用剪枝，若 δ_i ≤ V^(i) 则禁用剪枝，若处于中间则保持前一状态。该设计旨在快速响应局部运动变化，在机器人进行大范围运动时激活剪枝以抑制冗余视觉输入；当运动幅度减小时，则禁用剪枝以保留完整视觉上下文用于精确控制。</p>
+<p><strong>创新点</strong>：与现有静态剪枝或单一启发式方法相比，ADP的主要创新在于引入了<strong>动作条件化的动态门控</strong>。它不再对所有时间步采用固定的剪枝策略，而是将剪枝决策与机器人自身的运动动态（末端执行器轨迹）紧密耦合，实现了根据操作阶段（粗粒度 vs. 细粒度）自适应切换，从而更智能地在效率与精度间权衡。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：仿真实验在LIBERO套件上进行，包含Spatial, Object, Goal, Long四个测试集，评估空间理解、物体识别、目标导向行为和长视野规划能力。实验平台为Linux系统与NVIDIA RTX 4090 GPU。对比的基线方法包括OpenVLA、OpenVLA-OFT以及多种训练免费的高效方法如FastV、VLA-Cache等。真实世界实验涵盖了拾取、放置和擦拭等多种物体和任务。</p>
+<p><strong>关键实验结果</strong>：<br>在LIBERO仿真实验中，如表1所示，ADP在多种令牌保留比例下均实现了精度与计算效率的稳定权衡。当保留比例为50%-70%时，平均成功率相比OpenVLA-OFT基线下降很小（≤0.9%），同时LLM侧推理速度提升最高达1.23倍，FLOPs显著降低。进一步压缩保留比例至30%-40%，仍能保持94.4%-94.8%的平均成功率，并获得1.29-1.35倍的加速。相比之下，随机丢弃50%令牌的方法虽然也能获得1.29倍加速，但在Object和Long任务上的成功率分别仅为73.0%和76.2%，显著低于ADP。</p>
+<p><img src="https://arxiv.org/html/2509.22093v1/figs/libero.png" alt="LIBERO任务可视化"></p>
+<blockquote>
+<p><strong>图4</strong>：在LIBERO四类任务上的方法可视化。蓝色掩码表示被剪枝的视觉令牌。保留的令牌持续高亮任务相关物体，验证了文本驱动剪枝的有效性。此外，在关键阶段（如初始化、抓取、放置）恢复了完整视觉令牌，证明了动作感知动态策略的有效性。</p>
+</blockquote>
+<p>在真实世界实验中，如表2所示，ADP在四个任务上取得了平均95.8%的成功率，与OpenVLA-OFT基线的96.7%相当，同时将平均动作推理延迟从1.00秒降低至0.74秒，实现了1.35倍的加速。</p>
+<p><img src="https://arxiv.org/html/2509.22093v1/figs/real.jpg" alt="真实世界实验"></p>
+<blockquote>
+<p><strong>图5</strong>：真实世界实验设置及任务示例。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：<br>论文通过不同保留比例的实验（见表1）验证了剪枝强度对性能的影响。保留比例越低，FLOPs越少，速度越快，但成功率在过低时（如30%）会在复杂任务上下降。与随机丢弃的对比凸显了基于文本相关性选择的重要性。动作感知动态策略的贡献通过关键阶段恢复完整视觉的定性结果（图4）得以体现，避免了因持续剪枝而丢失精细操作所需细节。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出关键洞察</strong>：揭示了VLA模型中视觉令牌的重要性在机器人操作的不同阶段是动态变化的，这为设计阶段感知的高效方法提供了动机。</li>
+<li><strong>提出创新方法</strong>：设计了动作感知动态剪枝框架，首次将文本驱动的令牌选择与基于末端执行器运动轨迹的门控机制相结合，实现了根据操作动态自适应切换剪枝状态。</li>
+<li><strong>提供全面验证</strong>：通过详尽的仿真与真实世界实验，证明了ADP能显著降低计算开销和延迟（如1.35倍加速），同时保持有竞争力的操作成功率，为现有VLA策略提供了一个简单有效的即插即用高效化路径。</li>
+</ol>
+<p><strong>局限性</strong>：论文未明确阐述自身局限性，但方法可能依赖于对动作轨迹的准确解析和窗口统计量的合理计算。在动作非常复杂或噪声较大的场景下，门控决策的鲁棒性可能需要进一步验证。</p>
+<p><strong>后续研究启示</strong>：</p>
+<ol>
+<li><strong>动态效率优化</strong>：将“动态”和“条件化”思想引入模型效率优化领域，启示后续研究可以探索更多与任务状态、环境复杂度等相关的动态自适应机制。</li>
+<li><strong>多模态融合与剪枝</strong>：展示了如何利用一种模态（文本/动作）来指导对另一种模态（视觉）的压缩，为多模态模型的高效推理提供了跨模态协同设计的新思路。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型在机器人操作中因密集视觉令牌导致计算成本高、且现有方法忽视不同操作阶段冗余变化的问题，提出动作感知动态剪枝（ADP）框架。该方法整合文本驱动令牌选择与动作轨迹门控，通过基于过去运动的自适应门控机制动态调整令牌保留率。实验在LIBERO等场景中验证，ADP显著降低FLOPs和推理延迟（如OpenVLA-OFT加速1.35倍），同时保持高成功率（如OpenVLA提升25.8%）。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.22093" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

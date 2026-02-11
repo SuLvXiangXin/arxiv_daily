@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MoS-VLA: A Vision-Language-Action Model with One-Shot Skill Adaptation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>MoS-VLA: A Vision-Language-Action Model with One-Shot Skill Adaptation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.16617" target="_blank" rel="noreferrer">2510.16617</a></span>
+        <span>作者: Ufuk Topcu Team</span>
+        <span>日期: 2025-10-18</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人领域借鉴大语言模型的成功范式，通过收集大规模机器人轨迹数据（如Open X-Embodiment项目）并训练基于注意力的视觉-语言-动作（VLA）基础模型，以期实现通用、鲁棒的控制。然而，尽管这些模型在分布内任务和实验室环境中表现尚可，但在面对全新的环境、任务或机器人本体（即上下文）时，其表现往往非常脆弱。关键挑战在于机器人演示数据的稀缺性和收集成本，仅靠数据规模难以实现真正的泛化。现有的主流适应方法是基于梯度的微调，这通常需要在新任务/环境下收集数十或数百条专家轨迹，并进行大量前向和反向传播计算，资源开销巨大。</p>
+<p>本文针对VLA模型在部署时难以快速、低成本适应新上下文的痛点，提出了一种全新的视角：将机器人操作策略表示为一组有限个已学习基函数的线性组合，从而构建一个结构化的技能空间。本文的核心思路是：在预训练阶段，利用函数编码器算法跨数据集联合学习这些基函数；在测试时，仅需一条专家演示，通过一个轻量级的凸优化问题（最小化L1动作误差）即可推断出新任务的技能表示，无需梯度更新，实现快速的一次性技能适应。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>MoS-VLA的整体目标是学习一个由基函数张成的策略空间，使得任何特定于上下文的专家策略都可以表示为这些基函数的线性组合。该方法基于OpenVLA架构进行构建。</p>
+<p><img src="https://arxiv.org/html/2510.16617v1/x3.png" alt="方法框架图"></p>
+<blockquote>
+<p><strong>图3</strong>：MoS-VLA的架构与训练流程。（左）基于OpenVLA主干网络，图像和指令由Llama 2模型处理。语言建模头被替换为k个基动作头。动作预测通过第3.1节所述的向量操作进行线性组合。（右）训练时，我们在上下文估计和参数更新之间迭代。我们在两个阶段都利用了并行性：在校准期间，每个训练节点仅计算并广播其托管数据集的系数；在模型更新期间，上下文系数保持不变，可训练权重通过DDP进行调整。</p>
+</blockquote>
+<p><strong>整体流程</strong>：</p>
+<ol>
+<li><strong>离线预训练阶段</strong>：输入为来自多个不同上下文（实验室环境）的大规模机器人数据集（如RT-X）。输出为一组k个神经网络的基函数 <code>{g1, ..., gk}</code> 以及模型的主干网络参数。这些基函数共同张成一个策略空间。</li>
+<li><strong>在线适应阶段</strong>：输入为一条在新上下文c下收集的专家演示轨迹 <code>τ_exp^c</code>。通过求解一个L1范数最小化的线性规划问题，计算出一组系数 <code>α^c ∈ R^k</code>。此后，对于任何新状态s，适应后的策略输出为 <code>π(s) = Σ α_i^c * g_i(s)</code>。</li>
+</ol>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>基函数学习与函数编码器</strong>：本文方法的核心是函数编码器算法。该算法将不同上下文下的专家策略集合 <code>Π_exp</code> 视为一个巴拿赫空间（配备L1范数）。目标是学习一组基函数，使得该空间中的任何函数（即策略）都可表示为基函数的线性组合。与原始函数编码器使用L2范数不同，本文采用L1范数进行优化（公式1），以更好地处理数据中的噪声和异常值，强调精确控制。</li>
+<li><strong>架构修改</strong>：为了使OpenVLA适用于函数编码器，需要k个独立的、以状态为条件的输出。由于参数量巨大，并未创建k个独立的网络副本，而是采用共享主干网络+多输出头的设计。具体而言，移除了原始的Llama 2语言建模头，替换为k个随机初始化的输出头，每个头输出一个动作向量，作为一个基函数 <code>g_i</code>。因此，MoS-VLA的总参数量实际上少于原始OpenVLA。</li>
+<li><strong>训练过程</strong>：从预训练的OpenVLA开始，使用LoRA对主干网络进行参数高效微调，同时训练新增的k个输出头。训练采用改进的函数编码器流程：为了适应大规模VLA训练的内存和分布式需求，并未在每个梯度步都计算系数，而是为每个数据集维护一个容量为512的校准缓冲区，并每16个梯度步计算并广播一次系数。系数计算（一个线性规划问题）与梯度更新过程解耦，提高了内存效率和训练稳定性。</li>
+<li><strong>创新点</strong>：<ul>
+<li><strong>梯度免费的快速适应</strong>：与需要反向传播的微调方法相比，MoS-VLA的适应过程仅需对基函数进行前向传播（以获取专家轨迹状态对应的基函数输出），然后求解一个小的线性规划问题。计算开销极小，可在数秒内完成。</li>
+<li><strong>结构化技能空间</strong>：将策略表示为连续技能基的线性组合，而非离散的技能集合或单一的混合策略。如图2所示，这允许策略在技能空间中连续变化，能更灵活、精确地适应新任务。</li>
+<li><strong>首次将函数编码器应用于大规模VLA模型</strong>：证明了该算法能够扩展到十亿参数级别的架构和混合视觉-语言数据集。</li>
+</ul>
+</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>数据集</strong>：使用Open X-Embodiment项目的RT-X数据集（Magic Soup Plus混合数据）进行训练。包含27个训练子集和5个未见过的（OOD）测试子集。</li>
+<li><strong>基线方法</strong>：主要对比对象是原始OpenVLA模型。</li>
+<li><strong>评估任务</strong>：<ol>
+<li><strong>数据集误差评估</strong>：计算各数据集上的L1动作预测误差。</li>
+<li><strong>模拟与真实机器人任务</strong>：在模拟环境（Robosuite）中测试“方块抬起”和“开门”任务；在真实的Franka Emika Panda机械臂上测试“目标到达”、“方块抬起”和“笔插入”任务。所有测试环境均未在训练中出现。</li>
+</ol>
+</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><p><strong>数据集L1误差对比</strong>：</p>
+<p><img src="https://arxiv.org/html/2510.16617v1/x4.png" alt="验证误差对比"></p>
+<blockquote>
+<p><strong>图4</strong>：在训练集和OOD数据集上的验证动作L1误差。MoS-VLA仅用512个样本校准后，在27个训练子集中的18个上，以及全部5个OOD数据集上，均取得了比OpenVLA更低的误差。这表明MoS-VLA有效缓解了“混合上下文过拟合”问题。</p>
+</blockquote>
+</li>
+<li><p><strong>技能空间可视化</strong>：</p>
+<p><img src="https://arxiv.org/html/2510.16617v1/x6.png" alt="系数可视化"></p>
+<blockquote>
+<p><strong>图6</strong>：通过PCA和t-SNE对从专家轨迹计算出的各任务/实验室设置的系数进行可视化。来自相同实验室设置的任务倾向于聚集在一起，表明学习到的函数空间能够捕捉上下文相似性。三个已知实验室设置相似的Austin数据集（黑色）形成了一个清晰的簇。</p>
+</blockquote>
+</li>
+<li><p><strong>机器人任务成功率</strong>：</p>
+<p><img src="https://arxiv.org/html/2510.16617v1/x31.png" alt="成功率表格"></p>
+<blockquote>
+<p><strong>表1</strong>：OpenVLA与MoS-VLA的成功率对比。在模拟（m=20轮）和真实机器人（m=10轮）实验中，预训练的OpenVLA由于领域差距成功率为0%。而MoS-VLA仅用一次专家演示校准后，在所有任务上取得了70%到100%的成功率。</p>
+</blockquote>
+</li>
+<li><p><strong>定性结果展示</strong>：<br>论文提供了大量模拟和真实机器人任务的执行过程截图（图5-图30），直观展示了MoS-VLA在经过一次性适应后，能够成功完成开门、抬起方块、插入笔等任务。</p>
+</li>
+</ol>
+<p><strong>消融实验与组件贡献</strong>：<br>论文虽未进行严格的消融实验，但通过对比OpenVLA基线（无结构化技能空间，需大量微调）和MoS-VLA（一次性适应），清晰证明了所提出的“基函数线性组合”框架和“基于L1优化的梯度免费适应”流程是性能提升的关键。可视化结果（图6）进一步印证了学习到的技能空间具有可解释的结构，能够反映数据集间的相似性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种用于VLA模型的一次性、上下文内适应方法MoS-VLA，该方法通过将策略表示为已学习技能基的线性组合，实现了无需梯度计算的快速适应，显著降低了部署开销。</li>
+<li>首次成功将函数编码器算法应用于十亿参数级别的Transformer架构和混合视觉-语言输入数据，为大规模基础模型的快速适应提供了新思路。</li>
+<li>通过广泛的实验验证，在多个未见过的数据集和真实的机器人任务上，MoS-VLA的性能显著优于未适应的基础模型，证明了其实际有效性。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文自身指出，当前方法的成功仍限于相对短视野的任务。将其扩展到长视野问题可能需要额外的时序抽象或分层技能组合机制。此外，在随机性较高的环境（如模拟方块抬起任务）中，可能需要多于一条演示才能实现一致的成功。</p>
+<p><strong>后续研究启示</strong>：</p>
+<ol>
+<li><strong>扩展任务范围</strong>：未来的工作可以探索如何将MoS-VLA框架与分层规划或选项学习结合，以处理更复杂的、长视野的机器人操作任务。</li>
+<li><strong>适应机制增强</strong>：研究在更少数据（如部分轨迹）或不同形式监督（如语言反馈）下的适应能力。探索系数 <code>α</code> 的在线更新策略以应对环境动态变化。</li>
+<li><strong>架构与优化探索</strong>：尝试从预训练的视觉和语言模型开始从头训练基函数，而非基于已有VLA模型微调，可能避免局部最优并进一步提升性能。同时，可以探索其他类型的函数空间表征和优化目标。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出MoS-VLA模型，旨在解决现有视觉-语言-动作模型在新环境或任务中泛化能力差的问题。其核心方法是将机器人策略表示为有限学习基函数的线性组合，预训练时从多数据集中联合学习这些基函数以构建结构化技能空间。测试时仅需单次专家演示，通过一个轻量级、无需梯度更新的L1误差凸优化问题，即可快速推断并适配新技能。实验表明，该模型在五个未见数据集上均取得了更低的动作预测误差，并能成功完成预训练VLA模型完全失败的仿真与真实机器人任务。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.16617" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

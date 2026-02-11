@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Optimistic Reinforcement Learning-Based Skill Insertions for Task and Motion Planning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Optimistic Reinforcement Learning-Based Skill Insertions for Task and Motion Planning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.14065" target="_blank" rel="noreferrer">2510.14065</a></span>
+        <span>作者: Bram Vanderborght Team</span>
+        <span>日期: 2025-10-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>任务与运动规划（TAMP）为机器人操作提供了长时域推理的通用解决方案，但其通常依赖于预定义动作知识，难以处理具有效果不确定性的动作，例如非抓取操作（推、滑）。相反，强化学习（RL）擅长通过试错获取鲁棒的短时域操作技能，但难以应对长时域规划问题。现有工作尝试将独立RL策略与TAMP结合，但未能将RL技能完全集成到TAMP流程中，导致部署效率低下。本文针对如何将具有不确定效果的RL技能无缝集成到TAMP流程这一具体痛点，提出将RL技能定义为包含数据驱动逻辑组件的“神经符号技能”，并设计计划细化子程序来处理不可避免的效果不确定性。核心思路是：通过训练RL策略获得技能，并利用从策略交互中收集的数据构建状态判别器和子目标生成器，使技能能被符号规划器调用，同时使用乐观替换和计划细化来管理动作效果的不确定性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文方法遵循“先搜索后采样”的TAMP流程，使用PDDL定义符号规划域。核心创新在于定义了神经符号技能，并设计了处理其效果不确定性的机制。</p>
+<p><img src="https://arxiv.org/html/2510.14065v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：TAMP中RL技能的结构。蓝色流程为任务规划，绿色流程为运动规划，青绿色实体为中间层。RL概率技能包含运动层的RL策略、数据驱动的状态判别器和中间层的子目标生成器。右侧展示了状态判别器（区分有效/无效初始状态）和子目标生成器（根据初始状态和策略提供可达子目标）的输出示例。</p>
+</blockquote>
+<p>一个RL技能被定义为一个五元组 $\phi = \langle\bar{v},\omega,\pi,\Theta,\sigma\rangle$，包含：对象参数$\bar{v}$；符号操作符$\omega = \langle\bar{v},P,E\rangle$（$P$为前置条件，$E$为效果）；执行底层运动的策略$\pi$；状态判别器$\Theta$；以及子目标生成器$\sigma$。其PDDL定义（如Listing 1所示）使用<code>Around</code>谓词表示不确定效果，这提示规划器自动插入后续的<code>Observe</code>动作。</p>
+<p><strong>策略训练</strong>：为展示方法的通用性，论文以<code>Retrieve</code>（用杆取回杯子）和<code>EdgePush</code>（将盘子推到桌边）两个技能为例。训练采用目标条件策略，输入为状态$x$和指定子目标$x_g$。<code>Retrieve</code>使用数值观测（物体位姿），<code>EdgePush</code>使用深度图像观测。动作空间均为笛卡尔空间的子空间。奖励函数编码了多个准则，例如<code>EdgePush</code>的奖励包括到达目标、使物体可抓取以及防止物体掉落。为提高策略鲁棒性，训练中使用了域随机化，包括物体的动摩擦系数、形状、尺寸以及桌边角度噪声。</p>
+<p><strong>状态判别器与子目标生成器</strong>：这是连接符号规划与RL技能的关键数据驱动组件。</p>
+<ul>
+<li><em>数据生成</em>：使用训练好的策略在规划场景中运行大量回合，随机选择初始状态和子目标，根据回合是否成功（实际最终状态与子目标距离小于阈值$\epsilon$）生成标签，得到数据集 ${ x_0, x_g, \hat{x}_g, \texttt{s} }$。</li>
+<li><em>状态判别器</em>：是一个二元分类神经网络$\Theta_{\theta}$，用于判断给定初始状态$x_0$是否在该RL技能的能力范围内。它通过最小化二元交叉熵损失进行训练。在规划时，它用于验证技能操作符中的前置条件谓词（如<code>CanRetrieveFrom</code>）。</li>
+<li><em>子目标生成器</em>：被表述为一个k近邻搜索问题。给定当前状态$x$，它在数据集中找到k个最近的初始状态，并筛选出对应成功标签的数据实例。每个实例中的子目标$x_g$及其关联的n个效果状态${\hat{x}_g^{1,\cdots,n}}$被封装为一个“替换”$\kappa$。这些候选替换用于在规划时进行后续谓词验证和几何落地。</li>
+</ul>
+<p><strong>不确定性处理</strong>：</p>
+<ul>
+<li><em>乐观替换</em>：在规划时，需要从子目标生成器提供的候选替换中选择一个进行落地。通过统计方法计算每个子目标$x_g$的“乐观度”$\eta_{\text{opt}}$，即其关联的n个效果状态能使后续动作谓词（如<code>IK</code>）为真的比例。选择乐观度最高的子目标作为乐观替换进行落地，从而将效果不确定性纳入规划考量。</li>
+<li><em>计划细化</em>：为应对乐观替换与实际效果间的偏差，设计了两项调整。首先，在符号层面，RL技能的效果使用<code>Around</code>谓词，这会导致规划器在每个概率技能后自动插入一个<code>Observe</code>动作（将<code>Around</code>转换为精确的<code>AtPose</code>）。其次，在执行层面，后续确定性动作（如<code>Pick</code>）的运动计划需要基于<code>Observe</code>到的实际状态进行重新规划。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2510.14065v1/x7.png" alt="计划细化"></p>
+<blockquote>
+<p><strong>图2</strong>：计划细化子程序。概率技能带来的状态不确定性（紫色管状区域，直径越大越不确定）可能导致后续动作失败。需要在任务层插入<code>Observe</code>操作符，并在运动层基于观察到的状态细化后续确定性动作（红色阴影部分）的运动计划。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在Pybullet模拟器中进行，使用了两个长时域操作任务：1）<strong>Table Rearranging</strong>：将杯子和盘子从一个桌子转移到另一个桌子，需要<code>Pick</code>、<code>Place</code>、<code>Retrieve</code>和<code>EdgePush</code>技能。2）<strong>Retrieval-Only</strong>：仅包含<code>Retrieve</code>和<code>Pick/Place</code>技能的简化场景。</p>
+<p><strong>对比的基线方法</strong>：1) <strong>PDDLStream</strong>：经典的采样型TAMP框架，将RL技能视为黑盒采样器。2) <strong>LOFT</strong>：一种学习操作符的TAMP方法，从演示中学习符号操作符。3) **HRL (Hierarchical RL)**：一种分层强化学习方法，通过上层控制器调用底层技能。4) **Ours (w/o refinement)**：本文方法的不包含计划细化子程序的变体。</p>
+<p><strong>关键实验结果</strong>：<br>实验评估了成功率、规划时间和执行时间。在Table Rearranging任务中，本文完整方法取得了最高的成功率（93.3%）。PDDLStream由于将RL技能视为黑盒采样器，规划时间极长（&gt;600秒）且成功率低（26.7%）。LOFT由于从有限演示中学习，泛化能力差，成功率仅为6.7%。HRL由于稀疏奖励和长时域问题，未能学到有效策略。关闭计划细化后，本文方法成功率降至73.3%，凸显了该组件的重要性。</p>
+<p><img src="https://arxiv.org/html/2510.14065v1/x8.png" alt="Table Rearranging任务结果"></p>
+<blockquote>
+<p><strong>图3</strong>：Table Rearranging任务的成功率对比。本文方法（Ours）成功率最高（93.3%），显著优于各基线方法。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.14065v1/x9.png" alt="规划与执行时间"></p>
+<blockquote>
+<p><strong>图4</strong>：Table Rearranging任务的规划时间和执行时间对比。本文方法在保持高成功率的同时，规划时间（约0.1秒）远低于PDDLStream，与LOFT相当，但执行时间因包含概率技能而略长。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.14065v1/x10.png" alt="Retrieval-Only任务结果"></p>
+<blockquote>
+<p><strong>图5</strong>：Retrieval-Only任务的成功率对比。本文方法同样取得最高成功率（100%），进一步验证了其有效性。</p>
+</blockquote>
+<p><strong>消融实验与组件分析</strong>：</p>
+<ul>
+<li><em>状态判别器效果</em>：如图5所示，训练好的状态判别器能有效区分RL技能的有效和无效初始状态。</li>
+<li><em>子目标生成器与乐观替换</em>：图6展示了子目标生成器的工作流程。图11-图14的消融实验表明，使用基于数据驱动子目标生成器的乐观替换进行规划，相比使用随机子目标或策略直接输出，能显著提高规划成功率和效率。</li>
+<li><em>计划细化必要性</em>：图7直观展示了计划细化的原理。定量结果（图8, 图10）显示，移除计划细化后成功率下降约20%，证明了处理实际效果偏差的必要性。</li>
+<li><em>域随机化的作用</em>：图15-图18显示，在训练策略时加入域随机化，能显著提高学得策略在测试时面对未见物体形状、大小和摩擦系数时的鲁棒性和泛化能力。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了一种将RL技能完全集成到TAMP流程的框架，通过定义包含数据驱动状态判别器和子目标生成器的神经符号技能，使具有不确定效果的RL技能能够被符号规划器直接调用。2）设计了乐观替换策略和计划细化子程序，有效处理了概率技能效果的不确定性，提高了长时域任务的成功率。3）通过实验验证了该方法在复杂操作任务中优于传统TAMP和分层RL基线，在规划效率和任务成功率之间取得了良好平衡。</p>
+<p>论文提到的局限性包括：1）状态判别器和子目标生成器需要离线数据生成和训练。2）目前技能的定义和组合性有限，未来需要研究如何自动组合技能或学习分层技能。3）实验主要在模拟环境中进行。</p>
+<p>本工作对后续研究的启示：为融合学习与规划提供了新思路，表明通过精心设计的数据驱动接口，可以将学习到的、具有不确定性的低层技能无缝接入符号规划框架，从而扩展规划系统的能力边界。未来方向可能包括探索更高效的在线数据收集与组件更新机制，以及研究如何将此类方法扩展到更复杂的多技能组合和现实世界机器人部署中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人任务与运动规划中，确定性动作规划难以处理具有效果不确定性的概率性动作（如推、滑等），而强化学习又难以进行长时程规划的问题，提出一种将强化学习技能集成到TAMP流程的方法。其关键技术是定义带有数据驱动逻辑组件的RL技能，使其能被符号规划调用，并设计计划精炼子程序处理效果不确定性。实验表明，该方法成功将TAMP能力扩展至概率性技能领域，并相较于已有方法提升了规划效率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.14065" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

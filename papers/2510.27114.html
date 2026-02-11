@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning Generalizable Visuomotor Policy through Dynamics-Alignment - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Learning Generalizable Visuomotor Policy through Dynamics-Alignment</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.27114" target="_blank" rel="noreferrer">2510.27114</a></span>
+        <span>作者: Jungwoo Lee Team</span>
+        <span>日期: 2025-10-31</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人视觉运动策略学习的主流方法主要分为两类：一是基于扩散模型的行为克隆方法，它们直接从专家演示中学习动作分布，但受限于演示数据的有限覆盖，泛化能力不足；二是基于视频预测模型的方法，它们通过在大规模视频数据上预训练来学习丰富的时空表征，但这类方法学习的是无动作条件的动力学模型，无法区分不同控制输入带来的结果，这限制了其在精确操作任务中的应用，并且通常需要海量的预训练数据。本文针对的核心痛点是：现有方法缺乏对动作条件的显式动力学建模，导致策略在面对分布外场景时泛化能力弱。本文提出了一种新视角，即通过整合显式的、动作条件的动力学模型到策略学习中，利用动力学预测为动作生成提供校正反馈。本文的核心思路是提出一种动力学对齐的流匹配策略，让策略模型和动力学模型在动作生成过程中通过共享流样本进行相互校正，从而实现自纠正和更好的泛化。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>DAP方法的整体框架包含两个核心模型：一个预测未来观测的动力学模型 <code>f</code>，和一个生成动作的策略模型 <code>π</code>。两者均采用流匹配方法进行训练。在推理时，两个模型并行迭代生成动作和未来观测，并通过“流外推”技术相互提供条件输入，形成闭环校正。</p>
+<p><img src="https://arxiv.org/html/2510.27114v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：DAP方法整体框架。左侧为动力学模型 <code>f(o_t, a_t)</code>，采用带交叉注意力条件的流匹配VAE-DiT架构，从混合的专家和随机数据中学习。右侧为策略模型 <code>π(a_t|o_t, o_{t+1})</code>，采用带交叉注意力U-Net架构的流匹配生成动作。蓝色箭头所示的流外推技术实现了相互校正：在流时间步 <code>τ</code> 的流样本被外推以预测 <code>o_{t+1}</code> 和 <code>a_t</code>，从而使动作生成与动力学预测对齐。</p>
+</blockquote>
+<p>核心模块与技术细节如下：</p>
+<ol>
+<li>**动力学模型 <code>f_θ</code>**：采用基于DiT的架构，使用Stable Diffusion的VAE进行潜在扩散。动作通过交叉注意力层作为条件输入。其训练目标（公式4）是回归条件向量场，训练数据混合了专家演示 <code>D_expert</code> 和随机探索数据 <code>D_random</code>，以扩大观测-动作对的覆盖范围。</li>
+<li>**策略模型 <code>π_φ</code>**：架构与扩散策略类似，基于U-Net并引入交叉注意力层来注入观测信息。当前观测 <code>o_t</code> 和未来观测 <code>o_{t+1}</code> 使用独立的视觉编码器。其训练目标（公式5）同样是流匹配回归，但仅使用专家数据。</li>
+<li><strong>创新点：动力学对齐与流外推</strong>：这是DAP区别于现有方法的关键。现有方法（如UVA）虽然联合训练动作和观测预测头，但在推理时生成路径是分离的。DAP则通过<strong>动力学对齐</strong>实现了策略与动力学模型在生成过程中的<strong>迭代耦合</strong>。在采样时（算法1），两者并行更新，策略模型的条件是外推的未来观测 <code>o_{t+1}^{(τ→1)}</code>，动力学模型的条件是外推的动作 <code>a_t^{(τ→1)}</code>。<strong>流外推</strong>技术（公式6）用于从当前流样本 <code>x^{(τ)}</code> 和预测的向量场 <code>u_τ</code> 估计最终数据 <code>x^{(1)}</code> 的近似值 <code>x^{(τ→1)}</code>，以此为对方模型提供更稳定、准确的条件输入，从而实现有效的相互校正。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.27114v1/x2.png" alt="流外推效果"></p>
+<blockquote>
+<p><strong>图2</strong>：流外推技术的定量与定性评估。上图显示，在不同流时间步 <code>τ</code>，外推得到的未来观测（Cam. Ext. PSNR）和动作（Act. Ext. MSE）的精度与最终预测结果（Cam. PSNR, Act. MSE）非常接近。下图展示了外推未来观测的定性样本，表明即使在生成早期，外推结果也已接近真实。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在四个真实世界机器人操作任务（关闭抽屉-CD、抓取放置-PP、折叠毛巾-TF、杯子摆放-CA）上进行评估。使用UR5机械臂和多个RealSense D435相机。每个任务收集50-100条专家演示和等量的随机探索数据。</p>
+<p><strong>对比基线</strong>：包括扩散策略的U-Net版（DP-C）和Transformer版（DP-T）、统一视频动作模型（UVA）以及基于大规模预训练VLA模型并微调的 <code>π_0</code>。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>任务成功率</strong>：如图3所示，DAP在四个任务上取得了平均75.0%的成功率，显著优于DP-C（62.5%）、DP-T（57.5%）、UVA（32.5%）和 <code>π_0</code>（30.0%）。在最具挑战性的杯子摆放任务中，DAP取得了30%的成功率，而DP-C完全失败。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.27114v1/x3.png" alt="任务成功率对比"></p>
+<blockquote>
+<p><strong>图3</strong>：上图展示了各方法在四个真实世界任务上的成功率。DAP平均成功率最高。下图展示了各任务设置，右下角对比了模型参数量，DAP（369M）与基线模型规模相当。</p>
+</blockquote>
+<ol start="2">
+<li><p><strong>动作预测误差</strong>：如表1所示，在验证集上，DAP的动作预测平均MSE为0.333，低于所有基线方法，表明其动作生成更准确。</p>
+</li>
+<li><p><strong>分布外（OOD）鲁棒性</strong>：论文定义了三个层次的泛化，DAP主要针对Level 2（配置空间OOD）进行了测试。如图4所示，在存在视觉干扰物和光照条件变化的情景下，DAP的表现明显优于最佳基线DP-C，平均优势达10个百分点。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.27114v1/x4.png" alt="OOD场景结果"></p>
+<blockquote>
+<p><strong>图4</strong>：在视觉干扰（左）和光照变化（右）两种OOD场景下的任务成功率。DAP展现了最强的鲁棒性。</p>
+</blockquote>
+<ol start="4">
+<li><strong>消融实验</strong>：如图5所示，移除了动力学对齐（即顺序生成而非并行迭代）或流外推技术后，性能均出现显著下降。同时使用随机数据和专家数据训练动力学模型，比仅使用专家数据能带来更优的性能。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.27114v1/x5.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图5</strong>：消融实验结果。从左至右分别展示了：移除动力学对齐（w/o Alignment）、移除流外推（w/o Extrapolation）、动力学模型仅使用专家数据（w/o Random Data）对成功率的影响。完整模型（Ours）性能最佳。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种新颖的动力学对齐流匹配策略架构，通过在动作生成过程中共享流样本，使策略和动力学模型能够相互提供校正反馈，实现自纠正。</li>
+<li>引入了流外推技术，为迭代生成过程中的相互条件提供了稳定且准确的估计。</li>
+<li>通过大量真实世界实验验证了方法的有效性，特别是在具有挑战性的精确操作任务和OOD场景中，性能显著优于现有基线。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，当前工作主要针对单任务、单数据集场景下的Level 1和Level 2泛化，尚未探索跨不同任务和配置的Level 3“通才”能力泛化。</p>
+<p><strong>对后续研究的启示</strong>：本研究证明了将显式、动作条件的动力学模型深度整合到策略生成循环中的价值。这为改进行为克隆的泛化能力提供了一条新路径，即利用低成本随机数据丰富动力学理解，并通过模型间的交互式校正提升决策质量。未来工作可探索如何将该框架扩展到更复杂的多任务、多模态场景，以及如何进一步优化迭代生成过程的效率。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对行为克隆方法因数据有限导致泛化性差的问题，提出了一种**动态对齐流匹配策略**。该方法的核心是让策略模型与动态模型在动作生成过程中**相互提供纠正反馈**，通过流外推技术实现动作生成与动态预测的对齐。实验表明，该方法在真实机器人操作任务上**泛化性能优于基线**，尤其在包含视觉干扰和光照变化的分布外场景中表现出更强的鲁棒性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.27114" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>OVAL-Grasp: Open-Vocabulary Affordance Localization for Task Oriented Grasping - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>OVAL-Grasp: Open-Vocabulary Affordance Localization for Task Oriented Grasping</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.20841" target="_blank" rel="noreferrer">2511.20841</a></span>
+        <span>作者: Odest Chadwicke Jenkins Team</span>
+        <span>日期: 2025-11-25</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，机器人要在非结构化环境中操作物体，需要执行任务导向的抓取，即根据给定任务抓取物体的特定功能部件。主流方法主要分为两类：基于几何的方法难以处理由视觉特征定义的部件、遮挡和未见过的物体；而基于深度学习的方法通常是端到端的，依赖于固定功能性的监督训练，这限制了其适应性。近期研究开始探索一次性或零样本（开放词汇）的功能性定位，但仍需微调，成本高且依赖数据集。</p>
+<p>本文针对现有方法在开放词汇、零样本适应性和处理视觉语义方面的关键局限性，提出了一种新的视角：利用未经微调的大语言模型（LLM）和视觉语言模型（VLM）来实现任务导向的、基于功能性的抓取。其核心思路是：给定RGB图像和任务描述，首先用LLM推理出与任务相关（应抓取）和无关（应避免）的物体部件，然后用VLM分割这些部件，并构建任务特异性热图来过滤通用抓取生成器产生的候选抓取，最终选择最合适的抓取位姿执行。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>OVAL-Grasp的整体流程是一个模块化的pipeline。输入是RGB-D图像 (I) 和自然语言描述的任务 (t)。输出是机器臂末端执行器的抓取位姿 (g \in SE(3))。整个过程无需任何训练，完全利用预训练的基础模型。</p>
+<p><img src="https://arxiv.org/html/2511.20841v1/figs/system_overview_v2.png" alt="系统概览"></p>
+<blockquote>
+<p><strong>图2</strong>：系统概览。机器人通过使用LLM识别与抓取相关的物体部件，VLM分割这些部件，并构建热图来过滤抓取候选，从而生成一组满足给定任务的任务导向抓取。</p>
+</blockquote>
+<p>该框架包含三个核心模块：</p>
+<ol>
+<li><strong>部件分解</strong>：使用大语言模型 (L)（本文采用GPT-4o API），根据任务 (t) 识别图像中的目标物体 (x)，并将其分解为“理想的”部件（有助于完成任务，应抓取）和“不理想的”部件（阻碍任务，应避免）。例如，对于“倒水”任务，水壶的把手是理想部件，壶嘴是不理想部件。</li>
+<li><strong>部件定位</strong>：使用视觉语言分割模型 (V)（本文采用PartGLEE），以上一步得到的部件名称列表作为提示词，为每个部件生成一个二值掩码及其置信度分数。PartGLEE具有先进的开放词汇部件分割能力。</li>
+<li><strong>热图生成与抓取过滤</strong>：此模块整合前两步信息，对通用抓取生成器 (G)（本文采用ContactGraspNet）提出的候选抓取进行评分和筛选。<ul>
+<li><strong>热图生成</strong>：初始化一个与输入图像同尺寸的零值热图 (H)。首先将整个物体的分割掩码以正值加入。然后，将每个“理想”部件掩码乘以其置信度后加到热图上，将每个“不理想”部件掩码乘以其置信度后从热图中减去。最后，将热图值缩放到[0, 255]范围，并用3x3高斯核进行平滑以去除噪声。这样，热图上高亮区域代表抓取有利位置，低值或负值区域代表应避免的位置。</li>
+<li><strong>抓取评分与选择</strong>：ContactGraspNet为场景生成 (N) 个候选抓取 (g_{c_i})。每个候选抓取通过热图获得两个分数：接触分数 (S_c(g_{c_i})) 和z轴分数 (S_z(g_{c_i}))。接触分数通过将抓取接触点 ((x_c, y_c)) 重投影到热图 (H) 上得到，确保抓取点位于正确区域。z轴分数通过找到物体点云 (P) 中距离抓取z轴延伸线 (z_g) 最近的点 (p)，并将其重投影 ((x_p, y_p)) 到热图上得到，用于惩罚可能遮挡任务相关区域的抓取接近角度。总分为两者之和 (S(g_{c_i}) = S_c(g_{c_i}) + S_z(g_{c_i}))。最终选择总分最高的候选抓取作为执行目标 (g)。</li>
+</ul>
+</li>
+</ol>
+<p>与现有方法相比，OVAL-Grasp的核心创新点在于：1) <strong>完全零样本且无需训练</strong>，直接组合使用现成的LLM、VLM和抓取生成器；2) <strong>开放词汇</strong>，能处理未见过的物体和任务描述；3) <strong>融合视觉语义理解</strong>，能够处理如“条形码”、“标签”等与几何形状无关的功能部件；4) <strong>模块化设计</strong>，各组件可随基础模型的进步而独立升级。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在Fetch移动操作机器人平台上进行，使用了20个家用物体和YCB数据集物体，每个物体对应3个不同的任务（共60个任务场景）。基线方法选择了当前先进的零样本任务导向抓取方法：GraspGPT和ShapeGrasp。值得注意的是，基线方法在实验中被提供了<strong>真实物体分割掩码</strong>，而OVAL-Grasp无需此信息。</p>
+<p><img src="https://arxiv.org/html/2511.20841v1/figs/fetch_mug2.png" alt="实验设置"></p>
+<blockquote>
+<p><strong>图3</strong>：实验使用了Fetch机器人（左）以及家用和YCB物体（右）来评估OVAL-Grasp和基线方法。</p>
+</blockquote>
+<p>评估指标包括<strong>部件选择成功率</strong>（系统正确识别并完全覆盖任务相关部件可见区域的试验比例）和<strong>抓取成功率</strong>（机器人在识别出的部件上成功执行稳定抓取并提起物体的试验比例）。</p>
+<p><strong>关键定量结果</strong>（桌面场景）：</p>
+<ul>
+<li>OVAL-Grasp的部件选择成功率达到**95.0%<strong>，抓取成功率为</strong>78.3%**。</li>
+<li>显著优于基线：部件选择成功率比GraspGPT（60.0%）高35%，比ShapeGrasp（73.3%）高21.7%；抓取成功率比GraspGPT（56.7%）高21.6%，比ShapeGrasp（66.7%）高11.6%。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2511.20841v1/figs/shapegrasp_fail.png" alt="ShapeGrasp失败案例"></p>
+<blockquote>
+<p><strong>图4</strong>：ShapeGrasp的失败案例。在处理凸面几何形状或与物体主体齐平的部件时，ShapeGrasp无法识别部件（如水壶盖和易拉罐拉环）。</p>
+</blockquote>
+<p><strong>杂乱场景鲁棒性</strong>：在包含遮挡的15个杂乱场景中评估部件选择成功率。</p>
+<ul>
+<li>OVAL-Grasp达到<strong>80.0%</strong> 的成功率。</li>
+<li>远高于GraspGPT（26.7%）和ShapeGrasp（46.7%）。后两者严重依赖完整几何信息，在遮挡下性能骤降。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2511.20841v1/figs/qual_results.png" alt="杂乱场景对比"></p>
+<blockquote>
+<p><strong>图6</strong>：在杂乱场景中部件识别与抓取提议的对比示例。提议的抓取点以绿色高亮。即使部件被部分遮挡，OVAL-Grasp也能成功识别抓取点。</p>
+</blockquote>
+<p><strong>视觉语义理解能力</strong>：<br><img src="https://arxiv.org/html/2511.20841v1/figs/clutter_3.png" alt="视觉语义示例"></p>
+<blockquote>
+<p><strong>图5</strong>：OVAL-Grasp识别与物体几何无关的部件。热图中为条形码和罐头标签区域分配了分数，会过滤掉可能遮挡它们的抓取。<br>OVAL-Grasp能够处理依赖视觉特征（如颜色、图案）的任务，例如“扫描条形码”或“阅读标签”。如图5所示，系统能正确识别并避免抓取几何上不存在的条形码和标签区域，这是纯几何方法无法实现的。</p>
+</blockquote>
+<p><strong>消融实验</strong>：通过更换LLM和VLM组件，验证模块化设计的有效性及各部件的贡献。</p>
+<table>
+<thead>
+<tr>
+<th align="left">方法</th>
+<th align="left">分割模型</th>
+<th align="left">语言模型</th>
+<th align="left">部件选择成功率</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">OVAL-Grasp</td>
+<td align="left">PartGLEE</td>
+<td align="left">Deepseek-R1 (7B)</td>
+<td align="left">33.3%</td>
+</tr>
+<tr>
+<td align="left">OVAL-Grasp</td>
+<td align="left">PartGLEE</td>
+<td align="left">GPT-3.5 Turbo</td>
+<td align="left">58.3%</td>
+</tr>
+<tr>
+<td align="left">OVAL-Grasp</td>
+<td align="left">VLPart</td>
+<td align="left">GPT-4o</td>
+<td align="left">78.3%</td>
+</tr>
+<tr>
+<td align="left">OVAL-Grasp</td>
+<td align="left"><strong>PartGLEE</strong></td>
+<td align="left"><strong>GPT-4o</strong></td>
+<td align="left"><strong>95.0%</strong></td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表3</strong>：消融研究展示了OVAL-Grasp使用不同部件分割模型和LLM时的性能。</p>
+</blockquote>
+<p>实验表明：1) <strong>语言模型</strong>：GPT-4o性能最佳，GPT-3.5 Turbo在部件级推理上存在困难，DeepSeek-R1因模型规模和错误推理表现最差。2) <strong>分割模型</strong>：PartGLEE因其对物体部件的层次化建模，性能显著优于VLPart。这证明了系统性能可随单个组件的改进而提升。</p>
+<p><img src="https://arxiv.org/html/2511.20841v1/figs/failure_cases_clutter.png" alt="失败案例"></p>
+<blockquote>
+<p><strong>图7</strong>：在杂乱场景中部件识别失败的示例。一个案例因高度杂乱对杯子过度分割，另一个案例因物体重叠错误地分割出多个把手。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了 <strong>OVAL-Grasp</strong>，首个完全零样本、无需训练、利用LLM和VLM进行开放词汇功能性定位的任务导向抓取框架；2) 展示了<strong>模块化设计</strong>的优势，其性能可随基础模型进化而提升；3) 在真实机器人实验中，<strong>性能优于现有先进方法</strong>，尤其在处理杂乱场景和视觉语义任务方面表现突出。</p>
+<p>论文自身指出的局限性包括：1) <strong>开环推理</strong>：缺乏检测和从失败或不正确抓取中恢复的反馈机制；2) <strong>单步抓取</strong>：不支持需要多阶段操作或恢复动作的复杂任务规划；3) <strong>依赖预训练模型</strong>：对于小众或代表性不足的物体部件，鲁棒性可能降低。</p>
+<p>这项工作对后续研究的启示是：将开放词汇感知与机器人操作结合的模块化零样本路径具有巨大潜力。未来的方向可以集中在为系统引入<strong>闭环反馈</strong>（如利用触觉、力觉或视觉信号检测失败），以及开发<strong>主动策略</strong>（如重新摆放物体、调整相机位姿）来改善非结构化环境中的部件分割和功能性定位。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出OVAL-Grasp方法，解决机器人在开放场景中根据语言任务抓取物体正确部位的问题。该方法采用零样本开放词汇范式，结合大语言模型（LLM）识别任务相关部件，利用视觉语言模型（VLM）进行部件分割，并生成物体可操作区域的2D热图。实验表明，该方法在真实机器人测试中正确识别部件成功率达95%，抓取正确可操作区域成功率为78.3%；在遮挡场景下部件选择成功率为80%，优于现有基线方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.20841" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

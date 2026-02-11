@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Improving Robustness to Out-of-Distribution States in Imitation Learning via Deep Koopman-Boosted Diffusion Policy - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Improving Robustness to Out-of-Distribution States in Imitation Learning via Deep Koopman-Boosted Diffusion Policy</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.00555" target="_blank" rel="noreferrer">2511.00555</a></span>
+        <span>作者: Zhongliang Jiang Team</span>
+        <span>日期: 2025-11-01</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前模仿学习（IL）领域的主流范式是结合生成模型（如扩散模型）与动作分块（Action Chunking， AC）。这种方法通过生成连续的多步动作序列来捕捉动作间的长期依赖关系，缓解因复合误差导致的协变量偏移问题。然而，现有方法（如Diffusion Policy）存在一个关键局限性：当同时使用视觉和本体感觉（proprioception）输入时，策略容易过度依赖本体感觉这种“捷径”，从而牺牲了对任务视觉特征的捕捉。这导致策略在面对分布外（OOD）状态（例如机械臂未能成功抓取抽屉把手）时，缺乏恢复能力，可能陷入振荡或失败。</p>
+<p>本文针对“多模态模仿学习策略因过度依赖本体感觉而鲁棒性不足”这一具体痛点，提出了一个双分支架构的新视角。核心思路是解耦不同感觉模态的组合角色：一个视觉分支专注于从视觉观察中编码任务进展，以在受阻时触发恢复行为；另一个融合分支整合视觉与本体感觉信息，用于精细操作。通过一个聚合模块动态整合两个分支的预测，并引入深度Koopman算子来增强对视觉动态的结构化表征学习，最终提升策略对分布外状态的鲁棒性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法称为深度Koopman增强的双分支扩散策略（Deep Koopman-boosted Dual-branch Diffusion Policy， D3P）。其整体目标是在推理时，利用增强的视觉表征和融合表征生成双动作分块，再通过聚合模块得到一个精炼的动作序列，以应对测试时可能出现的分布外状态。</p>
+<p><img src="https://arxiv.org/html/2511.00555v1/figures/fig-overview.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图2</strong>：D3P算法的整体架构与组件。(a) 整体架构：包含双分支编码器（视觉分支和融合分支）、一个带切换模块的扩散模型（DDPM）以及一个动作分块聚合模块。(b) 深度Koopman算子模块：学习视觉动态的线性近似，并输出潜在动作表征。(c) 动作分块聚合模块：基于生成模型在测试时的损失（作为不确定性信号）对时间上重叠的预测动作进行加权聚合。</p>
+</blockquote>
+<p><strong>整体流程</strong>：在训练时，系统接收当前时间步的视觉观测（前视和腕部RGB图像）和本体感觉（关节位置、夹爪宽度）。这些输入被分别送入两个分支进行编码。一个<strong>切换模块</strong>会随机选择将“融合分支”的输出表征 <code>f_f</code> 或“视觉分支”的潜在动作表征 <code>f_u</code> 输入给扩散模型进行训练。在推理时，扩散模型会<strong>同时</strong>以 <code>f_f</code> 和 <code>f_u</code> 为条件，生成两个独立的动作分块（AC）。这些AC与先前时间步产生的、在时间上重叠的AC一起，被送入<strong>聚合模块</strong>，根据各AC生成的不确定性进行加权合成，最终输出当前要执行的短动作序列 <code>a_h</code>。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>融合分支</strong>：负责整合视觉与本体感觉信息以进行精确操作。使用两个ResNet-18分别编码前视和腕部图像，特征拼接后投影为视觉特征 <code>f_v</code>。本体感觉输入 <code>q_t</code> 被映射到高维空间后与 <code>f_v</code> 堆叠，最后通过通道注意力机制平衡两种模态的贡献，输出融合表征 <code>f_f</code>。</li>
+<li><strong>视觉分支与深度Koopman算子模块</strong>：该分支旨在从纯视觉输入中捕获任务进展的动态。其核心是一个深度Koopman算子模块，它将视觉观测映射到一个潜在空间，并假设在该空间中动态遵循一个线性仿射系统：<code>f_v(t+h) = K * f_v(t) + V * f_u(t)</code>。其中，<code>K</code> 是控制状态演化的Koopman算子，<code>V</code> 捕捉控制输入的影响，<code>f_u(t)</code> 是由一个因果潜在策略 <code>L_ψ</code> 从 <code>f_v(t)</code> 推断出的<strong>潜在动作表征</strong>。该模块的训练损失 <code>L_dko</code> 旨在最小化对下一状态 <code>f_v(t+h)</code> 的预测误差，同时通过使用停止梯度（stop-gradient）和图像增强等技巧来避免模式坍塌。</li>
+<li><strong>扩散模型与切换训练</strong>：采用去噪扩散概率模型来生成长度为 <code>l=16</code> 的动作分块。在训练时，通过一个伯努利切换变量（概率 <code>p=0.6</code>）随机选择使用 <code>f_u</code> 或 <code>f_f</code> 作为条件进行训练，这使得同一个扩散模型能够学会响应两种不同的表征。扩散模型的目标是学习去噪过程，其损失函数 <code>L_ddpm</code> 为预测噪声的均方误差。</li>
+<li><strong>基于测试时损失的聚合模块</strong>：在推理的每一步，会得到来自当前及之前步骤的、多个时间上重叠的AC候选集合 <code>A_h(t)</code>。为了从中选出最优的执行序列 <code>a_h(t)</code>，本文提出使用扩散模型在测试时的损失作为每个生成AC的<strong>不确定性</strong>或<strong>置信度</strong>信号。具体而言，对于每个候选AC，将其与生成它的条件表征再次输入训练好的扩散模型，计算其损失值。损失越低，表示该AC在给定当前观测下越“可信”。聚合模块根据这些损失值计算权重，最终通过加权平均或选择机制合成最终动作。</li>
+</ol>
+<p><strong>创新点</strong>：</p>
+<ul>
+<li><strong>双分支架构解耦模态角色</strong>：明确分离了纯视觉路径（用于状态恢复）和融合路径（用于精细操作），避免了单一策略对本体感觉的过度依赖。</li>
+<li><strong>深度Koopman算子增强视觉动力学</strong>：显式地对视觉动态进行结构化建模，学习一个线性近似，从而获得更具因果性和预测性的视觉表征，而非隐式地编码所有图像变化。</li>
+<li><strong>基于不确定性的动作分块聚合</strong>：利用生成模型自身的测试时损失作为实时置信度度量，指导时间重叠动作的融合，这是一种新颖且无需额外训练价值函数的聚合机制。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>仿真基准</strong>：在RLBench的6个桌面操作任务上进行评估（Open Drawer, Close Drawer, Push Button, Pick Up Cup, Put Knife in Pot, Stack Wine）。</li>
+<li><strong>真实世界任务</strong>：设计了3个任务（Open Drawer, Close Jar, Stack Cups）。</li>
+<li><strong>实验平台</strong>：仿真使用PyBullet模拟器和Franka Emika Panda机械臂；真实实验使用相同的实体机械臂。</li>
+<li><strong>对比方法</strong>：与当前最先进的生成式IL方法对比，包括：扩散策略（Diffusion Policy）、ACT、IBC、以及两种统一视频-动作模型UVA和UWM。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>在RLBench的6个任务上，D3P的平均成功率达到**77.5%<strong>，相比表现次优的Diffusion Policy（平均62.9%）</strong>绝对提升了14.6%<strong>。在三个真实世界任务上，D3P的平均成功率为</strong>73.3%<strong>，相比Diffusion Policy（58.3%）</strong>绝对提升了15.0%**。</p>
+<p><img src="https://arxiv.org/html/2511.00555v1/figures/fig-simtasks.png" alt="仿真任务结果"></p>
+<blockquote>
+<p><strong>图5</strong>：在RLBench六个任务上的成功率对比。D3P（橙色）在除“Put Knife in Pot”外的所有任务上均取得最佳或并列最佳性能，平均成功率显著高于所有基线方法。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.00555v1/figures/fig-curves.png" alt="学习曲线"></p>
+<blockquote>
+<p><strong>图6</strong>：在Open Drawer和Push Button任务上的训练曲线（成功率和训练损失）。D3P收敛后的成功率更高且更稳定，训练损失也更低，表明其学习更高效。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.00555v1/figures/fig-realworld_tasks_2.png" alt="真实世界任务结果"></p>
+<blockquote>
+<p><strong>图7</strong>：真实世界任务的定性结果与成功率。左栏展示了D3P在开抽屉任务中失败后成功恢复的序列；右表显示D3P在三个真实任务上均取得了最高的成功率。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：<br>论文对D3P的三个核心组件进行了消融研究：</p>
+<ol>
+<li><strong>移除双分支（仅融合分支）</strong>：性能下降，证实了纯视觉分支对于恢复能力的必要性。</li>
+<li><strong>移除深度Koopman模块（视觉分支使用普通编码器）</strong>：性能下降，表明结构化动力学建模对提升视觉表征质量有积极作用。</li>
+<li><strong>移除聚合模块（简单平均替代）</strong>：性能显著下降，这凸显了基于测试时损失的不确定性加权聚合对于可靠执行至关重要。<br>消融实验结果表明，<strong>双分支架构</strong>和<strong>聚合模块</strong>贡献了最大的性能提升。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了双分支扩散策略架构</strong>，有效减少了对本体感觉数据的过度依赖，使策略能在任务受阻时动态转向视觉信息，从而增强了对不同任务条件的适应性和从分布外状态恢复的能力。</li>
+<li><strong>将深度Koopman算子无缝集成到模仿学习策略中</strong>，以捕获视觉动态。通过精心设计的训练框架避免模式坍塌，从而增强了视觉表征并提升了整体性能。</li>
+<li><strong>设计了一种新颖的动作分块后处理聚合模块</strong>，该模块利用扩散模型的测试时损失来表示预测动作的不确定性，显著提高了策略执行的成功率。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文自身提到，D3P引入了额外的计算开销，因为需要在每个推理步骤运行两次扩散去噪过程（分别对应两个分支）并计算测试时损失进行聚合。此外，方法在非常依赖触觉反馈或严格力控的任务上的有效性尚未得到验证。</p>
+<p><strong>对后续研究的启示</strong>：<br>这项工作为构建更鲁棒的模仿学习系统提供了新思路：<strong>显式解耦不同模态的功能</strong>而非简单融合，以及<strong>利用生成模型自身的不确定性进行实时决策</strong>。深度Koopman算子为在潜在空间中显式、结构化地建模动态提供了一种可行工具，未来可探索将其应用于更复杂的多智能体或非平稳环境动态建模。如何降低双分支和不确定性评估带来的计算成本，也是值得优化的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对模仿学习中扩散策略难以捕捉多步间强时间依赖、对分布外状态鲁棒性差的问题，提出深度库普曼增强的双分支扩散策略（D3P）。方法核心是双分支架构：视觉分支编码任务进程，融合分支整合多模态输入实现精确操作，并引入深度库普曼算子学习视觉时序动态。实验表明，D3P在六项模拟任务上平均性能超越现有最优扩散策略14.6%，在三项真实机器人任务上提升15.0%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.00555" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

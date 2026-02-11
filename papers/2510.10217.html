@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>UF-RNN: Real-Time Adaptive Motion Generation Using Uncertainty-Driven Foresight Prediction - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>UF-RNN: Real-Time Adaptive Motion Generation Using Uncertainty-Driven Foresight Prediction</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.10217" target="_blank" rel="noreferrer">2510.10217</a></span>
+        <span>作者: Tetsuya Ogata Team</span>
+        <span>日期: 2025-10-11</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人学中，训练机器人在状态不确定（如物体属性模糊或交互不可预测）的环境中有效操作是一个长期挑战。当前主流的模仿学习方法通常依赖成功示例，往往忽略了不确定性最为显著的失败场景。现有方法如Action Chunking Transformer (ACT)和Diffusion Policy模型，虽然能通过学习多模态转移动态来适应不同场景，但缺乏显式机制来引导探索以减少不确定性，导致信息收集次优和政策学习低效。</p>
+<p>本文针对这一局限性，从主动推理（Active Inference）中汲取灵感，提出了UF-RNN模型。其核心思路是结合标准时间序列预测和一个主动的“Foresight”模块，该模块通过内部模拟多个未来轨迹并选择能最小化预测方差的路径，使模型能够有选择地在高不确定性下探索动作，从而在仅有成功演示数据的情况下，实现对不确定环境的鲁棒适应。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>UF-RNN模型遵循深度预测学习的预测方案，其整体框架由一个RNN模块和一个新颖的Foresight模块组成。RNN模块学习机器人的感觉运动动态，并根据观察到的传感器数据生成机器人动作。输入 $i_t$ 是当前时间步 $t$ 观测到的传感器数据（如关节角度和视觉特征向量），输出 $o_{t+1}$ 和 $\widehat{o}_{t+1}$ 分别是下一时间步的真实和预测传感器数据。运动通过连续预测下一个传感器值并将其应用于机器人的控制器来生成。Foresight模块的作用是优化模型的隐藏状态 $H_t$ 为 $\widehat{H}_t$，以最小化所有模态的未来方差（即不确定性）。</p>
+<p><img src="https://arxiv.org/html/2510.10217v1/assets_png/model_structure.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：UF-RNN模型网络结构。(A) 整体模型，包含RNN模块和Foresight模块。(B) RNN模块细节，使用卷积自编码器(CAE)压缩视觉输入，使用随机分层LSTM(SH-LSTM)预测时间序列。(C) Foresight模块过程，通过内部模拟（闭环预测）重定向RNN隐藏状态以导向不确定性更低的状态。</p>
+</blockquote>
+<p><strong>RNN模块</strong>：采用一个预训练的卷积自编码器(CAE)来压缩高维视觉输入，以及一个随机分层LSTM(SH-LSTM)来预测时间序列传感器数据。SH-LSTM融合了S-RNN的随机预测特性、Multiple timescale RNN (MT-RNN)的多时间尺度分层结构以及Active Attention RNN ($A^2RNN$)的模态内与模态间动态捕获结构。具体而言，下层LSTM（$LSTM_{image}$ 和 $LSTM_{joint}$）处理原始传感器数据动态（短时间尺度），而上层LSTM（$LSTM_{shared}$）管理更抽象、长期的信息。每个下层LSTM预测三个量：1) 下一传感器数据的均值 $\widehat{o}<em>{t+1}^{mean}$；2) 方差 $\widehat{o}</em>{t+1}^{var}$；3) 一个标量值 $T=\widehat{o}_{t+1}^{step}$，用于决定Foresight模块中模拟的未来步数。</p>
+<p><strong>Foresight模块</strong>：该模块通过执行<strong>闭环预测</strong>来生成<strong>前瞻</strong>，即最多 $T$ 个时间步的预期未来状态 $(o_{t+T}^{mean},,o_{t+T}^{var})$。在闭环预测中，模型递归地将其自身的预测输出作为下一时间步的输入，从而能够基于当前隐藏状态 $H_t$ 内部模拟环境可能的发展。其关键技术包括：</p>
+<ol>
+<li><strong>多重噪声扰动</strong>：对隐藏状态 $H_t$ 施加 $n$ 个不同的高斯噪声扰动，生成 $N$ 个扰动后的隐藏状态 $\widetilde{H}<em>{t}^{n}$。对每个扰动状态执行 $T$ 步闭环预测，得到 $N$ 组预测的未来状态。最终选择那个能使预测方差降低最多的隐藏状态：$\widetilde{H}</em>{t}=\underset{\widetilde{H}<em>{t}^{n}}{\operatorname{argmax}},(o</em>{t}^{n,var}-o_{t+T}^{n,var})$。这一选择机制受到自由能框架中**预期自由能(EFE)**最小化原则的启发。</li>
+<li><strong>自适应噪声强度</strong>：扰动噪声的强度与先前预测的方差 $\widehat{o}_{t-1}^{var}$ 成正比。当模型检测到高不确定性时，会增加噪声强度以探索更多样化的未来轨迹；反之则减少噪声，进行更保守的预测。这实现了不确定性感知下的探索与利用平衡。</li>
+</ol>
+<p><strong>训练过程</strong>：采用端到端训练，损失函数结合了<strong>重建损失</strong>和<strong>随机正则化项</strong>。重建损失衡量预测与专家轨迹的偏差，并通过预测方差进行加权，以减弱高不确定性数据的影响。随机正则化项则约束预测的方差表示随时间保持稳定。</p>
+<p>与现有方法相比，UF-RNN的创新点在于：1) 明确引入了基于EFE最小化的不确定性感知策略选择机制；2) 通过Foresight模块实现了对未来不确定性的主动、内部模拟与评估，从而引导探索。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在模拟环境和真实机器人平台上进行，核心任务是开门。模拟实验使用Robosuite模拟器和7自由度机械臂，收集了推、拉、滑三种门各5条成功演示轨迹（共15条）。真实实验使用UR5e机械臂，任务简化为推和拉两种门，各收集15条演示轨迹（共30条），并引入了±5cm的水平位置偏移以增加变异性。</p>
+<p><strong>对比基线</strong>：1) <strong>SH-RNN</strong>：标准的随机分层RNN，无Foresight机制；2) <strong>SH-RNN+noise</strong>：与SH-RNN结构相同，但在每个时间步向隐藏状态注入随机噪声，但无Foresight选择过程。</p>
+<p><img src="https://arxiv.org/html/2510.10217v1/assets_png/sim_success_rate.png" alt="成功率对比"></p>
+<blockquote>
+<p><strong>图3</strong>：各训练模型成功率对比。UF-RNN（约1300轮后）成功学习所有三种开门动作，成功率收敛至约80%，而两个基线模型成功率低或不稳定。</p>
+</blockquote>
+<p><strong>关键定量结果</strong>：在模拟实验中，UF-RNN模型成功学习所有三种开门动作，在1300轮训练后成功率收敛至约80%。SH-RNN成功率很低，且很少能可靠地学习超过一两种动作。SH-RNN+noise偶尔能发现所有三种动作，但轮次不一致且不稳定。</p>
+<p><img src="https://arxiv.org/html/2510.10217v1/assets_png/sim_pca.png" alt="隐藏状态过渡"></p>
+<blockquote>
+<p><strong>图4</strong>：各模型RNN隐藏状态（经PCA降至2维）过渡对比。UF-RNN为每种开门运动构建了不同的吸引子（离线轨迹），并在推理时用于生成运动；在高不确定性分支点，隐藏状态在小范围内扰动，尝试不同开门动作。基线模型则难以构建清晰的吸引子盆地。</p>
+</blockquote>
+<p><strong>隐藏状态与混沌分析</strong>：PCA可视化显示，UF-RNN的隐藏状态为每种开门运动形成了不同的吸引点，并在遇到未知门类型时展现出分支行为。这种分支是由预测不确定性增加所触发的探索行为。而基线模型要么坍缩到单一吸引子，要么无法形成清晰分离。</p>
+<p><img src="https://arxiv.org/html/2510.10217v1/assets_png/sim_lyapunov2_compressed.png" alt="李雅普诺夫指数"></p>
+<blockquote>
+<p><strong>图5</strong>：各训练模型李雅普诺夫指数过渡对比。UF-RNN和SH-RNN+noise在关键任务阶段（如抓握门把手时）出现峰值，表明存在混沌特性。但只有UF-RNN能主动利用这种混沌进行策略分支。</p>
+</blockquote>
+<p><strong>李雅普诺夫指数</strong>：计算表明，UF-RNN和SH-RNN+noise在关键任务阶段（如抓握门把手时）都表现出李雅普诺夫指数的峰值，意味着存在混沌动力学。然而，只有UF-RNN能主动将这些混沌特性用于策略分支，而SH-RNN+noise的混沌未被有效引导。SH-RNN的指数则保持低平。</p>
+<p><img src="https://arxiv.org/html/2510.10217v1/assets_png/real_disturbance_compressed.png" alt="真实世界干扰实验"></p>
+<blockquote>
+<p><strong>图6</strong>：真实世界实验中UF-RNN的隐藏状态过渡。当机器人在拉门过程中受到人为阻挡时（干扰），其隐藏状态在潜在空间中探索多个吸引子，表现出自适应行为（先尝试推，后返回拉）。</p>
+</blockquote>
+<p><strong>真实世界与干扰测试</strong>：在只有推、拉两种门的真实任务中，UF-RNN和SH-RNN+noise都表现稳健。但在<strong>外部干扰测试</strong>中（人为阻止拉门动作），UF-RNN展现出适应性：它先表现出困惑的拉动作，然后过渡到短暂的推动作尝试，最终在干扰解除后成功拉开门。隐藏状态分析显示其探索了多个吸引子。而SH-RNN+noise则倾向于持续拉的动作，无法转向替代策略。</p>
+<p><strong>消融实验总结</strong>：通过对比UF-RNN、SH-RNN和SH-RNN+noise，证明了：1) <strong>Foresight模块的选择机制</strong>对于将噪声探索有效导向不确定性降低至关重要；2) <strong>自适应噪声强度</strong>与不确定性耦合，实现了平衡的探索；3) <strong>整体架构</strong>能够学习并利用隐藏空间中的混沌动力学来处理感知模糊。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了一种基于预期自由能最小化的<strong>不确定性感知策略选择机制</strong>；2) 设计了<strong>UF-RNN模型</strong>，其Foresight模块能够预测多个未来场景并选择减少长期不确定性的动作；3) 在模拟和真实机器人开门任务上验证了模型的有效性，证明了其能泛化到预定义状态-动作映射之外以及未预见的干扰。</p>
+<p>论文提到的局限性包括：实验任务相对简单（开门），且真实实验将任务从三种门简化为两种。这暗示了在更复杂、多阶段任务中的验证仍需进行。</p>
+<p>对后续研究的启示：UF-RNN将认知科学中的主动推理原则与深度学习模型结合，为在数据稀缺的模仿学习中处理认知不确定性提供了新思路。未来工作可扩展至更具动态性、层次化不确定性的环境，并深化其与自由能原理、混沌吸引子在生物认知中作用的理论分析，推动自适应机器人向更类人的决策能力发展。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出UF-RNN模型，以解决机器人在不确定环境（如物体属性模糊）中适应性差的问题。核心方法是引入“Foresight”模块，通过内部模拟多条未来轨迹、优化隐藏状态以降低预测方差，从而在高不确定性下引导探索性行为。在仿真与真实机器人的开门任务中，模型无需失败示例，即通过潜在空间的自诱导混沌动力学实现鲁棒适应，相比传统随机RNN基线取得了更高的成功率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.10217" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

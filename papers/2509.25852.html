@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Reinforced Embodied Planning with Verifiable Reward for Real-World Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Reinforced Embodied Planning with Verifiable Reward for Real-World Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.25852" target="_blank" rel="noreferrer">2509.25852</a></span>
+        <span>作者: Hao Chen Team</span>
+        <span>日期: 2025-09-30</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，利用视觉语言模型作为高层规划器是具身智能领域的主流方法。然而，其在真实世界中的部署面临两大关键局限性：(i) 缺乏将自然语言与多步骤动作计划耦合的大规模、序列化操作数据；(ii) 缺乏用于在规划目标上微调VLM的密集、可解释的奖励信号。这导致现有VLM规划器要么局限于合成环境，要么在真实世界的视觉多样性、动作可变性和部分可观测性面前性能迅速退化。</p>
+<p>本文针对上述数据稀缺和奖励设计困难的具体痛点，提出了一种新视角：通过设计一种基于技能语法检查和二分图匹配的<strong>可验证奖励</strong>，对VLM进行强化学习微调，使其同时具备生成可靠的长时程操作计划以及验证步骤完成情况的能力。核心思路是提出REVER框架，利用可验证奖励对VLM进行强化微调，得到一个名为RoboFarseer的模型，该模型能够从语言指令生成显式的思维链进行时空推理，并作为规划器和监控器在闭环系统中执行任务。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>REVER框架包含三个核心组成部分：(1) 系统化的数据收集与合成流水线，将真实世界演示转换为结构化训练数据；(2) 基于可验证奖励的强化微调方法，用于激励VLM的规划能力；(3) 结合高层规划与底层控制的分层执行框架，用于真实世界部署。</p>
+<p><img src="https://arxiv.org/html/2509.25852v1/x2.png" alt="REVER框架概览"></p>
+<blockquote>
+<p><strong>图2</strong>：REVER框架概览。包含三个核心组件：数据收集与合成流水线、基于可验证奖励的强化微调方法、结合高层规划与底层控制的分层执行框架。</p>
+</blockquote>
+<p><strong>数据流水线</strong>：基于UMI框架收集原子操作技能的视频演示。通过自动化标注引擎，将长时程任务（由K个有序技能合成）的视频处理成两种标注：<strong>规划标注</strong>（给定初始观察和用户指令，真实标签是整个子任务序列）和<strong>完成验证标注</strong>（给定子任务开始和结束的观察对及指令，判断任务是否成功完成）。最终组装成结构化的Vision–Instruction–Plan三元组，构成LEAP数据集（包含12,000个任务）。</p>
+<p><strong>可验证奖励函数</strong>：这是REVER的核心创新。给定生成的计划 (P_g) 和真实计划 (P_{gt})，奖励 (\mathcal{R}(P_g, P_{gt})) 由格式得分和内容得分加权构成。</p>
+<ul>
+<li><strong>格式得分</strong>：检查生成的计划是否符合预定义的标签模板（如 <code>&lt;think&gt;...&lt;/think&gt;&lt;answer&gt;...&lt;/answer&gt;</code>），符合则得1分，否则得0分。这确保了模型输出结构化的推理轨迹。</li>
+<li><strong>内容得分</strong>：衡量生成计划与真实计划的语义相似度。将其建模为一个<strong>最大权二分图匹配</strong>问题。图的顶点集分别是 (P_g) 和 (P_{gt}) 的步骤，边权重由动作相似度（动词匹配）和对象相似度（对象/位置参数匹配）加权计算（权重分别为0.3和0.7）。内容得分为最大匹配的总权重除以较长计划的长度，再减去一个长度惩罚项（权重 (w_l=0.1)）。这种设计能够鲁棒地处理步骤顺序调换但语义正确的情况。</li>
+</ul>
+<p><strong>强化微调</strong>：利用上述可验证奖励，采用GRPO算法对VLM（基于Qwen2.5-VL-7B）进行微调。GRPO通过从当前策略中采样一组（B个）响应，计算每个响应的奖励，并标准化为相对优势 (\hat{A}_i)。优化目标是一个包含裁剪机制的代理目标函数，旨在最大化优势响应的概率，同时通过KL散度项防止策略偏离参考策略太远，确保稳定的策略更新。</p>
+<p><strong>分层执行框架</strong>：系统运行时，RoboFarseer作为高层规划器，根据用户指令和初始观察生成子任务列表。低层控制策略（本文使用融合语言条件的扩散策略）执行具体的子任务。同时，RoboFarseer切换为<strong>执行监控器</strong>模式，以5Hz的频率持续比对当前观察与子任务开始时的观察，判断当前子任务是否完成。一旦监控器输出“完成”，系统即停止当前动作并推进至下一个子任务；若执行失败或超时，则触发重新规划。这形成了一个完整的“规划-执行-监控”闭环。</p>
+<p><img src="https://arxiv.org/html/2509.25852v1/x3.png" alt="RoboFarseer执行轨迹示例"></p>
+<blockquote>
+<p><strong>图3</strong>：RoboFarseer执行长时程任务“整理桌面上的小物品”的轨迹示例。展示了从初始观察、生成思维链和计划，到逐步执行（拾取、放置）的过程。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准测试</strong>：使用了五个规划基准，包括基于真实UMI演示的LEAP-L（长时程序列规划）和LEAP-U（指令对齐规划）、来自ShareRobot的开放词汇规划、基于第一人称视频的EgoPlan-Bench2，以及多模态基准RoboVQA。测试形式包括多项选择题和开放规划题。</li>
+<li><strong>基线方法</strong>：对比了三组模型：商业模型（Gemini-2.5-Pro/Flash, GPT-4.1/4o, Claude-Sonnet-4）、开源大模型（Qwen2.5-VL-72B/32B-Instruct）以及具身专用模型（RoboBrain2-7B/32B）。</li>
+<li><strong>真实世界评估</strong>：在Dobot Nova5机械臂上部署，在“整理桌面”、“泡茶”、“取食物饮料”三个家庭场景中测试了10条指令，每条指令在不同初始场景下进行10轮测试。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2509.25852v1/x4.png" alt="规划准确率"></p>
+<blockquote>
+<p><strong>图4</strong>：各模型在规划基准测试上的Top-1准确率（%）。在多项选择任务上，RoboFarseer-7B在LEAP-L上达到59.3%，超越了所有开源对比模型（至少高出9个百分点），并与参数量大10倍的模型表现相当。在LEAP-U、RoboVQA和ShareRobot-Planning上，RoboFarseer取得了所有模型中的最高分。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.25852v1/LEAP.png" alt="开放规划得分"></p>
+<blockquote>
+<p><strong>图5</strong>：基于二分图匹配的规划得分在LEAP开放规划测试集上的结果。在需要生成完整计划的开放任务上，RoboFarseer优势明显：在LEAP-L上得分为76%，远超最强的商业模型Gemini-2.5-Pro（24%）和RoboBrain2-32B（26%）。这表明REVER的可验证奖励微调能有效教会VLM生成长且可执行的序列。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.25852v1/icl.png" alt="上下文示例影响"></p>
+<blockquote>
+<p><strong>图6</strong>：上下文示例数量对LEAP-U开放规划性能的影响。提供示例（2-shot）能提升基线模型的性能，但RoboFarseer即使在零样本（0-shot）情况下也能保持92%的精确匹配率，证实了可验证奖励训练在强制格式保真度方面超越了简单的少样本提示。</p>
+</blockquote>
+<p><strong>真实世界评估结果</strong>：<br>如表1所示，在10条复杂指令的真实机器人测试中，完整REVER系统的<strong>整体任务成功率</strong>（所有子任务均完成）在50%到100%之间。相比之下，<strong>移除VLM规划器、仅使用底层控制策略</strong>的消融实验，整体成功率大幅下降（0%-40%）。平均而言，引入规划器后，整体成功率提升了大约60%。</p>
+<p><img src="https://arxiv.org/html/2509.25852v1/images/ball.jpeg" alt="真实世界评估场景"></p>
+<blockquote>
+<p><strong>图7</strong>：真实世界评估场景示例：整理桌面。展示了物体随机摆放的初始场景。</p>
+</blockquote>
+<p><strong>消融实验贡献</strong>：论文虽未设置独立的消融实验章节，但通过对比“有/无VLM规划器”的真实世界结果（表1最右列），直接证明了高层规划模块对提升长时程任务整体成功率的决定性贡献，提升幅度约60%。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>REVER框架</strong>，其核心是一种基于技能语法检查和有序二分图匹配的<strong>可验证奖励</strong>，使得能够对VLM进行无需人工偏好标签或模拟器查询的强化学习微调，以提升其长时程规划能力。</li>
+<li>构建了<strong>LEAP数据集</strong>，通过自动化流水线将原始UMI演示转换为大规模、结构化的Vision-Instruction-Plan三元组，专门用于长时程具身动作规划的研究。</li>
+<li>训练并发布了<strong>RoboFarseer模型</strong>，该模型通过REVER框架微调，同时具备高层规划与步骤完成验证的能力，在多项基准测试上达到或超越了参数量大一个数量级的模型，并在开放规划任务上显著领先。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，当前方法依赖于一个预定义的原子技能集 (\mathcal{S})，这限制了其处理技能库外新动作的泛化能力。此外，GRPO微调过程需要大量的计算资源（8张H100 GPU训练约28小时/epoch）。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>奖励设计</strong>：可验证奖励为具身AI的强化学习提供了一条可解释、低噪声的路径，未来可探索更复杂的语义和物理一致性奖励。</li>
+<li><strong>数据合成</strong>：自动化从原始演示生成结构化规划数据的方法，可以缓解数据稀缺问题，并可扩展到更多样化的场景和技能。</li>
+<li><strong>模型能力</strong>：证明了通过针对性微调，较小规模的模型（7B）能在特定任务上媲美甚至超越超大通用模型，启示了走向高效专用具身模型的方向。</li>
+<li><strong>系统闭环</strong>：规划与验证一体化的设计，为实现鲁棒的自主长时程任务执行提供了有效的系统架构范例。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人根据自然语言指令执行长时程操作任务的核心挑战，即缺乏大规模顺序操作数据和密集可解释奖励，提出了REVER框架。该框架训练了RoboFarseer视觉语言模型，其关键技术包括：利用通用操作接口采集原子技能数据，通过自动标注生成训练三元组，并设计了一种基于有序二分图匹配的可验证奖励来评估计划。实验表明，该模型性能与规模大得多的专有模型相当，在开放式规划上超越最佳基线40%以上，在实际长时程任务中将系统整体成功率提升了约60%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.25852" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

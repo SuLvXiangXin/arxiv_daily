@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VITA-VLA: Efficiently Teaching Vision-Language Models to Act via Action Expert Distillation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>VITA-VLA: Efficiently Teaching Vision-Language Models to Act via Action Expert Distillation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.09607" target="_blank" rel="noreferrer">2510.09607</a></span>
+        <span>作者: Caifeng Shan Team</span>
+        <span>日期: 2025-10-10</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，赋予视觉语言模型（VLM）以行动能力的视觉语言行动（VLA）模型主要通过两种主流方法实现。第一类是基于离散化的方法（如OpenVLA、RT系列），将连续动作空间离散化为令牌，通过大语言模型（LLM）进行映射生成，但这类方法通常忽略了机器人状态这一建模物理动态的关键信号。第二类是基于扩散的方法（如GR00T、π₀），将VLM作为特征提取器，将特征注入一个独立的动作专家进行去噪生成动作，这导致VLM仅充当静态编码器，其端到端动作建模潜力未被充分利用。此外，这两类方法都需要在大型具身数据集上进行昂贵的端到端预训练，消耗大量计算资源和数据，但在CALVIN、LIBERO等基准测试上的性能仍落后于专用的小型动作模型。</p>
+<p>本文针对VLA模型训练成本高昂且性能未达最优的痛点，提出了一个基于知识蒸馏的新视角：从性能优异的小型动作模型中蒸馏其动作建模知识，高效地赋予预训练VLM以行动能力。其核心思路是：通过一个轻量化的两阶段蒸馏框架，将小型动作模型的策略迁移到VLM中，重用其预训练的动作解码器，从而避免对VLM进行端到端的重训练，在显著降低训练成本的同时实现卓越的性能。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>VITA-VLA的整体框架建立在预训练的VITA-1.5-7B模型之上，仅通过添加两个轻量化组件使其具备动作生成能力：一个状态编码器和一个可学习的动作令牌。模型的输入包括图像（静态和腕部摄像头）、语言指令、机器人状态和动作令牌，输出为7自由度的可执行动作（6维机械臂动作和1维夹爪动作）。</p>
+<p><img src="https://arxiv.org/html/2510.09607v2/x1.png" alt="模型架构"></p>
+<blockquote>
+<p><strong>图1</strong>：VITA-VLA模型架构。模型以VITA-1.5-7B为骨干，输入包括图像令牌、文本指令令牌、状态令牌和动作令牌。状态编码器将机器人状态编码为单个令牌。动作令牌作为可学习查询，其最终层的隐藏状态被动作映射器提取并映射，随后由预训练的动作解码器生成最终动作。</p>
+</blockquote>
+<p><strong>核心模块与流程</strong>：</p>
+<ol>
+<li><strong>状态编码器</strong>：由于直接将原始状态值作为文本令牌输入效果不佳，论文设计了一个专用编码器。分别用线性层编码6自由度机械臂状态和2维（独热编码）夹爪状态，再将结果拼接并通过另一个线性层投影至与文本令牌相同的维度，从而将结构化状态信息有效融入模型。</li>
+<li><strong>动作令牌</strong>：定义一个可学习的动作令牌，作为训练和推理时的查询。为预测未来三步动作，该令牌被重复三次。输入序列按步组织，每步包含图像令牌、文本令牌、一个状态令牌和三个动作令牌。</li>
+<li><strong>动作映射器与解码器</strong>：从VLM最后一层提取动作令牌的隐藏状态后，使用一个轻量化的三层MLP作为动作映射器，将其投影到小型动作模型预训练解码器所期望的输入空间。该解码器是一个固定的两层MLP，直接复用自小型动作模型（如Seer）。最终动作由 $\hat{a} = D(M(a_h))$ 生成。</li>
+</ol>
+<p><strong>两阶段训练策略</strong>：<br>训练的核心创新在于提出的两阶段蒸馏策略。</p>
+<p><img src="https://arxiv.org/html/2510.09607v2/x2.png" alt="训练策略"></p>
+<blockquote>
+<p><strong>图2</strong>：两阶段训练策略。左侧为对齐阶段：训练状态编码器、动作令牌和动作映射器，通过MSE损失对齐VLM与小型动作模型的动作隐藏状态。右侧为微调阶段：对齐后，对语言模型、状态编码器、动作模块等进行端到端优化，使用MAE和BCE损失监督动作生成。</p>
+</blockquote>
+<ul>
+<li><strong>第一阶段：对齐</strong>：目标是桥接VLA模型与小型动作模型在动作表示空间上的差距。让两个模型接收相同的输入（图像、指令、状态），提取各自动作令牌最后一层的隐藏状态。通过动作映射器将VLA的隐藏状态映射后，与小型动作模型的隐藏状态计算均方误差（MSE）损失：$\mathcal{L}<em>{\text{align}} = \frac{1}{N}\sum</em>{i=1}^{N} |M(a_h^{\text{VLA},i}) - a_h^{\text{Small},i}|_2^2$。此阶段仅训练状态编码器、动作令牌和动作映射器（约3000万参数），实现了高效的表示空间对齐，并为复用预训练动作解码器奠定了基础。</li>
+<li><strong>第二阶段：端到端微调</strong>：对齐后，使用相同的输入数据进行端到端微调。复用第一阶段预训练的动作映射器和从小型动作模型继承的动作解码器来生成动作。损失函数为机械臂动作的平均绝对误差（MAE）损失和夹爪动作的二元交叉熵（BCE）损失的加权和：$\mathcal{L}<em>{\text{total}} = \mathcal{L}</em>{\text{arm}} + \lambda \cdot \mathcal{L}_{\text{gripper}}$，其中 $\lambda=0.01$。此阶段微调语言模型、状态编码器、动作查询、动作映射器和动作解码器，实现多模态信息的深度融合与精确动作预测。</li>
+</ul>
+<p><strong>与现有方法的创新点</strong>：</p>
+<ol>
+<li><strong>蒸馏而非端到端训练</strong>：通过蒸馏小型动作专家的知识，避免了从头开始训练大规模VLA模型所需的巨量数据和算力。</li>
+<li><strong>VLM深度参与动作建模</strong>：不同于扩散方法将VLM降级为特征提取器，本方法通过动作令牌使VLM的Transformer骨干直接参与动作表示的生成，更好地利用了其序列建模能力。</li>
+<li><strong>轻量化架构修改与两阶段训练</strong>：仅在原有VLM上添加少量参数，并通过先对齐后微调的策略，确保了知识迁移的稳定性和最终性能的优越性。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准测试</strong>：在仿真环境使用CALVIN ABC-D（评估零样本泛化）和LIBERO（评估长视野任务和多种泛化能力）基准。在真实世界使用ALOHA机器人执行5种操作任务。</li>
+<li><strong>基线方法</strong>：对比了小型动作模型（Seer, Susie, GR-1）和多种VLA模型（OpenVLA, Octo, π₀-FAST, SpatialVLA, CoT-VLA, Roboflamingo, 3D-VLA）。Seer同时作为蒸馏的教师模型。</li>
+<li><strong>训练设定</strong>：主要评估“两阶段”训练策略，并与“仅微调”（无对齐阶段）和“冻结VLM”等设定进行对比。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<p>表1：CALVIN ABC-D结果<br><img src="https://arxiv.org/html/2510.09607v2/x3.png" alt="CALVIN结果表"></p>
+<blockquote>
+<p><strong>图3/表1</strong>：CALVIN ABC-D基准上的连续任务成功率。VITA-VLA（两阶段）在VLA模型中取得了最佳性能，第一任务成功率达92.5%，超过了教师模型Seer-Large（88.4%），证明了其强大的零样本泛化能力。但表格也显示，在需要连续完成更多任务时（第4、5任务），性能有所下降。</p>
+</blockquote>
+<p>表2：LIBERO总体结果<br><img src="https://arxiv.org/html/2510.09607v2/x4.png" alt="LIBERO结果表"></p>
+<blockquote>
+<p><strong>图4/表2</strong>：LIBERO四个任务套件的平均成功率。VITA-VLA（两阶段）以97.3%的平均成功率全面超越所有基线方法，在LIBERO-LONG上相较之前最佳结果（CoT-VLA的69.0%）提升了24.5%，优势显著。</p>
+</blockquote>
+<p>表3：LIBERO-LONG详细任务结果<br><img src="https://arxiv.org/html/2510.09607v2/x5.png" alt="LIBERO-LONG结果表"></p>
+<blockquote>
+<p><strong>图5/表3</strong>：LIBERO-LONG十个具体任务的详细成功率。VITA-VLA（两阶段）平均成功率达93.5%，相比教师模型Seer-Large（87.7%）提升5.8%，且相比“仅微调”设定（92.5%）也有提升，证明了两阶段训练策略的有效性。</p>
+</blockquote>
+<p><strong>消融分析与真实世界实验</strong>：</p>
+<p><img src="https://arxiv.org/html/2510.09607v2/x6.png" alt="消融研究"></p>
+<blockquote>
+<p><strong>图6</strong>：不同训练策略在LIBERO-LONG上的消融研究。“两阶段”策略性能最佳，“仅微调”次之，“冻结VLM”最差。这验证了对齐阶段对于知识迁移的重要性，以及微调VLM参数对于整合多模态信息的必要性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.09607v2/x7.png" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>图7</strong>：真实世界五类操作任务的成功率。VITA-VLA（两阶段）平均成功率为82.0%，相比教师模型Seer（65.0%）有17%的显著提升，证明了该方法在真实物理环境中的有效性和优越性。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了高效的VLA训练框架</strong>：通过从性能优良的小型动作模型中蒸馏动作知识，避免了大规模端到端预训练，大幅降低了训练VLA模型所需的计算和數據成本。</li>
+<li><strong>设计了轻量化的架构与两阶段训练策略</strong>：通过引入状态编码器和动作令牌，最小化对原始VLM的修改；通过先对齐表示空间、后微调整合的两阶段策略，实现了高效且稳定的知识迁移与性能提升。</li>
+<li><strong>实现了卓越的性能</strong>：在CALVIN、LIBERO等多个仿真基准以及真实世界机器人任务上达到了最先进的性能，显著超越了现有的VLA方法及其蒸馏的教师模型。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文自身提到，虽然在第一项任务上表现出色，但在CALVIN基准上需要连续完成多项长序列任务时，性能提升并不明显，甚至有所下降（参见表1中第4、5任务成功率）。这表明模型在非常长视野的序列任务规划方面可能存在局限。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>蒸馏是高效构建VLA的有效途径</strong>：本文证明，通过精心设计的蒸馏策略，可以“站在巨人的肩膀上”，将专用模型的优势高效注入通用基础模型，这为未来开发更强大、更高效的具身AI模型提供了新思路。</li>
+<li><strong>轻量化修改与能力保留</strong>：在扩展基础模型功能时，应优先考虑最小化修改以保留其原有强大能力（如VLM的视觉语言理解），并通过适配器或令牌等机制引入新功能。</li>
+<li><strong>两阶段训练策略的普适性</strong>：先对齐潜在空间、再进行端到端优化的两阶段范式，在处理异构模型的知识迁移问题时，可能具有广泛的适用性。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出VITA-VLA框架，旨在高效赋予视觉语言模型（VLM）动作执行能力，解决传统端到端训练VLA模型成本高昂的问题。方法核心是通过动作专家蒸馏，将小型预训练动作模型的知识迁移至VLM，仅需添加动作标记和状态编码器，并采用两阶段训练策略：先对齐VLM隐藏状态与动作空间，再选择性微调关键模块。实验表明，该方法在LIBERO、LIBERO-LONG和CALVIN ABC-D等基准上显著提升成功率（最高提升24.5%），并在真实机器人操作任务中平均成功率达到82.0%，较教师模型提升17%，同时大幅降低训练开销。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.09607" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

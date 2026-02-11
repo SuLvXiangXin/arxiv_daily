@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Fast Visuomotor Policy for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Fast Visuomotor Policy for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.12483" target="_blank" rel="noreferrer">2510.12483</a></span>
+        <span>作者: Wenqiang Zhang Team</span>
+        <span>日期: 2025-10-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前从示教中学习机器人策略的主流方法主要包括三类：自回归建模（AM）、基于L1/L2回归的连续动作预测以及扩散建模（DM）。自回归方法借鉴大语言模型，使用离散的动作令牌进行预测，具有可扩展性和灵活性，但牺牲了精细的动作细节，难以实现高精度控制。L1/L2回归方法直接预测连续动作，精度得以提升，但其单模态建模特性难以处理任务中固有的多模态动作分布（例如，一个目标可以通过左移或右移两种不同路径达成）。扩散策略通过建模动作分数函数的梯度来学习多模态分布，但需要多次去噪步骤，计算开销巨大，难以满足高频实时机器人任务的需求。</p>
+<p>本文针对“如何同时实现高精度、多模态和快速推理”这一具体痛点，提出了一种基于能量分数（Energy Score）学习目标的新视角。其核心思路是：利用严格适当地评分规则——能量分数作为监督目标，训练一个模型使其预测分布与真实数据分布一致，从而在单次前向传播中即可原生地预测出多模态的连续动作，避免了迭代采样，实现了精度与速度的兼得。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架基于一个仅解码器的Transformer架构，并引入了核心的能量MLP模块。模型输入为历史观测序列和一系列可学习的动作令牌（与位置编码结合）。Transformer解码器输出一组向量序列 {z_t}，每个z_t对应一个未来时间步的动作潜在表示。核心的能量MLP模块以z_t和随机噪声样本为输入，输出预测的连续动作。</p>
+<p><img src="https://arxiv.org/html/2510.12483v1/x2.png" alt="现有策略对比"></p>
+<blockquote>
+<p><strong>图2</strong>：现有策略对比。(a) 自回归策略以自回归方式预测离散令牌。(b) L1/L2策略预测连续动作，但难以建模多模态分布。(c) 扩散策略通过多次去噪步骤生成多模态连续动作。(d) 本文的Energy Policy在单次前向传播中产生多模态连续动作。</p>
+</blockquote>
+<p>能量分数是该方法的核心创新点。对于一个模型预测分布p和真实数据分布q，能量分数S(p, y)（其中y是来自q的样本）定义为：<code>S(p, y) = -E[||x1 - x2||^α] + 2E[||x - y||^α]</code>，其中x1, x2, x是来自p的独立样本，α ∈ (0,2)。这是一个严格适当评分规则，当且仅当p=q时期望分数最小。在训练时，对于每个真实动作a_t，能量MLP通过输入两个不同的随机噪声，从同一z_t生成两个独立动作样本a_t^1和a_t^2。能量损失函数定义为：<code>L(p, a_t) = ||a_t^1 - a_t||^α + ||a_t^2 - a_t||^α - ||a_t^1 - a_t^2||^α</code>。该损失鼓励样本靠近真实动作，同时保持样本间的多样性，从而驱动模型学习真实的多模态分布。</p>
+<p><img src="https://arxiv.org/html/2510.12483v1/x3.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图3</strong>：Energy Policy概览。(a) 架构主要由Transformer解码器和能量MLP组成。解码器输出潜在向量{z_t}，能量MLP据此和噪声样本预测动作序列。(b) 能量损失计算基于两个采样动作a_t^1、a_t^2和真实动作a_t。(c) 能量MLP由多个包含adaLN的残差块构成，用于注入和调制噪声。</p>
+</blockquote>
+<p>能量MLP的具体实现采用多个残差块。每个块依次包含LayerNorm、线性层、SiLU激活、线性层和残差连接。关键设计是采用了adaLN-Zero块，该块以噪声输入为条件，通过平移、缩放和门控操作来调制前向传播，这不仅有效注入了随机性，也增强了模型的表达能力。在推理时，模型只需将z_t与一个随机噪声样本输入能量MLP，即可直接采样得到一个连续动作，实现了单步生成。</p>
+<p>与现有方法相比，创新点体现在：1) 首次将严格适当的能量分数作为机器人策略的学习目标，用于多模态连续动作建模；2) 设计了专用的能量MLP模块来参数化该目标，结构简单高效；3) 实现了训练与推理的一致性，无需多步迭代或精度妥协的蒸馏过程。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在模拟和真实世界环境中进行。使用的Benchmark包括：Robomimic（Lift, Can, Square任务）、Franka Kitchen（长视野规划）、MimicGen（多任务学习）以及PushT、ToolHang等高精度或双臂协调任务。真实实验使用了CR3和UR5机器人平台，执行静态（Cup, Rabbit）和动态（Catch）任务。</p>
+<p>对比的基线方法广泛，包括：扩散策略（DP-C, DP-T, DP-UMI）、自回归策略（CARP）、隐式行为克隆（IBC）、以及其他高效策略如一步扩散策略（OneDP）、IMLE策略、一致性策略（CP）和VQ-BeT。</p>
+<p>关键实验结果如下：在Robomimic单物体操作任务上，Energy Policy在状态和图像观测下均达到或超过最佳基线性能（如Square-ph图像任务成功率0.95 vs CARP的0.88），同时推理速度比CARP快3.7<del>7倍，比扩散策略快22</del>70倍。在Franka Kitchen长视野任务上，成功率相当（p4任务0.96），速度比CARP快4倍，比扩散策略快42~45倍。在MimicGen多任务基准上，平均成功率（0.86）与CARP（0.85）相当，但推理速度快2.3倍；相比扩散基线（SDP，0.78），成功率提升约10%，速度快16.6倍以上。与其他高效策略相比，在PushT等6个任务上的平均成功率（0.87）最高，且保持了有竞争力的推理速度（7.02ms）。</p>
+<p><img src="https://arxiv.org/html/2510.12483v1/x1.png" alt="整体性能展示"></p>
+<blockquote>
+<p><strong>图1</strong>：左：方法在单任务、多任务和真实世界场景下的表现。右：在PushT任务上的代表性对比气泡图，显示本方法在达到SOTA成功率的同时推理速度更快，且模型参数量（气泡大小）显著更小。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.12483v1/x4.png" alt="真实世界实验设置"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界实验设置。(a) 静态任务（Cup, Rabbit）的设备和目标行为。(b) 动态任务（Catch）的设备和目标行为。</p>
+</blockquote>
+<p>真实世界实验中，在静态任务上成功率略优于基线（Cup: 17/20 vs 16/20; Rabbit: 20/20 vs 19/20），且推理速度快3.4倍。在动态Catch任务上优势更明显，成功率（13/20）显著高于扩散基线（8/20），且推理速度快5倍（0.02s vs 0.10s），证明了其在实时交互任务中的适用性。</p>
+<p><img src="https://arxiv.org/html/2510.12483v1/x5.png" alt="多模态行为可视化"></p>
+<blockquote>
+<p><strong>图5</strong>：在PushT环境中从具有双模解的初始状态采样50条轨迹的前40步可视化。Energy Policy生成了平滑的轨迹，覆盖了左、右两种模式。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.12483v1/x6.png" alt="消融实验结果"></p>
+<blockquote>
+<p><strong>图6</strong>：消融实验结果。(a) MLP通道宽度为512时性能最佳。(b) α=1.0时性能最佳。(c) 使用adaLN能显著提升性能。(d) 均匀噪声分布优于高斯分布。</p>
+</blockquote>
+<p>消融实验在Square-mh任务上进行，总结了各组件贡献：1) <strong>能量MLP通道宽度</strong>：宽度512时性能最佳（成功率0.85），过宽（1024）会导致过拟合性能下降。2) <strong>能量损失系数α</strong>：α=1.0（即使用L1距离）时性能最优。3) <strong>adaLN模块</strong>：使用adaLN进行噪声调制能将成功率从0.72大幅提升至0.85，证明其有效性。4) <strong>噪声分布</strong>：使用均匀分布噪声优于高斯分布。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：第一，提出了一种新颖的基于能量分数的策略学习框架，能够原生地建模多模态连续动作分布。第二，设计了高效的能量MLP架构，实现了在单次前向传播中直接采样连续动作，从而获得了极快的推理速度，非常适合实时机器人应用。第三，通过大量模拟与真实机器人实验验证了该方法的有效性，在保持与先进方法相当甚至更高成功率的同时，实现了数量级的速度提升。</p>
+<p>论文自身未明确阐述局限性，但可以推测，单步采样模式可能对极其复杂的多峰分布建模能力存在上限，其表达能力与多步采样的扩散模型在理论上存在差异。此外，能量MLP的设计和超参数（如宽度、α）需要根据任务调整。</p>
+<p>本工作对后续研究的启示在于：1) 将严格适当的评分规则引入机器人学习是一个富有潜力的方向，可以探索其他类型的评分规则。2) 证明了通过精心设计的学习目标和网络结构，可以在不依赖复杂迭代生成过程的情况下实现高性能，为开发兼顾精度与效率的机器人策略提供了新思路。3) 简单的均匀噪声注入与调制机制被证明非常有效，这挑战了生成模型中常假设高斯噪声的必要性。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出名为Energy Policy的快速机器人操作策略框架，旨在解决实时机器人任务中高效、精准的多模态动作预测难题。核心技术包括：1）采用能量分数作为学习目标，以建模多模态动作分布；2）设计轻量能量MLP，实现单次前向预测。实验表明，该方法在MimicGen等基准上达到或超越现有最优性能，同时显著降低计算开销，推理速度更快，模型参数量更小。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.12483" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RynnVLA-002: A Unified Vision-Language-Action and World Model - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>RynnVLA-002: A Unified Vision-Language-Action and World Model</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.17502" target="_blank" rel="noreferrer">2511.17502</a></span>
+        <span>作者: Hao Chen Team</span>
+        <span>日期: 2025-11-21</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前具身智能领域，视觉-语言-动作（VLA）模型通过将大规模预训练的多模态大语言模型（MLLM）与动作头或专家模块结合，实现了根据语言指令和视觉观察生成动作，展现出强大的泛化能力。然而，标准的VLA架构存在三个根本缺陷：1) 无法完全理解动作，因为动作仅存在于输出端，模型无法形成对动作动力学的显式内部表示；2) 缺乏想象力，无法预测候选动作下世界如何演变，阻碍了前瞻性和反事实推理；3) 没有明确的物理理解，无法内化物体交互、接触或稳定性等动态。世界模型通过学习基于当前图像和动作预测未来观察，直接解决了这些限制，为智能体提供了动作感知的内部状态、想象力和物理信息的环境动态表示。但世界模型本身又受限于无法直接生成动作输出，在需要显式动作规划的场景中存在功能缺口。本文针对VLA模型和世界模型各自的局限性，提出了一个统一的“行动世界模型”（Action World Model）新视角，将两者整合到一个框架中。其核心思路是让VLA模型和世界模型在统一的自回归LLM架构下共同训练，通过动作生成和图像生成的联合学习，实现环境动态理解与动作规划能力的相互增强。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RynnVLA-002的整体框架旨在统一VLA模型和世界模型的功能。VLA模型根据语言目标$l$、本体感知状态$s_{t-1}$和观察历史$o_{t-h:t}$生成动作$a_t$。世界模型则根据过去的观察和动作$a_{t-h:t-1}$预测下一个观察$\hat{o}<em>t$。训练时，混合VLA模型数据和世界模型数据，共同训练一个集成模型$M</em>{\psi}$，使其共享参数$\psi$并能根据查询扮演VLA或世界模型的角色。</p>
+<p><img src="https://arxiv.org/html/2511.17502v2/x1.png" alt="方法概念图"></p>
+<blockquote>
+<p><strong>图1</strong>：RynnVLA-002统一框架概念图。(a) VLA模型基于图像理解生成动作；(b) 世界模型基于图像和动作理解生成下一帧图像；(c) 行动世界模型统一了图像和动作的理解与生成。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.17502v2/x2.png" alt="整体框架"></p>
+<blockquote>
+<p><strong>图2</strong>：RynnVLA-002整体架构概述。训练过程涉及VLA模型数据和世界模型数据。</p>
+</blockquote>
+<p><strong>数据标记化与训练目标</strong>：模型基于Chameleon初始化，这是一个统一的图像理解与生成模型。共使用四个分词器：图像分词器（VQ-GAN）、文本分词器（BPE）、状态分词器和动作分词器。后两者将连续的机器人状态和动作的每个维度离散化为256个区间。所有图像、文本、动作和状态标记共享一个大小为65536的单一词汇表。VLA模型数据的标记序列为：<code>{text} {state} {image-front-wrist}×M {action}×K</code>，模型基于语言指令、本体状态和M张历史图像生成K个动作，损失为离散动作标记的交叉熵损失$\mathcal{L}<em>{dis_action}$。世界模型数据的标记序列为：<code>{text} {images-front-wrist}{action} {images-front-wrist}×N</code>，模型基于当前图像和动作生成下一帧，可自回归重复N次，损失为离散图像标记的交叉熵损失$\mathcal{L}</em>{img}$。总体训练目标为混合损失：$\mathcal{L}<em>{dis} = \mathcal{L}</em>{dis_action} + \mathcal{L}_{img}$。</p>
+<p><strong>核心创新模块1：离散动作块生成的注意力掩码</strong>。为了高效执行，需要一次生成多个动作（动作块），但单纯的自回归生成会导致性能下降，因为预训练的MLLM在动作领域的泛化能力有限，早期动作的错误会在默认因果注意力掩码下传播到后续动作。</p>
+<p><img src="https://arxiv.org/html/2511.17502v2/x3.png" alt="注意力掩码对比"></p>
+<blockquote>
+<p><strong>图3</strong>：注意力掩码示意图。(a) 默认VLA模型（因果掩码）；(b) 本文提出的VLA模型动作生成掩码；(c) 世界模型部分使用的掩码。</p>
+</blockquote>
+<p>为解决此问题，论文提出了一个针对动作生成的替代注意力掩码（图3b）。该掩码确保当前动作的生成仅依赖于文本和视觉输入，而禁止访问先前的动作。这使得自回归框架能够独立地生成多个动作，缓解了错误累积问题。世界模型部分仍使用常规的注意力掩码（图3c）。</p>
+<p><strong>核心创新模块2：连续动作块的Action Transformer</strong>。尽管离散动作块模型在仿真中表现良好，但在真实机器人实验中泛化能力有限且推理速度慢。泛化差源于离散自回归模型需要大量数据，而机器人数据往往稀缺；推理慢源于自回归生成的序列性。为此，论文在保留原始离散联合建模的同时，引入了一个专用的、更小的连续Action Transformer头。该模块以并行方式处理完整的上下文（语言、图像、状态标记），并利用可学习的动作查询一次性输出整个动作块。这种设计有两个优势：1) 更紧凑的结构减少了在有限数据上的过拟合，改善了泛化并能生成更流畅、稳定的动作；2) 并行生成大大加快了推理速度。使用L1回归损失$\mathcal{L}<em>{conti_action}$监督Action Transformer。最终的混合损失函数为：$\mathcal{L} = \mathcal{L}</em>{dis} + \alpha\mathcal{L}<em>{conti} = \mathcal{L}</em>{dis_action} + \mathcal{L}<em>{img} + \alpha\mathcal{L}</em>{conti_action}$，其中$\alpha=10$。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>仿真实验</strong>：在LIBERO基准上进行评估，该基准包含Spatial、Object、Goal、Long四个测试套件。数据集经过清洗，划分为90%训练集和10%验证集。VLA模型输入M=2张历史图像帧，动作块大小K在长任务中为10，短任务中为5。世界模型使用单轮预测（N=1）。评估指标：VLA模型采用50次部署的成功率；世界模型采用FVD、PSNR、SSIM、LPIPS。</p>
+<p><img src="https://arxiv.org/html/2511.17502v2/x4.png" alt="仿真结果对比表"></p>
+<blockquote>
+<p><strong>表1</strong>：LIBERO基准上的评估结果。RynnVLA-002在未使用任何预训练的情况下，离散动作版本达到93.3%平均成功率，连续动作版本达到97.4%的平均成功率，与许多经过大规模预训练的强基线方法性能相当甚至更优。</p>
+</blockquote>
+<p><strong>真实世界机器人实验</strong>：在LeRobot SO100机械臂上收集了“将积木放入圆圈”和“将草莓放入杯子”两个拾放任务的数据集。与GR00T N1.5和$\pi_0$这两个强开源基线对比。评估了单目标、多目标和带干扰物三种场景。</p>
+<p><img src="https://arxiv.org/html/2511.17502v2/x5.png" alt="真实世界实验设置"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界机器人实验设置。(a) 将积木放入圆圈；(b) 将草莓放入杯子；(c) 带干扰物的任务。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.17502v2/x6.png" alt="真实世界结果对比表"></p>
+<blockquote>
+<p><strong>表2</strong>：真实世界SO100机器人上的评估结果（成功率）。RynnVLA-002在未预训练的情况下取得了有竞争力的结果，在杂乱环境（多目标和带干扰物）中表现尤其突出，例如在“放积木”任务的多目标和干扰物场景中成功率超过80%，领先基线10-30%。</p>
+</blockquote>
+<p><strong>消融实验</strong>：</p>
+<ol>
+<li><strong>世界模型对VLA的益处</strong>：在仿真中，加入世界模型数据训练能稳定提升VLA性能（见表3、4）。在真实世界中，益处更为显著（见表5），仅用VLA数据训练的模型成功率低于30%，而联合训练后提升至80%以上。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.17502v2/x7.png" alt="VLA可视化对比"></p>
+<blockquote>
+<p><strong>图5</strong>：LIBERO任务上的VLA模型可视化（任务：将奶油奶酪放入碗中）。上图：未联合世界模型训练，机器人直接移向目标位置但未成功抓取；下图：联合世界模型训练，机器人在遇到失败时会重试抓取目标物体，表明世界模型数据帮助VLA更关注被操控物体。</p>
+</blockquote>
+<ol start="2">
+<li><p><strong>VLA模型对世界模型的益处</strong>：混合数据训练的世界模型（Action World Model）在视频生成的各项指标上均优于或与仅用世界模型数据训练的模型（World Model）持平（见表6）。可视化结果（图7）显示，基线世界模型预测抓取失败或存在视角间不一致，而行动世界模型能一致生成成功抓取的视频。</p>
+</li>
+<li><p><strong>离散动作注意力掩码的有效性</strong>：如图6所示，在生成较长动作块时，使用默认因果掩码的性能会下降，而提出的掩码机制能有效缓解此问题，尤其是在较长块长度下表现更优。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.17502v2/x8.png" alt="动作块长度消融"></p>
+<blockquote>
+<p><strong>图6</strong>：离散动作下动作块长度的消融研究。提出的注意力掩码在生成长动作块时性能优于默认的因果掩码。</p>
+</blockquote>
+<ol start="4">
+<li><strong>离散动作加速收敛</strong>：在训练中保留离散动作标记与连续的Action Transformer头共同训练，能够加速VLA训练的收敛并提高最终成功率。如图8所示，包含离散动作标记的模型在训练初期就能获得显著更高的成功率。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.17502v2/figures/performance_plot_final.png" alt="离散动作加速收敛图"></p>
+<blockquote>
+<p><strong>图8</strong>：离散动作标记加速连续动作生成的收敛。带有离散动作的模型比没有的成功率更高，优势在训练初期最为明显。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了RynnVLA-002，一个在单一框架内统一VLA模型与世界模型的“行动世界模型”，实现了环境动态与动作规划的联合学习；2) 针对离散动作块生成中的错误累积问题，引入了动作注意力掩码策略；并为进一步改善真实世界的泛化与推理速度，增加了并行的连续Action Transformer头，形成了混合架构；3) 通过详实的仿真与真实世界实验，证明了VLA模型与世界模型能够相互增强：世界模型数据提升了VLA对物体交互的关注和任务成功率，而VLA增强的图像理解能力则提升了世界模型的视频预测质量与一致性。</p>
+<p>论文自身提到的局限性最初体现在纯离散模型上：在真实世界应用中泛化能力有限且推理速度慢，这正是促使作者演进出混合架构（增加连续Action Transformer）的原因。这启示后续研究：统一框架是有效的方向，但需要精心设计不同模态（特别是连续控制信号）的表示与生成机制。本文的混合损失训练（离散与连续监督共存）和注意力掩码设计为处理自回归模型中的错误传播提供了新思路。此外，实验表明，即使在没有大规模预训练的情况下，通过这种联合学习也能获得极高的数据效率与性能，这对数据匮乏的机器人学习领域具有重要启发。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>论文解决标准VLA模型缺乏动作理解、想象力和物理理解，以及世界模型无法直接生成动作的问题。提出RynnVLA-002统一框架，结合VLA模型（从图像生成动作）和世界模型（用动作预测未来图像状态），通过多模态tokenizer和共享词汇表实现环境动力学与行动规划的联合学习。实验表明，模型在LIBERO仿真基准上达到97.4%成功率（无预训练），在真实LeRobot任务中集成世界模型使整体成功率提升50%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.17502" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

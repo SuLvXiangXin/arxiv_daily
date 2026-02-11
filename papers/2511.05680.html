@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VLM-driven Skill Selection for Robotic Assembly Tasks - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>VLM-driven Skill Selection for Robotic Assembly Tasks</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.05680" target="_blank" rel="noreferrer">2511.05680</a></span>
+        <span>作者: Chang-Hyun Kim Team</span>
+        <span>日期: 2025-11-07</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人装配任务需要精确的操纵能力和对复杂多步骤过程的高级推理，涉及长期规划以及对部件交互和空间关系的物理理解。视觉语言模型（VLMs）因其融合视觉感知与语言理解的能力，在机器人操纵任务中展现出优势。然而，现有方法通常将技能选择视为一个整体的过程，这在需要层次化分解和精确空间推理的复杂装配场景中效果有限。</p>
+<p>本文针对复杂装配中技能选择与参数化的痛点，提出了一种分层的VLM驱动框架。其核心思路是将装配任务分解为两个阶段：首先利用VLM进行物体识别和视觉标注，然后基于标注信息进行技能推理和参数选择，最后通过模仿学习执行具体的原始技能，从而结合了高级抽象规划与低级可靠执行。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架是一个迭代过程，如图1所示。系统输入为工作空间的原始图像，输出为完成装配任务的一系列机器人动作。流程如下：1）获取当前场景、目标物体和最终目标的图像；2）第一阶段VLM识别物体并生成数字标记；3）第二阶段VLM根据标记后的图像和任务提示，选择下一个原始技能及其参数（如操作物体ID、目标位置ID）；4）机器人根据VLM提供的ID信息移动到目标大致区域；5）执行对应的模仿学习技能策略；6）重复此过程直至任务完成。</p>
+<p><img src="https://arxiv.org/html/2511.05680v1/img/overview.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：VLM驱动的机器人装配框架，展示了从视觉输入经过两阶段VLM处理到技能执行的迭代过程。左侧为原始图像输入和VLM处理流程，右侧为机器人执行模块。</p>
+</blockquote>
+<p><strong>核心模块一：第一阶段VLM - 物体识别与视觉标注</strong>。此模块接收原始图像集合（包括任务物体 $I_{\text{object}}$、当前装配状态 $I_{\text{current}}$ 和目标状态 $I_{\text{goal}}$）以及物体名称列表 $P_{\text{obj}}$。VLM识别相关物体并输出一组二维点坐标 $\mathbf{P}$，然后通过 <code>VisualMarking</code> 函数生成带有数字ID标记的标注图像 $I_{\text{object}}^{ann}, I_{\text{current}}^{ann}, I_{\text{goal}}^{ann}$。这种标记方法扩展了标准的视觉提示，包含了目标物体、当前状态和目标状态三方面的时空上下文信息。</p>
+<p><strong>核心模块二：第二阶段VLM - 多模态输入处理与技能选择</strong>。此模块接收增强的多模态输入 $\mathbf{I}<em>{\text{multi}}$，包括上一阶段生成的标注图像和结构化的自然语言提示 $P</em>{\text{task}}$。VLM进行推理，输出下一个原始技能 $skill$、操作物体ID $ID_{\text{obj}}$ 和目标ID $ID_{\text{target}}$。原始技能集定义为 $\mathbf{S}={\text{pick}, \text{place}, \text{insert}, \text{done}, \text{init}}$，每个技能都有特定功能（如抓取、放置、插入）和基于ID的参数。</p>
+<p><img src="https://arxiv.org/html/2511.05680v1/img/vlm_prompt.png" alt="提示架构"></p>
+<blockquote>
+<p><strong>图2</strong>：集成任务描述、状态分析和动作规范的提示架构。提示包含任务上下文、当前视觉状态描述（引用数字标记）、可用原始技能、决策逻辑工作流和期望的输出格式。</p>
+</blockquote>
+<p><strong>核心模块三：基于模仿学习的技能执行</strong>。每个原始技能由一个通过模仿学习训练的策略网络 $\pi_{skill}$ 来执行。策略以当前相机图像 $I_t^{\text{cam}}$ 和机器人状态 $\text{s}_t$ 为输入，预测一段时间的机器人动作序列（轨迹）$\boldsymbol{\tau}$。本文采用动作分块（action chunking）学习，即策略一次预测连续多个动作，以提高时间一致性和减少误差累积。具体实现使用了基于Diffusion Transformer的扩散策略。</p>
+<p><strong>创新点</strong>：与将技能选择视为整体过程的现有方法相比，本文的创新主要体现在：1）<strong>两阶段分层处理</strong>：将视觉感知（识别与标注）与决策推理（技能选择）解耦，使系统更模块化且易于解释。2）<strong>标记式视觉提示</strong>：利用数字标记在图像中明确标识物体和状态，为VLM提供了结构化的空间和上下文信息。3）<strong>VLM规划与IL执行的紧密集成</strong>：VLM负责高层状态估计和任务规划，并将机器人引导至模仿学习模型能有效操作的局部区域，结合了两者的优势。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在仿真和真实世界环境中进行，包含两部分评估：1）VLM基础原始技能选择的有效性；2）与模仿学习（IL）集成的完整任务执行能力。</p>
+<p><strong>基准与数据集</strong>：实验针对齿轮装配任务。使用了GPT-4.1-2025-04-14和GPT-5-mini-2025-08-07两个VLM模型进行评估。模仿学习策略使用扩散策略，每个原始技能用10条演示轨迹训练。</p>
+<p><strong>对比方法</strong>：主要对比了不同VLM模型（GPT-4.1 vs. GPT-5-mini）在技能选择任务上的性能。在集成实验中，与完全基于IL的执行（基线方法）进行了对比。</p>
+<p><strong>关键实验结果</strong>：<br>VLM技能选择实验的成功率总结于表1。评估分为抓取（Pick）和插入（Insert）两个子任务。</p>
+<p><img src="https://arxiv.org/html/2511.05680v1/img/sim_ex1.png" alt="仿真结果"></p>
+<blockquote>
+<p><strong>图3</strong>：仿真环境中VLM基础原始技能选择结果示例。展示了VLM对场景的分析和技能选择输出。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.05680v1/img/real_ex1.png" alt="真实环境1结果"></p>
+<blockquote>
+<p><strong>图4</strong>：真实环境1中VLM基础原始技能选择结果示例。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.05680v1/img/real_ex2.png" alt="真实环境2结果"></p>
+<blockquote>
+<p><strong>图5</strong>：真实环境2中VLM基础原始技能选择结果示例。</p>
+</blockquote>
+<p><strong>表1</strong>：不同环境下VLM基础原始技能选择成功率。</p>
+<table>
+<thead>
+<tr>
+<th align="left">环境</th>
+<th align="left">GPT-4.1 (Pick)</th>
+<th align="left">GPT-4.1 (Insert)</th>
+<th align="left">GPT-5-mini (Pick)</th>
+<th align="left">GPT-5-mini (Insert)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">仿真</td>
+<td align="left">3/10 (30%)</td>
+<td align="left">3/10 (30%)</td>
+<td align="left">3/10 (30%)</td>
+<td align="left">10/10 (100%)</td>
+</tr>
+<tr>
+<td align="left">真实1</td>
+<td align="left">10/10 (100%)</td>
+<td align="left">3/10 (30%)</td>
+<td align="left">10/10 (100%)</td>
+<td align="left">10/10 (100%)</td>
+</tr>
+<tr>
+<td align="left">真实2</td>
+<td align="left">10/10 (100%)</td>
+<td align="left">0/10 (0%)</td>
+<td align="left">8/10 (80%)</td>
+<td align="left">10/10 (100%)</td>
+</tr>
+</tbody></table>
+<p><strong>结果分析</strong>：GPT-5-mini在插入任务上表现显著优于GPT-4.1，在三个环境中均达到100%成功率，而GPT-4.1最高仅30%。这表明更新的VLM在精确空间推理能力上有重大提升。在抓取任务上，两者在真实环境中表现都很好（80-100%），但在仿真环境中均只有30%成功率，提示仿真到真实的迁移在该任务上存在挑战。</p>
+<p><img src="https://arxiv.org/html/2511.05680v1/img/total_ex1.png" alt="集成执行"></p>
+<blockquote>
+<p><strong>图6</strong>：在仿真环境中使用所提框架执行机器人装配任务。展示了VLM引导规划与IL技能执行集成的过程。</p>
+</blockquote>
+<p><strong>集成实验结果</strong>：在假设VLM能生成合适规划的前提下，本文提出的VLM引导原始选择框架与IL执行的集成方法，能够成功执行齿轮装配任务，而完全基于IL的基线方法则失败了。这验证了分层任务分解（VLM规划 + IL执行）对于复杂操作任务的有效性。</p>
+<p><strong>消融实验</strong>：虽然未进行严格的组件消融实验，但通过对比不同VLM模型的性能（表1），间接展示了VLM能力（尤其是空间推理）对整个系统性能的关键影响。GPT-5-mini在插入任务上的卓越表现直接提升了框架处理精密装配步骤的潜力。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1）提出了一种模块化的分层架构，将VLM驱动的高级技能选择与模仿学习的低级技能执行相结合，该架构能无缝集成不断进化的VLM能力。2）通过实验验证了这种层次化原始技能分解对于复杂操作任务的有效性，特别是在精密装配步骤中。3）通过明确的技能选择和视觉标注过程，提供了可解释的决策路径。</p>
+<p><strong>局限性</strong>：论文提到，VLM的性能（尤其是空间推理精度）直接影响框架的上限，例如GPT-4.1在插入任务上的高失败率。此外，目前定义的原始技能集（pick, place, insert等）较为基础，可能不足以覆盖更复杂的工业装配场景。</p>
+<p><strong>后续研究启示</strong>：1）可以扩展原始技能库，纳入更多针对特定装配操作（如旋拧、对齐、压入）的技能。2）需要提升仿真环境的真实感，以改善仿真到真实的迁移性能，特别是在物体识别和抓取规划方面。3）本文框架展示了结合大型基础模型与经典机器人学习方法的潜力，未来可探索在更多样化、更复杂的长期任务中的应用。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人装配任务中复杂多步骤规划与技能选择的挑战，提出一种结合视觉语言模型（VLM）和模仿学习的框架。方法采用两阶段VLM架构：第一阶段执行视觉场景分析与对象空间标记；第二阶段基于注释输入进行技能推理和参数选择，实现层次化技能分解与自适应操作。实验证明该方法在装配场景中有效，实现了高成功率，并通过结构化原始技能分解保持了可解释性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.05680" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

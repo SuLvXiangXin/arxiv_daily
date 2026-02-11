@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SRPO: Self-Referential Policy Optimization for Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>SRPO: Self-Referential Policy Optimization for Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.15605" target="_blank" rel="noreferrer">2511.15605</a></span>
+        <span>作者: Xipeng Qiu Team</span>
+        <span>日期: 2025-11-19</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型在机器人操作任务中表现出色，但其性能严重依赖专家演示数据，导致演示偏差并限制了性能上限。强化学习作为一种重要的后训练策略，被用于克服这些限制。然而，现有的VLA-RL方法，包括基于分组的优化方法，普遍受到严重的奖励稀疏性问题的困扰。这些方法通常仅依赖任务成功与否的二元指示作为奖励，浪费了失败轨迹中的宝贵信息，导致训练效率低下。本文针对这一关键痛点，提出了一种自参考的新视角，旨在不依赖外部演示或手动奖励工程的情况下，利用模型自身在当前训练批次中生成的成功轨迹作为参考，为失败的尝试提供渐进式奖励。其核心思路是：通过一个在大规模数据上预训练的世界模型的潜在表征来稳健地衡量行为进展，从而实现自参考的轨迹比较与奖励分配，最终高效优化策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>SRPO的整体框架是一个集成自参考奖励机制的强化学习训练流程。在每次训练迭代中，策略与环境交互，收集一个批次的轨迹（包括成功和失败的）。这些轨迹的视觉观测序列被送入一个预训练的世界模型编码器，得到轨迹级的潜在表征。成功的轨迹被聚类以获取参考中心，失败的轨迹则通过计算其表征与最近成功参考中心的距离来获得渐进式奖励。这些奖励随后用于优势估计，并驱动策略在KL正则化的约束下进行优化。</p>
+<p><img src="https://arxiv.org/html/2511.15605v2/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：SRPO方法概述。在策略部署阶段，成功和失败的轨迹被收集到“部署参考集”中。对于每条轨迹，使用在大规模机器人视频数据上预训练的世界模型作为编码器，提取潜在世界表征。行为相似性被建模为该空间中轨迹嵌入之间的L2距离，从而产生渐进式奖励。这些奖励随后用于优势估计和KL正则化下的策略优化。</p>
+</blockquote>
+<p>核心模块包括：</p>
+<ol>
+<li><strong>世界模型编码与渐进式奖励建模</strong>：这是SRPO的核心创新。对于每条轨迹的观测序列 (o_{0:T})，使用预训练的潜在世界模型 (\mathcal{W}) 进行编码，得到固定维度的表征 (h = \mathcal{W}(o_{0:T}))。对于批次内的所有成功轨迹表征集合 (\mathcal{S})，使用DBSCAN算法进行聚类，得到一组代表性中心 (C)。对于失败的轨迹表征 (h_i)，其奖励通过计算其到最近成功中心 (h_j \in C) 的L2距离 (d_i = \min(|h_i - h_j|^2)) 来获得。最终奖励 (g_i) 对成功轨迹设为1.0，对失败轨迹则通过一个激活函数 (\phi) 对标准化后的距离 ( (d_i - \bar{d}) / \sigma_d ) 进行映射，将其转换到(0,1)区间，其中 (\bar{d}) 和 (\sigma_d) 是当前批次所有失败轨迹距离的均值和标准差。</li>
+<li><strong>自参考策略优化</strong>：SRPO的优化目标借鉴了PPO/GRPO的框架，但优势估计基于自参考的渐进式奖励。概率比 (r_{i,t}(\theta)) 计算新旧策略在给定状态-动作对下的概率比值。优势估计 (\hat{A}<em>i) 通过对奖励 (g_i) 进行组内标准化（减去均值 (\mu_g)，除以标准差 (\sigma_g)）得到。优化目标为带裁剪的替代目标 (\mathcal{L}^{\text{CLIP}}</em>{t,i}(\theta)) 加上一个KL散度正则项 (\omega(\theta) = \beta D_{\text{KL}}(\pi_{\theta} \parallel \pi_{ref}))，以保持策略稳定性。最终的优化目标是最大化 (\mathcal{L}<em>{\text{SRPO}}(\theta) = \mathbb{E}</em>{t,i} \mathcal{L}^{\text{CLIP}}_{t,i}(\theta) + \omega(\theta))。</li>
+</ol>
+<p>与现有方法相比，SRPO的创新点具体体现在：</p>
+<ul>
+<li><strong>自参考范式</strong>：无需外部专家演示或手工设计任务里程碑，直接利用模型自身在线生成的成功轨迹作为参考标准。</li>
+<li><strong>潜在世界表征</strong>：利用预训练世界模型的压缩、可迁移的潜在空间编码来衡量行为进展，克服了像素级世界模型泛化性差或需要任务特定微调的问题，实现了鲁棒且任务无关的轨迹比较。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验主要在LIBERO基准测试（包含Goal、Spatial、Object和Long四个套件，各10个任务）和引入七维扰动的LIBERO-Plus基准上进行。实验平台基于修改后的OpenVLA模型（增加了动作分块和并行解码，称为OpenVLA*）。</p>
+<p>对比的基线方法广泛，包括：基于稀疏结果奖励的RL方法（SimpleVLA-RL、RIPT-VLA、RLinf），使用手动设计过程奖励的方法（TGRPO），使用世界模型作为模拟器的方法（World-Env），以及其他多种模仿学习方法作为参考。</p>
+<p>关键实验结果如下：</p>
+<ul>
+<li><strong>LIBERO基准上的SOTA性能</strong>：从仅使用单演示进行监督微调的基线模型（OpenVLA*-One，平均成功率48.9%）出发，经过在线SRPO训练仅200步后，平均成功率达到了99.2%，相对提升了103%，创造了新的SOTA。这显著优于其他依赖稀疏奖励的RL方法（如SimpleVLA-RL的96.9%，RLinf的98.0%）。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2511.15605v2/x1.png" alt="主要结果表"></p>
+<blockquote>
+<p><strong>表1</strong>：LIBERO基准上的性能对比。SRPO在仅使用第三人称视觉和语言指令输入的情况下，取得了最佳的平均成功率（99.2%），显著超越了其单演示SFT基线以及众多其他方法。</p>
+</blockquote>
+<ul>
+<li><strong>LIBERO-Plus上的强泛化能力</strong>：在包含各种扰动的LIBERO-Plus基准上，基于单演示SFT的模型应用在线SRPO后，总体成功率从19.4%提升至59.6%（相对提升167%），甚至超过了在完整数据上训练的SFT基线模型（OpenVLA*-Full，51.1%）。在使用增广数据训练的场景下，SRPO同样展现出巨大优势。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2511.15605v2/x4.png" alt="泛化结果表"></p>
+<blockquote>
+<p><strong>表2</strong>：LIBERO-Plus基准上的鲁棒性评估。SRPO显著提升了基础模型在所有七个扰动维度上的性能，展示了卓越的泛化能力。</p>
+</blockquote>
+<ul>
+<li><strong>潜在世界表征奖励的有效性分析</strong>：与像素级奖励和基于ImageBind通用视觉嵌入的奖励相比，SRPO使用的潜在世界表征奖励在五个评估指标上均表现最佳，能产生更平滑、单调的进度曲线，并能更好地区分成功与失败轨迹。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2511.15605v2/x3.png" alt="进度奖励比较"></p>
+<blockquote>
+<p><strong>图3</strong>：模拟和真实环境中进度估计方法的比较。SRPO奖励（a,d）提供了单调且符合物理规律的进度估计。像素级奖励（b,e）对感知变化敏感，而ImageBind奖励（c,f）则因动作突变而呈现不稳定趋势。</p>
+</blockquote>
+<p>消融实验（论文附录）表明，SRPO的各个组件均对最终性能有贡献。使用潜在世界表征进行奖励塑造是关键，其性能显著优于使用像素特征或通用视觉编码（ImageBind）。自参考的学习范式（利用批次内成功轨迹）本身也带来了主要性能增益。KL正则化对于训练稳定性至关重要。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li>提出了SRPO框架，通过自参考学习利用模型自身成功轨迹为失败尝试提供渐进式奖励，有效缓解了VLA-RL中的奖励稀疏性问题，且无需额外监督。</li>
+<li>引入了一种基于潜在世界表征的渐进式奖励方法，该方法具有任务无关性和良好的可迁移性，克服了传统像素级世界模型的局限性。</li>
+<li>实验证明，SRPO在LIBERO基准上达到了最先进的性能，并在LIBERO-Plus上表现出强大的泛化能力，为自主VLA学习建立了新范式。</li>
+</ol>
+<p>论文自身提到的局限性包括：所依赖的潜在世界模型可能无法完全捕捉某些特定任务所需的细微进展模式；此外，该方法依赖于训练批次内存在成功轨迹，在任务极其困难、初期成功率极低时可能面临挑战。</p>
+<p>本文的启示在于：自参考学习范式为减少强化学习对昂贵外部监督的依赖提供了有前景的方向；利用在大规模数据上预训练的模型（如世界模型）的潜在表征，可以作为跨任务、跨域奖励设计的强大且通用的工具；该方法展示了如何通过更高效地利用失败轨迹的信息来大幅提升机器人策略学习的效率。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型依赖专家演示、存在演示偏差，以及现有强化学习方法因奖励稀疏导致训练效率低的问题，提出自我参考策略优化框架。其核心是**利用当前批次内的成功轨迹作为自参考，并通过世界模型的潜在空间表示稳健衡量行为进展，从而为失败尝试分配渐进式奖励**。在LIBERO基准上，仅用200步强化学习便将成功率从48.9%提升至99.2%，相对改进达103%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.15605" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>X-Diffusion: Training Diffusion Policies on Cross-Embodiment Human Demonstrations - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>X-Diffusion: Training Diffusion Policies on Cross-Embodiment Human Demonstrations</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.04671" target="_blank" rel="noreferrer">2511.04671</a></span>
+        <span>作者: Kushal Kedia Team</span>
+        <span>日期: 2025-11-06</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>模仿学习是教授机器人技能的有效方法，但收集大量机器人数据成本高昂且缓慢。人类视频演示易于大规模收集，成为有吸引力的替代数据源。然而，人类与机器人在形态结构上存在根本差异，导致动作执行方式不匹配。即使通过运动学重定向将人类手部运动转换为机器人动作，也可能产生机器人物理上不可行的动作。尽管存在这些低层差异，人类演示仍能提供关于如何操纵和与物体互动的有价值的运动线索。目前主流方法试图统一人类和机器人的动作空间，并通常依赖机器人遥操作数据进行微调以产生兼容动作，但假设所有人类动作都可由机器人执行在实践中并不成立，限制了直接重定向的可靠性。</p>
+<p>本文的核心痛点是：如果目标是最终机器人性能，不加区分地使用所有人类演示进行训练是否最优？一些与机器人执行方式不匹配的演示是否会损害策略学习？本文提出了一个新视角：利用前向扩散过程——随着噪声被添加到动作中，低层执行差异逐渐消失，而高层任务指导得以保留。本文核心思路是：训练一个扩散策略，通过一个分类器判断噪声化的人类动作何时与机器人动作无法区分，从而有选择地将人类数据集成到策略训练中，在最大化利用人类数据的同时避免学习动态不可行的动作。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>X-Diffusion 是一个用于在包含多种执行风格的跨形态人类数据上训练扩散策略的框架。其整体流程是：首先统一状态和动作表示，然后训练一个分类器来预测一个带噪声的动作是由人类还是机器人执行的。在策略训练期间，一个人类动作只有在添加了足够多的噪声，使得分类器无法辨别其形态来源时，才会被纳入训练。</p>
+<p><img src="https://arxiv.org/html/2511.04671v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：X-Diffusion 概述。天真地在动态不匹配的人类和机器人数据集上共同训练扩散策略，可能导致去噪过程输出对机器人动态不可行的动作，使性能低于标准的仅使用机器人的扩散策略训练。相反，X-Diffusion 训练一个分类器来区分带噪声的人类和机器人动作，并仅在分类器不确定动作由哪种形态产生时才将带噪声的人类动作集成到策略训练中，从而有效地从大量多样化的人类演示中学习。</p>
+</blockquote>
+<p>核心模块包括：</p>
+<ol>
+<li><p><strong>跨形态状态与动作空间统一</strong>：使用 HaMeR 从双视角RGB图像中检测2D手部关键点并三角化为机器人坐标系下的3D位姿，将抓取点（拇指和食指指尖平均值）和方向重定向到机器人末端执行器。使用 Grounded-SAM2 分割任务相关物体，并在每一帧上叠加渲染的末端执行器位姿关键点，以减少视觉域差距。策略输入是带有关键点叠加的掩码图像，与本体感觉信息拼接。</p>
+</li>
+<li><p><strong>噪声化人-机器人动作分类器</strong>：分类器 $c_\theta(\cdot|k, \mathbf{A_t^k}, s_t)$ 以扩散步数 $k$、带噪声的动作序列 $\mathbf{A_t^k}$ 和当前状态 $s_t$ 为输入，输出该动作源自机器人（$y=1$）或人类（$y=0$）的概率。使用二元交叉熵损失进行训练。为防止因人类数据量远大于机器人数据而导致分类器偏向预测人类标签，从两个数据集中以相等概率采样动作。</p>
+</li>
+<li><p><strong>最小不可区分步数</strong>：对于每个人类动作序列 $\mathbf{A_t}$，定义其最小不可区分步数 $k^\star(\mathbf{A}<em>t)$，即分类器为其分配至少50%机器人概率的最早扩散步数：$k^\star(\mathbf{A}</em>{t}) = \min\left{k : c_{\theta}(k, \mathbf{A}<em>{t}^{k}, s</em>{t}) \geq 0.5\right}$。这标识了在噪声化过程中，人类动作被充分抽象以至于类似于机器人动作的节点。</p>
+</li>
+<li><p><strong>分类器与扩散策略的集成</strong>：扩散策略通过神经网络对去噪的逆过程进行建模。在训练时，修改损失函数，仅当 $k \geq k^\star$ 时才将人类动作纳入去噪损失计算。公式化表示为：<br>$\mathcal{L}<em>{\text{X-DP}}(\theta) = \mathbb{E}</em>{(k, \mathbf{A}<em>{t}, s</em>{t})\sim\mathcal{D}<em>{R}} \ell!\left(p</em>{\theta},\mathbf{A}<em>{t}^{k}\right) + \mathbb{E}</em>{(k, \mathbf{A}<em>{t}, s</em>{t})\sim\mathcal{D}<em>{H}}\mathbf{1}</em>{{k\geq k^{\star}(\mathbf{A}<em>{t})}},\ell!\left(p</em>{\theta},\mathbf{A}_{t}^{k}\right)$。<br>这种选择性集成确保了在最大化利用人类演示的同时，不牺牲动作执行的运动学可行性。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.04671v1/x3.png" alt="噪声与分类器预测可视化"></p>
+<blockquote>
+<p><strong>图3</strong>：在不同扩散步数下，可视化带噪声的动作及分类器预测。对人类可行（如自上而下抓握）的动作在低噪声步数下与机器人动作分布重叠，分类器会误判，因此我们在策略训练中将其纳入扩散去噪过程。而对机器人运动学或动态不可行（如侧向抓握）的人类动作，直到前向扩散过程中添加显著更多噪声后，分类器仍能准确识别其为人类动作，从而将其对策略学习的影响限制为仅在高噪声下提供粗略指导。</p>
+</blockquote>
+<p>与现有方法相比，创新点在于：1）提出了“最小不可区分步数”的概念，量化了人类动作在噪声下与机器人动作的相似度；2）利用一个可训练的判别式分类器（而非手动规则或启发式方法）动态地、按样本地决定何时在训练中使用人类数据；3）将去噪损失中人类数据的贡献与噪声水平绑定，使可行的人类动作提供精细的低层监督，而不匹配的人类动作仅提供粗糙的高层指导。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在五个不同的操作任务上进行评估：抓放（Serve Egg）、非抓握操作（Close Drawer, Push Plate）、精确插入（Mug On Rack）和重新定向（Bottle Upright）。每个任务收集5个机器人演示和100个人类演示（单手机器人为7-DOF Franka Emika Panda机械臂）。每个方法在每个任务上进行10次真实世界滚动评估并报告平均成功率。</p>
+<p><strong>基线方法</strong>：</p>
+<ol>
+<li>Diffusion Policy：仅在5个机器人演示上训练。</li>
+<li>Point Policy：在所有人类和机器人数据上共同训练，通过手和物体关键点统一观测和动作。</li>
+<li>Motion Tracks：在所有人类和机器人数据上共同训练，将动作空间统一为手部关键点，但使用原始RGB图像观测。</li>
+<li>DemoDiffusion：使用人类轨迹作为初始噪声来调节一个仅使用机器人的扩散策略。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.04671v1/x4.png" alt="性能对比基线"></p>
+<blockquote>
+<p><strong>图4</strong>：在5个不同操作任务上的成功率对比。X-Diffusion 在所有任务上都是性能最高的模型，即使在执行风格不匹配时也能有效地将人类动作数据纳入其训练方案。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：X-Diffusion 在五个任务上的平均成功率比最佳基线高出16%。具体而言，在 Push Plate 任务上，X-Diffusion 成功率（90%）显著高于机器人独 Diffusion Policy（40%）。相比之下，在 Bottle Upright 任务上，X-Diffusion 仅比 Diffusion Policy（10%）提高了10%（达到20%），而所有其他基线方法成功率降至0%。</p>
+<p><img src="https://arxiv.org/html/2511.04671v1/assets/feasible_qualitative.png" alt="天真共同训练学习不可行动作"></p>
+<blockquote>
+<p><strong>图5</strong>：天真共同训练学习不可行的机器人动作。在多个任务中，人类可能以机器人无法实现的方式操纵物体。将所有人数据纳入策略训练会激励策略学习人类演示的、但对机器人不可行的策略。</p>
+</blockquote>
+<p><strong>消融与分析</strong>：</p>
+<ol>
+<li><strong>与手动过滤对比</strong>：实验构建了一个通过逆运动学回放并手动过滤掉失败轨迹得到的可行人类数据集 $\mathcal{D}_{H}^{+}$。训练了四个策略：仅机器人、天真共同训练、使用过滤数据的共同训练、X-Diffusion。结果显示，使用过滤数据的策略性能优于天真共同训练，证实了包含不可行人类演示会降低性能。而 X-Diffusion 在所有任务上均优于过滤数据策略，证明了其即使从不可行的人类演示中也能提取有效信号的能力。</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th align="left">方法</th>
+<th align="center">Mug On Rack</th>
+<th align="center">Serve Egg</th>
+<th align="center">Push Plate</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">X-Diffusion</td>
+<td align="center">10/10</td>
+<td align="center">9/10</td>
+<td align="center">8/10</td>
+</tr>
+<tr>
+<td align="left">Filtered</td>
+<td align="center">8/10</td>
+<td align="center">6/10</td>
+<td align="center">6/10</td>
+</tr>
+<tr>
+<td align="left">Naive</td>
+<td align="center">6/10</td>
+<td align="center">5/10</td>
+<td align="center">2/10</td>
+</tr>
+<tr>
+<td align="left">Robot</td>
+<td align="center">5/10</td>
+<td align="center">4/10</td>
+<td align="center">4/10</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表I</strong>：X-Diffusion 与使用经手动验证为机器人可行的人类演示训练的策略（Filtered）、使用所有人数据天真训练的策略（Naive）以及仅使用机器人数据训练的策略（Robot）的性能对比。X-Diffusion 在每个任务上都优于所有基线。</p>
+</blockquote>
+<ol start="2">
+<li><strong>跨任务人类数据质量分析</strong>：通过分类器在不同噪声水平下对 Push Plate 和 Bottle Upright 任务的预测进行分析。绘制了所有人类和机器人数据在不同噪声步数下的平均预测机器人概率。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.04671v1/x5.png" alt="分类器机器人概率随前向扩散过程变化"></p>
+<blockquote>
+<p><strong>图6</strong>：随着噪声水平增加，人类动作分布变得更像机器人动作分布。人类动作与机器人动作的相似度因任务而异：如图所示，Push Plate 数据在每个噪声水平上的人类与机器人动作分布距离比 Bottle Upright 更小。因此，我们的策略通过在前一个任务上训练能获得更大的性能提升。</p>
+</blockquote>
+<p>结果显示，对于 Bottle Upright，在低噪声状态下分类器对其类别预测极其自信和准确；而对于 Push Plate，随着噪声添加，人类和机器人概率差距迅速缩小，表明其（带噪声的）动作分布变得更相似。这与策略成功率有强相关性，并解释了为何在 Bottle Upright 任务上性能提升有限（因为人类演示速度更快且易产生重定向误差）。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了 X-Diffusion 框架，用于在跨形态人类数据上训练扩散策略，同时保持动态可行的机器人运动。</li>
+<li>证明了先前不加区分使用所有人数据的方法常会产生不可行的机器人动作，并通过消融实验表明其选择性训练策略优于天真共同训练和手动人工标注。</li>
+<li>在五个操作任务上，X-Diffusion 平均优于一系列跨形态学习基线16%。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，X-Diffusion 是在有限数量的机器人/人类演示以及校准的多相机环境中进行训练的。未来工作将尝试在大规模数据集上训练分类器，并从非结构化的互联网规模人类视频中学习。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>数据利用范式</strong>：提供了一种原则性方法，用于在存在分布不匹配（如形态差异）时，从混合质量的数据源中学习。核心思想是利用生成模型（扩散）的噪声过程作为“抽象过滤器”，并结合判别模型（分类器）进行自动数据选择。</li>
+<li><strong>自动化数据筛选</strong>：表明通过训练一个任务和形态感知的分类器，可以自动、动态地筛选训练数据，这比手动过滤或基于简单启发式的方法更可扩展和准确。</li>
+<li><strong>信号解耦</strong>：方法揭示了如何从同一数据源（人类演示）中解耦出有用的高层任务指导信号和可能有害的低层执行细节，这对从任何非完美示范数据中学习具有普遍意义。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决的核心问题是：如何有效利用大量人类演示视频训练机器人策略，克服人类与机器人因形态差异导致的动作执行不匹配问题。关键技术X-Diffusion框架提出：通过前向扩散过程向动作添加噪声，使低层执行差异模糊化而保留高层任务语义；并训练一个分类器判断噪声化动作的来源，仅在分类器无法区分时（即添加足够噪声后）才将人类动作用于策略训练，从而避免学习动力学不可行的动作。实验表明，该方法在五个操作任务上比最佳基线平均成功率提升16%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.04671" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

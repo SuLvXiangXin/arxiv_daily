@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Two-Steps Diffusion Policy for Robotic Manipulation via Genetic Denoising - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Two-Steps Diffusion Policy for Robotic Manipulation via Genetic Denoising</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.21991" target="_blank" rel="noreferrer">2510.21991</a></span>
+        <span>作者: Yinchuan Li Team</span>
+        <span>日期: 2025-10-24</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>扩散策略通过模仿专家演示，在机器人操作领域取得了最先进的成果。然而，扩散模型最初为图像生成等视觉任务开发，其推理策略被直接迁移到控制领域而未加调整，导致推理过程是顺序的且计算成本高昂，需要大量去噪步骤来生成高质量样本，这对于需要实时动作生成的机器人应用是一个主要限制。为了加速，现有工作提出了蒸馏、一致性模型和捷径流匹配等方法，但通常需要在性能或简单性上做出权衡，且需要重新训练新模型。本文针对扩散策略推理效率低下的痛点，提出了一种新视角：通过调整去噪过程以适应具身AI任务的具体特性——特别是动作分布的结构化、低维特性——可以在不重新训练或改变架构的情况下加速现成的扩散策略。本文核心思路是：通过减少推理步骤、修改去噪计划，并引入一种基于种群选择的遗传去噪策略，来降低分布外风险，从而在极少的神经网络评估次数下实现高效且高性能的采样。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体目标是利用预训练的扩散策略模型，通过改进采样过程，在极少的去噪步骤（低NFE）下生成高质量动作序列。方法的核心是遗传扩散策略（GDP），它在标准去噪循环中引入了一个种群管理和选择机制。</p>
+<p><img src="https://arxiv.org/html/2510.21991v1/graphs/genetic_diffusion.png" alt="遗传去噪过程"></p>
+<blockquote>
+<p><strong>图2</strong>：遗传去噪过程。从纯高斯噪声样本开始，计算适应度分数并用作多项式选择的权重。被选中的样本被复制以替换被删除的样本。然后，按照可能调整过的DDPM去噪步骤执行一次去噪。如果未达到最终去噪步骤，则循环回适应度计算并重复。通过选择衡量样本是否在分布内的适应度分数，该方法倾向于选择具有更精确去噪估计、从而能产生更精确采样动作的去噪轨迹。</p>
+</blockquote>
+<p>GDP的流程如算法1所示，其输入包括预训练的噪声预测模型ϵ_θ、噪声计划、去噪规则D、适应度评分函数φ、种群大小P、存活个体数S和去噪步骤数N。首先，从高斯分布中采样初始化一个包含P个个体的种群。然后，从t_N到t_0进行迭代去噪。在每一步t_j，算法执行以下操作：1) 为种群中的每个样本x_t_j^i计算适应度分数p_i = φ(x_t_j^i, t_j, ϵ_θ(x_t_j^i, t_j))；2) 根据这些分数进行加权多项式选择，选出S个幸存个体；3) 复制这些幸存个体以填满种群（即，每个幸存个体被复制P/S次）；4) 对更新后的种群应用标准的去噪步骤D，得到下一步的样本x_{t_{j-1}}^i。最终，返回第一个样本x_0^0作为生成的动作。</p>
+<p>核心模块是适应度评分函数φ，其作用是引导选择过程，偏好“分布内”的样本，从而缓解裁剪带来的分布外问题。论文提出了两类评分函数：</p>
+<ol>
+<li>**基于裁剪的评分 (φ_clip)**：φ_clip,f,T(x_t, t) = T × f( x̂_0 - CLIP( x̂_0 ) )，其中x̂_0是当前步骤预测的干净样本。该评分直接衡量预测值超出动作边界（[-1,1]）的程度，裁剪越严重，分数越低。</li>
+<li>**基于Stein的评分 (φ_stein)**：φ_stein,f,T(x_t, t) = T × f( ||ϵ_θ(x_t, t)|| )。该评分利用噪声预测值的大小作为指标，高噪声预测意味着样本远离目标分布的任何模式，因此分数低。</li>
+</ol>
+<p>与现有方法相比，GDP的创新点具体体现在：1) <strong>针对性设计</strong>：针对机器人动作空间低维、结构化的特点，分析了标准去噪中裁剪导致分布外问题的根源，而非盲目套用图像生成领域的加速技术。2) <strong>种群进化思想</strong>：首次将遗传算法引入扩散模型采样加速，通过维护一个候选解（去噪轨迹）种群，并基于适应度进行选择，在低推理预算下同时兼顾了探索（通过种群多样性）和利用（通过选择高质量轨迹）。3) <strong>无需重训练</strong>：GDP是对采样过程的改进，可直接应用于已有的DDPM训练好的策略模型，无需额外的训练成本。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：评估使用了来自D4RL和Robomimic的14个机器人操作任务，具体包括Adroit Hand的Pen、Relocate、Hammer、Door任务，以及Robomimic的Lift、Can、Square、Transport、Tool Hang任务（使用Proficient Human和Medium Human数据集）。实验平台基于PyTorch，使用统一的UNet架构（65M参数）。对比的基线方法包括：标准DDPM、DDIM、EDM以及需要重新训练的Shortcut模型。实验系统地扫描了推理步骤数δ、噪声缩放因子γ、动作序列长度h_A等超参数。</p>
+<p><strong>关键实验结果</strong>：<br>在Adroit Hand任务上，GDP在仅用2个推理步骤时，性能达到或超过标准DDPM使用100步的性能。如表1所示，对于Hammer任务，GDP（2步，γ=0.2）成功率为1.00，而DDPM（100步，γ=1）为0.68；对于Relocate任务，GDP为0.98，DDPM为0.69。即使与同样使用2步但经过计划调整和最佳γ调优的DDPM变体相比，GDP在多数任务上仍有提升（如Relocate: 0.98 vs 0.92）。Shortcut模型虽能1步采样，但性能显著下降。</p>
+<p><img src="https://arxiv.org/html/2510.21991v1/x1.png" alt="标准化分数对比"></p>
+<blockquote>
+<p><strong>图1</strong>：Genetic Diffusion Policy与shortcut和扩散策略基线在Adroit Hand任务上的标准化分数对比。GDP在少量步骤下（如2步）取得了优异性能。</p>
+</blockquote>
+<p>在Robomimic任务上（表2），GDP在2步推理时，性能与经过计划调整的DDPM变体相当或略优，大多数成功率差异在2个标准差之内，表明在相对简单的任务上，GDP的优势不如在Adroit上明显，但仍能保持高性能。</p>
+<p><img src="https://arxiv.org/html/2510.21991v1/graphs/clip/clip_score.jpg" alt="裁剪频率与性能关系"></p>
+<blockquote>
+<p><strong>图3</strong>：每个标记代表在去噪步骤t=5时，任务、去噪步数和噪声注入尺度的唯一组合。裁剪频率计算为被投影到立方体边界的扁平化、加噪动作序列张量中条目的比例。灰色线显示了为每个任务单独拟合的四阶多项式回归。该图表明，裁剪频率越高，最终的回合回报越低。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.21991v1/graphs/clip/clip0_score.png" alt="裁剪频率与去噪步骤关系"></p>
+<blockquote>
+<p>**图5(a)**：裁剪频率（归一化后）作为去噪步骤数的函数；步骤越多，裁剪越频繁。性能峰值出现在步骤数较少（n≈4）时，此时裁剪最少。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.21991v1/x5.png" alt="噪声注入尺度的影响"></p>
+<blockquote>
+<p>**图5(b)**：噪声注入尺度对不同动作序列长度下性能的影响（跨任务平均）；降低噪声注入能系统性提升性能。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.21991v1/x6.png" alt="跨时间步性能"></p>
+<blockquote>
+<p><strong>图6</strong>：所有任务在不同时间步下的性能。GDP（Genetic）在少量步骤下性能优异，且通过调整计划（Scheduled）的DDPM也能获得很大提升。</p>
+</blockquote>
+<p><strong>消融实验与分析</strong>：<br>论文通过系统实验验证了其核心洞察：1) <strong>减少推理步骤</strong>：降低去噪步骤数可以减少裁剪，从而提升性能，存在一个最佳步数（约4步）使性能最优（图5a）。2) <strong>降低噪声注入尺度（γ）</strong>：减少噪声注入同样能显著降低裁剪并提高成功率（图5b），将某些任务的成功率从75%提升至完全解决。3) <strong>动作序列长度（Horizon）</strong>：中等的动作序列长度通常比很短或很长的序列更具挑战性，这可能源于条件复杂性和分布复杂性之间的权衡。4) <strong>GDP组件</strong>：实验表明，使用γ=1会损害GDP性能，因为噪声允许种群个体在模式间“跳跃”，可能导致选择过程中的模式坍塌。而结合了调整后的时间计划（如最大时间步设为90，最小为20）和降低的γ（0.2）的GDP，在2步推理时取得了最佳平衡。</p>
+<p><strong>推理开销</strong>：如表3所示，GDP由于需要处理种群，会引入额外的计算开销。当种群大小为32时，总开销约为基线（种群大小为1的DDPM）的1.5倍。然而，考虑到GDP能以极少的步骤（如2步）达到高性能，其总体的绝对推理时间仍远低于需要很多步骤的基线方法。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) <strong>提出了针对机器人操作的高效去噪方案</strong>：通过减少推理步骤和降低噪声注入尺度，显著加速了现有扩散策略的推理，且常能提升性能。2) <strong>进行了深入的理论与实证分析</strong>：揭示了标准去噪过程中因裁剪导致的分布外问题，并阐明了在低维机器人设置中减少噪声注入的反直觉好处。3) <strong>提出了遗传扩散策略（GDP）</strong>：一种新颖的基于种群选择的采样策略，通过筛选分布内的去噪轨迹，在极低推理预算下提高了鲁棒性和性能，这是首次将遗传算法用于加速扩散模型采样。</p>
+<p>论文提到的局限性包括：GDP在Robomimic等相对简单的任务上，相对于精心调整的DDPM变体，性能提升不够显著；GDP在噪声注入尺度γ=1时效果不佳；EDM策略在不同动作序列长度上表现不稳定。</p>
+<p>本文对后续研究的启示是：1) <strong>领域特异性设计至关重要</strong>：直接将图像生成领域的先进技术迁移到具身AI可能不适用，需要针对机器人任务的动作空间特性和训练动态进行专门分析。2) <strong>采样过程优化潜力巨大</strong>：无需改变模型架构或重新训练，仅通过优化采样算法（如引入进化计算思想）即可在速度和质量上获得显著收益。3) <strong>探索与利用的权衡</strong>：在策略推理阶段，可以偏向“利用”（确定性高、多样性低）以获得更可靠的动作，这与训练阶段需要“探索”以避免模式坍塌形成对比。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中扩散策略推理步骤多、计算成本高的问题，提出一种两步扩散策略。核心方法是遗传去噪，通过选择低分布外风险的轨迹来优化去噪过程，以适应机器人动作分布的结构化、低维特性。实验表明，该方法仅需2步神经函数评估即可解决复杂任务，在14个机器人操作任务上性能最高提升20%，且推理步骤显著减少。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.21991" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

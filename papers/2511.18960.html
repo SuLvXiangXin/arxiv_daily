@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AVA-VLA: Improving Vision-Language-Action models with Active Visual Attention - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>AVA-VLA: Improving Vision-Language-Action models with Active Visual Attention</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.18960" target="_blank" rel="noreferrer">2511.18960</a></span>
+        <span>作者: Xiaoyuan Yu Team</span>
+        <span>日期: 2025-11-24</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于预训练视觉语言模型构建的视觉-语言-动作模型已成为具身智能任务的主流范式。这些模型通常将每个时间步的密集视觉输入作为独立帧进行处理，这隐含地将机器人操作任务建模为马尔可夫决策过程。然而，在真实的机器人操作场景中，当前视觉帧仅是对环境真实状态的部分观测，忽略了非观测的动态变化和遮挡信息。这种历史无关的设计对于动态顺序决策中的有效视觉令牌处理是次优的，因为它未能利用历史上下文信息。现有一些方法虽开始利用历史信息进行视觉令牌剪枝以提升效率，但缺乏一种动态、上下文感知的视觉处理范式来从根本上提升VLA的泛化质量。</p>
+<p>本文针对VLA模型因孤立处理视觉帧而缺乏历史上下文感知的关键痛点，从部分可观测马尔可夫决策过程的视角出发，提出了AVA-VLA框架。其核心思路是引入一个从先前决策步衍生的、作为智能体信念状态神经近似的循环状态，并设计一个主动视觉注意力模块，利用该循环状态动态调制当前帧的视觉处理，使模型能够基于历史信念而非静态语言指令来过滤和聚焦注意力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>AVA-VLA框架基于代表性的并行解码VLA模型OpenVLA-OFT构建，其核心创新在于引入了循环状态和主动视觉注意力模块，使策略决策不仅依赖于当前观测，还依赖于历史上下文。</p>
+<p><img src="https://arxiv.org/html/2511.18960v2/x2.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图2</strong>：AVA-VLA框架概览。框架在基础VLA模型（如OpenVLA-OFT）上增加了两个核心组件：1）一个循环状态，由前一时刻动作相关的隐藏状态通过MLP变换得到，并用于初始化当前时刻的动作占位符嵌入；2）一个主动视觉注意力模块，它接收当前视觉令牌和循环状态，计算出一组软权重，用于动态调制大型语言模型主干中所有层的注意力计算。</p>
+</blockquote>
+<p><strong>整体流程</strong>：在时间步t，给定当前视觉观测和语言指令，视觉编码器生成视觉令牌，语言分词器生成语言令牌。同时，从时间步t-1的模型最后一层隐藏状态（与动作预测相关）通过一个MLP模块B变换得到循环状态 r^{t-1}。该循环状态有两个用途：一是直接作为当前时刻的动作占位符嵌入 p^t 的初始化值；二是与当前视觉观测一同输入到AVA模块中，计算出一组针对视觉令牌的软权重 ω^t。随后，视觉令牌、语言令牌以及由循环状态初始化的动作占位符嵌入被输入到LLM主干中。在LLM的每一层进行注意力计算时，会应用由AVA模块生成的软权重构成的软注意力掩码矩阵，从而动态调整对视觉令牌的关注程度。最后，LLM的输出经由动作头映射为可执行的动作块。</p>
+<p><strong>核心模块技术细节</strong>：</p>
+<ol>
+<li><strong>循环状态</strong>：定义为 r^{t-1} = B(h_M^{t-1})，其中 h_M^{t-1} 是上一时刻最后一层（第M层）的隐藏状态。它作为历史上下文信息的压缩表示，近似于POMDP中的信念状态。</li>
+<li><strong>主动视觉注意力模块</strong>：该模块首先通过模态特定的MLP将视觉特征和语言指令特征映射到较低的维度d&#39;。接着，使用一个FiLM层，以语言特征为条件对视觉特征进行调制。然后，以调制后的视觉特征作为查询Q，以经过MLP编码的循环状态作为键K和值V，执行交叉注意力计算。交叉注意力的输出再经过一个自注意力层和一个前馈网络，最后通过一个线性层和Softmax函数，预测出每个视觉令牌的“增强”或“减弱”对数概率 ρ^t ∈ R^{L_I × 2}。最终，软权重 ω^t = ρ^t γ，其中γ是一个二维向量，其分量分别代表增强和减弱操作的标量分数。这些软权重被用于构造一个软注意力掩码矩阵U^t，该矩阵在LLM每一层的标准注意力Softmax计算中，用于重新加权与视觉令牌相关的注意力分数（公式11,12），从而实现基于历史上下文的主动视觉信息过滤与聚焦。</li>
+</ol>
+<p><strong>创新点</strong>：与现有VLA模型仅基于当前观测做决策相比，AVA-VLA的主要创新在于从POMDP理论获得启发，显式地将决策条件于一个从历史衍生的循环状态上，并设计了专门的AVA模块，使模型能够主动、动态地根据历史决策背景调整其对当前视觉输入的关注点，而非被动地处理每一帧。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：评估在三个场景下进行：1) <strong>仿真基准LIBERO</strong>：包含Spatial, Object, Goal, Long四个任务套件，评估单任务学习和多任务学习性能。2) <strong>仿真基准CALVIN</strong>：使用“ABC → D”的零样本泛化设置。3) <strong>真实机器人任务</strong>：在Mobile ALOHA双臂机器人平台上执行四项挑战性任务（抓放、序列指令理解、柔性物体折叠、灵巧操作）。使用<strong>成功率</strong>作为主要评估指标，在CALVIN上额外使用<strong>平均完成长度</strong>。基线方法包括TraceVLA、WorldVLA、π₀系列、OpenVLA、UniVLA、OpenVLA-OFT等近期代表性工作。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>LIBERO基准</strong>：如表1所示，无论是在“一个策略应对所有套件”还是“每个套件一个策略”的设置下，AVA-VLA都取得了最优的平均成功率（98.0%和98.3%），并且在最具挑战性的LIBERO-Long套件上表现尤其突出（97.6%和96.2%），显著超越了基础模型OpenVLA-OFT。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2511.18960v2/M-Realworld-R.png" alt="真实机器人实验结果"></p>
+<blockquote>
+<p><strong>图3</strong>：Mobile ALOHA真实机器人实验对比。在四项任务中，AVA-VLA相比基线方法UniVLA和OpenVLA-OFT，取得了最高的任务成功率（平均87.5%）和最稳定的表现，验证了其优秀的仿真到现实转移能力和实际适用性。</p>
+</blockquote>
+<ul>
+<li><strong>CALVIN基准</strong>：在零样本泛化设置下，AVA-VLA取得了86.8%的最高平均成功率和3.74的平均完成长度，优于基础模型OpenVLA-OFT（80.8%， 3.46）及其他对比方法。</li>
+<li><strong>真实机器人实验</strong>：如图3所示，AVA-VLA在四项任务上的平均成功率达到了87.5%，显著高于UniVLA（72.5%）和OpenVLA-OFT（77.5%），展现了强大的实践应用能力。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2511.18960v2/app-ED-L.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图4</strong>：在LIBERO-Long套件上的消融研究结果。实验表明，同时使用循环状态初始化占位符和AVA模块带来最大性能增益（96.2%成功率）。仅使用循环状态或仅使用AVA模块也能带来显著提升，证明了两个组件的有效性。移除两者则退化为基础模型性能。</p>
+</blockquote>
+<p><strong>消融实验</strong>：如图4所示，在LIBERO-Long套件上的消融实验验证了各核心组件的贡献。仅使用循环状态初始化动作占位符（w/ RS）可将成功率从94.5%提升至95.5%；仅使用AVA模块（w/ AVA）可提升至95.8%；而同时使用两者（AVA-VLA）则达到最佳性能96.2%。这证明了循环状态提供的历史上下文和AVA模块实现的主动视觉调制均对性能提升有重要且互补的贡献。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 首次从POMDP视角出发，提出了AVA-VLA框架，以解决基于MDP的VLA模型缺乏历史上下文的关键限制。2) 设计了主动视觉注意力模块，能够利用循环状态动态调制当前帧的视觉处理，实现基于历史信念的注意力聚焦。3) 在仿真与真实机器人任务上的广泛实验表明，该框架能有效提升VLA策略性能，并达到最先进的水平。</p>
+<p><strong>局限性</strong>：论文提到，由于现代VLA主干网络巨大的内存和计算成本，训练时采用了截断的通过时间反向传播策略（固定短时间窗口T=4），这可能会限制模型学习更长程时间依赖的能力。</p>
+<p><strong>对后续研究的启示</strong>：1) <strong>POMDP视角的有效性</strong>：将VLA建模问题从MDP转向POMDP，并引入信念状态的近似表示，是提升序列决策性能的一个富有潜力的方向。2) <strong>主动感知的可行性</strong>：在顺序决策的动态环境中，可以实现主动的视觉感知，即根据智能体的决策历史有选择地处理视觉信息，这比被动处理所有信息更高效、更鲁棒。3) <strong>效率与性能的权衡</strong>：AVA模块产生的视觉令牌重要性权重天然适用于视觉令牌剪枝，未来工作可探索利用该机制在保持甚至提升性能的同时，显著降低VLA模型的计算开销。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有视觉-语言-动作（VLA）模型在动态顺序决策中，因独立处理各时刻视觉输入而忽略历史上下文，导致视觉处理效率不高的问题，提出AVA-VLA框架。该框架从部分可观测马尔可夫决策过程（POMDP）视角出发，创新性地引入主动视觉注意力（AVA）模块。AVA利用上一决策步骤产生的循环状态（近似信念状态），计算软权重以动态聚焦于与任务历史相关的关键视觉标记。实验表明，AVA-VLA在LIBERO和CALVIN等机器人基准测试中取得了最先进的性能，并在真实双臂机器人平台上验证了其有效性和良好的仿真到现实迁移能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.18960" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

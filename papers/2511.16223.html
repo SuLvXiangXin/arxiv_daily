@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DynaMimicGen: A Data Generation Framework for Robot Learning of Dynamic Tasks - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>DynaMimicGen: A Data Generation Framework for Robot Learning of Dynamic Tasks</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.16223" target="_blank" rel="noreferrer">2511.16223</a></span>
+        <span>作者: Anna Valente Team</span>
+        <span>日期: 2025-11-20</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>模仿学习（IL）和示教学习（LfD）旨在通过人类演示让机器人学习技能，但传统方法需要大量演示数据才能泛化到不同的场景配置、物体实例和机器人平台。收集这些数据集耗时耗力，在现实应用中往往不切实际。现有的一些数据生成方法，如MimicGen和DexMimicGen，通过分割人类轨迹并进行刚性的SE(3)变换或线性插值来扩充数据，但它们通常假设静态环境。这种“准静态”假设限制了它们在动态、变化环境中的适应性，简单的插值在条件改变时可能导致碰撞或任务失败。本文针对“如何从最少的人类监督中生成大规模、可用于训练、且能适应动态任务设置的机器人数据集”这一具体痛点，提出了DynaMimicGen（D-MG）框架。其核心思路是：给定极少（通常仅需一个）的人类演示，首先将其分割为面向物体的子任务，然后利用动态运动原语（DMPs）来编码、适配和泛化演示行为，从而生成能够实时适应物体位姿、机器人状态或场景几何形状变化的平滑、真实且与任务一致的笛卡尔轨迹。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>D-MG的整体流程如论文图1所示。输入是源数据集 𝒟_𝑠𝑟𝑐（包含1-2个人类演示），输出是生成的大规模数据集 𝒟_𝑔𝑒𝑛。其pipeline包含几个关键阶段：1）根据已知的任务序列，将源演示解析为面向物体的子任务片段；2）为每个子任务片段训练一个动态运动原语（DMP）；3）当需要在新的目标场景（可能具有不同的初始状态或动态变化）中生成一条轨迹时，选择最相关的源演示，并对其每个子任务对应的DMP进行适配；4）执行适配后的DMP序列，并持续监控环境状态，在检测到变化时进行在线调整；5）仅将成功的执行轨迹加入生成数据集。</p>
+<p><img src="https://arxiv.org/html/2511.16223v1/Figures/DMG_framework.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：DynaMimicGen系统流程概览。（左）D-MG首先从源数据集中为目标任务选择最相关的演示（绿色高亮），然后识别出对应的参考片段（红色高亮），即一个面向物体的子任务，用于训练动态运动原语。（右）为了在新场景中生成新演示，D-MG（1）监控环境的当前状态，（2）变换选定的片段以为当前状态配置生成DMP目标，（3）执行生成的轨迹。此过程伴随对环境的实时监控，以响应动态变化调整轨迹。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>演示解析与子任务分割</strong>：假设任务由已知顺序的、面向物体的子任务序列构成（例如，“打开抽屉”、“抓取杯子”、“将杯子放入抽屉”、“关闭抽屉”）。每个演示轨迹被分解为连续的片段，每个片段对应一个子任务。在模拟中，可以利用任务完成指标（如检测到抓取、放置事件）自动检测子任务边界；在真实世界中，则可以进行手动标注。</li>
+<li><strong>动态运动原语（DMPs）的学习与表示</strong>：这是方法的核心。DMP将运动建模为一个二阶动力系统：<code>y¨(t) = α_y (β_y (g - y(t)) - y˙(t)) + f(x)</code>。其中 <code>y(t)</code> 是系统状态（如末端执行器位置），<code>g</code> 是目标位置，<code>f(x)</code> 是非线性强迫项，用于复现复杂的轨迹形状。强迫项由一组高斯基函数 <code>Ψ_i(x)</code> 和权重 <code>ω_i</code> 加权求和得到。通过局部加权回归（LWR），可以从演示轨迹 <code>τ_demo</code> 中学习出权重 <code>ω_i</code>，使得DMP能够复现演示的运动模式。学习完成后，通过改变初始状态 <code>y0</code> 和目标 <code>g</code>，DMP可以平滑地生成适应新场景的轨迹，并保持原有的动态特性。</li>
+<li><strong>子任务片段的适配</strong>：对于每个子任务片段，关键是将演示中的目标末端执行器位姿从演示时的物体坐标系转换到新场景中的物体坐标系。具体步骤是：计算演示中末端执行器相对于物体坐标系的变换 <code>T_obj^target</code>；然后，在新场景中，利用当前物体的位姿 <code>T~_W^obj</code>，通过 <code>T~_W^target = T~_W^obj * T_obj^target</code> 计算出新的目标末端执行器位姿。这个新的目标位姿 <code>g</code> 和机器人当前位姿 <code>y0</code> 作为输入，驱动训练好的DMP生成适配后的轨迹。</li>
+<li><strong>执行与动态适应</strong>：在执行生成的轨迹时，D-MG持续监控相关物体的位姿。如果检测到位姿发生变化（动态扰动），系统会立即根据上述适配公式重新计算当前子任务的瞬时目标，并利用DMP的微分方程特性在线调整正在执行的轨迹，从而实现实时适应。</li>
+</ol>
+<p><strong>与现有方法的创新点</strong>：相较于MimicGen等使用刚性变换和线性插值的方法，D-MG的核心创新在于利用DMPs进行轨迹生成和调制。DMPs提供了一种基于动力系统的、平滑的泛化方式，能够自然地适应新的起点和目标，并允许在轨迹执行过程中根据更新的目标进行在线调整。这使得D-MG突破了静态场景假设，能够处理执行过程中物体位置发生变化的动态任务设置。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：在模拟环境中评估了三个代表性任务：基础操作（Stack，堆叠方块）、接触密集操作（Square，将方螺母放入栓）、长时程顺序操作（MugCleanup，清理杯子入抽屉）。每个任务定义了不同的初始状态分布（D0， D1， D2）以增加复杂性。</li>
+<li><strong>实验平台</strong>：使用模拟环境，并提及了在真实世界开发了Stack任务版本。</li>
+<li><strong>Baseline方法</strong>：主要对比方法是MimicGen (MG)。为了公平比较，将MG生成的相对（delta）轨迹重新处理为绝对坐标。</li>
+<li><strong>训练策略</strong>：使用D-MG为每个任务变体生成1000条成功轨迹，然后分别使用扩散策略（Diffusion Policy， 使用200条轨迹子集）和行为克隆（BC-RNN， 使用全部1000条轨迹）训练策略网络。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2511.16223v1/Figures/Stack.png" alt="任务图示"></p>
+<blockquote>
+<p><strong>图2</strong>：模拟实验任务概览，包括Stack、Square和MugCleanup，涵盖了从基础拾放到接触密集和长时程操作的不同行为类别。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.16223v1/Figures/MugDynamic_1.png" alt="动态生成示例"></p>
+<blockquote>
+<p><strong>图8</strong>：动态数据集生成示例（MugCleanup任务初始配置）。展示了D-MG如何在任务执行期间引入受控的物体位置扰动，并适应这些变化。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>数据生成成功率（DGR）</strong>：在更宽、更难的初始状态分布（D1， D2）下，D-MG的数据生成成功率显著高于MG。例如，在Square任务的D2分布下，D-MG的DGR为66.4%，而MG仅为32.8%。这证明了DMPs在复杂泛化场景下比简单的刚体变换更有效。</li>
+<li><strong>策略学习性能</strong>：在三个任务的所有分布上，使用D-MG生成的数据训练的扩散策略和行为克隆代理，其任务成功率始终优于或与使用MG数据训练的代理持平，且在更具挑战性的分布上优势更明显。例如，在Stack任务的D1分布下，基于D-MG数据的扩散策略成功率为86.6%，而基于MG数据的为56.7%。</li>
+<li><strong>动态适应性</strong>：实验专门测试了在轨迹生成过程中动态扰动物体位置的情况。D-MG能够成功适应这些变化并完成轨迹，而基于静态假设的方法（如MG）则会失败。这直接验证了D-MG处理动态任务设置的核心能力。</li>
+<li><strong>消融实验</strong>：论文进行了消融研究，比较了使用DMPs与使用简单的线性插值（LI）进行轨迹生成。在Square-D2和MugCleanup-D1设置下，DMPs在数据生成成功率（DGR）上大幅领先于线性插值（分别高出33.6和18.0个百分点）。这证实了DMPs在生成高质量、可泛化轨迹方面的关键作用，而不仅仅是起点-终点的简单插值。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>从最小输入实现可扩展数据生成</strong>：提出DynaMimicGen框架，能够从极少（常为单个）人类演示中生成大规模机器人操作数据集，极大减少了对繁重人工数据收集的需求。</li>
+<li><strong>支持动态任务设置的数据生成</strong>：突破了现有方法对静态环境的假设，利用DMPs的适应性，使生成的数据能够涵盖并适应执行过程中物体位姿的动态变化。</li>
+<li><strong>为模仿学习代理生成有价值数据</strong>：通过实验证明，基于D-MG生成数据训练的模仿学习代理，在多种未见过的场景配置中均表现出强大性能，验证了所生成数据的高质量和有效性。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到的局限性包括：1）依赖于绝对笛卡尔末端执行器位姿动作空间；2）需要已知任务的对象中心子任务序列（即任务规划已知）；3）假设在运动生成过程中每个时间步都能观察到物体位姿。</p>
+<p><strong>对后续研究的启示</strong>：D-MG展示了将经典机器人学方法（如DMPs）与大规模数据生成相结合的潜力，为高效准备模仿学习数据集提供了新思路。其核心启示在于，通过利用具有物理意义和可解释性的运动表示（如DMPs）进行数据扩充，可以生成更符合动力学、更易于泛化，特别是能适应动态变化的数据。这为面向真实世界复杂、非结构化环境的数据驱动机器人学习指明了一个可行的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出DynaMimicGen框架，旨在解决机器人模仿学习依赖大量耗时人力演示、难以适应动态环境的核心问题。其关键技术是：基于少量演示，先进行任务分割，再利用动态运动基元（DMPs）泛化行为，生成能实时适应物体位姿、场景几何变化的平滑笛卡尔轨迹。实验表明，用该框架生成数据训练的智能体，在堆叠立方体、向抽屉放置杯子等长时程、接触密集的动态任务中表现强劲，有效实现了在环境变化下的泛化，为规模化机器人学习提供了高效数据生成方案。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.16223" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

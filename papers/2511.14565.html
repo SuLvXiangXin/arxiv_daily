@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Masked IRL: LLM-Guided Reward Disambiguation from Demonstrations and Language - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Masked IRL: LLM-Guided Reward Disambiguation from Demonstrations and Language</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.14565" target="_blank" rel="noreferrer">2511.14565</a></span>
+        <span>作者: Andreea Bobu Team</span>
+        <span>日期: 2025-11-18</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，机器人通过从演示中学习奖励函数来适应用户偏好。主流方法是语言条件逆强化学习，它通过将语言指令作为条件信号，训练一个能跨多种偏好泛化的奖励模型。然而，这种方法存在两个关键局限性：首先，在演示数据有限的情况下，奖励模型容易过拟合到与任务无关的状态细节（虚假相关性），无法捕捉真实的人类意图；其次，现实中的自然语言指令常常是模糊或欠明确的，仅将其作为简单的条件信号无法可靠地解决奖励函数的歧义性。本文针对奖励学习在数据有限和语言模糊双重挑战下的痛点，提出了利用大型语言模型结合演示与语言互补信息的新视角。其核心思路是：利用LLM从语言中推断状态相关性掩码，强制奖励模型对不相关状态保持不变性以提高样本效率；同时，利用LLM结合演示上下文对模糊指令进行推理澄清，以增强对模糊语言的鲁棒性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Masked IRL的整体框架是一个端到端的语言条件奖励学习流程，其输入是成对的轨迹演示和语言指令，输出是一个能够根据新指令预测状态奖励的模型。核心流程包括：1）利用LLM结合演示澄清模糊指令；2）利用LLM从（澄清后的）指令生成状态相关性掩码；3）使用掩码损失和标准IRL损失联合训练奖励模型；4）使用学得的奖励模型进行轨迹优化。</p>
+<p><img src="https://arxiv.org/html/2511.14565v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：系统概述。我们使用演示和LLM推理来澄清模糊的语言指令。然后将澄清后的指令映射到状态掩码，这些掩码通过掩码损失指导奖励模型，在训练期间强制对不相关的状态维度保持不变性。我们使用掩码损失和IRL损失的加权和来训练奖励模型。使用学习到的奖励模型，我们可以通过选择具有最高奖励的轨迹来执行轨迹优化。</p>
+</blockquote>
+<p>该方法包含三个核心模块：</p>
+<ol>
+<li><p><strong>状态掩码生成与掩码损失</strong>：对于每个演示-语言对，使用LLM（GPT-4o）根据指令和状态描述，输出一个二进制状态掩码，指明状态向量中哪些维度与指令相关。关键创新在于不是简单地用掩码将不相关维度置零（显式掩码），而是设计了一个隐式的<strong>掩码损失</strong>。该损失通过扰动被标记为不相关的状态维度（例如添加均匀噪声），并惩罚奖励值因此发生的变化，从而强制模型学习对这些维度的不变性。这避免了因LLM生成的掩码错误而完全丢弃有用信息的风险。总训练目标是标准的最大熵IRL损失与掩码损失的加权和：𝒥(θ) = ℒ_IRL(θ) + λℒ_mask(θ)。</p>
+</li>
+<li><p><strong>语言歧义澄清机制</strong>：当指令模糊时（如“Stay away”），使用LLM（GPT-5）进行联合推理。向LLM提供任务描述、原始指令、演示轨迹的状态表示以及同一起始点的最短路径参考轨迹。LLM被提示推断能够解释演示与参考轨迹差异的澄清后指令（如“Stay away from the table”）。若存在多种可能澄清，LLM返回所有选项，实现数据增强。随后，使用澄清后的指令生成状态掩码。</p>
+</li>
+<li><p><strong>语言条件奖励模型架构</strong>：模型骨干是一个语言条件奖励函数。使用预训练的T5编码器将语言指令编码为嵌入，然后通过特征线性调制层（FiLM）来调制状态输入：h_fused = γ ⊙ s + β，其中γ和β由语言嵌入经MLP产生。这种调制方式比简单的拼接更结构化、高效。调制后的融合表示再通过一个四层MLP输出标量奖励值。训练时冻结语言编码器。</p>
+</li>
+</ol>
+<p>与现有方法相比，创新点体现在：1）<strong>利用语言推断“什么重要”</strong>：不仅用语言作条件，还用其生成状态掩码以指导学习，减少对虚假相关性的依赖；2）<strong>双向消歧</strong>：演示可澄清模糊语言，澄清后的语言又能更精准地指导奖励学习，形成互补。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在模拟和真实世界中进行，使用Franka Emika 7自由度机械臂执行物体递送任务。状态为19维向量，包含末端执行器、物体（桌子、笔记本电脑）和人的位置与旋转。基准测试对比了多种方法：<strong>Masked IRL</strong>（使用Oracle或LLM生成掩码）、<strong>Explicit Mask</strong>（显式掩码置零，使用Oracle或LLM掩码）、以及标准的<strong>LC-RL</strong>（仅语言条件，无掩码）。评估指标为<strong>平均获胜率</strong>，即学习到的奖励模型在测试轨迹对上做出的偏好选择与真实奖励函数一致的频率。实验考虑了不同稀疏度（相关特征数量）的奖励函数。</p>
+<p><img src="https://arxiv.org/html/2511.14565v1/x3.png" alt="性能对比"></p>
+<blockquote>
+<p><strong>图3</strong>：不同奖励密度下的性能。所有方法在（a）对40个训练偏好进行1k轮预训练和（b）对30个测试偏好进行100轮微调后，在不同奖励密度下的平均获胜率。所有模型都使用每个用户偏好10个演示进行训练，并使用具有新物体配置的未见轨迹进行评估。阴影区域表示五个不同种子的标准误差。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>有效性</strong>：如图3所示，Masked IRL（无论使用Oracle还是LLM生成的掩码）在不同奖励密度下，对训练和测试偏好都一致匹配或优于基线LC-RL。这表明单纯的FiLM语言条件不足以防止过拟合，而掩码损失能有效提升鲁棒性和泛化能力。</li>
+<li><strong>样本效率</strong>：Masked IRL在演示数据较少时表现更优。要达到可比性能，Explicit Mask基线需要多33%的数据，而LC-RL基线平均需要多达<strong>4.7倍</strong>的演示数据。</li>
+<li><strong>消融实验</strong>：对比隐式掩码损失（Masked IRL）和显式掩码置零（Explicit Mask）发现，即使使用Oracle掩码，隐式方法也表现更好，证明了其对于潜在掩码错误的鲁棒性。使用LLM生成掩码的Masked IRL性能接近使用Oracle掩码的版本，表明LLM能有效生成高质量掩码。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.14565v1/x4.png" alt="真实机器人结果"></p>
+<blockquote>
+<p><strong>图4</strong>：真实机器人实验中的获胜率。在真实机器人上，使用每个偏好5个演示进行训练后，Masked IRL (LLM Mask) 在测试偏好上的表现优于LC-RL和Explicit Mask (LLM Mask)。</p>
+</blockquote>
+<ol start="4">
+<li><strong>真实机器人验证</strong>：在真实机器人实验中（图4），Masked IRL (LLM Mask) 同样优于LC-RL和Explicit Mask基线，成功地将模拟中的优势迁移到物理系统。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.14565v1/x5.png" alt="定性示例"></p>
+<blockquote>
+<p><strong>图5</strong>：定性示例。对于模糊指令“Stay away”，LC-RL学到的奖励在桌子附近产生高奖励（红色），错误地认为要避开桌子；而Masked IRL通过LLM澄清指令为“Stay away from the human”，并生成相应掩码，从而学到的奖励在远离人的区域（蓝色）更高，符合演示中避开人的意图。</p>
+</blockquote>
+<ol start="5">
+<li><strong>定性分析</strong>：如图5所示，面对模糊指令“Stay away”，LC-RL错误地将高奖励关联到桌子附近（可能因为演示轨迹绕开了桌子），而Masked IRL通过LLM推理结合演示，澄清了意图是“远离人”，从而学到了正确的奖励分布。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献有三点：1) 引入了<strong>语言引导的状态相关性掩码</strong>及新颖的<strong>隐式掩码损失</strong>，通过强制对不相关状态的不变性，显著提高了从演示中学习奖励的样本效率；2) 开发了一种<strong>基于LLM的歧义澄清机制</strong>，能够利用演示上下文对模糊语言指令进行推理和澄清，增强了奖励学习对模糊语言的鲁棒性；3) 在模拟和真实机器人实验中验证了方法的有效性，相较于现有语言条件IRL方法，在更少数据下实现了更好的泛化性能。</p>
+<p>论文提到的局限性包括：方法依赖于外部LLM（GPT-4o/GPT-5）进行掩码生成和指令澄清，其性能、成本和延迟会影响系统表现；实验评估的环境和任务复杂度相对有限。</p>
+<p>这项工作对后续研究的启示在于：它展示了如何深度整合LLM的语义推理能力与传统的机器人学习框架，不仅将语言视为条件信号，更将其作为解释和结构化学习过程的监督来源。未来可探索更高效或专有的掩码学习方式，减少对大型通用LLM的依赖，并将该方法扩展到更复杂的、包含视觉输入的多模态场景中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人从演示中学习奖励函数时容易过拟合、泛化差，以及语言指令模糊导致歧义的核心问题，提出Masked IRL框架。该方法利用大型语言模型（LLM）结合演示（展示如何行动）和语言（指定重要内容），通过推断状态相关性掩码并对无关状态强制不变性，在指令模糊时用LLM推理进行澄清。实验表明，在模拟和真实机器人上，Masked IRL相比先前方法性能提升高达15%，数据使用减少达4.7倍，显著提高了样本效率、泛化能力和对模糊语言的鲁棒性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.14565" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

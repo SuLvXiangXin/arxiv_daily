@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>EmbodiSwap for Zero-Shot Robot Imitation Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>EmbodiSwap for Zero-Shot Robot Imitation Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.03706" target="_blank" rel="noreferrer">2510.03706</a></span>
+        <span>作者: Yiannis Aloimonos Team</span>
+        <span>日期: 2025-10-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人模仿学习传统上依赖于通过遥操作、VR或脚本控制收集的机器人演示数据。这类数据收集成本高昂，且通常与特定硬件和环境绑定，存在严重偏差，难以扩展。相比之下，人类视频数据丰富、多样且自然包含丰富的手-物交互。利用大规模人类视频数据不仅能规避机器人数据收集的挑战，还能扩展机器人可学习的动作范围。然而，直接从人类视频学习机器人策略面临“具身鸿沟”：人类与机器人的形态和执行器（手与夹爪）存在根本差异。</p>
+<p>本文针对这一核心痛点，提出了一种名为EmbodiSwap的方法，旨在弥合野外采集的以自我为中心的人类视频与目标机器人具身之间的鸿沟。其核心思路是：通过一个多步骤的视频编辑流程，将人类视频中的人手替换为光真实感的机器人夹爪，生成合成机器人视频数据集；随后，利用该数据集训练一个基于V-JEPA视觉主干网络的闭环机器人操作策略，实现零样本（无需任何机器人演示）的模仿学习。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架分为两大部分：1) EmbodiSwap数据合成流程；2) 基于V-JEPA的策略网络训练与部署。</p>
+<p><img src="https://arxiv.org/html/2510.03706v1/Figure_1_Architecture_21.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：训练设置总览。系统输入为包含人类执行动作的帧序列 <code>{I0, ..., IT}</code>。第一帧经过多步骤机器人合成过程，生成机器人合成图像 <code>I0*</code>。<code>I0*</code> 输入V-JEPA编码器，其输出与对应于后续帧 <code>I1:T</code> 的位置掩码令牌 <code>M1:T</code> 一同输入V-JEPA预测器。预测器的输出与可选（虚线表示）的本体感觉令牌 <code>p0</code> 和动作位置令牌 <code>l0</code> 的编码表示一同输入交叉注意力层 <code>C</code>，最终输出从 <code>I0</code> 到 <code>IT</code> 的相对手部变换预测。训练使用 <code>L1</code> 损失，监督信号来自3D手部重建网络计算的 <code>I0</code> 和 <code>IT</code> 之间的相对3D手部变换。</p>
+</blockquote>
+<p><strong>核心模块一：EmbodiSwap机器人合成流程</strong><br>该流程将单帧人类RGB图像转换为包含机器人夹爪的图像，具体步骤如图3所示。</p>
+<p><img src="https://arxiv.org/html/2510.03706v1/Figure_2_Data_Editing_13.png" alt="数据处理流程"></p>
+<blockquote>
+<p><strong>图3</strong>：机器人合成流程总览。流程始于包含可见人手的RGB帧。图像首先由三个组件处理：1) <strong>身体分割网络</strong>生成演员的二进制分割掩码；2) <strong>3D手部提取器</strong>重建3D人手骨架；3) <strong>深度网络</strong>估计精确的度量深度。这些组件的输出再由两个组件进一步处理：4) <strong>图像修复</strong>，接收原始RGB图像和身体分割掩码，从场景中擦除演员及其影响；5) <strong>渲染与混合</strong>，接收所有修复后的图像、深度图和末端执行器位姿，渲染合成机器人操纵器，将其合成到场景中，并根据场景与机器人之间的深度差异调整前景/背景内容。</p>
+</blockquote>
+<ul>
+<li><strong>输入</strong>：单帧人类RGB图像。</li>
+<li><strong>技术细节</strong>：<ol>
+<li><strong>身体分割</strong>：使用SAM2，以来自低分辨率粗略分割（由在VISOR上训练的网络提供）的身体点作为提示，生成高分辨率人体分割掩码。</li>
+<li><strong>3D手部提取</strong>：使用HaWoR，联合重建每帧的3D手部和相机位姿。</li>
+<li><strong>深度估计</strong>：使用UniDepthV2，结合相机内参，估计度量深度图。</li>
+<li><strong>图像修复</strong>：使用OmniEraser，根据身体分割掩码从原始图像中移除演员及其影响（如阴影）。</li>
+<li><strong>渲染与混合</strong>：将修复后的图像、深度图与重定向后的夹爪位姿结合。使用Pybullet的逆运动学渲染RGB-D合成机器人。通过逐像素比较场景深度图与渲染的机器人深度图，选择深度值更小（更近）的源进行混合，从而实现机器人对物体的遮挡或被物体遮挡的效果。</li>
+</ol>
+</li>
+<li><strong>输出</strong>：包含光真实感机器人夹爪的合成图像。</li>
+</ul>
+<p><strong>核心模块二：夹爪位姿重定向</strong><br>为将3D人手骨架映射到机器人夹爪，需要进行位姿重定向。</p>
+<p><img src="https://arxiv.org/html/2510.03706v1/retargetting.png" alt="位姿重定向"></p>
+<blockquote>
+<p><strong>图5</strong>：人手位姿到夹爪位姿的重定向。左侧提取人手的MANO关节位置，并由此计算6自由度手部位姿。右侧将机器人夹爪对齐到此推导出的6自由度位姿。该方案支持两指和三指夹爪。</p>
+</blockquote>
+<p>具体方法基于HaWoR预测的MANO参数计算21个关节点 <code>kpi</code>。夹爪中心 <code>Gc</code> 定义为手掌中心（五个特定关节点的平均值）。夹爪方向由三个轴定义：Z轴与手掌法线对齐（<code>Gz = (kp5 - kp0) × (kp17 - kp0)</code>）；X轴从拇指第一关节指向其余四指第一关节的质心（<code>Gx = 1/4(kp5+kp9+kp13+kp17) - kp1</code>）；Y轴根据映射的是右手还是左手，由叉积计算得出。最终得到6自由度夹爪位姿 <code>Tg</code>，用于机器人渲染并作为模型的回归目标。</p>
+<p><strong>核心模块三：基于V-JEPA的策略网络</strong></p>
+<ul>
+<li><strong>架构</strong>：主要利用V-JEPA的两个组件：编码器（Encoder）和预测器（Predictor）。编码器处理机器人合成图像 <code>I0*</code> 生成嵌入向量。预测器结合此嵌入和后续帧的位置掩码令牌 <code>M1:T</code>，预测视频 <code>I0:T*</code> 的编码表示。可选的本体感觉 <code>p0</code> 和动作位置 <code>l0</code> 输入通过全连接层编码，然后与预测器输出拼接，输入一个由两个交叉注意力层和两个自注意力层组成的注意力探针 <code>C</code>。最终通过一个全连接层输出一个相对位姿向量。</li>
+<li><strong>训练监督</strong>：训练信号是当前帧与未来某一帧之间的手部相对6D位姿（平移和旋转）。未来帧的偏移量因动作而异（快速动作如开、关用较短偏移，慢速动作如倾倒用较长偏移）。</li>
+<li><strong>创新点</strong>：1) 将原本用于视频理解的V-JEPA重新用于合成机器人视频上的模仿学习；2) 在训练和部署时，模型<strong>不依赖于额外的目标图像条件</strong>，实现了真正的零样本学习；3) 对现有动作数据集进行了重新标注，以更适合机器人操作学习。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2510.03706v1/Figure_3_Annotations_7.png" alt="动作边界"></p>
+<blockquote>
+<p><strong>图4</strong>：动作与子动作边界可视化。展示了来自EPIC Kitchens的3个示例序列。每个示例的顶行是裁剪的RGB帧。中间行的紫色箭头对应EPIC Kitchens提供的原始标注动作及其时间边界。第三行的彩色箭头对应Therblig子动作序列及其时间边界。虚线箭头表示该子动作为额外部分，实线箭头表示相关联的子动作剪辑用于训练。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>数据集</strong>：从EPIC Kitchens 2020、HOI4D和Ego4D三个以自我为中心的数据集中选取了出现频率最高的5个动作：放置（place）、打开（open）、关闭（close）、倾倒（pour）和切割（cut）。</li>
+<li><strong>基准方法</strong>：在预训练方法比较中，评估了13种不同的预训练视觉主干网络，包括ResNet-50、MAE、DINOv2、R3M、ViP、VC-1、Octo、RoboFlamingo、π₀、ResNet-3D、Hiera-L以及不同配置的V-JEPA。</li>
+<li><strong>真实世界平台</strong>：使用UR10机器人和Robotiq夹爪，在实验室环境中进行评估，该环境与训练数据（厨房环境）的背景和光照条件不同。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2510.03706v1/Figure_5_RealWorld_7.png" alt="真实世界实验"></p>
+<blockquote>
+<p><strong>图6</strong>：真实世界实验设置。部署UR10机器人执行打开、关闭、倾倒、切割和放置动作。顶行左侧为打开工具箱，右侧为将杯中物倒入平底锅；底行左侧为开/关动作使用的物体，右侧为切、放、倒动作使用的物体。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>预训练方法比较（表I）</strong>：在末端执行器位姿预测任务上，使用EmbodiSwap数据训练时，基于视频特征预测自监督预训练的V-JEPA模型（ViT-L）性能最佳，综合平移和旋转误差为0.275，显著优于其他基于图像或视频预训练的模型（如π₀误差为0.323，ResNet-50误差为0.354）。这表明为视频特征预测设计的预训练方法在此任务上具有优势。</li>
+<li><strong>真实世界机器人评估（表II）</strong>：<ul>
+<li>本文方法（V-JEPA over ViT-L with EmbodiSwap data）在85次试验中取得了70次成功，**成功率达82%**。</li>
+<li>显著优于两个基线：1) 使用30个实验室演示进行少样本训练的π₀模型（15/85）；2) 使用EmbodiSwap数据训练的零样本π₀模型（24/85）。</li>
+<li>分动作看，本文方法在打开（19/20）、关闭（17/20）、切割（14/15）、放置（10/15）和倾倒（10/15）动作上均表现优异。</li>
+</ul>
+</li>
+<li><strong>消融与观察</strong>：<ul>
+<li><strong>输入形式</strong>：与使用视频序列作为输入相比，使用单帧图像输入（如图1所示）性能更优。</li>
+<li><strong>感知输入</strong>：对于<code>place</code>动作，不提供本体感觉信息时网络性能更好；对于<code>pour</code>动作，提供噪声动作位置估计作为输入有助于网络依赖视觉线索。</li>
+<li><strong>外观差异</strong>：在部署时，将物理机器人的关节角度渲染成合成图像并覆盖到输入图像上以对齐训练外观，但实验发现此替换对模型预测影响不大。</li>
+</ul>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>EmbodiSwap</strong>，一种将光真实感机器人夹爪覆盖到人类视频上的方法，并创建了一个大规模机器人操作数据集，用于桥接具身鸿沟。</li>
+<li>创新性地<strong>重新利用了V-JEPA</strong>这一互联网规模视频预测模型，用于零样本模仿学习，构建了闭环操作策略，在真实世界测试中达到82%的成功率。</li>
+<li>通过系统性的比较，<strong>实证表明</strong>为特征级视频预测预训练的V-JEPA模型，在预测未来末端执行器轨迹任务上，优于机器人领域更常用的其他预训练方法。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提及的局限性包括：当前方法主要依赖于手部运动，未显式建模物体3D运动（因为后者更易出错）；对于<code>place</code>动作，需要学习复杂的空间关系（物体形状、夹爪对齐、目标位置）。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>数据生成范式</strong>：EmbodiSwap提供了一种利用丰富人类视频资源生成机器人训练数据的可行路径，可推广至更多机器人形态和任务。</li>
+<li><strong>视觉主干选择</strong>：本工作表明，在机器人学习领域，采用为视频理解预训练的先进模型（如V-JEPA）可能比直接采用传统的图像预训练模型更具潜力，这为机器人视觉表征学习提供了新方向。</li>
+<li><strong>零样本学习框架</strong>：所提出的不依赖目标图像的策略学习框架，为实现更通用的、可直接从人类视频中学习的机器人系统提供了参考。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出EmbodiSwap方法，以解决零样本机器人模仿学习中人类视频与机器人形态不匹配（“具身鸿沟”）的核心问题。该方法通过合成逼真的机器人覆盖层替换人类视频中的人手，并创新性地将V-JEPA视觉骨干网络从视频理解领域迁移至机器人模仿学习。在真实世界测试中，基于该方法的零样本训练模型取得了82%的成功率，优于传统小样本训练方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.03706" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

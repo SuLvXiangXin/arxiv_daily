@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FieldGen: From Teleoperated Pre-Manipulation Trajectories to Field-Guided Data Generation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>FieldGen: From Teleoperated Pre-Manipulation Trajectories to Field-Guided Data Generation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.20774" target="_blank" rel="noreferrer">2510.20774</a></span>
+        <span>作者: Yao Mu Team</span>
+        <span>日期: 2025-10-23</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人操作数据收集方法面临规模、多样性与质量之间的根本权衡。基于仿真的方法可规模化生成数据，但存在难以克服的模拟到真实（sim-to-real）的鸿沟；基于遥操作的方法能产生高质量演示，但受限于单次操作成本高、操作者认知疲劳以及无意识中趋向于固定的运动模式，导致数据多样性不足且难以规模化。现有半自动化方法（如PATO、GCENT）虽试图缓解，但仍依赖于预训练策略，可能无法从根本上突破人类演示的行为约束。</p>
+<p>本文针对“如何以最小人力成本规模化收集高质量、多样化的真实世界操作数据”这一痛点，提出了基于“阶段解耦”和“场引导”的新视角。其核心思路是：将操作任务分解为允许轨迹多样化的“预操作”阶段和需要专家精度的“精细操作”阶段；首先收集少量强调关键接触和位姿的人类演示，从中构建一个“吸引场”；随后，通过自动化脚本采样随机初始观测，并计算向该场渐进收敛的轨迹，从而大规模生成预操作阶段的数据。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>FieldGen的整体流程分为两个阶段：1）<strong>精细操作阶段</strong>：通过遥操作收集少量演示，标注关键的操作位姿（位置$p_G$和方向$R_G$），用于构建预操作场$\mathcal{F}_{Gen}$。2）<strong>场引导的接近阶段</strong>：基于构建的场，自动化脚本从多样化的末端执行器配置中随机采样观测$o_t$，并通过渐近地向场滚动来生成相应的动作序列$a_t$。其输入是随机采样的机器人末端位姿和RGB观测，输出是朝向操作位姿的一系列动作（末端执行器位姿增量）。</p>
+<p><img src="https://arxiv.org/html/2510.20774v2/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：FieldGen半自动数据生成框架。左侧展示了从少量人类遥操作演示中提取关键操作位姿；右侧展示了基于预操作场（PMF）自动生成大量多样化接近轨迹的过程。</p>
+</blockquote>
+<p>核心模块是<strong>预操作场（Pre-Manipulation Field， PMF）</strong>的构造，它被分解为位置锥形场$\mathcal{F}<em>{pos}$和方向球形场$\mathcal{F}</em>{ori}$。</p>
+<p><img src="https://arxiv.org/html/2510.20774v2/x2.png" alt="场构造"></p>
+<blockquote>
+<p><strong>图2</strong>：(a) 位置锥形场示意图。目标点$G$作为零重力汇点，场线在锥体内平滑收敛至$G$，在锥体外先平行于轴方向$\hat{u}$对齐再进入锥体。(b) 方向球形场示意图。所有场线均收敛至球心，即目标方向$R_G$。</p>
+</blockquote>
+<p><strong>位置锥形场</strong>确保末端执行器沿夹爪轴方向（$\hat{u}$，与夹爪闭合轴相反）接近目标位置。对于一个采样点$Q$，计算其沿轴方向的距离$a$和径向距离$r$。若$Q$在锥内（$r \leq \tan\theta,a$），则沿$G$、$Q$、$\hat{u}$平面内的半摆线曲线平滑收敛至$G$；若在锥外，则先沿$\hat{u}$方向投影至锥面点$P$，再沿摆线曲线从$P$运动至$G$。最终平移动作增量$\Delta p$由此曲线决定。</p>
+<p><strong>方向球形场</strong>确保夹爪方向与目标方向对齐。对于采样方向$R_Q$，计算其与目标方向$R_G$的相对旋转$R_{\Delta}$，并取其对数映射得到轴角向量$\omega$，则角速度修正量$\Delta R = -K_{R},\omega$，使方向平滑收敛。</p>
+<p>生成轨迹后，通过除以参数$\beta$（控制相邻帧间的平均位移）确定动作序列长度，并提取固定大小的片段用于训练。</p>
+<p>与现有方法相比，FieldGen的创新点在于：1) <strong>根本性的阶段解耦</strong>：将需要高精度监督的接触操作与允许自动多样化的接近过程分离。2) <strong>基于几何场的轨迹生成</strong>：利用从少量演示中抽象出的锥形场和球形场作为几何引导，自动生成物理上合理且多样化的轨迹，而非依赖预训练策略或简单重复人类模式。</p>
+<p>此外，论文扩展了<strong>FieldGen-Reward</strong>，通过在成功端点$P_O$周围半径为$R$的球体内随机采样新端点$P_N$来生成质量（奖励）连续变化的轨迹，奖励定义为$reward=1-|P_O P_N|/R$，从而为策略学习提供明确的质量信号。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在AgiBot G1机器人上进行，使用NVIDIA Orin进行推理。评估了Diffusion Policy (DP) 和 RDT-small 两种策略。任务包括：Pick（抓取）、Rotate Pick（旋转抓取）、Transparent Pick（透明物体抓取）、Affordance Pick（抓取特定部位）。</p>
+<p><img src="https://arxiv.org/html/2510.20774v2/x3.png" alt="实验任务设置"><br><img src="https://arxiv.org/html/2510.20774v2/Talk/setup_Pick.jpg" alt="Pick"><br><img src="https://arxiv.org/html/2510.20774v2/Talk/setup_RotatePick.jpg" alt="Rotate Pick"><br><img src="https://arxiv.org/html/2510.20774v2/Talk/setup_TransparentPick.jpg" alt="Transparent Pick"><br><img src="https://arxiv.org/html/2510.20774v2/Talk/setup_AffordancePick.jpg" alt="Affordance Pick"></p>
+<blockquote>
+<p><strong>图3/4/5/6/7</strong>：实验评估的四个操作任务设置图示。</p>
+</blockquote>
+<p><strong>1. 等时数据有效性实验</strong>：在相同累计收集时间（4-20分钟）下，比较FieldGen与纯遥操作收集的数据所训练策略的性能。</p>
+<p><img src="https://arxiv.org/html/2510.20774v2/x4.png" alt="等时数据有效性结果"></p>
+<blockquote>
+<p><strong>图8</strong>：在相同收集时间预算下，使用FieldGen数据训练的策略（实线）相比使用纯遥操作数据训练的策略（虚线）成功率更高，且随收集时间增长提升更显著。</p>
+</blockquote>
+<p>结果（表I）显示，在所有时间点和任务上，FieldGen均优于遥操作。例如，20分钟时，DP策略在四个任务上的平均成功率，FieldGen为97.9%，远超遥操作的64.6%。RDT-small策略也表现出类似趋势。</p>
+<p><strong>2. 数据质量与泛化实验</strong>：在固定数据量（帧数）下，比较两者在末端执行器初始位姿泛化、物体位置泛化、物体实例泛化三个任务上的性能。</p>
+<p><img src="https://arxiv.org/html/2510.20774v2/x5.png" alt="等数据泛化结果"></p>
+<blockquote>
+<p><strong>图9</strong>：在相同数据量下，FieldGen数据（实线）训练的策略泛化性能优于遥操作数据（虚线），且性能随数据量增长更稳定。</p>
+</blockquote>
+<p>结果（表II）显示，FieldGen数据训练的策略泛化能力显著更强。例如，在“Start EE Pose Gen”任务上，仅用4000帧FieldGen数据，DP策略即达到100%成功率，而遥操作数据仅8.3%。</p>
+<p><strong>3. 轨迹多样性与空间覆盖实验</strong>：比较低（固定始终点遥操作）、中（变起点遥操作）、高（FieldGen）三种多样性水平下的空间覆盖率和下游策略性能。</p>
+<p><img src="https://arxiv.org/html/2510.20774v2/Talk/raw_rgb_2d.png" alt="多样性散点图与结果"></p>
+<blockquote>
+<p><strong>图13</strong>：XY平面上的轨迹散点图显示，FieldGen（高多样性）产生的轨迹空间覆盖更广、更均匀。</p>
+</blockquote>
+<p>结果（表III）表明，FieldGen的空间覆盖率最高（18.14%），且其数据训练出的策略成功率最高（DP和RDT-small平均83.3%），验证了高多样性直接带来更强的策略。</p>
+<p><strong>4. 消融实验</strong>：</p>
+<ul>
+<li><strong>曲线类型</strong>：比较摆线（Cycloid）与贝塞尔（Bézier）曲线。摆线由于具有自然的几何平滑性，成功率更高（DP: 75% vs. 58.3%）。</li>
+<li>**参数$\beta$**：控制轨迹点间距。$\beta$过小导致运动缓慢振荡，过大导致过早执行抓取而失败。实验选择$\beta=0.0025$作为平衡点。</li>
+<li><strong>FieldGen-Reward</strong>：引入奖励标注后，策略（DP-R.）性能进一步提升。在4分钟收集时间内，平均成功率从50.0%提升至79.2%。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2510.20774v2/x6.png" alt="消融实验结果"><br><img src="https://arxiv.org/html/2510.20774v2/x7.png" alt="参数β消融"><br><img src="https://arxiv.org/html/2510.20774v2/x10.png" alt="Reward效果"></p>
+<blockquote>
+<p><strong>图11/12/16</strong>：(a) 摆线曲线相比贝塞尔曲线能带来更高的任务成功率。(b) 参数$\beta$对任务成功率的影响，需平衡运动效率与可靠性。(c) 使用FieldGen-Reward数据（DP-R.）训练的策略比使用标准FieldGen数据（DP）训练的策略性能更优。</p>
+</blockquote>
+<p><strong>5. 人力效率评估</strong>：测量两小时内的“有效收集时间占比”和“帧收集速率”。FieldGen的有效收集时间占比为66.73%（遥操作27.07%），帧收集速率为1203.14帧/分钟（遥操作569.10帧/分钟），分别提升了2.47倍和2.11倍，显著降低了操作者认知负荷。</p>
+<p><img src="https://arxiv.org/html/2510.20774v2/x8.png" alt="效率对比"><br><img src="https://arxiv.org/html/2510.20774v2/x9.png" alt="收集速率对比"></p>
+<blockquote>
+<p><strong>图14/15</strong>：(a) FieldGen将大部分收集时间转化为仅需轻度监督的自主执行，有效收集时间占比大幅提升。(b) FieldGen的数据生成吞吐量（帧/分钟）是纯遥操作的两倍以上。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了<strong>预操作场（PMF）</strong>这一新概念，作为一个从少量演示中建模和推断的抽象表示，为规模化半自动真实机器人数据收集提供了统一框架。2) 设计了一种基于<strong>操作阶段解耦</strong>的半自动收集流程，将需要人类专家精度的接触操作与可自动化生成多样化轨迹的接近过程分离，实现了高质量与高多样性的统一。3) 通过大量实验验证了该方法在<strong>数据效率、策略性能、泛化能力、多样性覆盖以及人力成本节省</strong>方面的显著优势。</p>
+<p>论文提到的局限性在于，当前方法主要专注于预操作阶段的自动化生成，精细操作阶段仍依赖于人类演示。对于更复杂的、非预定义路径的精细操作（如插入、装配），完全自动化生成仍具挑战。</p>
+<p>这项工作对后续研究的启示在于：1) <strong>场引导的生成范式</strong>可以扩展到更复杂的操作阶段或不同类型的场（如基于力的场）。2) <strong>阶段解耦思想</strong>可激励研究者进一步探索任务中哪些子阶段适合自动化增强。3) <strong>FieldGen-Reward</strong>展示了利用质量连续标注的数据进行训练的优势，为结合离线强化学习或更精细的奖励塑形提供了新思路。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出FieldGen框架，以解决机器人操作数据收集中规模、多样性与质量难以平衡的核心问题。该方法将操作分解为预操作与精细操作两阶段：人类提供关键接触点演示后，利用吸引力场自动生成多样化的轨迹，并结合FieldGen-Reward进行奖励标注以增强策略学习。实验表明，基于FieldGen训练的策略相比遥操作基线取得了更高的成功率和稳定性，同时显著降低了真实世界数据收集所需的人力成本。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.20774" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

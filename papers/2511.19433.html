@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Mixture of Horizons in Action Chunking - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Mixture of Horizons in Action Chunking</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.19433" target="_blank" rel="noreferrer">2511.19433</a></span>
+        <span>作者: Mingyu Ding Team</span>
+        <span>日期: 2025-11-24</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前主流的视觉-语言-动作模型通常采用基于全注意力的动作模块和动作分块策略，即在每个控制步骤预测未来一段连续的动作序列。尽管分块策略被证明有效，但模型性能对训练时使用的分块长度（称为“视野”）高度敏感。现有方法普遍采用固定的单一视野，这可能导致次优性能并限制了模型的灵活性，例如无法在推理时进行自适应延迟控制。</p>
+<p>本文通过实证研究揭示了视野选择的内在权衡：较长的视野能提供更强的全局预见性，从而在长时序任务上表现更好，但会牺牲细粒度的控制精度；较短的视野能实现更精确的局部控制，但在需要长期规划的任务上表现不佳。这表明固定单一的视野选择是模型泛化的一个固有瓶颈。</p>
+<p>本文针对这一具体痛点，提出了混合视野的新视角。其核心思路是：将单一动作块重排为具有不同视野的多个片段，使用共享的动作Transformer并行处理它们，并通过一个轻量级的线性门控机制融合各视野在每个时间步的预测输出，从而在一个模型中联合利用长视野的预见性和短视野的精确性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架以最大视野 H 和一组候选视野 ℋ = {h₁, …, h_N} 为输入。给定一个真实动作块 A_t = (a_{t,1}, …, a_{t,H})，为每个候选视野 h 构造一个截断块 A_t^{(h)} = (a_{t,1}, …, a_{t,h})。为了高效计算，将所有截断块填充至长度 H 以进行批处理，并使用特定于视野的注意力掩码来屏蔽位置 k &gt; h 的信息。这样，共享的动作Transformer可以并行处理所有视野。视觉-语言模型编码的上下文表示仅需计算一次，且动作Transformer本身是轻量级的，因此MoH策略在训练和推理中引入的开销极小。</p>
+<p><img src="https://arxiv.org/html/2511.19433v1/x3.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图3</strong>：混合视野框架总览。动作相关输入被重排为不同视野，然后由共享的动作Transformer并行处理。一个仅含2k参数的门控头产生每步、每视野的权重，用于将各视野的预测融合为最终的动作预测。该策略对任何基于全注意力的动作Transformer（包括流匹配和一步预测策略）都是即插即用的。</p>
+</blockquote>
+<p>核心模块是门控混合机制。共享动作Transformer为每个视野 h 产生隐藏状态 Z_t^{(h)} ∈ ℝ^{h×d}，动作头将其转换为视野特定的预测 Â<em>t^{(h)} = (â</em>{t,1}^{(h)}, …, â_{t,h}^{(h)})。一个附加在共享Transformer之上的线性层作为门控头，为每个时间步 k 和视野 h 产生逻辑值 g_{t,k,h}。对于给定的时间步 k，仅当 k ≤ h 时视野 h 才有效；对无效视野进行掩码，并在剩余有效视野上进行归一化，得到权重 α_{t,k,h}。最终在时间步 k 的融合预测是 â_{t,k} = Σ_{h∈ℋ: k≤h} α_{t,k,h} â_{t,k}^{(h)}。</p>
+<p>为防止门控网络崩溃到少数偏好视野，论文引入了平衡损失 L_bal。该损失鼓励在每个由有序边界 {0, h₁, …, h_N} 划分的时间区间内，所有有效视野的权重平均利用率保持平衡，通过最小化这些平均值的变异系数平方来实现。</p>
+<p>训练目标结合了三个部分：基于融合预测 {â_{t,k}} 计算的损失 L_mix、各视野独立预测 {Â_t^{(h)}} 的损失之和 L_ind，以及平衡损失 L_bal。总损失为 L = L_mix + λ_ind L_ind + λ_bal L_bal，其中 λ_ind 和 λ_bal 经验性地设为 1 和 10^{-3}。</p>
+<p>与现有方法相比，创新点在于：1) 首次系统性地通过并行处理和门控融合来整合多尺度视野的优势，而非使用单一视野。2) 设计是通用且高效的，可无缝插入任何基于全注意力的动作模块，几乎不增加计算开销。3) 自然地启用了基于跨视野共识的动态推理方案。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了LIBERO和RoboTwin2.0两个模拟基准进行评估。LIBERO包含Spatial、Object、Goal、Long四个任务套件，共40个任务。RoboTwin2.0是一个双手操作基准，论文在7个代表性任务上进行了评估。实验平台使用4张NVIDIA A100 GPU。</p>
+<p>对比的基线方法包括流匹配策略 π_0、π_0.5 和一步回归策略 π_reg。同时，论文在结果表中与众多SOTA VLA模型进行了对比，如OpenVLA、CoT-VLA、Diffusion Policy、SmolVLA、X-VLA等。</p>
+<p><img src="https://arxiv.org/html/2511.19433v1/x1.png" alt="LIBERO实验结果"></p>
+<blockquote>
+<p><strong>图1</strong>：动作视野对 π_0 模型的影响。评估时执行预测块中的前5个动作。不同视野在四个LIBERO任务套件上表现出权衡效应。本文的混合视野策略缓解了这种权衡，提高了整体成功率。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.19433v1/x4.png" alt="RoboTwin2.0实验结果"></p>
+<blockquote>
+<p><strong>图4</strong>：在RoboTwin 2.0基准上与SOTA方法的比较。π_0 结合MoH在大多数任务上取得了最高的平均成功率。</p>
+</blockquote>
+<p>关键实验结果总结如下：</p>
+<ul>
+<li>在LIBERO上（表1），MoH策略为所有基线带来了显著提升。π_0.5 结合MoH达到了99.0%的平均成功率，创造了新的SOTA。π_0 结合MoH将平均成功率从93.8%提升至95.1%，π_reg 结合MoH从95.2%提升至96.4%。</li>
+<li>在RoboTwin2.0上（图4），π_0 结合MoH在Easy和Hard设置下均取得了最高的平均成功率（分别为98.6%和93.6%），并 consistently 优于基线 π_0。</li>
+</ul>
+<p>消融实验（表2，表3）探索了不同组件的影响：</p>
+<ol>
+<li><strong>视野密度</strong>：固定最大视野H_max=30，改变候选视野的步长d。引入少量视野（如d=10，即三个视野）即可将平均成功率从97.7%提升至98.3%。步长d=3（即10个视野）时取得最佳性能99.0%，表明更密集的视野有助于进一步调和短期精度与长期预见性，但并非越多越好。</li>
+<li><strong>门控与平衡策略</strong>：与基线相比，仅使用损失重加权（无MoH）可提升至98.1%；使用平均融合（无门控）可提升至98.4%；使用MoH但移除平衡损失 L_bal 可提升至98.5%；而完整的MoH（含门控和 L_bal）达到了最佳的99.0%。这表明门控机制比简单平均更有效，且平衡损失对于防止门控崩溃、确保所有视野被有效利用至关重要。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li>系统性地研究了VLA模型中动作分块视野的影响，揭示了长期预见性与短期精度之间的关键权衡。</li>
+<li>提出了混合视野策略，这是一种即插即用、低开销的方法，能够缓解上述权衡，提升模型性能和泛化能力。</li>
+<li>提出了一种基于跨视野共识的动态推理方案，通过选择跨视野一致的稳定动作来执行，实现了更稳定、更高效的执行。</li>
+</ol>
+<p>论文自身提到的局限性包括：混合视野的密度（步长d）需要手动选择；动态推理方案中的阈值参数（如缩放比r、最小步数n）需要调整。</p>
+<p>对后续研究的启示：1) 可以探索自适应的视野选择机制，而非预定义集合。2) MoH的思想可以扩展到其他需要处理多尺度时序依赖的序列预测任务中。3) 可以研究更复杂的、基于内容的门控融合机制，以动态地根据任务上下文调整不同视野的贡献。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作（VLA）模型在机器人操作中，因固定动作块长度（视野）导致的性能权衡问题：长视野利于全局规划但损害细粒度精度，短视野则相反。为此，提出混合视野（MoH）策略，将动作块拆分为不同视野的片段，通过共享动作变换器并行处理，并利用轻量线性门融合输出。该方法能同时利用长短期优势，即插即用，且支持动态自适应推理。实验表明，MoH显著提升了模型性能与泛化能力，在混合任务设置下，仅需3万次训练迭代即在LIBERO基准上达到99%的平均成功率，且推理吞吐量较基线提升2.5倍。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.19433" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

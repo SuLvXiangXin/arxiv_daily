@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>GraSP-VLA: Graph-based Symbolic Action Representation for Long-Horizon Planning with VLA Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>GraSP-VLA: Graph-based Symbolic Action Representation for Long-Horizon Planning with VLA Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.04357" target="_blank" rel="noreferrer">2511.04357</a></span>
+        <span>作者: Cédric Buche Team</span>
+        <span>日期: 2025-11-06</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，从演示中学习新技能的自主机器人部署是一个重要挑战。现有方案主要分为两类：一是采用视觉-语言-动作（VLA）模型的端到端模仿学习，二是采用动作模型学习（AML）的符号化方法。一方面，当前的VLA模型缺乏高层符号规划能力，这阻碍了其在长时程任务中的表现。另一方面，AML等符号化方法依赖于人工专家设计谓词，缺乏泛化性和可扩展性。本文针对AML方法中人工设计符号表示成本高、泛化性差，以及VLA模型在长时程任务中性能下降的具体痛点，提出了一种新的神经符号方法。核心思路是利用连续场景图表示从人类演示中生成符号表示，该表示用于在推理时生成新的规划域，并作为编排器来调度低层VLA策略，从而扩展可连续复现的动作数量。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>GraSP-VLA架构分为两个阶段：任务建模（Phase I）和任务复现（Phase II）。Phase I从单次演示中提取动作描述：首先训练场景图生成（SGG）模型识别任务相关关系；然后在推理时，使用连续场景图聚合方法将场景图在时间上聚合；最后，使用PDDL动作生成器提取PDDL格式的动作描述。Phase II逐步复现整个任务：动作编排器断言前提条件，并通过客户端-服务器通信调用策略库中相应的预训练VLA策略来执行每个动作。</p>
+<p><img src="https://arxiv.org/html/2511.04357v1/images/server_arch4.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：GraSP-VLA的整体架构。顶部：使用连续场景图生成从单次演示中自动提取PDDL动作。底部：使用预训练的VLA策略库执行任务。</p>
+</blockquote>
+<p><strong>核心模块1：多层场景图生成（SGG）</strong>。传统SGG模型输出 <code>&lt;主体，谓词，客体&gt;</code> 三元组。本文根据关系类型将其扩展为四层表示：功能层（如人手动作）、拓扑层（空间关系）、物理部分-整体层（层级关系）和属性层（非不变属性）。通过对每个关系类别的谓词子集分别应用argmax函数，模型最多可预测 <code>n×(n-1)×4</code> 个关系。一个谓词可属于多个层（如“on”既可用于拓扑关系，也可用于功能关系）。关系分类由微调的大语言模型完成。生成的多层场景图 <code>G&#39; = {V, E, L}</code>，其中节点 <code>v = (b, c, w)</code> 包含边界框、类别标签和置信度，边 <code>e = (u, v, l, c, w)</code> 包含相连节点、所属层、类别和置信度。</p>
+<p><strong>核心模块2：连续场景图（CSG）</strong>。在多层场景图<code>G&#39;</code>之上，定义连续场景图<code>G_k^+ = {V_k, E_k, f_k, l_k}</code>作为机器人的内部记忆，其中节点和边随时间持续更新。通过多目标跟踪（MOT）算法为每个物体关联跟踪ID，使节点在时间上持久化。为使边连续，为每对节点关联一个 <code>n×m</code> 矩阵（<code>n</code>为时间戳，<code>m=4</code>为层数），记录每个时间戳、每层的关系状态。</p>
+<p><img src="https://arxiv.org/html/2511.04357v1/images/state_refinement.png" alt="状态精炼示例"></p>
+<blockquote>
+<p><strong>图2</strong>：给定层中两个节点间关系的状态精炼示例。状态由关系标签表示（例如，8=above，5=below）。滑动窗口设置为3个时间戳（即θ=3）。</p>
+</blockquote>
+<p><strong>状态精炼机制</strong>：为提升鲁棒性，引入基于滑动窗口（θ=3）的状态精炼机制。对于新检测到的关系，会与其先前状态比较，并等待未来的检测来确认或反驳该关系（如图2所示），以此过滤错误预测并确保表示符合现实约束。此外，每条边关联一个置信度权重<code>ω_r</code>，会根据检测到该关系的时间间隔进行更新，低置信度的关系会被自动移除。</p>
+<p><strong>核心模块3：自动动作描述生成</strong>。目标是利用连续场景图<code>G_k^+</code>自动生成规划域（PDDL格式）。首先，将图中节点区分为<code>agent</code>（标签为<code>person</code>）和<code>object</code>。一个动作被定义为图更新前后关系集合<code>Π_k^-</code>和<code>Π_(k+γ)^+</code>之间的差异。通过观察功能层关系如何导致同一客体在拓扑层关系的变化来识别过渡状态（即动作）。</p>
+<p><img src="https://arxiv.org/html/2511.04357v1/images/transition.png" alt="过渡识别示例"></p>
+<blockquote>
+<p><strong>图3</strong>：使用连续场景图的拓扑层和功能层交互识别“将玻璃杯移到架子”动作的过渡示例。</p>
+</blockquote>
+<p>具体算法（Algorithm 1）为：在每个新时间戳，遍历当前检测到的所有功能层关系<code>r_f</code>。对于每个<code>r_f</code>，在滑动窗口<code>ζ</code>（设为10）内，向前查找其客体在拓扑层的关系作为前提条件（P），向后查找作为效果（E）。如果前提条件和效果均非空且不相同，则生成一个PDDL动作，并将前提条件中有而效果中没有的关系作为否定效果（NE）加入效果集。</p>
+<p><strong>核心模块4：VLA策略调度</strong>。在推理时，动作编排器利用生成的PDDL动作描述来编排任务。每个PDDL动作根据涉及的谓词和客体映射到已知技能（即预训练的VLA策略），并通过技能执行服务器调用。在开环模仿学习范式下，不使用专用规划器，而是直接按序验证每个动作的前提条件（基于当前<code>G_k^+</code>状态）并执行相应策略，通过同步的客户端-服务器通信进行。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验分为三部分：1) SGG骨干网络评估；2) 连续场景图与动作描述生成在DAHLIA数据集上的验证；3) 整个GraSP-VLA架构在SO-101机器人上的真实世界实验评估。</p>
+<p><strong>SGG评估</strong>：使用基于YOLOv8m的REACT模型，在IndoorVG数据集（84个物体类，34个谓词类）上训练。采用Recall@K和meanRecall@K指标评估。为减少误检，设置了置信度阈值α=0.194。</p>
+<p><strong>表I</strong>：REACT SGG模型在IndoorVG数据集上的性能（α=0.194）。</p>
+<table>
+<thead>
+<tr>
+<th align="left">模型</th>
+<th align="left">R@50/100</th>
+<th align="left">mR@50/100</th>
+<th align="left">mAP50</th>
+<th align="left">延迟(ms)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">REACT</td>
+<td align="left">31.4 / 34.5</td>
+<td align="left">17.5 / 19.7</td>
+<td align="left">37.9</td>
+<td align="left">26.6</td>
+</tr>
+</tbody></table>
+<p>结果显示，关系预测指标相对较低，特别是在细粒度动作谓词（如<code>holding</code>）上准确率不高（Recall@100为0.29），这反映了SGG领域已知的长尾分布挑战。</p>
+<p><strong>连续场景图与动作描述评估</strong>：使用DAHLIA数据集，并采用OC-SORT进行多目标跟踪以构建连续场景图。评估自动动作描述生成时，与一个基线方法（仅考虑涉及<code>person</code>节点的关系变化）对比，采用召回率（TP/(TP+FN)）指标。</p>
+<p><strong>表II</strong>：DAHLIA数据集上规划域生成的结果（TP=真阳性，FP=假阳性）。</p>
+<table>
+<thead>
+<tr>
+<th align="left">视频</th>
+<th align="left">基线 (TP/FP)</th>
+<th align="left">本文方法 (TP/FP)</th>
+<th align="left">召回率</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">1</td>
+<td align="left">3/0</td>
+<td align="left">21/14</td>
+<td align="left">0.69</td>
+</tr>
+<tr>
+<td align="left">2</td>
+<td align="left">1/0</td>
+<td align="left">19/28</td>
+<td align="left">0.51</td>
+</tr>
+<tr>
+<td align="left">...</td>
+<td align="left">...</td>
+<td align="left">...</td>
+<td align="left">...</td>
+</tr>
+</tbody></table>
+<p>结果表明，本文方法能提取出更多正确的动作描述（真阳性显著高于基线），平均召回率达到0.69，但同时也产生了大量误报（假阳性）。这主要归因于SGG模型在关系预测，尤其是细粒度动作谓词上的不准确性。</p>
+<p><strong>真实世界实验</strong>：在SO-101机械臂上执行一个长时程任务（如“准备早餐”），该任务可分解为多个原子动作（如拿起刀、切水果等）。策略库由在简单行为上预训练的多个VLA策略组成。</p>
+<p><img src="https://arxiv.org/html/2511.04357v1/images/init_pose.jpg" alt="初始姿态"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界实验中，SO-101机械臂的初始姿态。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.04357v1/images/end_pose_1.jpg" alt="结束姿态1"></p>
+<blockquote>
+<p><strong>图5</strong>：任务执行过程中的一个结束姿态示例。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.04357v1/images/end_pose_2.jpg" alt="结束姿态2"></p>
+<blockquote>
+<p><strong>图6</strong>：任务执行完成的最终结束姿态示例。</p>
+</blockquote>
+<p>实验表明，GraSP-VLA能够成功编排低层VLA策略，按正确顺序执行原子动作，从而完成演示的长时程任务。这验证了其作为VLA策略编排器的潜力。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了将场景图表示扩展为<strong>多层连续场景图</strong>，作为机器人的内部记忆；2) 提出了一种从连续场景图中<strong>自动生成规划域（PDDL动作）的新算法</strong>；3) 设计了基于连续场景图的<strong>编排器</strong>，用于将任务分解为原子行为序列；4) 实现了采用<strong>客户端-服务器执行的预训练VLA策略库</strong>。</p>
+<p>论文提到的局限性包括：SGG模型在细粒度动作谓词上的准确率仍然较低，这直接影响动作描述的生成质量；当前系统在任务复现阶段是开环的，依赖于初始演示提取的固定动作序列。</p>
+<p>对后续研究的启示：可以致力于改进SGG模型，特别是提升对动作相关关系的识别能力；可以探索将闭环规划或重新规划整合到系统中，以处理执行过程中的不确定性；此外，该框架可扩展用于多智能体协作任务的建模与编排。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出GraSP-VLA框架，旨在解决自主机器人在长视野任务中规划能力不足的问题。现有VLA模型缺乏高级符号规划，而符号学习方法泛化性与可扩展性有限。该框架采用神经符号方法，通过连续场景图表示将人类演示转化为符号表示，并以此作为低层VLA策略的协调器，支持动作序列的扩展生成。实验表明，该方法能有效从观测数据生成规划领域，其场景图表示在真实长视野任务中展现出协调VLA策略的潜力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.04357" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

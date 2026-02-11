@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SARM: Stage-Aware Reward Modeling for Long Horizon Robot Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>SARM: Stage-Aware Reward Modeling for Long Horizon Robot Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.25358" target="_blank" rel="noreferrer">2509.25358</a></span>
+        <span>作者: Philipp Wu Team</span>
+        <span>日期: 2025-09-29</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人学习领域近期通过整合感知、控制和语言理解，在统一框架下执行复杂任务方面展现出潜力。然而，当前方法在处理长视野、接触丰富的操作任务（如处理可变形物体）时仍面临困难，此类任务的演示数据质量往往参差不齐。现有主流方法如基于帧索引的奖励标签方法，在任务时长可变的长序列任务（如折叠T恤）中会失效，因为相同的任务状态可能因演示时长不同而被赋予差异巨大的进度值，引入严重的标签噪声。此外，基于视觉语言模型（VLM）的奖励模型通常需要处理从初始帧开始的整个轨迹以解析时间依赖性，增加了数据和计算需求，阻碍了扩展。</p>
+<p>本文针对长视野操作任务中奖励信号难以一致、准确建模的痛点，提出了一个阶段感知的新视角。核心思路是利用自然语言子任务注释来自动生成与语义对齐的、跨演示一致的进度标签，并构建一个联合预测高级任务阶段和阶段内细粒度进度的奖励模型，从而为下游策略学习提供稳健的监督信号。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>方法整体包含奖励模型训练和基于奖励的策略学习两部分。输入是带有多视角视频、关节状态和动作的轨迹数据，输出是预测的任务进度值，用于指导策略训练。</p>
+<p><img src="https://arxiv.org/html/2509.25358v3/x1.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图1</strong>：方法整体框架。(a) 数据处理：利用自然语言子任务协议对演示进行标注。(b) 奖励模型训练：训练阶段感知奖励模型（SARM）。(c) 策略训练：使用奖励信号通过奖励对齐的行为克隆（RA-BC）框架训练策略。</p>
+</blockquote>
+<p><strong>核心模块1：基于子任务注释的标签生成</strong><br>为克服帧索引标签的局限性，本文设计了子任务标注协议（如稀疏和密集两种，示例如图5、图6）。标注者根据协议将轨迹分割为K个子任务，记录每个子任务的起止帧。基于整个数据集中各子任务的平均时间比例先验 (\bar{\alpha}<em>k)，为每个子任务的起止帧分配累积进度值（起始为(P</em>{k-1})，结束为(P_k)），子任务内的帧则通过时间线性插值获得细粒度进度标签(y_t)。这确保了语义相似的动作状态获得相近的进度值，与演示时长无关。</p>
+<p><strong>核心模块2：阶段感知奖励模型（SARM）架构</strong><br>SARM采用双头架构，共享一个骨干网络，分别预测任务阶段和细粒度进度。</p>
+<p><img src="https://arxiv.org/html/2509.25358v3/x2.png" alt="SARM架构"></p>
+<blockquote>
+<p><strong>图2</strong>：SARM架构概述。左：SARM包含阶段估计器和子任务估计器。首先从观测预测任务阶段，该预测作为先验上下文传入子任务估计器以预测阶段内的进度值。右：估计器架构，阶段和子任务估计器共享此结构。</p>
+</blockquote>
+<p>具体而言，输入为N帧的图像序列和关节状态。图像通过冻结的CLIP编码器提取特征，与投影后的关节状态在(d_{\text{model}})维空间融合。仅对第一帧添加显式位置偏置以防止绝对时间信息泄露。融合后的多模态序列经Transformer编码器处理以捕获时序依赖。最后，阶段模型头输出阶段logits，经softmax得到阶段概率分布(\Pi_{1:N})和离散阶段预测(\hat{S}<em>{1:N})；子任务模型头则以前一阶段预测为条件，输出标量进度预测(\hat{\tau}</em>{1:N})。最终归一化进度预测(\hat{y}<em>{1:N})由公式(\hat{y}</em>{1:N} = \hat{P}<em>{k-1,1:N} + \bar{\alpha}</em>{k,1:N} \hat{\tau}<em>{1:N})计算得到，其中(\hat{P}</em>{k-1})和(\bar{\alpha}_{k})由预测的阶段分布(\Pi)和数据集先验计算。</p>
+<p><strong>核心模块3：奖励对齐的行为克隆（RA-BC）</strong><br>RA-BC利用训练好的奖励模型为行为克隆提供加权。对于每个训练样本i，计算一个时间窗口（锚点）与其后移一个动作块（步长Δ）的窗口之间的进度增量(\widehat{r}<em>i = \phi(o_i^{t+\Delta}) - \phi(o_i^t))，作为预期改进的信号。通过在线运行的统计量（均值μ和标准差σ）对该增量进行校准，并映射到权重(w_i)。权重计算结合了线性斜坡函数和基于阈值κ的先验覆盖，以清晰区分优劣数据。最终的RA-BC损失函数为归一化的加权损失：(\mathcal{L}</em>{\text{RA-BC}}(\theta)=\frac{\sum_{i=1}^{N}w_i \ell(\pi_{\theta}(o_i), a_i)}{\sum_{i=1}^{N}w_i+\varepsilon})。</p>
+<p><strong>创新点</strong></p>
+<ol>
+<li><strong>阶段感知的进度建模</strong>：联合建模离散任务阶段和连续阶段内进度，克服了单一连续进度信号在长视野任务中的模糊性。</li>
+<li><strong>基于语义的自动标签生成</strong>：利用子任务注释和数据集级时间先验自动生成一致且鲁棒的进度标签，替代了不可靠的帧索引标签。</li>
+<li><strong>数据质量感知的策略学习</strong>：提出RA-BC框架，利用奖励模型估计的进度增量动态加权训练样本，自动筛选高质量数据，提升策略性能。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：主要评估任务为真实世界的T恤折叠。使用了两个标注数据集：(\mathcal{D}<em>{\text{dense}})（200条轨迹，密集标注）和(\mathcal{D}</em>{\text{sparse}})（500条轨迹，稀疏标注）。策略训练数据集(\mathcal{D}<em>{\text{all}})包含200小时演示，并从中过滤出一个20小时的高质量子集(\mathcal{D}</em>{\text{2min}})。策略基于Pi0模型进行微调。</p>
+<p><strong>基线方法</strong>：对比了多种奖励模型基线，包括GVL、VLC、LIV和ReWiND。</p>
+<p><strong>奖励模型评估结果</strong>：<br>评估分为人类演示进度估计（计算MSE损失）和真实机器人策略rollout进度估计（根据公式10进行分类，计算分类得分ρ）。关键结果如下表所示：</p>
+<p><img src="https://arxiv.org/html/2509.25358v3/x13.png" alt="奖励模型评估表"></p>
+<blockquote>
+<p><strong>表1</strong>：奖励模型评估结果。SARM在人类演示验证集上取得最低MSE（0.008），在机器人rollout分类上取得最高得分ρ（0.94），显著优于所有基线。</p>
+</blockquote>
+<p>SARM在两项评估中均表现最佳。可视化对比（图3）也显示，相比ReWiND，SARM的进度预测更准确、校准更好。</p>
+<p><img src="https://arxiv.org/html/2509.25358v3/x3.png" alt="进度预测可视化"></p>
+<blockquote>
+<p><strong>图3</strong>：T恤折叠演示的预测任务进度可视化。与ReWiND相比，SARM提供了更准确和校准的估计。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：</p>
+<ul>
+<li><strong>单协议训练</strong>：仅用密集或稀疏数据训练的模型性能下降，表明利用异构标注协议的大数据集有优势。</li>
+<li><strong>无回放增强（w/o R）</strong>：在机器人rollout上性能大幅下降（ρ从0.94降至0.67），模型变得过于乐观，说明回放增强对于泛化到真实策略（包含失败案例）至关重要。</li>
+</ul>
+<p><strong>策略学习评估结果</strong>：<br>将T恤折叠任务按难度分解为三个子任务进行策略评估。关键结果如下：</p>
+<p><img src="https://arxiv.org/html/2509.25358v3/x14.png" alt="策略成功率表"></p>
+<blockquote>
+<p><strong>表2</strong>：T恤折叠策略在不同任务和训练步数下的成功率（SR）。RA-BC-SARM在最具挑战性的任务上取得了最高成功率。</p>
+</blockquote>
+<p>使用完整数据集(\mathcal{D}_{\text{all}})和SARM奖励模型的RA-BC-SARM方法取得了最佳性能：在从平整状态开始折叠（中等难度）的任务上达到83%成功率，在从褶皱状态开始（高难度）的任务上达到67%成功率。相比之下，使用同一训练集的普通行为克隆（BC-All）成功率分别仅为8%和0%。即使使用过滤后的高质量数据集（BC-2min），性能也远不及RA-BC-SARM。使用ReWiND奖励模型的RA-BC-ReWiND性能有所提升，但仍不及SARM，这凸显了高质量奖励模型的关键作用。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了SARM，一个阶段感知的视频奖励建模框架，能够从自然语言子任务注释中自动推导出鲁棒且一致的进度标签。</li>
+<li>提出了RA-BC框架，利用学习到的奖励模型来识别高质量演示并重新加权训练数据，显著提升了在多样化、含噪声数据集上的策略学习效果。</li>
+<li>在真实机器人长视野操作任务（T恤折叠）上进行了全面验证，证明了该方法在奖励建模准确性和下游策略性能上均大幅超越现有强基线。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，标注协议（子任务定义）需要人工设计，这可能影响该方法泛化到全新任务上的便捷性。</p>
+<p><strong>后续启示</strong>：本工作强调了在规模化机器人学习中数据质量与数据数量同等重要。奖励建模作为一种为噪声演示提供 grounded 监督信号的工具，是实现可扩展、标注高效模仿学习的关键推动者。未来的工作可以探索如何自动化或半自动化子任务注释过程，以进一步降低应用门槛。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对长视野、接触丰富的机器人操作任务（如折叠T恤）中演示质量不一致的核心问题，提出SARM框架。该框架通过阶段感知奖励建模，联合预测高级任务阶段和各阶段内细粒度进度，并利用自然语言子任务注释自动生成奖励标签，克服了传统帧索引标签的局限。基于此，进一步提出奖励对齐行为克隆（RA-BC），依据奖励估计筛选高质量数据并重新加权样本。实验表明，在折叠T恤任务中，该方法从平整和皱褶状态分别达到83%和67%的成功率，显著超过普通行为克隆的8%和0%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.25358" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

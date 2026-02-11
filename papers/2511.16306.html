@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>InEKFormer: A Hybrid State Estimator for Humanoid Robots - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>InEKFormer: A Hybrid State Estimator for Humanoid Robots</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.16306" target="_blank" rel="noreferrer">2511.16306</a></span>
+        <span>作者: Frank Kirchner Team</span>
+        <span>日期: 2025-11-20</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>人形机器人状态估计的主流方法可分为三类：模型方法（如扩展卡尔曼滤波EKF及其不变版本InEKF）、数据驱动方法（如循环神经网络RNN、Transformer）以及混合方法。模型方法依赖精确的系统模型和手动调优的噪声参数，对模型失配敏感；纯数据驱动方法需要大量训练数据，且在高维状态空间下的计算效率和泛化能力面临挑战。现有混合方法大多将模型与数据驱动组件以<strong>外部并行或串联</strong>方式结合，较少探索两者<strong>内部紧密集成</strong>的方案，且相关研究多集中于四足机器人或低维仿真系统，未充分展示于全尺寸人形机器人这一高维复杂场景。</p>
+<p>本文针对模型失配和噪声参数调优的痛点，提出了将先进的模型方法（InEKF）与强大的数据驱动模型（Transformer）进行<strong>内部深度融合</strong>的新视角。核心思路是：保留InEKF基于李群的状态传播与校正框架，但摒弃其依赖手动调参噪声协方差矩阵来计算卡尔曼增益的传统步骤，转而使用一个Transformer网络，直接从历史状态与观测差异中<strong>学习并预测</strong>最优的卡尔曼增益，从而更好地补偿模型误差和传感器噪声。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>InEKFormer是一个内部耦合的混合状态估计算法。其整体流程（pipeline）为：在每个时间步，算法接收来自机器人传感器的IMU测量值、关节角度和脚部接触力，计算出一组右不变差异特征（F1-F5）作为输入；一个Transformer网络（增益估计器模型）根据这些输入特征序列预测出卡尔曼增益矩阵；随后，该增益被用于InEKF的校正步骤（公式2），结合状态传播结果和腿部运动学观测，输出最终修正后的浮基状态估计。输入是历史状态、观测及接触信息，输出是当前时刻的卡尔曼增益。</p>
+<p><img src="https://arxiv.org/html/2511.16306v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：InEKFormer高层架构框图。展示了数据流：传感器测量（IMU，关节角度，接触力）经过预处理生成输入特征（F1-F5），输入至增益估计器模型（Transformer）预测卡尔曼增益，最终与InEKF的核心步骤（状态传播、观测计算）结合，输出校正后的状态估计。<code>1/z^k</code> 表示k个单位延迟，用于构建历史序列。</p>
+</blockquote>
+<p>核心模块包括两个部分：</p>
+<ol>
+<li><strong>不变扩展卡尔曼滤波（InEKF）框架</strong>：负责状态传播和校正。状态传播（公式1）使用IMU测量和捷联惯性模型进行预测。状态校正（公式2）在预测状态的基础上，利用学习到的卡尔曼增益和来自腿部运动学的观测向量进行更新。状态定义于SE_4(3)李群上（公式3），除了浮基的姿态、速度、位置外，<strong>永久性</strong>包含了左、右脚接触点的位置（<code>c_L^W</code>, <code>c_R^W</code>），以适应Transformer对固定输入维度的要求。</li>
+<li><strong>Transformer增益估计器模型</strong>：这是方法的创新核心。其作用是替代传统InEKF中基于噪声协方差矩阵的卡尔曼增益计算。模型从五类输入特征中学习：<ul>
+<li>F1: 观测差异 (ΔỸ)</li>
+<li>F2: 创新差异 (ΔY)</li>
+<li>F3: 前向演化差异 (ΔX̃)</li>
+<li>F4: 前向更新差异 (ΔX̂)</li>
+<li>F5: 接触状态 (μ_c)<br>特征F1-F4为右不变差异，F5是通过逻辑Sigmoid函数对z向接触力阈值化得到的连续接触状态（公式5）。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2511.16306v1/x3.png" alt="增益估计器架构"></p>
+<blockquote>
+<p><strong>图3</strong>：增益估计器模型详细架构。Transformer采用编码器-解码器结构。编码器处理观测相关特征（F1, F2），模拟观测噪声协方差的计算；解码器处理系统状态相关特征（F3, F4），模拟状态协方差的传播。两者的潜在表示经全连接解码器生成初步增益矩阵 <code>K̄</code>，最后与接触状态 <code>μ_c</code> 按公式6进行加权，得到最终增益估计 <code>K̂</code>。</p>
+</blockquote>
+<p>与现有方法相比，创新点具体体现在：</p>
+<ul>
+<li><strong>深度内部集成</strong>：不同于多数外部结合的混合方法，本文将Transformer深度嵌入到InEKF的增益计算这一核心环节中。</li>
+<li><strong>面向人形机器人的设计</strong>：通过永久扩展状态矩阵和引入连续接触状态输入，解决了人形机器人双脚交替接触带来的动态维度变化问题，使其适用于高维全尺寸人形平台。</li>
+<li><strong>特征工程</strong>：设计了基于李群结构的右不变差异特征（F1-F4），这些特征包含了模型失配和噪声的统计信息，替代了手工调参的协方差矩阵。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>数据集与实验平台</strong>：使用RH5全尺寸人形机器人（32自由度）在仿真（RobotDART）和真实环境中采集的数据集。数据集包含行走、下蹲、转身、髋部运动、单腿平衡等5类动作，共约57.5万个数据样本，包含运动捕捉系统提供的浮基及脚部姿态真值、IMU、关节编码器和六维力/扭矩传感器数据。数据集已公开。</p>
+<p><strong>对比的Baseline方法</strong>：</p>
+<ol>
+<li><strong>InEKF</strong>：作为纯模型方法的代表。</li>
+<li><strong>KalmanNet</strong>：一种内部混合方法，使用RNN学习EKF的卡尔曼增益，是本文最直接的对标方法。</li>
+</ol>
+<p><strong>关键实验结果</strong>：<br>实验分为基线测试（i）、单轨迹测试（ii）和多轨迹测试（iii）。关键数值结果总结于表III。</p>
+<ul>
+<li><strong>基线测试（i）</strong>：在极短序列（10个训练样本）上，InEKFormer模型（Ω2, Ω4）能够有效过拟合，并在后续非训练样本上产生合理推断，证明了算法和数据的基本有效性。同时，在仿真数据上，Ω2的性能显著优于对应的KalmanNet模型（Γ1）。</li>
+<li><strong>单轨迹与多轨迹测试（ii, iii）</strong>：在更大规模数据训练后，最佳性能的InEKFormer模型（Ω9，使用仿真+真实数据训练）在大多数状态维度上取得了最低的RMSE。例如，位置误差（p_x, p_y, p_z）达到10^-4米量级，姿态误差（φ_x, φ_y, φ_z）达到10^-4弧度量级，显著优于在线InEKF和各个KalmanNet模型。值得注意的是，仅用真实数据训练的Ω8也表现出色。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2511.16306v1/x6.png" alt="基线测试位置误差"></p>
+<blockquote>
+<p><strong>图6</strong>：在仿真数据基线测试中，InEKFormer（Ω1，Ω2）与KalmanNet（Γ1）的位置估计绝对误差对比。结果显示，InEKFormer模型在训练区间（前10步）能精确拟合，在测试区间（后10步）误差逐渐增大但轨迹趋势正确，而KalmanNet（Γ1）则迅速发散。这验证了InEKFormer框架的有效性和数据集的信息充分性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.16306v1/x7.png" alt="多轨迹测试误差对比"></p>
+<blockquote>
+<p><strong>图7</strong>：在多轨迹测试（iii）中，性能最佳的InEKFormer模型（Ω9）与在线InEKF在所有测试轨迹上的平均位置及姿态RMSE对比。柱状图清晰显示，InEKFormer（Ω9）在所有六个状态维度上的误差均远低于纯模型的InEKF，展示了混合方法在提升估计精度方面的巨大优势。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：<br>通过比较不同训练条件（表I）和模型（Ω1-Ω9）的结果，可以总结出各组件的贡献：</p>
+<ol>
+<li><strong>训练模式至关重要</strong>：采用自回归（AR）模式训练的模型（Ω2, Ω4）性能远优于仅使用教师强制（TF）模式训练的对应模型（Ω1, Ω3），这表明让模型在训练时适应其自身输出的误差累积对于状态估计这种序列任务极为关键。</li>
+<li><strong>数据规模与多样性提升性能</strong>：使用大量混合数据（仿真+真实）训练的Ω9模型取得了最佳性能，优于仅使用仿真（Ω7）或仅使用真实数据（Ω8）训练的模型，说明数据量和多样性对Transformer增益估计器的泛化能力有正面影响。</li>
+<li><strong>InEKFormer vs. KalmanNet</strong>：在可比条件下（如Ω5 vs. Γ5, Ω6 vs. Γ6），InEKFormer consistently outperforms KalmanNet，尤其是在速度估计上优势明显，证明了Transformer结构相比RNN在处理此类高维时序问题上的优势。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>InEKFormer</strong>，一种新颖的、内部深度集成的混合状态估计方法，首次将InEKF与Transformer网络结合，并成功应用于全尺寸人形机器人。</li>
+<li>创建并开源了一个包含丰富运动类型的<strong>RH5人形机器人状态估计数据集</strong>，为后续研究提供了宝贵的资源。</li>
+<li>进行了<strong>广泛的实验对比</strong>，不仅证明了InEKFormer优于纯模型方法（InEKF）和另一种内部混合方法（KalmanNet），还深入分析了不同训练策略和数据的影响。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文自身提到，Transformer网络需要大量数据进行训练。此外，在高维状态估计问题中，实现<strong>鲁棒的自回归训练</strong>仍然是一个挑战，这在基线测试中模型从教师强制转向自回归模式时出现的性能差异中得以体现。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>Transformer在机器人状态估计中的潜力</strong>：本文展示了Transformer能够有效学习复杂动力学系统的状态估计增益，为将其应用于更高维或更复杂的机器人系统提供了鼓舞。</li>
+<li><strong>内部混合架构的有效性</strong>：深度集成模型先验与数据驱动学习能力的内部混合路径，是提升状态估计器在模型失配和噪声环境下鲁棒性的一个有前景的方向。</li>
+<li><strong>训练策略的重要性</strong>：研究强调了针对序列估计任务设计专门训练策略（如TBPTT-SS）的必要性，未来可以探索更先进的自回归或课程学习策略以进一步提升性能。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对人形机器人运动中的状态估计问题，提出了一种混合状态估计器InEKFormer。该方法深度融合了不变扩展卡尔曼滤波（InEKF）与Transformer网络，利用Transformer预测卡尔曼增益以补偿模型失配。在RH5人形机器人五种运动类型的数据集上进行评估，结果表明该方法较纯模型方法（InEKF）和现有混合方法（KalmanNet）展现出潜力，同时揭示了在高维状态估计中需要更稳健的自回归训练。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.16306" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>U-LAG: Uncertainty-Aware, Lag-Adaptive Goal Retargeting for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>U-LAG: Uncertainty-Aware, Lag-Adaptive Goal Retargeting for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.02526" target="_blank" rel="noreferrer">2510.02526</a></span>
+        <span>作者: Anujith Muraleedharan Team</span>
+        <span>日期: 2025-10-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人操作的主流方法包括视觉伺服、任务与运动规划（TAMP）、模型预测控制（MPC）以及基于学习的视觉运动策略。这些方法在感知延迟或场景突变时存在关键局限性：经典视觉伺服在高控制频率下有效，但对感知延迟和遮挡敏感；TAMP和MPC等方法会在世界变化时重新规划整个轨迹，当感知存在滞后时，当前正在执行的设定点可能已经过时；基于学习的策略虽然能吸收小扰动，但大多仍假设感知更新是及时的。</p>
+<p>本文针对机器人执行过程中，由于异步感知导致观测延迟或间歇性到达，使得预先计算的任务目标（如抓取点、接触点）在执行中途变得“过时”这一具体痛点。论文提出了一个新视角：将“执行中目标重定向”视为感知与控制之间一个独立的、可插拔的模块，而不是重新设计控制器或从头开始重新规划。其核心思路是：在现有控制栈中插入一个轻量级重定向层，每当新观测到达时，更新前接触、接触和后接触目标点，而底层笛卡尔伺服控制器保持不变地执行这些更新后的目标。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>U-LAG系统的整体框架是一个模块化的管道。输入是带有延迟的感知数据（RGB-D观测及分割点云）和当前机器人状态，输出是更新后的任务路径点（前接触、接触、后接触目标）。这些路径点被馈送给一个不变的底层笛卡尔伺服控制器执行。</p>
+<p><img src="https://arxiv.org/html/2510.02526v1/figs/icra_final.png" alt="系统概览"></p>
+<blockquote>
+<p><strong>图2</strong>：U-LAG系统概览。左侧：感知与传感。中间：重定向器（Nearest/ICP/UAR/UAR–PF）、共享的保护机制和任务特定的路径点合成器。右侧：不变的笛卡尔伺服和夹爪状态机，执行路径点。</p>
+</blockquote>
+<p>核心模块是四种不同的目标重定向器（ℛ）：</p>
+<ol>
+<li>**最近几何重算 (Nearest)**：根据最新的感知代理（物体中心估计）直接使用封闭形式的几何公式重新计算所有路径点。这种方法确定、快速，在点云干净且延迟不大时表现良好。</li>
+<li><strong>ICP配准 (ICP)<strong>：使用点对点迭代最近点算法，将过时的点云与新鲜点云对齐，估计一个刚性变换（旋转 <strong>R</strong>* 和平移 *<em>t</em></strong>），然后将过时的前接触目标通过该变换进行传送（</strong>g<strong>pre′ = <strong>R</strong>* <strong>g</strong>pre + *<em>t</em></strong>）。接触和后接触目标则根据最新的感知代理重新计算。此方法在点云重叠度高时表现优异。</li>
+<li>**不确定性感知重定向 (UAR)**：根据点云的平面分散度 σxy 来膨胀几何边界，以偏向于避免擦边接触和未到达。定义一个膨胀项 Δ(σxy) = λσxy，并将其加到标称的偏移量（如预接触间隔 δpre、接触边界 δcontact、后超调 δover）上，然后裁剪到任务特定的边界内，最后代入几何公式生成路径点。这以近乎零的代价注入了不确定性意识。</li>
+<li>**不确定性感知重定向与粒子滤波 (UAR–PF)**：在延迟下维持对物体平面位姿（x, y, θ）及速度的信念分布。使用一个粒子滤波器，在预测步骤中施加高斯加速度噪声，在测量更新步骤中使用感知代理（物体中心）和分散度 σxy 来更新粒子权重。路径点生成使用粒子加权平均的中心，并同样应用UAR的不确定性膨胀。粒子滤波的信念平滑在处理大延迟和噪声点云时特别有价值。</li>
+</ol>
+<p>所有重定向器都包裹在一套<strong>共享的可靠性机制</strong>中，这些机制不改变底层控制器或重定向器算法，但提高了鲁棒性：</p>
+<ul>
+<li><strong>视觉保护</strong>：如果新鲜代理与延迟代理之间的位置变化超过阈值，则忽略新鲜点云，回退到可信的估计。</li>
+<li><strong>两阶段路径点规划</strong>：将任何重定向后的目标分解为三个路径点：先抬升到安全高度，再水平移动到目标XY位置，最后下降。这防止了在物体表面附近的侧向扫掠。</li>
+<li><strong>滑移监控</strong>：在推动过程中，如果末端执行器与物体失去接触超过一定时间，则触发一次重新感知/重定向。</li>
+<li><strong>失速监控</strong>：如果末端执行器运动和目标进度在接触状态下都低于阈值超过一段时间，则触发重新感知/重定向，避免在目标附近无限制地挣扎。</li>
+</ul>
+<p>与现有方法相比，创新点具体体现在：1) 将目标重定向模块化，作为一个可插拔的层，与控制器和规划器解耦；2) 明确考虑了感知不确定性（通过点云分散度）和时间延迟（通过粒子滤波维持信念），使重定向决策更加鲁棒；3) 提供了一套从简单到复杂的重定向器实现，并配备了实用的工程保护机制。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在PyBullet仿真环境中使用PandaGym（Franka Panda机器人）进行。构建了一个可重复的<strong>Shift×Lag压力测试协议</strong>：当末端执行器到达接近触发点时，1) 将目标物体按固定幅度 r ∈ {0, 2, …, 10} cm 随机平面传送；2) 将动作保持针对过时目标持续一段合成的感知延迟 L ∈ {0, 100, 200, 300, 400} ms。延迟结束后，相机重新捕获，重定向器更新目标。评估了四个任务：抓取放置、推动、堆叠和插孔。</p>
+<p>对比的基线/方法包括：<strong>无重定向</strong>、<strong>最近几何重算 (Nearest)<strong>、</strong>ICP配准 (ICP)<strong>、</strong>不确定性感知重定向 (UAR)</strong> 和 <strong>UAR–PF</strong>。</p>
+<p><img src="https://arxiv.org/html/2510.02526v1/x1.png" alt="所有任务成功率"></p>
+<blockquote>
+<p><strong>图3</strong>：所有任务在Shift × Lag网格上的成功率（每单元格50次随机种子）。列分别为基线方法（无重定向、Nearest、ICP、UAR、UAR–PF）。所有面板使用统一的颜色刻度。UAR–PF在大多数情况下保持最高的成功率。</p>
+</blockquote>
+<p>关键实验结果总结如下：</p>
+<ul>
+<li><strong>抓取任务</strong>：在最具挑战性的场景（10 cm位移，400 ms延迟）下，UAR–PF的成功率达到0.86，而UAR为0.10，ICP为0.24，Nearest为0.10，无重定向基线为0.00。在（8 cm，300 ms）下，UAR–PF和UAR均达到0.84，而ICP和Nearest分别降至0.32和0.08。</li>
+<li><strong>推动任务</strong>：在（10 cm，400 ms）下，UAR–PF成功率为0.82，UAR为0.66，ICP为0.34，Nearest为0.02，无重定向为0.00。UAR–PF和UAR在大部分网格上表现接近，但在大位移+大延迟时PF的信念平滑提供额外优势。</li>
+<li><strong>堆叠与插孔任务</strong>：趋势类似，UAR–PF和UAR显著优于其他方法。例如堆叠任务在（8 cm，300 ms）下，UAR–PF成功率为0.88，而ICP为0.36，Nearest为0.04。</li>
+<li><strong>性能指标</strong>：平均重定向延迟与注入的延迟L成比例增加。末端执行器行程方面，UAR–PF和UAR通常比无重定向基线有适度增加，但换来了高得多的成功率。Nearest和ICP在失败案例中有时会导致过度的、徒劳的移动。</li>
+</ul>
+<p>消融实验（通过比较不同重定向器的表现）表明：</p>
+<ol>
+<li><strong>粒子滤波组件</strong>：对比UAR和UAR–PF，在极端位移和延迟下，PF的信念平滑能防止因单次噪声观测导致的误瞄准，贡献了额外的鲁棒性。</li>
+<li><strong>不确定性感知组件</strong>：对比Nearest/ICP和UAR/UAR–PF，根据点云分散度膨胀边界有效减少了擦边接触和未到达，是性能提升的关键。</li>
+<li><strong>共享保护机制</strong>：虽然未被列为算法贡献，但两阶段路径点、滑移/失速监控等机制对于在实际接触和感知缺陷下实现稳健行为至关重要。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li>提出了 <strong>UAR–PF</strong>，一种延迟自适应、不确定性感知的目标重定向器，它通过在延迟下维持物体位姿的信念分布并据此选择最大化预期进度的目标。</li>
+<li>设计了一个 <strong>可插拔的重定向接口</strong>，将执行中目标重定向确立为感知与控制之间一个独立的模块，可与现有系统轻松集成。</li>
+<li>建立了一个 <strong>可重复的Shift×Lag基准</strong>，用于在抓取、推动、堆叠和插孔任务上系统地评估方法对位移和感知延迟的鲁棒性。</li>
+</ol>
+<p>论文自身提到的局限性包括：假设准静态交互和单一刚性接触；依赖校准的相机和已知外参；在仿真中使用可靠的对象分割（尽管实践中任何检测器/分割器都可提供）。这些假设在更动态、多接触或感知极度不可靠的现实场景中可能不成立。</p>
+<p>本工作对后续研究的启示在于：将目标重定向作为一个独立的、可研究的模块，与控制器设计和全局规划分离，是一个有价值的视角。明确地建模感知不确定性和时间延迟对于在非理想感知条件下实现鲁棒操作至关重要。模块化的设计允许研究人员轻松插入和比较不同的重定向策略，并可通过共享的保护机制提高整体系统的实用性。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人在动态环境中因感知延迟导致预设任务目标失效的问题，提出U-LAG中间执行层目标重定向框架。其核心技术UAR-PF是一种不确定性感知的重定向器，能在感知延迟下维持物体姿态分布，并选择最大化预期进展的目标。通过在PyBullet/PandaGym中构建可重复的Shift×Lag压力测试（物体偏移0-10cm，延迟0-400ms）验证，UAR-PF相比无重定向基线在抓取、推动等任务中成功率更高，末端执行器移动更少，且中止次数降低。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.02526" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

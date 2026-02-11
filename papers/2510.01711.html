@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Contrastive Representation Regularization for Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Contrastive Representation Regularization for Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.01711" target="_blank" rel="noreferrer">2510.01711</a></span>
+        <span>作者: Jinwoo Shin Team</span>
+        <span>日期: 2025-10-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型通过利用预训练视觉-语言模型的丰富表示，在机器人操作任务中展现出强大能力。主流方法通常采用基于VLM表示的条件生成式动作解码器，并使用动作预测损失进行训练。然而，VLM表示存在一个关键局限性：它们通常在大规模视觉-语言数据上训练，缺乏对机器人模态信号的接触，如低级控制动作和本体感知状态。这导致VLM表示对视觉外观高度敏感，却未能充分捕获与机器人控制相关的信号，使得直接基于冻结VLM表示训练VLA模型性能欠佳。</p>
+<p>本文针对VLM表示与机器人信号之间不匹配的具体痛点，提出了一种新的视角：通过对比学习正则化，显式地将VLM表示与机器人的本体感知状态对齐。本文的核心思路是提出一个轻量级的机器人状态感知对比损失，作为动作预测目标的补充，在标准VLA训练流程中端到端地优化，以学习对控制更敏感的表示。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法在标准VLA训练框架基础上，增加了一个对比学习路径来正则化表示学习。整体框架如下图所示。</p>
+<p><img src="https://arxiv.org/html/2510.01711v2/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：方法整体框架。左侧为标准VLA训练路径，使用流匹配损失训练动作解码器；右侧为新增的对比学习路径，通过视图截断操作构建增强表示，并应用机器人状态感知对比损失，使表示与本体感知状态对齐。</p>
+</blockquote>
+<p><strong>整体流程</strong>：模型输入包括多视角观测图像、任务指令和机器人本体感知状态。预训练VLM将多模态输入编码为隐藏表示，随后一个轻量级适配器模块处理该表示，得到用于动作解码的条件表示。同时，一个可学习的总结令牌被附加到VLM输出，经适配器处理并投影后，得到一个紧凑的总结表示，专门用于对比学习。训练目标结合了原始的动作预测损失和提出的对比损失。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>机器人状态感知对比损失</strong>：这是方法的核心创新。该损失是InfoNCE对比损失的一个加权变体，其权重基于机器人本体感知状态之间的相对距离计算。具体地，对于一个批次中的样本对，其软权重定义为：$w_{ij} = \frac{\exp(-|{\mathbf{q}}_i - {\mathbf{q}}_j|<em>2 / \beta)}{\sum</em>{k=1}^B \exp(-|{\mathbf{q}}_i - {\mathbf{q}}_k|_2 / \beta)}$，其中 ${\mathbf{q}}$ 是本体感知状态，$\beta$ 是温度系数。这使得具有相似本体状态的样本表示在嵌入空间中更接近。</li>
+<li><strong>总结令牌与投影头</strong>：由于VLM输出序列较长，直接用于对比学习效率低下且信号分散。因此，引入一个可学习的总结令牌，将其与VLM输出拼接后通过适配器，得到一个单独的总结表示 ${\mathbf{w}}$。再经过一个轻量的两层MLP投影头 $g_\psi$，映射到用于对比学习的低维表示 ${\mathbf{z}}$。</li>
+<li><strong>视图截断增强</strong>：为了给对比学习提供多样化的正样本对，提出了一种表示级的增强策略。该方法随机选择一个观测视角的索引，并将VLM输出中对应该视角的特征切片掩蔽掉。这种操作在表示层面进行，避免了为每个增强样本重新前向传播VLM的高昂开销，非常轻量。</li>
+</ol>
+<p><strong>训练目标</strong>：最终的总损失为动作预测的流匹配损失与RS-CL损失的加权和：$\mathcal{L} = \mathcal{L}<em>{\textrm{FM}} + \lambda \mathcal{L}</em>{\textrm{RS-CL}}$。超参数 $\lambda$ 使用余弦衰减调度，在训练早期强调表示优化，后期则更关注动作预测。</p>
+<p><strong>创新点</strong>：与现有方法相比，本文的创新点主要体现在：1) <strong>监督信号创新</strong>：首次提出使用机器人本体感知状态的相对距离作为软监督信号，来指导VLM表示的对比学习，使其直接对齐控制相关的物理状态。2) <strong>流程集成创新</strong>：将表示正则化设计为一个完全兼容现有VLA训练流程的轻量级辅助目标，无需额外的训练阶段或精心策划的数据集。3) <strong>增强策略创新</strong>：提出“视图截断”这一高效的表示级增强方法，利用VLA模型固有的多视角输入特性来构建对比对。</p>
+<p><img src="https://arxiv.org/html/2510.01711v2/x2.png" alt="表示可视化"></p>
+<blockquote>
+<p><strong>图2</strong>：VLM表示可视化。(a) 执行相同开门任务的不同场景轨迹。(b) 预训练VLM表示主要由视觉外观主导。(c) RS-CL引导的表示与机器人本体感知状态对齐，能捕获跨环境的共同机器人信号，并按照任务进度对齐所有轨迹。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.01711v2/x3.png" alt="增强策略"></p>
+<blockquote>
+<p><strong>图3</strong>：对比对的表示级增强。视图截断通过随机掩蔽VLM表示中某一观测视角对应的特征切片，来构建增强表示。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：模拟实验使用RoboCasa-Kitchen和LIBERO多任务操作基准。真实机器人实验使用Franka Research 3机械臂，执行抓放和关盖子任务。</li>
+<li><strong>实验平台</strong>：主要基于GR00T N1.5 VLA框架进行实现和对比。</li>
+<li><strong>对比基线</strong>：包括代表性的VLA模型 $\pi_0$、$\pi_0$-FAST、GR00T N1，以及在从头训练实验中对比的、经过机器人数据进一步训练的VLM（如RoboBrain, VeBrain等）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>微调实验（模拟）</strong>：在RoboCasa-Kitchen上，RS-CL显著提升了GR00T N1.5的性能。例如，在使用30条示范数据时，平均成功率从48.2%提升至53.0%；在需要精确定位的抓放任务上，成功率从30.8%大幅提升至41.5%（+11.2%）。在LIBERO基准上，RS-CL也将平均成功率从95.7%提升至96.4%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.01711v2/x4.png" alt="RoboCasa结果表"></p>
+<blockquote>
+<p><strong>表1</strong>：RoboCasa-Kitchen基准成功率。RS-CL在不同示范数据量下均能提升GR00T N1.5的性能，尤其在抓放任务上提升显著。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.01711v2/x5.png" alt="LIBERO结果表"></p>
+<blockquote>
+<p><strong>表2</strong>：LIBERO基准成功率。RS-CL在GR00T N1.5基础上取得了最佳平均性能。</p>
+</blockquote>
+<ol start="2">
+<li><strong>真实机器人实验</strong>：RS-CL将4个抓放任务和1个关盖子任务的平均成功率从45.0%提升至58.3%（+13.3%）。在具有挑战性的关盖子任务中，RS-CL在手腕相机视野被遮挡的情况下，仍能实现精确对准和成功关闭。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.01711v2/x6.png" alt="真实机器人结果"></p>
+<blockquote>
+<p><strong>图5</strong>：真实机器人任务成功率。RS-CL在域内任务和泛化任务上均带来一致提升。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.01711v2/x7.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图6</strong>：真实机器人操作定性结果。在手腕视图部分遮挡下，基线模型放置不准，而RS-CL能成功精确关盖。</p>
+</blockquote>
+<ol start="3">
+<li><strong>从头训练实验</strong>：在不同预训练VLM骨干上从头训练VLA模型时，RS-CL均带来一致提升。与使用机器人数据进一步训练VLM的基线方法相比，RS-CL能带来更大或额外的性能增益。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.01711v2/x8.png" alt="从头训练结果"></p>
+<blockquote>
+<p><strong>图7</strong>：从头训练实验成功率。RS-CL在不同VLM骨干上均有效，且优于或能补充“进一步训练VLM”的策略。</p>
+</blockquote>
+<p><strong>消融实验</strong>：</p>
+<ul>
+<li><strong>软监督目标</strong>：使用当前本体感知状态距离作为软监督信号效果最好（成功率69.7%），优于使用下一动作距离或标准InfoNCE（无软标签）。</li>
+<li><strong>增强方法</strong>：“视图截断”增强策略效果最佳，优于其他表示级截断方法。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2510.01711v2/x9.png" alt="消融研究表"></p>
+<blockquote>
+<p><strong>表3</strong>：消融研究结果。(a) 不同软监督目标的影响。(b) 不同表示增强方法的影响。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.01711v2/x10.png" alt="对齐度量"></p>
+<blockquote>
+<p><strong>图8</strong>：与本体感知状态的对齐度量。RS-CL训练后的模型，其条件表示与本体感知状态的相关性显著高于基线。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>机器人状态感知对比损失</strong>，这是一种新颖的、轻量的表示正则化目标，能够显式地将VLM表示与机器人本体感知状态对齐，从而增强其对控制相关信号的表征能力。</li>
+<li>设计了<strong>视图截断</strong>这一高效的表示级增强策略，用于构建对比学习所需的正样本对，且完全兼容现有VLA训练流程。</li>
+<li>在模拟和真实机器人操作基准上进行了广泛验证，表明RS-CL能够持续提升SOTA VLA模型的性能，特别是在需要精确定位的任务上。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，RS-CL的性能可能依赖于本体感知状态测量的准确性，对噪声或不可靠的状态传感器数据可能比较敏感。</p>
+<p><strong>研究启示</strong>：</p>
+<ol>
+<li><strong>表示对齐的重要性</strong>：这项工作凸显了在具身智能中，将高层语义表示与低层物理/控制状态进行显式对齐的价值，这是提升策略性能的有效途径。</li>
+<li><strong>轻量级正则化的有效性</strong>：表明通过设计精巧的辅助损失函数，可以在不改变主干网络架构、不引入复杂多阶段训练的情况下，显著改善模型性能。</li>
+<li><strong>跨模态监督信号</strong>：探索如何利用机器人领域固有的、易于获取的信号（如状态、动作）来监督和塑造来自其他模态的预训练表示，是一个富有前景的研究方向。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作（VLA）模型在机器人操作任务中，其表征对机器人控制信号和本体感知状态不敏感的问题，提出了一种名为“机器人状态感知对比损失（RS-CL）”的表示正则化方法。该方法利用机器人状态之间的相对距离作为软监督，将VLM表征与机器人本体状态对齐，从而在标准VLA训练流程中轻量、有效地增强与控制相关的表征学习。核心实验表明，RS-CL显著提升了VLA模型的性能：在RoboCasa-Kitchen的拾放任务中，成功率从30.8%提升至41.5%；在真实机器人操作任务中，成功率从45.0%提升至58.3%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.01711" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

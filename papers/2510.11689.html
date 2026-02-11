@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Phys2Real: Fusing VLM Priors with Interactive Online Adaptation for Uncertainty-Aware Sim-to-Real Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Phys2Real: Fusing VLM Priors with Interactive Online Adaptation for Uncertainty-Aware Sim-to-Real Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.11689" target="_blank" rel="noreferrer">2510.11689</a></span>
+        <span>作者: Mac Schwager Team</span>
+        <span>日期: 2025-10-13</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，将仿真中训练的机器人操作策略迁移到真实世界（Sim-to-Real）的主流方法是领域随机化（DR）。通过在训练期间随机化仿真动力学参数，DR旨在训练出对真实世界变化具有鲁棒性的策略。然而，这种方法可能导致策略学习到一种“平均”行为，在面对训练分布之外的物体物理属性（如质心、质量分布）时泛化能力差，并且无法针对特定物体的物理特性进行自适应调整，从而牺牲了性能。</p>
+<p>本文针对上述痛点，提出了一种新的视角：与其仅训练一个对所有参数范围都鲁棒的策略，不如训练一个既能对宽泛参数范围保持鲁棒，又能针对特定物体的物理属性进行自适应调整以获得更优性能的策略。其核心思路是模仿人类结合视觉感知与物理交互的适应能力，提出一个名为Phys2Real的框架，通过不确定性感知的融合方法，将视觉语言模型（VLM）从外观推断的物理参数先验，与机器人通过在线交互学习到的参数估计相结合，从而在仿真训练的策略中实现对真实世界物体物理特性的精准适应。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Phys2Real的整体框架是一个“真实-仿真-真实”（Real-to-Sim-to-Real）的三阶段流程：1）从真实世界视频进行高保真几何重建，创建仿真资产；2）在仿真中训练基于物理参数条件化的策略，并配备不确定性感知的在线适应模型；3）在真实世界部署时，融合VLM提供的先验与在线交互估计，以条件化策略进行操控。</p>
+<p><img src="https://arxiv.org/html/2510.11689v1/figures/RealToSim.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图1</strong>：真实到仿真的网格重建流程。从物体视频开始，提取图像帧并使用SAM-2分割目标物体。随后训练一个3D高斯泼溅模型，并使用SuGaR提取一个表面对齐的、以物体为中心的网格。最后生成一个干净、水密的网格，得到可用于仿真的资产。</p>
+</blockquote>
+<p><strong>核心模块一：真实到仿真场景重建</strong>。对于没有已知网格的物体，该方法构建了一个从视频帧自动重建网格的流程。首先使用SAM-2分割目标物体，然后在物体前景图像上训练一个3D高斯泼溅模型，最后利用SuGaR从中提取水密网格，从而获得几何精确的仿真资产。</p>
+<p><strong>核心模块二：物理条件化的策略学习</strong>。策略训练受到快速运动适应（RMA）启发，但进行了关键改进，分为三个阶段（见图2）：</p>
+<ol>
+<li><strong>Phase 1</strong>：策略在仿真中直接基于可解释的<strong>地面真实物理参数</strong>（如质心CoM）进行训练，使策略学会针对不同物理配置的最优行为。这与RMA使用潜在表示不同，为后续与VLM估计融合奠定了基础。</li>
+<li><strong>Phase 1.5（可选）</strong>：为了增强策略对部署时可能出现的噪声估计的鲁棒性，使用对每个物理参数添加随机高斯噪声（如σ=1.5 cm）的估计值对策略进行微调，防止其因估计误差而进入训练分布之外的状态。</li>
+<li><strong>Phase 2</strong>：冻结已训练的策略权重，训练一个包含N=10个模型的<strong>集成适应模型</strong>。该模型以一个滑动窗口内的观测和动作历史为输入，学习预测物理参数。关键创新在于，该集成模型不仅输出参数估计，还通过集成方差（公式1）量化<strong>认知不确定性</strong>，并通过每个模型输出的方差均值（公式2）量化<strong>偶然不确定性</strong>。总的不确定性为两者之和（公式3）。这种不确定性分解使得系统能够区分因数据不足导致的模型不确定性和环境中固有的观测噪声。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.11689v1/x1.png" alt="策略训练流程"></p>
+<blockquote>
+<p><strong>图2</strong>：Phys2Real策略训练。策略和适应模型的训练分为三个阶段。Phase 1：策略基于仿真的地面真实物理属性（如CoM）进行条件化训练。Phase 1.5：使用带噪声的物理属性进行微调，以对下游来自融合估计的噪声建立鲁棒性。Phase 2：训练一个包含N个编码器的集成模型，输入观测和动作历史。集成估计的方差提供了认知不确定性。每个编码器输出物理属性估计及其相关不确定性（偶然不确定性）。测试时，通过逆方差加权融合适应估计和VLM估计。</p>
+</blockquote>
+<p><strong>核心模块三：基于物理参数估计的仿真到真实迁移</strong>。这是方法的核心创新点，旨在解决间歇性接触导致交互历史信息不足的问题。该方法将VLM提供的视觉先验与在线适应模型的估计进行融合。</p>
+<ul>
+<li><strong>VLM先验获取</strong>：从不同视角拍摄N张物体图像，对每张图像向VLM（GPT-5）查询M次，使用特定提示（见图3）获取物理参数（如CoM）估计及其不确定性。最终VLM估计值为所有查询结果的聚合均值，不确定性为VLM自报告不确定性的均值。</li>
+<li><strong>在线适应估计获取</strong>：由上述集成适应模型提供，包括估计值θ_rma和总不确定性σ_rma（公式3）。</li>
+<li><strong>不确定性感知融合</strong>：利用物理参数可解释的特性，将VLM先验和在线估计通过<strong>逆方差加权</strong>进行融合（公式4）。融合后的估计值θ_hat用于在测试时条件化策略。该机制使得当在线交互历史不确定（σ_rma高）时，系统更依赖VLM先验；反之，当VLM估计不确定（σ_vlm高）时，则更依赖在线估计。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2510.11689v1/x2.png" alt="VLM先验获取"></p>
+<blockquote>
+<p><strong>图3</strong>：用于任务相关物理参数的VLM先验。我们查询VLM（GPT-5）以根据物体图像提供估计的CoM和不确定性。对N张图像中的每一张，重复查询M次。然后计算平均VLM估计值θ_vlm以及平均不确定性σ_vlm。通过公式（4）将其与RMA估计融合。</p>
+</blockquote>
+<p>与现有方法相比，Phys2Real的创新点具体体现在：1）将VLM用于物理参数估计并直接应用于底层闭环控制，而非仅用于高层规划；2）扩展RMA框架，使其直接输出可解释的物理参数及分解的不确定性，从而能与VLM先验在线融合；3）构建了融合几何（高斯泼溅重建）与物理（在线估计）信息的“数字孪生”。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在真实世界中使用6自由度UFctory xArm机械臂进行平面推动任务评估。使用运动捕捉系统获取精确物体位姿。评估了两个任务：1）<strong>T型块推动</strong>：通过在不同位置（顶部或底部）附加金属配重来改变物体质心，使用已知网格。2）<strong>锤子推动</strong>：锤子具有偏心的质量分布，其网格通过前述重建流程获得。评估指标包括成功率、最终位置误差、最终方向误差和任务完成时间。</p>
+<p><strong>对比基线</strong>：包括领域随机化（DR）、快速运动适应（RMA-only）、基于状态的扩散策略（模仿学习基线）、仅使用VLM先验条件化的策略（Physics-conditioned [VLM]）、以及使用仿真中地面真实物理参数条件化的特权基线（Physics-conditioned [privileged]）。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>T型块推动（重心在顶部）</strong>：如表I所示，这是更具挑战性的配置。Phys2Real取得了57.14%的成功率，显著优于DR的23.81%和RMA-only的14.29%。尽管特权基线性能更高（90.48%），但Phys2Real在无需真实参数的情况下取得了最佳的非特权性能。</li>
+<li><strong>T型块推动（重心在底部）</strong>：如表II所示，Phys2Real达到了100%的成功率，而DR和RMA-only均为79.17%。仅使用VLM先验的策略也取得了91.67%的高成功率。</li>
+<li><strong>锤子推动</strong>：如表III所示，Phys2Real和DR都达到了100%的成功率，但Phys2Real的平均任务完成时间比DR快15%（77.79秒 vs 90.65秒）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.11689v1/x3.png" alt="T型块推动任务结果CDF"></p>
+<blockquote>
+<p><strong>图4</strong>：T型块推动任务结果。我们比较了每种策略在 rollout 结束时位置误差的累积分布函数（CDF）。对于重心在顶部（a）和底部（b）的配置，Phys2Real（绿色曲线）在大部分分位数上都保持着较低的位置误差，表明其性能更优且更稳定。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：实验结果本身构成了对VLM先验和在线适应模块的消融。在T型块任务中：</p>
+<ul>
+<li><strong>仅使用VLM先验</strong>（Physics-conditioned [VLM]）：在重心底部配置表现良好（91.67%），但在重心顶部配置极差（4.76%），说明VLM估计可能存在偏差且单独使用不可靠。</li>
+<li><strong>仅使用在线适应</strong>（RMA-only）：在两个配置下成功率均低于Phys2Real（顶部14.29%，底部79.17%），表明间歇性接触导致交互历史信息不足，限制了纯交互适应的效果。</li>
+<li><strong>两者结合（Phys2Real）</strong>：在所有非特权方法中取得了最佳或接近最佳的性能，证明了<strong>融合视觉先验与交互信息对于成功至关重要</strong>。逆方差加权机制能够有效权衡两者，在VLM估计可靠时（如重心底部）充分利用，在其不可靠时（如重心顶部）更多地依赖在线学习的适应。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li><strong>提出了一个不确定性感知的VLM先验与在线适应融合框架</strong>：首次将VLM的物理推理能力用于实时底层闭环控制，并通过在线交互历史持续 refine VLM的初始估计，有效应对了仿真到真实迁移中物体物理属性不确定的挑战。</li>
+<li><strong>设计了基于集成的、分解的（认知/偶然）不确定性量化方法</strong>：并将其与VLM的自报告不确定性结合，通过逆方差加权实现动态融合，为在间歇性接触场景中实现鲁棒适应提供了新思路。</li>
+<li><strong>构建了物理信息化的数字孪生</strong>：将高保真几何重建（3D高斯泼溅）与在线物理属性估计相结合，为策略训练和测试创建了更贴近真实世界的仿真环境。</li>
+</ol>
+<p><strong>论文提到的局限性</strong>：当前方法在真实世界评估中依赖运动捕捉系统提供精确的物体位姿。作者指出，用基于视觉的感知跟踪替代运动捕捉是一个有前景的未来方向。</p>
+<p><strong>对后续研究的启示</strong>：这项工作展示了将基础模型（VLMs）的感知先验与机器人交互学习相结合的潜力，为实现更通用、自适应的机器人系统开辟了道路。其“感知估计-交互精修”的范式，以及将不同来源估计在可解释参数空间内基于不确定性进行融合的思路，可推广至其他需要在线适应动态或物理属性的机器人任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>论文Phys2Real旨在解决模拟到现实转移中机器人操作策略难以适应变化物体物理属性（如质量分布）的核心挑战。方法融合视觉语言模型（VLM）先验与交互式在线适应，通过3D高斯溅射重建、VLM推断物理参数先验及在线估计，并利用集成不确定性量化细化预测。实验在T块和锤子推动任务中显示，相比域随机化基线，Phys2Real显著提升性能：底部加权T块成功率100% vs 79%，顶部加权57% vs 23%，锤子推动平均任务完成速度快15%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.11689" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
