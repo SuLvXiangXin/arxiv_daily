@@ -210,7 +210,7 @@ const buildDetailPage = (paper) => {
 
 /* ── enrich items with summaries (incremental save) ──── */
 
-const SUMMARY_CONCURRENCY = 3; // parallel paper processing (lower for thinking mode)
+const SUMMARY_CONCURRENCY = 16; // parallel paper processing
 
 const buildOutput = async (items, existing, outputPath, pagesDir) => {
   const existingMap = new Map(

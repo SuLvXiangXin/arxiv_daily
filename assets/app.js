@@ -1,6 +1,10 @@
 const listEl = document.getElementById("paper-list");
 const lastUpdatedEl = document.getElementById("last-updated");
 const paperCountEl = document.getElementById("paper-count");
+const searchInput = document.getElementById("search-input");
+const searchCountEl = document.getElementById("search-count");
+
+let allPapers = [];
 
 const formatDate = (value) => {
   if (!value) return "--";
@@ -82,8 +86,8 @@ const loadPapers = async () => {
       .slice()
       .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 
-    listEl.innerHTML = "";
-    sorted.forEach((paper, index) => listEl.appendChild(buildCard(paper, index)));
+    allPapers = sorted;
+    renderPapers(allPapers);
     paperCountEl.textContent = String(sorted.length);
     lastUpdatedEl.textContent = formatDate(data.generatedAt);
 
@@ -102,5 +106,32 @@ const loadPapers = async () => {
     renderEmpty();
   }
 };
+
+const renderPapers = (papers) => {
+  listEl.innerHTML = "";
+  if (!papers.length) {
+    listEl.innerHTML = "<div class=\"paper-card\">没有找到匹配的论文。</div>";
+  } else {
+    papers.forEach((paper, index) => listEl.appendChild(buildCard(paper, index)));
+  }
+};
+
+const filterPapers = () => {
+  const query = searchInput.value.trim().toLowerCase();
+  if (!query) {
+    renderPapers(allPapers);
+    searchCountEl.textContent = "";
+    return;
+  }
+  const keywords = query.split(/\s+/);
+  const filtered = allPapers.filter((p) => {
+    const title = (p.title || "").toLowerCase();
+    return keywords.every((kw) => title.includes(kw));
+  });
+  renderPapers(filtered);
+  searchCountEl.textContent = `${filtered.length} / ${allPapers.length}`;
+};
+
+searchInput.addEventListener("input", filterPapers);
 
 loadPapers();
