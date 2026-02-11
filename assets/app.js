@@ -74,7 +74,13 @@ const buildCard = (paper) => {
 
   const summary = document.createElement("p");
   summary.className = "paper-summary";
-  summary.textContent = paper.summary || "摘要生成中...";
+  // Render inline markdown (bold, italic, code)
+  const summaryText = paper.summary || "摘要生成中...";
+  summary.innerHTML = summaryText
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/`(.+?)`/g, "<code>$1</code>");
 
   const tags = document.createElement("div");
   tags.className = "paper-tags";
