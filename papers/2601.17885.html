@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>PEAfowl: Perception-Enhanced Multi-View Vision-Language-Action for Bimanual Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Computer Vision and Pattern Recognition (cs.CV)</span>
+      <h1>PEAfowl: Perception-Enhanced Multi-View Vision-Language-Action for Bimanual Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.17885" target="_blank" rel="noreferrer">2601.17885</a></span>
+        <span>作者: Fan, Qingyu, Li, Zhaoxiang, Lu, Yi, Chen, Wang, Shen, Qiu, Long, Xiao-xiao, Cai, Yinghao, Lu, Tao, Wang, Shuo, Cao, Xun</span>
+        <span>日期: 2026/01/25</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前用于机器人操作的视觉-语言-动作（VLA）模型在单臂操作中表现出色，但面向多任务双手操作的研究尚不充分，尤其是在存在遮挡、视点和场景变化的复杂环境中。现有主流方法存在两个关键局限：第一，处理多视角输入时，通常采用视图无关的方式，将各视角图像独立编码后的令牌进行简单拼接，缺乏对跨视角几何对应关系的显式建模，导致特征空间缺乏3D一致性，对相机位姿、标定误差和遮挡敏感。第二，语言指令通常作为全局条件向量注入，或以少量文本令牌附加到视觉流中，注意力计算仍以视觉为中心，这在多任务、多物体的杂乱场景中可能导致注意力分散、指令无关，并弱化了对预训练视觉-语言对齐能力的利用，无法精准定位场景中的相关物体和空间关系。</p>
+<p>本文针对双手操作在杂乱场景中需要稳定空间理解和细粒度指令接地的具体痛点，提出了两个新视角：一是引入几何引导的多视角感知，显式建立跨视角的3D空间对齐；二是用感知器（Perceiver）风格的“文本作为查询”的读出机制，替代全局语言条件注入，实现迭代的证据积累。本文的核心思路是：通过预测每个视觉令牌的深度分布并进行可微3D提升，在共享基座帧中聚合跨视角邻居，形成几何接地的特征；同时，利用文本令牌作为潜在查询，迭代地从冻结的CLIP视觉特征中提取指令相关的视觉证据，生成紧凑的指令条件化令牌。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>PEAfowl的整体框架耦合了几何引导的多视角融合（GGMVF）与语言引导的读出机制，为后续基于扩散的动作解码器（遵循SEM架构）提供条件。输入是多视角RGB-D观测、本体感知状态和语言指令；输出是未来H步的双手动作序列。</p>
+<p><img src="https://arxiv.org/html/2601.17885v1/x2.png" alt="方法架构"></p>
+<blockquote>
+<p><strong>图2</strong>：PEAfowl架构总览。顶部：几何引导的多视角融合模块，RGB-D令牌用于预测每个令牌的深度分布，进行可微3D提升和跨视角融合；仅在训练时使用预训练的相机深度模型（CDM）监督深度分布预测头。底部：语言引导的读出模块，冻结的CLIP特征被一个感知器风格的“文本作为查询”读出器查询，并池化为紧凑的上下文令牌。两者输出的令牌与本体感知状态一起输入到扩散动作解码器。</p>
+</blockquote>
+<p><strong>核心模块一：几何引导的多视角融合（GGMVF）</strong><br>该模块旨在从多视角RGB-D观测中构建具有空间感知能力的表征，具体流程如图3所示：</p>
+<ol>
+<li><strong>多视角RGB-D特征提取</strong>：每个视角分别使用共享的编码器提取多尺度RGB和深度特征金字塔。RGB编码器从Grounding-DINO初始化，深度编码器使用轻量级ResNet。</li>
+<li><strong>跨尺度令牌化</strong>：将L层特征金字塔展平为RGB令牌序列和深度令牌序列。</li>
+<li><strong>深度感知的3D提升</strong>：为建模图像块级别的深度模糊性，网络从共位的RGB-D令牌对预测一个离散的深度分布 <code>p_n(v)</code>（覆盖B个深度区间）。利用该分布，将每个2D令牌的中心像素柔和地反向投影到机器人基座帧中，计算期望的3D锚点 <code>x̄_n(v)</code> 和深度感知的点嵌入 <code>g_n(v)</code>。<code>x̄_n(v)</code> 用于后续跨视角匹配，<code>g_n(v)</code> 作为几何上下文。</li>
+<li><strong>成对RGB-D令牌融合</strong>：为避免噪声深度数据破坏预训练的RGB语义，仅在深度分布预测分支中，对共位的RGB-D令牌对进行轻量级的局部融合。通过一个小型注意力块融合投影后的RGB令牌和深度令牌。</li>
+<li><strong>跨视角3D邻居聚合</strong>：基于计算出的期望3D锚点 <code>{x̄_n(v)}</code>，在共享基座帧中根据几何邻近性聚合跨视角信息。对于每个查询令牌，计算其与其他视角所有令牌锚点的欧氏距离，选择K个最近邻，并使用基于距离的softmax权重聚合这些邻居的RGB令牌特征。聚合后的特征通过一个可学习的门控标量γ，以残差方式更新原始RGB令牌，从而对齐不同相机中对应同一物理区域的令牌。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2601.17885v1/x3.png" alt="几何引导多视角融合"></p>
+<blockquote>
+<p><strong>图3</strong>：几何引导的多视角融合（GGMVF）细节。多尺度RGB和深度特征被令牌化，共位的RGB-D对用于预测离散深度分布以进行可微3D提升。得到的3D锚点使得能够在基座帧中使用基于距离的softmax权重进行Top-K跨视角邻居聚合和门控残差更新。聚合后的RGB令牌与深度令牌、3D点嵌入通过MLP融合，产生几何增强的令牌。</p>
+</blockquote>
+<p><strong>核心模块二：语言引导的多视角读出</strong><br>为提升杂乱场景中的指令接地能力，此模块用文本感知的多视角读出替代全局文本条件注入：</p>
+<ol>
+<li><strong>冻结的CLIP令牌</strong>：提取指令的CLIP文本令牌，以及每个视角RGB图像的CLIP视觉补丁令牌（使用最后一层注意力层输出以获得更密集的对齐）。</li>
+<li><strong>感知器风格的文本作为查询读出</strong>：对于每个视角，将文本令牌初始化为潜在查询，通过M个潜在块进行迭代精炼。每个块交替执行对当前视角CLIP视觉补丁的交叉注意力以及潜在查询的自注意力，产生视觉接地的文本潜在表示。</li>
+<li><strong>读出令牌</strong>：将每个视角精炼后的文本潜在表示池化为固定数量R个上下文令牌，同时将原始文本令牌也池化为R个令牌。将所有视角的上下文令牌与文本池化令牌拼接，形成最终的语言引导上下文序列，用于条件化动作解码器。</li>
+</ol>
+<p><strong>创新点</strong>：与现有方法相比，PEAfowl的创新具体体现在：1) 显式地通过可微3D提升和几何邻居聚合实现跨视角特征对齐，而非简单的令牌拼接；2) 使用迭代的、文本驱动的交叉注意力机制从视觉特征中主动查询和聚集证据，而非被动地附加文本令牌。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：RoboTwin 2.0仿真基准（9个训练任务），设置包括<strong>Clean</strong>（固定参数）和<strong>Domain-Randomized</strong>（强扰动，如干扰物、光照、纹理、指令复述）。</li>
+<li><strong>实验平台</strong>：仿真使用Aloha-AgileX双手机器人和4相机RGB-D设置；实物实验使用双臂AgileX Piper平台（配置相同，但缩小了相机视野以增加难度）。</li>
+<li><strong>对比基线</strong>：<ul>
+<li>单任务视觉运动策略：ACT, DP, DP3。</li>
+<li>多任务双手VLA策略：π0, RDT, SEM。</li>
+</ul>
+</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>仿真结果如表1所示。在更具挑战性的<strong>Domain-Randomized</strong>设置下，PEAfowl在9个任务上的平均成功率达到<strong>47.1%<strong>，显著优于所有基线。其中，比最强的基线SEM（24.1%）提升了</strong>23.0个百分点</strong>。特别是在长时程、遮挡严重的任务上提升明显。在<strong>Clean</strong>设置下，PEAfowl平均成功率为69.6%，比SEM（51.0%）提升18.6个百分点。</p>
+<p><img src="https://arxiv.org/html/2601.17885v1/x4.png" alt="仿真与实物设置"></p>
+<blockquote>
+<p><strong>图4</strong>：仿真与实物实验设置。(a) RoboTwin 2.0仿真环境（Clean与Domain-Randomized设置）。(b) 实物双臂AgileX Piper机器人及4相机装置。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.17885v1/Fig/Fig5.png" alt="跨视角令牌一致性"></p>
+<blockquote>
+<p><strong>图5</strong>：跨视角令牌一致性可视化（t-SNE）。与SEM和PEAfowl聚合前的特征相比，PEAfowl聚合后的特征使得不同相机中对应同一物理区域的令牌形成了更一致、更紧密的聚类，表明其表征具有更好的3D对齐和视角一致性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.17885v1/Fig/Fig6.png" alt="深度分布预测"></p>
+<blockquote>
+<p><strong>图6</strong>：深度分布预测（实物实验）。展示了SEM、未使用深度蒸馏的PEAfowl以及完整PEAfowl预测的每个令牌深度分布。PEAfowl的预测比SEM更清晰，而训练时使用的深度蒸馏进一步锐化并补全了在噪声商品深度传感器下的深度预测。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：</p>
+<ul>
+<li><strong>泛化到未见任务</strong>：在仅使用9个任务训练后，PEAfowl在两个未见任务（Stack Blocks Two, Stack Bowls Two）上仍能取得很高的成功率，尤其在DR设置下显著优于基线（表2），展示了强大的泛化能力。</li>
+<li><strong>深度蒸馏的作用</strong>：实物实验结果（表3）显示，移除深度蒸馏（PEAfowl w/o DD）会导致平均成功率从68.3%下降至36.7%，证明了训练时从强深度教师模型（CDM）蒸馏先验知识对处理真实世界噪声深度数据至关重要。</li>
+<li><strong>几何融合稳定训练</strong>：图7表明，在多任务训练中，基线模型的深度损失会发散，而加入GGMVF模块能有效稳定深度分布的学习。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2601.17885v1/x5.png" alt="深度损失稳定性"></p>
+<blockquote>
+<p><strong>图7</strong>：深度损失稳定性。在多任务训练中，基线模型的深度损失会发散，而加入GGMVF模块能稳定深度分布的学习。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个<strong>几何引导的多视角感知模块</strong>，通过预测每个令牌的深度分布、可微3D提升和基于3D邻近性的跨视角聚合，从多视角RGB-D观测中构建具有空间感知能力的表征，并设计了仅用于训练的深度蒸馏方案以提升实物部署的鲁棒性。</li>
+<li>提出了<strong>语言引导的读出机制</strong>，用感知器风格的“文本作为查询”读出器替代常见的全局文本条件注入，通过迭代的交叉注意力从冻结的CLIP特征中提取指令相关的视觉证据，生成紧凑的指令条件化令牌。</li>
+<li>在仿真和实物双手操作任务上进行了广泛实验，验证了所提几何与语言引导感知方法的有效性，在领域随机化设置下相比最强基线有显著提升，并展示了良好的仿真到实物迁移能力。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，该方法依赖于已知的相机内参和外参（用于3D提升），且在极端遮挡情况下（例如物体完全被遮挡）可能失效。</p>
+<p><strong>对后续研究的启示</strong>：1) 在VLA策略中显式地建模3D几何关系是提升空间理解和跨视角鲁棒性的有效途径。2) 利用预训练视觉-语言模型的潜力，通过主动的、迭代的查询机制进行细粒度指令接地，比简单的全局条件化更具优势。3) 训练时的深度蒸馏是一种在不增加推理开销的前提下，将高质量几何先验注入策略的有效方法，尤其适用于处理真实世界中的噪声传感器数据。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对杂乱场景中双手操作任务因遮挡和视角变化导致的泛化能力差问题，提出PEAfowl模型。其核心方法包括：1）几何引导的多视图融合，通过预测token深度分布、可微分3D提升与局部跨视图聚合，构建几何一致表征；2）文本感知读取机制，采用Perceiver风格在冻结CLIP特征上迭代积累指令相关证据。实验表明，在RoboTwin 2.0上，PEAfowl相比最强基线成功率提升23.0个百分点，且真实机器人实验验证了其可靠的仿真到现实迁移能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.17885" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

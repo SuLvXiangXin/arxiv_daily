@@ -30,76 +30,178 @@
       <section class="detail-body">
         <h2>📝 详细解读</h2>
         <h2 id="研究背景与动机">研究背景与动机</h2>
-<p>当前具身人工智能（Embodied AI）方法通常通过模仿学习（IL）从专家演示中学习策略。然而，这种方法存在三个关键局限性：首先，仅基于最优轨迹训练的模型可能认为每个任务只有唯一有效解法；其次，模型从未见过可恢复的错误及其纠正过程；最后，当面对同一观察的多种有效行为模式时，IL缺乏评估动作质量的机制。相比之下，强化学习（RL）通过标量奖励提供反馈，但相关的探索过程通常导致样本效率低下，在奖励稀疏的具身任务中尤为严重。</p>
-<p>本文针对模仿学习无法有效利用次优演示数据这一具体痛点，提出了一种新视角：将次优行为（如错误和低效策略）与建设性的语言反馈相结合，从而将其转化为学习机会。核心思路是：将语言反馈嵌入作为Transformer策略输入序列的一部分，系统性地用包含语言反馈的次优演示增强训练数据，并可选地引入自监督的辅助反馈预测任务，以提高策略的组合泛化能力和鲁棒性，同时保持数据效率。</p>
+<p>当前具身AI方法倾向于从专家演示中学习策略。然而，由于缺乏评估演示动作质量的机制，这些方法仅限于学习最优行为，或者存在复制错误和低效行为的风险。虽然强化学习提供了另一种选择，但其相关的探索过程通常以牺牲数据效率为代价。本文探讨了当模仿学习训练的智能体能够获得建设性语言反馈，从而将不同行为模式情境化时，如何同时从最优和次优演示中学习鲁棒的表示。本文的核心思路是，通过将语言反馈嵌入作为Transformer策略输入序列的一部分，并可选地使用反馈预测的辅助自监督学习目标来补充传统的下一动作预测目标，从而将次优行为转化为学习机会，实现数据高效的泛化。</p>
 <h2 id="方法详解">方法详解</h2>
-<p>FOSSIL方法的整体框架基于一个自回归Transformer主干网络，其输入是一个包含多模态信息的序列，输出是下一时间步要执行的动作。输入序列的令牌（tokens）可灵活配置，包括图像观测（经CNN编码）、语言指令（经冻结的Sentence-BERT编码）、历史动作，以及核心的创新输入——语言反馈嵌入或标量奖励（即“回报”）。模型通过最小化动作预测的交叉熵损失进行训练。</p>
-<p><img src="https://example.com/fig1_method_framework.png" alt="方法框架"></p>
+<p>整体框架旨在利用反馈信号（语言或标量奖励）来情境化训练数据中的最优和次优行为模式，并通过辅助学习目标增强模型对行为后果的理解，从而学习高度可泛化和鲁棒的表示。</p>
+<p><img src="https://i.imgur.com/9Z0JQ6v.png" alt="方法框架"></p>
 <blockquote>
-<p><strong>图1</strong>：FOSSIL方法灵活架构的输入序列配置示例。序列包含任务指令、图像观测、历史动作、语言反馈以及可选的其他令牌（如标量奖励）。模型通过掩码机制控制哪些令牌在训练时可见，以适配不同的实验变体。</p>
+<p><strong>图1</strong>：方法整体框架。我们通过用反馈信号情境化行为模式，利用给定任务实例的最优和次优轨迹。我们利用不同类型的反馈和额外的自监督辅助任务，以数据高效的方式学习行为的可高度泛化和鲁棒的表示。</p>
 </blockquote>
-<p>核心模块与技术细节如下：</p>
+<p>模型基于自回归Transformer架构，灵感来源于Decision Transformers和Uni[MASK]方法，将模仿学习建模为序列决策问题。模型可以基于与状态-动作对相关的额外令牌（如指令、标量奖励和/或语言反馈）来条件化动作生成。</p>
+<p><img src="https://i.imgur.com/ZN7HkzP.png" alt="输入输出令牌示意图"></p>
+<blockquote>
+<p><strong>图2</strong>：一个基于初始指令和语言反馈条件化动作生成的模型的输入和输出令牌示例，并带有在下一时间步预测语言反馈的选项。<code>m_i</code>=指令，<code>f_i</code>=语言反馈，<code>r_i</code>=剩余回报/奖励，<code>o_i</code>=观察，<code>a_i</code>=动作。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
 <ol>
-<li><strong>数据生成与增强</strong>：为每个任务生成两种轨迹数据集。一是约12K条使用广度优先搜索（BFS）规划的最优路径。二是约12K条混合路径，其中包含约4K条最优路径和约8K条次优路径。次优路径通过以概率<code>p</code>用随机动作替换规划器动作来生成，随后由规划器动作纠正，从而在数据中系统性地引入错误和低效策略。</li>
-<li><strong>反馈生成</strong>：为轨迹中的每一步生成两种形式的反馈，确保公平比较。<ul>
-<li><strong>语言反馈</strong>：基于规则模板生成，分为“任务反馈”（评价与目标或干扰物的互动）和“可承受性反馈”（评价违反环境物理规则的动作）。反馈不仅包含判断，还包含解释。</li>
-<li><strong>标量奖励</strong>：对BabyAI原始的二元奖励函数进行奖励塑形，利用与语言反馈相同的成功/失败检测机制生成中间标量奖励，使其在提供频率上与语言反馈对齐。</li>
+<li><strong>架构基础</strong>：采用Llama2作为参考骨干架构，但覆盖其配置，不使用预训练权重，以支持更快的训练和推理，并能从整个轨迹而不仅是有限上下文长度的子轨迹中学习。</li>
+<li><strong>输入编码</strong>：<ul>
+<li><strong>语言输入（指令、反馈）</strong>：使用冻结的预训练Sentence-BERT语言模型编码，将任意长度的句子压缩为紧凑的向量表示。</li>
+<li><strong>图像观察</strong>：使用一个简单的CNN网络编码为单个令牌，该网络与策略同时训练。</li>
 </ul>
 </li>
-<li><strong>辅助自监督任务</strong>：除了主要动作预测目标外，模型可增加额外的回归头，用于预测下一时间步的标量奖励值或语言反馈嵌入，使用均方误差（MSE）损失。这些辅助损失通过可学习的权重参数与主损失平衡。预测的反馈令牌仅用于计算损失，不反馈回模型输入。此设计旨在鼓励模型学习更鲁棒的动作后果表征，并在推理时无反馈的情况下利用内部世界模型。</li>
+<li><strong>训练目标与损失函数</strong>：<ul>
+<li><strong>主要目标</strong>：通过最小化动作的交叉熵损失，将环境中的动作预测作为下一令牌预测任务来学习。</li>
+<li><strong>辅助自监督目标</strong>：引入额外的回归头，使用均方误差损失来预测下一时间步的标量奖励值和语言反馈嵌入。这些辅助损失通过可学习的加权参数与主要的动作预测损失进行平衡。预测的反馈令牌仅用于计算辅助损失，不作为输入反馈给模型。</li>
+</ul>
+</li>
+<li><strong>创新点</strong>：<ul>
+<li><strong>系统性的数据增强</strong>：训练机制系统地用基础演示的次优变体增强训练数据（见图3）。次优轨迹通过以概率<code>p</code>用从动作空间均匀采样的随机动作替换规划器动作来生成，后续规划器动作会纠正任何次优行为。</li>
+<li><strong>反馈作为条件</strong>：直接将语言反馈嵌入或标量奖励（剩余回报）作为输入序列的一部分提供给策略，为模型提供区分行为优劣的即时上下文。</li>
+<li><strong>反馈预测任务</strong>：通过要求模型预测自身动作将产生的反馈，鼓励其学习更鲁棒的动作表示，并使其在推断时没有反馈的情况下能够利用对动作后果的内部世界模型。</li>
+</ul>
+</li>
 </ol>
-<p>与现有方法相比，创新点主要体现在：1）<strong>系统性利用次优数据</strong>：不是避免次优行为，而是通过反馈将其语境化并用于学习；2）<strong>公平比较反馈模态</strong>：通过对齐生成频率，直接比较语言反馈与标量奖励的效果；3）<strong>引入反馈预测任务</strong>：将其作为模仿学习中的自监督辅助目标，以增强表征学习。</p>
 <h2 id="实验与结果">实验与结果</h2>
-<p><strong>实验设置</strong>：研究在自定义环境BabyAI-XGen（基于BabyAI修改）中进行，该环境支持对任务配置和环境参数的细粒度控制，便于系统评估组合泛化。评估主要沿两个轴线：组合泛化（系统性Systematicity和能产性Productivity）和鲁棒性（对目标表征、外部扰动、对抗/缺失反馈的鲁棒性及解的效率）。此外，还测试了数据效率。</p>
-<p><strong>基线方法</strong>：对比了多种基于相同Transformer架构的模型变体：仅使用最优轨迹且无步级反馈的模仿学习基线（<code>None</code>）；在次优数据上使用标量奖励（<code>Scalar</code>）或语言反馈（<code>Lang</code>）的变体；同时使用两者的变体（<code>Combo</code>）；以及增加了反馈预测（<code>+FP</code>）的版本。同时，还对比了使用PPO的在线RL基线。</p>
-<p><strong>关键实验结果</strong>：</p>
-<ol>
-<li><strong>组合泛化</strong>：在系统性测试（泛化到未见过的目标颜色-形状组合）中，使用语言反馈或标量奖励的模型性能是无反馈基线的四倍以上（具体数值：基线成功率约10%，反馈模型成功率超过40%）。语言反馈与标量奖励表现相当，结合两者并加入反馈预测任务时性能最佳。</li>
-</ol>
-<p><img src="https://example.com/fig2_compositionality_table.png" alt="组合泛化结果表"></p>
-<blockquote>
-<p><strong>图2</strong>：组合泛化（系统性和能产性）实验结果汇总表。数据显示，在大多数测试场景下，使用语言反馈（Lang）或标量奖励（Scalar）的模型显著优于无反馈基线（None），且两种反馈形式性能接近。</p>
-</blockquote>
-<ol start="2">
-<li><strong>鲁棒性</strong>：<ul>
-<li><strong>子目标完成</strong>：有反馈的模型能更完整地完成任务，而非仅完成部分子目标。</li>
-<li><strong>缺乏最优数据</strong>：当训练数据完全移除最优轨迹时，无反馈模型性能下降最显著，而结合了标量和语言反馈的模型受影响最小，表明步级反馈支持从不同次优解中进行轨迹拼接。</li>
-<li><strong>外部扰动</strong>：在随机替换动作的扰动下，无反馈模型性能降至70%以下。而能预测反馈的语言反馈模型（<code>LANG + FP</code>）可保持75%的原始性能，与标量奖励模型相当。结合两种反馈并预测反馈的模型（<code>COMBO + FP</code>）最鲁棒，保持78%性能。</li>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>环境</strong>：自定义的BabyAI-XGen环境，这是BabyAI的修改版，支持程序化生成用于组合泛化研究的定制任务。</li>
+<li><strong>数据集</strong>：为多任务训练生成两种轨迹数据集：1）约12K条使用BFS规划的最优路径；2）约4K条最优和约8K条包含错误和低效行为的次优路径组成的混合数据集。</li>
+<li><strong>反馈生成</strong>：基于规则的语言反馈和标量奖励生成，确保反馈的准确性和一致性。语言反馈扩展了“任务反馈”模板，涵盖对期望交互的正面反馈和对干扰物非期望交互的负面反馈。“可供性反馈”则在代理尝试无效动作时触发。标量奖励通过对原始二元奖励函数进行奖励塑形得到。</li>
+<li><strong>基线方法</strong>：所有模型共享相同的基础架构，通过掩码或解掩相关额外令牌来区分变体。<ul>
+<li><code>NONE</code>：仅掩码条件化令牌的模仿学习基线。</li>
+<li><code>SCALAR</code>：条件化于标量奖励（剩余回报）。</li>
+<li><code>LANG</code>：条件化于语言反馈。</li>
+<li><code>COMBO</code>：同时条件化于语言反馈和标量奖励。</li>
+<li>各变体均可选择是否添加反馈预测辅助任务（<code>+FP</code>）。</li>
 </ul>
 </li>
-</ol>
-<p><img src="https://example.com/fig3_robustness_plots.png" alt="鲁棒性分析图"></p>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<p><strong>1. 组合泛化</strong>：<br>实验评估了系统性（组合插值到新组合）和生产力（外推至未见过的值）两个维度。</p>
+<table>
+<thead>
+<tr>
+<th align="left">反馈增强</th>
+<th align="left">次优轨迹</th>
+<th align="left">反馈预测</th>
+<th align="left">系统性 (颜色-形状)</th>
+<th align="left">生产力 (颜色†)</th>
+<th align="left">生产力 (布局*)</th>
+<th align="left">平均</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">NONE</td>
+<td align="left">×</td>
+<td align="left">×</td>
+<td align="left">16.9</td>
+<td align="left">13.5</td>
+<td align="left">70.3</td>
+<td align="left">33.1</td>
+</tr>
+<tr>
+<td align="left">SCALAR</td>
+<td align="left">✓</td>
+<td align="left">✓</td>
+<td align="left">69.4</td>
+<td align="left">71.9</td>
+<td align="left">80.0</td>
+<td align="left">65.8</td>
+</tr>
+<tr>
+<td align="left">LANG</td>
+<td align="left">✓</td>
+<td align="left">✓</td>
+<td align="left">69.7</td>
+<td align="left">66.1</td>
+<td align="left">79.2</td>
+<td align="left">64.1</td>
+</tr>
+<tr>
+<td align="left">COMBO</td>
+<td align="left">✓</td>
+<td align="left">✓</td>
+<td align="left">71.7</td>
+<td align="left">69.5</td>
+<td align="left">78.5</td>
+<td align="left">65.0</td>
+</tr>
+</tbody></table>
 <blockquote>
-<p><strong>图3</strong>：鲁棒性分析图示。（a）任务完成情况分布，显示有反馈的模型完全完成任务的比例更高。（b）模型在外部扰动下的性能保持率。（c-d）模型在对抗性或缺失语言反馈情况下的性能表现，显示仅依赖语言反馈的模型性能崩溃，而结合标量奖励和反馈预测的模型能保留大部分性能。</p>
+<p><strong>表1</strong>：在不同组合泛化维度上的成功率（%）。<code>†</code>表示任务中的组合性，<code>*</code>表示环境中的组合性。结果表明，使用次优轨迹和某种形式反馈训练的模型，其性能远超仅使用最优轨迹的基线（<code>NONE</code>），在系统性任务上提升超过四倍。语言反馈（<code>LANG</code>）与标量奖励（<code>SCALAR</code>）在多数情况下性能相当，结合两者（<code>COMBO</code>）有时能带来小幅提升。</p>
 </blockquote>
-<ol start="3">
-<li><strong>数据效率</strong>：在仅使用25%、50%训练数据的缩放实验中，任何使用反馈来语境化次优轨迹的模型，其数据效率和缩放性都远优于仅从最优轨迹学习的IL基线或PPO基线。<code>Combo</code>变体在数据量充足时表现出最强的后期缩放潜力。</li>
-</ol>
-<p><img src="https://example.com/fig4_data_efficiency_curve.png" alt="数据效率曲线"></p>
+<p><strong>2. 鲁棒性</strong>：<br><img src="https://i.imgur.com/1pQYbN6.png" alt="鲁棒性评估结果"></p>
 <blockquote>
-<p><strong>图4</strong>：数据效率与缩放曲线。展示了不同模型在仅使用部分训练数据（25%， 50%， 100%）时，在系统性泛化任务上的性能。使用反馈的模型（Scalar， Lang， Combo）在不同数据规模下均优于IL基线（None）和PPO基线，且随着数据量增加性能持续提升。</p>
+<p><strong>图4</strong>：在不同鲁棒性评估设置下的成功率比较。a) 子目标表示：显示模型完全完成任务（所有子目标）与部分完成任务的比率。带有反馈的模型更可能完全完成任务。b) 外部扰动：模拟硬件故障（随机替换动作）。训练有语言反馈且能预测反馈的模型（<code>LANG + FP</code>）与使用标量奖励的模型同样鲁棒。c) 对抗性反馈：在推断时提供随机句子。仅依赖语言反馈的模型性能崩溃，但结合标量奖励和反馈预测（<code>COMBO + FP</code>）的模型能保留大部分性能。d) 缺失反馈：推断时不提供反馈。趋势与对抗性反馈类似。</p>
 </blockquote>
-<p><strong>消融实验总结</strong>：辅助反馈预测任务、结合语言与标量反馈，这两个组件在提升模型对扰动和缺失反馈的鲁棒性方面贡献显著。反馈预测使模型能内部预估动作后果，而结合两种反馈则提供了互补的信号，使模型在单一信号失效时仍能保持性能。</p>
+<table>
+<thead>
+<tr>
+<th align="left">反馈</th>
+<th align="left">次优+最优轨迹</th>
+<th align="left">仅次优轨迹</th>
+<th align="left">性能下降</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">NONE</td>
+<td align="left">15.1</td>
+<td align="left">12.1</td>
+<td align="left">-19.9%</td>
+</tr>
+<tr>
+<td align="left">SCALAR</td>
+<td align="left">69.6</td>
+<td align="left">62.3</td>
+<td align="left">-10.5%</td>
+</tr>
+<tr>
+<td align="left">LANG</td>
+<td align="left">68.0</td>
+<td align="left">61.2</td>
+<td align="left">-10.0%</td>
+</tr>
+<tr>
+<td align="left">COMBO</td>
+<td align="left">70.3</td>
+<td align="left">65.6</td>
+<td align="left">-6.7%</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表2</strong>：当仅使用次优轨迹（ST）与同时使用次优和最优轨迹（ST+OT）时，成功率的相对下降（%）。结果表明，步级反馈能有效实现来自不同次优解决方案的轨迹拼接，尤其是在结合两种反馈时，对最优数据的依赖最小。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：</p>
+<ul>
+<li><strong>次优轨迹</strong>：是性能提升的关键，使模型能学习从错误中恢复并理解多种解决方案。</li>
+<li><strong>反馈条件化</strong>：无论是语言还是标量形式，都为模型提供了区分行为优劣的必要信号，是泛化能力大幅提升的主要原因。</li>
+<li><strong>反馈预测辅助任务</strong>：增强了模型对动作后果的理解，特别是在面对外部扰动或反馈缺失/对抗时，显著提高了模型的鲁棒性。</li>
+<li><strong>反馈模态结合</strong>：结合语言反馈和标量奖励（<code>COMBO</code>）通常能带来最佳或接近最佳的鲁棒性表现，尤其是在对抗性场景下。</li>
+</ul>
 <h2 id="总结与启发">总结与启发</h2>
 <p><strong>核心贡献</strong>：</p>
 <ol>
-<li>提出了<strong>FOSSIL框架</strong>，首次系统性地利用语言反馈将模仿学习中的次优演示转化为有效的学习机会，显著提升了策略的组合泛化能力和数据效率。</li>
-<li>发布了<strong>BabyAI-XGen环境</strong>，为系统评估具身智能体的组合泛化提供了可高度定制、可复现的实验平台。</li>
-<li>通过严谨实验证明，<strong>语言反馈在提供频率一致的情况下，可作为标量奖励的竞争性替代或补充</strong>，为实际部署中反馈模态的选择提供了灵活性。</li>
+<li>提出了<strong>FOSSIL框架</strong>，该框架利用反馈来解锁模仿学习中次优演示的学习潜力，将错误转化为学习机会，显著提高了数据效率和组合泛化能力。</li>
+<li>发布了<strong>BabyAI-XGen环境</strong>，一个经过修改的测试平台，支持对具身智能体的组合泛化能力进行严格、多维度的评估。</li>
+<li>通过实验证明，在频率对齐的情况下，<strong>语言反馈与塑形标量奖励在指导学习方面效果相当</strong>，为实际应用提供了灵活性。同时，结合两种反馈模态和反馈预测任务能带来最佳的鲁棒性。</li>
 </ol>
-<p><strong>局限性</strong>：论文提到，当测试涉及训练中未出现过的物体空间关系时，语言反馈的效果较差，作者推测模型在将描述空间关系的语言进行“落地”时存在困难。</p>
-<p><strong>后续研究启示</strong>：</p>
+<p><strong>局限性</strong>：</p>
+<ul>
+<li>论文提到，当测试涉及训练中未出现过的物体位置（空间关系）时，语言反馈的效果不如标量奖励。作者假设模型难以正确理解描述空间关系的语言。</li>
+<li>严重依赖反馈信号：在推断时，如果语言反馈缺失或具有对抗性，仅依赖语言反馈的模型性能会严重下降（尽管这被视作未学习虚假相关性的积极迹象）。</li>
+</ul>
+<p><strong>对后续研究的启示</strong>：</p>
 <ol>
-<li><strong>反馈的自动生成与质量</strong>：本研究使用基于规则的反馈生成器。未来可探索利用大语言模型（LLM）生成更丰富、更自然的反馈，并研究反馈质量对学习的影响。</li>
-<li><strong>扩展到更复杂的环境与任务</strong>：可在视觉更复杂、物理交互更丰富的3D环境中验证此方法的有效性。</li>
-<li><strong>人机交互中的应用</strong>：该方法为通过自然语言交互（如人类教师的纠正性反馈）来在线改进机器人策略提供了可行的技术路径。</li>
-<li><strong>对表征学习的深入理解</strong>：辅助反馈预测任务的有效性表明，在模仿学习中引入对动作后果的预测是学习鲁棒、接地气的多模态表征的有前景的方向。</li>
+<li><strong>利用次优数据</strong>：在模仿学习中系统性地引入并情境化次优演示，是一种高效提升模型泛化能力和鲁棒性的途径。</li>
+<li><strong>多模态反馈的潜力</strong>：结合语言反馈的丰富语义和标量奖励的数值精确性，可能产生更强大、更适应不同部署场景的智能体。</li>
+<li><strong>辅助任务的价值</strong>：像反馈预测这样的自监督辅助任务，可以促使模型学习更丰富的世界模型，从而在不依赖外部反馈时也能做出稳健的决策。</li>
 </ol>
 
       </section>
       <section class="detail-tldr">
         <h2>💡 一句话总结</h2>
-        <p>本文针对具身视觉语言任务中模仿学习只能利用最优演示样本、无法从次优数据中学习的问题，提出FOSSIL方法。该方法的核心是**将语言反馈嵌入作为Transformer策略的输入**，并可选地增加**辅助的自监督反馈预测目标**，使智能体能利用语言反馈理解并学习次优行为。在BabyAI-XGen环境上的实验表明，该方法能**显著提升智能体的组合泛化能力与鲁棒性**，验证了语言反馈作为标量奖励替代方案的有效性，实现了数据高效的学习。</p>
+        <p>本文针对具身视觉语言任务中模仿学习的数据效率与泛化能力问题，提出FOSSIL方法。核心思路是利用语言反馈来利用次优示范样本，将错误转化为学习机会。关键技术是将语言反馈嵌入作为输入提供给基于Transformer的策略网络，并引入辅助的自监督反馈预测目标。实验在BABYAI-XGEN环境中进行，结果表明该方法显著提升了智能体的组合泛化能力和鲁棒性，证明了语言反馈是替代标量奖励的有效且直观的方式。</p>
       </section>
       <div class="detail-actions">
         <a href="http://arxiv.org/abs/2510.11307" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
@@ -108,8 +210,8 @@
     </article>
   </main>
   <footer class="site-footer">
-    <span>数据抓取来源于 Robotics arXiv Daily</span>
-    <span>本页由 GitHub Actions 定时更新</span>
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
   </footer>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"

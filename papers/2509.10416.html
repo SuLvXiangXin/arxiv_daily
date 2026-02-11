@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>TASC: Task-Aware Shared Control for Teleoperated Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>TASC: Task-Aware Shared Control for Teleoperated Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.10416" target="_blank" rel="noreferrer">2509.10416</a></span>
+        <span>作者: Fu, Ze, Song, Pinhao, Hu, Yutong, Detry, Renaud</span>
+        <span>日期: 2025/09/12</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于运动输入的共享控制方法主要集中于短视距行为，如目标到达、抓取或避障。这些方法存在两个关键局限性：第一，难以从用户的运动指令中推断多步日常任务的任务级意图；第二，难以泛化到涉及多样化物体和交互的通用操作任务中。本文针对共享控制中“任务理解与推断”以及“任务泛化”这两个核心痛点，提出利用视觉语言模型（VLM）提供的丰富常识知识来理解场景功能关系、推断任务级意图的新视角。本文的核心思路是：通过VLM构建一个开放词汇的交互图来编码物体间的功能关系，并基于此图推断用户意图，进而设计一个分阶段（抓取与物体交互）的共享控制策略，专门为用户提供旋转自由度上的辅助，实现零样本泛化的长视距操作协助。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>TASC框架旨在为多步遥操作提供通用、长视距的辅助。其整体流程是：系统接收RGB-D场景观测，利用VLM构建开放词汇交互图；一个目标推断模块融合该图与用户运动线索，估计用户当前意图目标的概率分布；一个共享控制器根据此分布，将用户的平移输入与系统计算的辅助旋转进行混合，在抓取和物体交互两个阶段提供旋转辅助。</p>
+<p><img src="https://arxiv.org/html/2509.10416v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：TASC框架概览。遥操作循环始于对场景的RGB-D观测，其与VLM共同处理以构建编码物体中心、主轴和功能关系的交互图。图中红色节点代表已抓取物体，蓝色节点代表作为抓取目标或功能相关物体的任务相关物体，灰色节点代表任务无关物体。推断模块融合该图与运动线索以估计目标分布。在此分布引导下，共享控制器将用户的平移输入与辅助旋转混合：抓取阶段通过抓取规划器辅助，物体交互阶段则强制对齐两个物体的主轴。</p>
+</blockquote>
+<p>框架包含三个核心模块：</p>
+<ol>
+<li><strong>开放词汇交互图构建</strong>：给定RGB图像，系统提示VLM识别功能相关的物体名称，并提取候选的物体-动作-物体交互三元组（如“hammer-hit-nail”）。基于此构建有向图 <code>𝒢 = (V, E)</code>，其中节点 <code>v_i</code> 存储通过GroundedSAM分割、并利用深度信息投影到3D空间的物体掩码、中心位置和点云；边 <code>e_ij</code> 代表从物体 <code>o_i</code> 到 <code>o_j</code> 的交互关系。该图是任务空间 <code>𝒯</code> 的紧凑语义表示。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.10416v1/x2.png" alt="交互图状态"></p>
+<blockquote>
+<p><strong>图2</strong>：处于不同激活状态的交互图。(a) 抓取阶段，具有出边（即可作为功能工具）的节点被标记为激活；(b) 物体交互阶段，仅考虑已抓取节点的邻居节点。</p>
+</blockquote>
+<ol start="2">
+<li><p><strong>基于交互图的目标推断</strong>：系统将多步任务分解为抓取和物体交互两个阶段，并利用交互图动态缩小候选目标集。在抓取阶段，候选目标是图中出度非零（即可作用于其他物体）的节点；在物体交互阶段，候选目标是图中与已抓取节点直接相连的节点。对于当前阶段候选目标集 <code>G</code> 中的每个目标 <code>g</code>，系统基于贝叶斯规则在线更新其概率 <code>p(g|ξ^(0:t))</code>，其中 <code>ξ^(0:t)</code> 是历史机器人状态和用户输入序列。似然项 <code>p(u_h^t | x^t, g)</code> 采用最大熵逆最优控制建模，假设用户行为旨在最小化一个与目标 <code>g</code> 相关的代价函数 <code>C_g(x^t, u_h^t)</code>。该代价函数根据末端执行器到目标 <code>g</code> 的平移距离 <code>d_g(x^t)</code> 定义：当距离大于阈值 <code>δ</code> 时，代价为常数 <code>c_0</code>，鼓励快速接近；当距离小于等于 <code>δ</code> 时，代价与距离线性相关，反映精细调整。通过递归更新，系统获得一个引导共享控制策略的目标概率分布。</p>
+</li>
+<li><p><strong>共享控制策略</strong>：该策略分为两个阶段提供旋转辅助。</p>
+<ul>
+<li><strong>抓取辅助</strong>：对于当前最可能的目标物体 <code>g*</code>，系统使用预训练的抓取规划器为其生成 <code>M</code> 个候选抓取位姿。系统选择距离当前末端位姿最近的抓取位姿（或其绕夹爪接近轴旋转180°的等效位姿中旋转量较小的一个）作为辅助目标 <code>T_g</code>。系统向 <code>T_g</code> 插值旋转，辅助强度与用户平移控制幅度成比例。当用户触发夹爪闭合动作时，系统进入全自主模式，接管平移和旋转以平滑完成最终接近并执行抓取。</li>
+<li><strong>物体交互辅助</strong>：抓取成功后激活。系统从交互图中确定交互对：已抓取物体 <code>o_A</code> 及其关联目标物体 <code>o_B</code>。通过VLM推断两者之间主轴应对齐或反对齐的约束集合 <code>𝒞 = {c_i = (a_i, b_i, s_i)}</code>。随后求解一个优化问题，计算满足这些轴对齐约束的最小旋转 <code>R_g</code>（公式5）。在共享控制中，此预测旋转与用户的平移输入混合，以支持精确对齐。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.10416v1/x3.png" alt="物体交互辅助"></p>
+<blockquote>
+<p><strong>图3</strong>：通过基于功能性的轴对齐实现物体交互辅助。系统使用VLM推断被抓物体与目标之间的轴对齐约束，并求解最优旋转以满足这些约束。</p>
+</blockquote>
+<p>与现有方法相比，TASC的创新点具体体现在：1) 利用VLM构建的交互图进行任务级、多步的意图推断，而非仅将可见物体均视为候选目标；2) 设计了一个统一的两阶段共享控制策略，将辅助范围从抓取延伸至抓取后的物体交互，并专门针对最费力且不直观的旋转自由度提供零样本泛化的辅助。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在模拟和真实世界两个平台上进行，使用了Franka Research 3机器人。模拟实验在基于Robosuite v1.5搭建的桌面环境中进行，物体模型主要来自YCB数据集，定义了三个多步操作任务：将香蕉放到盘子上（Place）、将马克笔插入马克杯（Insert）、用锤子敲击木栓（Hammer）。</p>
+<p>对比的基线方法包括：纯遥操作（Teleop）、不使用交互图的TASC变体（TASC-）、以及零样本视觉共享自治框架VOSA。评估指标包括客观指标（任务完成时间、末端轨迹长度、控制输入次数）和主观指标（控制感、预期符合度、可用性、满意度，0-10分）。</p>
+<p><img src="https://arxiv.org/html/2509.10416v1/x4.png" alt="模拟设置"></p>
+<blockquote>
+<p><strong>图4</strong>：模拟实验设置及各多步共享控制任务的物体初始状态。</p>
+</blockquote>
+<p>关键实验结果如<strong>表I</strong>所示。TASC在所有任务中都实现了最少的控制输入次数（Place: 116.6, Insert: 95.6, Hammer: 186.7），表明用户负担最低。对于需要精确对齐的Insert和Hammer任务，TASC也实现了更快的任务完成时间（Insert: 54.7秒, Hammer: 72.1秒）和更短的轨迹长度，显著提升了效率。与VOSA相比，TASC通过利用空间功能性减轻了最费力的旋转控制；与TASC-相比，TASC受益于语义推理来引导任务级意图推断，操作更快速直观。</p>
+<p><img src="https://arxiv.org/html/2509.10416v1/x5.png" alt="目标概率分布"></p>
+<blockquote>
+<p><strong>图5</strong>：三种共享控制方法中，目标概率分布随时间的变化；阴影区域表示在抓取和物体交互阶段正确预测目标的时间段。TASC能更早、更稳定地收敛到正确目标。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.10416v1/Figures/6_objective_metrics.png" alt="主观评分"></p>
+<blockquote>
+<p><strong>图6</strong>：用户在控制感、预期符合度、可用性和满意度四个主观指标上的评分结果。TASC在大多数指标上获得更高评分，在控制感和辅助效果间取得了良好平衡。</p>
+</blockquote>
+<p>消融实验（TASC-）的结果表明，移除交互图会导致在所有任务上的性能下降（时间更长、轨迹更长、输入更多），这验证了利用交互图进行语义推理和候选目标筛选对于高效意图推断和辅助的重要性。</p>
+<p><img src="https://arxiv.org/html/2509.10416v1/x6.png" alt="真实世界设置"></p>
+<blockquote>
+<p><strong>图7</strong>：真实世界实验设置，包括Franka Research 3机械臂、桌面物体和顶置RGB-D相机。</p>
+</blockquote>
+<p>真实世界实验旨在评估TASC的零样本泛化能力。如图8所示，TASC成功辅助用户完成了包括放置、对齐、堆叠、清扫、插入、倾倒在内的多种未见过的日常操作任务，用户仅需单手控制摇杆的平移部分即可完成任务，证明了其强大的泛化性。</p>
+<p><img src="https://arxiv.org/html/2509.10416v1/x7.png" alt="真实世界任务快照"></p>
+<blockquote>
+<p><strong>图8</strong>：TASC成功执行共享控制任务的快照，半透明物体表示初始位置。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了一个任务感知的共享控制框架，能够从历史控制行为和场景语义中推断用户的多步任务级意图，而无需预定义任务描述；2) 引入了一种基于开放词汇交互图的意图推断机制，利用VLM编码的功能关系缩小候选目标集，提高了推断效率和准确性；3) 设计了一个分阶段的共享控制策略，在抓取和物体交互阶段均提供旋转辅助，通过求解轴对齐优化问题实现零样本泛化的物体交互支持。</p>
+<p>论文提到的局限性包括：当前VLM的空间感知能力有限，可能导致轴对齐约束预测不稳定；抓取辅助依赖于离线的抓取规划器，可能无法覆盖所有可行的抓取方式。</p>
+<p>这项工作对后续研究的启示在于：展示了如何将基础模型的常识推理能力系统地整合到共享控制中，以解决长视距、通用任务协助的挑战。未来方向可以包括改进VLM的空间推理能力、探索在线学习或自适应机制以优化交互图、以及将语言等多模态输入更紧密地整合到意图推断环路中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出TASC框架，旨在解决遥操作中为日常多步骤任务提供通用、长视野共享控制的两大挑战：从运动指令推断任务级用户意图，以及跨多样物体与任务的泛化辅助。关键技术包括：通过视觉输入构建开放词汇交互图以理解物体功能关系，并基于视觉语言模型预测的空间约束，在抓取和交互阶段提供旋转辅助。实验表明，TASC在仿真和真实环境中均能提升任务效率并降低用户操作负担，实现了对日常操作任务的零样本泛化支持。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.10416" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

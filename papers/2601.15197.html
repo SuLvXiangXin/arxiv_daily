@@ -30,70 +30,62 @@
       <section class="detail-body">
         <h2>📝 详细解读</h2>
         <h2 id="研究背景与动机">研究背景与动机</h2>
-<p>当前，端到端训练的视觉-语言-动作（VLA）模型在机器人任务中展现出潜力，其直接从多模态输入（图像、语言指令）映射到机器人动作。然而，主流方法通常将VLA模型视为一个确定性的黑箱函数，这带来了几个关键局限性：1）<strong>数据效率低</strong>：需要大量、多样化的演示数据才能泛化到新场景；2）<strong>泛化能力受限</strong>：模型难以适应训练分布外的物体、布局或指令；3）<strong>缺乏不确定性估计</strong>：模型无法提供其预测动作的置信度，这在安全关键的应用中至关重要。</p>
-<p>本文针对VLA模型在泛化性和不确定性建模方面的不足，提出了一个新颖的<strong>贝叶斯分解</strong>视角。具体而言，作者认为将VLA模型分解为视觉-语言条件先验和动作似然两个部分，并引入<strong>潜在动作查询（Latent Action Queries）</strong> 作为中间表征，能够更有效地学习动作分布并量化不确定性。核心思路是：将VLA建模为一个贝叶斯推理过程，通过变分推断学习潜在动作查询的后验分布，该分布编码了多模态观测下的动作不确定性，最终解码出多样且合理的机器人动作序列。</p>
+<p>当前，视觉-语言-动作（VLA）模型通过在大规模人类演示数据上训练，学习将自然语言指令映射为机器人动作的策略，在分布内任务上展现出潜力。然而，主流方法在泛化到新指令或复杂多任务场景，尤其是在分布外（OOD）环境中时，面临显著挑战。论文指出，这一脆弱性的根源在于当前机器人数据集普遍存在的“目标驱动”收集偏差。在此类数据集中，仅从视觉观察就能高度确定性地预测语言指令（例如，看到柜子总是对应“打开柜子”），导致动作与指令之间的条件互信息（CMI）消失，作者称之为“信息坍缩”。其后果是，模型退化为纯视觉策略，忽略了语言约束，在遇到模糊场景或OOD环境时失败。</p>
+<p>本文针对VLA模型因数据集偏差而忽视语言指令这一具体痛点，提出了一个新的贝叶斯分解视角。核心思路是：通过引入可学习的潜在动作查询构建双分支架构，分别估计视觉先验和语言条件后验策略，并最大化动作与指令之间的点互信息（PMI），从而惩罚视觉捷径，强制模型依据语言指令生成动作。</p>
 <h2 id="方法详解">方法详解</h2>
-<p>BayesianVLA的整体框架是一个基于Transformer的编码器-解码器结构，但其核心在于贝叶斯概率图模型的构建与推断。模型将语言指令 ( I ) 和图像观测 ( O ) 作为条件，旨在生成机器人动作序列 ( A )。关键创新是引入了一组潜在变量 ( Z = {z_i}_{i=1}^N )（即潜在动作查询），将生成过程分解为 ( p(A | O, I) = \int p(A | Z) p(Z | O, I) dZ )。</p>
-<p><img src="https://raw.githubusercontent.com/your-repo/BayesianVLA/main/figures/framework.png" alt="BayesianVLA Framework"></p>
+<p>LangForce的整体框架是一个共享VLM权重的双分支架构，旨在同时建模视觉先验 p(a|v) 和完整的语言条件策略 π(a|v,ℓ)。</p>
+<p><img src="https://..." alt="方法框架"></p>
 <blockquote>
-<p><strong>图1</strong>：BayesianVLA 整体框架。模型接收图像观测和语言指令，通过视觉-语言编码器获得上下文特征。潜在动作查询（Latent Action Queries）通过交叉注意力与上下文交互，其先验分布由指令和观测决定。训练时，通过推理网络（变分后验）和先验网络计算KL散度进行正则化。最终，动作解码器从采样的潜在查询中解码出机器人动作序列。</p>
+<p><strong>图3</strong>：LangForce框架。采用共享VLM权重的双分支架构。先验分支（左）处理<code>[v, Q, ℓ]</code>，利用因果掩码学习视觉先验p(a|v)。后验分支（右）处理<code>[v, ℓ, Q]</code>，学习完整策略π(a|v,ℓ)。潜在动作查询Q作为瓶颈接口，LLR目标鼓励模型最大化动作与指令间的信息。</p>
 </blockquote>
-<p>框架包含三个核心模块：</p>
+<p>核心模块是<strong>潜在动作查询</strong>。作者在VLM词表中扩展了K=64个可学习的令牌<code>Q = {&lt;|action_1|&gt;, ..., &lt;|action_K|&gt;}</code>及其对应的嵌入向量。这些查询作为VLM（如Qwen3-VL）与连续动作头（一个扩散变换器DiT）之间的专用瓶颈。关键设计在于，仅将这些查询令牌的隐藏状态<code>H_Q</code>馈送给动作专家，而非所有输入令牌的隐藏状态。这结合解码器VLM固有的因果注意力掩码，使得通过简单改变<code>Q</code>在输入序列中的位置，就能精确控制编码到<code>H_Q</code>中的信息。</p>
+<p><strong>双分支训练策略</strong>具体如下：</p>
 <ol>
-<li><strong>视觉-语言编码器</strong>：使用预训练的视觉编码器（如ViT）和语言编码器（如BERT）分别处理图像 ( O ) 和指令 ( I )。编码后的特征被拼接或通过交叉注意力融合，形成统一的上下文表征 ( C )，作为后续先验和似然模块的条件。</li>
-<li><strong>贝叶斯推理与潜在动作查询模块</strong>：这是方法的核心。模型维护一组可学习的潜在动作查询 ( Z )。<strong>先验网络</strong> ( p_\theta(Z | C) ) 建模在给定上下文 ( C ) 下 ( Z ) 的分布（通常假设为对角高斯分布）。<strong>推理网络（变分后验）</strong> ( q_\phi(Z | C, A) ) 则在额外给定真实动作序列 ( A ) 的情况下，推断 ( Z ) 的近似后验分布，用于训练。潜在查询 ( Z ) 被设计为与上下文 ( C ) 通过Transformer解码器层进行交互，从而将多模态信息注入到潜在空间中。</li>
-<li><strong>动作解码器</strong>：( p_\psi(A | Z) ) 是一个基于Transformer的解码器，它以从分布中采样得到的潜在动作查询 ( Z ) 为输入，自回归地解码出具体的机器人动作序列 ( A )（如末端执行器位姿或关节角度）。</li>
+<li><strong>先验分支（视觉先验）</strong>：输入序列构造为<code>[v, Q, ℓ]</code>。由于因果掩码，<code>Q</code>只能关注视觉<code>v</code>而无法看到其后的语言<code>ℓ</code>。因此，<code>H_Q^{prior}</code>编码了纯视觉信息。使用这些特征预测动作，通过流匹配损失<code>L_prior</code>学习数据集中固有的动作偏差。优化<code>L_prior</code>时，<code>H_Q^{prior}</code>的梯度被截断，确保视觉先验的更新仅限于DiT动作头，防止VLM主干学习视觉捷径。</li>
+<li><strong>后验分支（完整策略）</strong>：输入序列构造为<code>[v, ℓ, Q]</code>。此时<code>Q</code>可以关注<code>v</code>和<code>ℓ</code>。<code>H_Q^{post}</code>编码了完整上下文。通过流匹配损失<code>L_main</code>学习专家动作。</li>
 </ol>
-<p>训练目标是最小化变分下界（ELBO）：<br>[<br>\mathcal{L} = \mathbb{E}<em>{q_\phi(Z | C, A)} [\log p_\psi(A | Z)] - \beta \cdot D</em>{KL}(q_\phi(Z | C, A) | p_\theta(Z | C))<br>]<br>其中，第一项是重构损失，确保动作能被准确解码；第二项是KL散度，正则化变分后验使其接近先验，并鼓励潜在空间学习到有意义的、与上下文相关的动作抽象。超参数 ( \beta ) 控制正则化强度。</p>
-<p>与现有确定性VLA模型相比，创新点具体体现在：1）<strong>概率化建模</strong>：将单点动作预测转变为分布预测，通过潜在查询的分布捕获不确定性；2）<strong>分解式学习</strong>：明确分离了条件先验 ( p(Z|O,I) ) 和动作似然 ( p(A|Z) )，这提高了模型的数据效率和对新组合的泛化能力；3）<strong>潜在动作查询作为中间抽象</strong>：这些查询不是直接的动作，而是编码了“动作意图”的潜在变量，为理解和生成多样化的动作提供了灵活的中间层。</p>
+<p><strong>优化目标</strong>是最大化动作与指令的条件点互信息（PMI），即最大化后验策略与先验策略的对数似然比（LLR）。具体地，利用VLM的语言建模损失作为<code>log p(ℓ|...)</code>的代理，定义LLR损失为：<code>L_LLR = log p(ℓ | v, H_Q^{prior}) - sg(log p(ℓ | v))</code>，其中<code>sg(·)</code>表示停止梯度操作。最大化此项（即最小化<code>-L_LLR</code>）强制动作表征<code>H_Q</code>携带能解释指令<code>ℓ</code>的信息。停止梯度操作是为了防止模型通过破坏基线<code>p(ℓ|v)</code>（即损害VLM的通用语言能力）来最大化比值。</p>
+<p><strong>总训练目标</strong>结合了动作预测损失和LLR正则化项：<code>L_total = (1-λ)L_FM(ψ; H_Q^{post}) + λL_FM(ψ; H_Q^{prior}) - βL_LLR</code>。实验中设置λ=0.3，β=0.1。在推理时，仅使用后验分支，因此相比标准VLA基线没有额外的计算开销。</p>
+<p>与现有方法相比，创新点主要体现在：1）明确识别并形式化了由数据集偏差引起的“信息坍缩”问题；2）提出了通过潜在动作查询实现贝叶斯分解的双分支架构；3）设计了最大化LLR的训练目标，直接惩罚视觉捷径，鼓励模型利用语言信息。</p>
 <h2 id="实验与结果">实验与结果</h2>
-<p><strong>实验设置</strong>：在模拟环境（Meta-World, Franka Kitchen）和真实世界数据集（Language-Table, Bridge-V2）上进行评估。任务范围包括桌面操作（推、抓、放置）和长视野移动操作。使用成功率（SR）和任务完成度作为主要指标。</p>
-<p><strong>基线方法</strong>：对比了包括端到端VLA模型（如RT-1, ACT）、基于扩散的策略（Diffusion Policy）以及非贝叶斯版本的潜在查询模型。</p>
-<p><img src="https://raw.githubusercontent.com/your-repo/BayesianVLA/main/figures/main_results.png" alt="Main Results"></p>
+<p>实验在三个模拟基准上进行：SimplerEnv、LIBERO和RoboCasa。训练基于StarVLA框架，使用8张NVIDIA H100 GPU，遵循默认协议。对比的基线方法广泛，包括RT-1-X、Octo系列、OpenVLA、π0、π0.5、Isaac-GR00T以及基于相同骨干网络的不同变体（QwenGR00T、QwenOFT等）。</p>
+<p><strong>在SimplerEnv上的结果</strong>：模型在BridgeDataV2和Fractal数据集上微调，评估四个操作任务。</p>
+<p><img src="https://..." alt="结果表格"></p>
 <blockquote>
-<p><strong>图2</strong>：在多个模拟和真实数据集上的成功率对比。BayesianVLA在绝大多数任务上超越了基线方法，特别是在需要组合泛化（如新物体-新指令组合）的设定下，优势更为明显（平均提升约8-15%）。</p>
+<p><strong>表1</strong>：SimplerEnv基准上的成功率（%）。LangForce取得了66.5%的平均成功率，超越了所有对比基线，相比其直接基线QwenGR00T（55.2%）有11.3%的绝对提升。在“Put Carrot on Plate”和“Put Eggplant in Yellow Basket”等需要精确识别的任务上提升显著。</p>
 </blockquote>
-<p><strong>关键实验结果</strong>：</p>
-<ol>
-<li><strong>泛化性能</strong>：在“未见过的物体+未见过的指令”组合测试中，BayesianVLA达到了75.2%的成功率，显著高于RT-1（58.7%）和ACT（61.3%）。这表明贝叶斯分解和潜在查询有助于模型更好地理解任务本质，实现更优的组合泛化。</li>
-<li><strong>不确定性校准</strong>：模型预测的动作熵与任务实际失败概率高度相关。在动作熵高的状态下执行干预或重规划，能有效避免失败，验证了其不确定性估计的有效性。</li>
-<li><strong>数据效率</strong>：在仅使用20%训练数据的设定下，BayesianVLA的性能下降幅度（-12.1%）远小于端到端模型RT-1（-31.5%），证明了其更高效的数据利用能力。</li>
-</ol>
-<p><img src="https://raw.githubusercontent.com/your-repo/BayesianVLA/main/figures/ablation.png" alt="Ablation Study"></p>
+<p><strong>在LIBERO上的结果</strong>：LIBERO包含Spatial, Object, Goal, Long四个子集。LangForce在具有视觉模糊性的Goal子集上取得了99.4%的成功率，优于基线Qwen3-VL-GR00T的97.4%（+2.0%）。</p>
+<p><img src="https://..." alt="结果表格"></p>
 <blockquote>
-<p><strong>图3</strong>：消融实验结果。从左至右分别移除了：1) KL散度项（即β=0）；2) 潜在查询的随机性（使用点估计）；3) 先验网络（使用标准正态先验）。性能均出现显著下降，证明了贝叶斯框架、潜在变量随机性和任务自适应先验各自的重要性。</p>
+<p><strong>表2</strong>：LIBERO基准上的成功率（%）。LangForce在四个子集上均表现优异，平均成功率98.4%。特别是在Goal子集上，其性能显著优于纯视觉基线（9.8%），证明了其解决模糊性的能力。</p>
 </blockquote>
-<p><strong>消融实验总结</strong>：</p>
-<ul>
-<li><strong>KL散度与先验（β&gt;0 &amp; 自适应先验）</strong>：贡献最大，移除后成功率下降超过20%。这验证了用任务上下文学习结构化先验分布对于引导潜在空间和实现泛化的关键作用。</li>
-<li><strong>潜在变量的随机性</strong>：移除后（确定性查询）性能下降约15%，表明对动作不确定性的显式建模对于处理模糊性指令和复杂场景至关重要。</li>
-<li><strong>潜在查询机制本身</strong>：即使是非贝叶斯版本，也比直接输出动作的模型有优势，说明潜在动作抽象这一设计本身是有益的。</li>
-</ul>
+<p><img src="https://..." alt="视觉捷径示例"></p>
+<blockquote>
+<p>**图2(a)**：LIBERO Goal中同一视觉场景对应多个任务的示例（如“将碗放入抽屉”或“将碗放在炉子上”）。这揭示了纯视觉模型无法解决的模糊性。</p>
+</blockquote>
+<p>为了定量分析，作者计算了LIBERO Goal数据集上条件熵<code>H(ℓ|v)</code>的代理指标——给定视觉观察时真实指令的负对数似然（NLL）和困惑度（PPL）。LangForce的NLL（9.47 nats/token）和PPL（12964.9）显著高于基线QwenGR00T（8.51 nats/token, 4964.1），表明其防止了条件熵的坍缩，保留了必要的任务不确定性，从而迫使策略利用语言指令来消歧。</p>
+<p><strong>在RoboCasa上的结果</strong>：评估了24个桌面操作任务。</p>
+<p><img src="https://..." alt="结果表格"></p>
+<blockquote>
+<p><strong>表4</strong>：RoboCasa基准上的成功率（%）。LangForce取得了52.6%的平均成功率，达到SOTA，超越了包括其基线QwenGR00T（47.8%）在内的所有方法。同时，其性能也显著高于纯视觉基线（44.7%），例如在“PnP Novel From Placemat To Bowl”任务上达到62.0%，远超纯视觉的32.0%。</p>
+</blockquote>
+<p><img src="https://..." alt="视觉捷径现象"></p>
+<blockquote>
+<p><strong>图1</strong>：RoboCasa中视觉捷径的示例。训练数据视觉多样但任务有限，导致模型学习基于特定视觉线索而非语言指令来执行任务。图(b)显示，即使在推理时没有语言指令，模型也能执行“PnPCanToDrawerClose”任务。</p>
+</blockquote>
+<p>此外，消融实验（通过纯视觉基线体现）验证了各组件贡献：纯视觉模型在分布内（如RoboCasa）或非模糊数据集上能达到与完整模型相近的性能甚至损失（见图2(b)），但在模糊（LIBERO Goal）或OOD（SimplerEnv）场景下性能暴跌，这反向证明了引入语言条件化和LLR目标对于打破视觉捷径、实现泛化的必要性。</p>
+<p><img src="https://..." alt="动作损失曲线"></p>
+<blockquote>
+<p>**图2(b)**：在BridgeDataV2和Fractal数据集上的动作损失曲线。纯视觉模型能达到与完整语言条件模型相当的低损失，表明即使在多样化的数据集中也存在视觉捷径，模型通过过拟合特定视觉模式来最小化训练目标。</p>
+</blockquote>
 <h2 id="总结与启发">总结与启发</h2>
-<p><strong>核心贡献</strong>：</p>
-<ol>
-<li><strong>提出了首个贝叶斯分解框架用于VLA模型</strong>，将动作生成明确建模为在潜在动作空间中的条件先验学习与似然解码过程。</li>
-<li><strong>引入了潜在动作查询</strong>作为一种灵活、可学习的中间动作抽象，通过变分推断进行训练，使其能够编码多模态不确定性并促进泛化。</li>
-<li><strong>通过系统性实验证明了该方法在泛化能力、数据效率和不确定性校准方面的显著优势</strong>，为构建更可靠、更通用的机器人VLA策略提供了新路径。</li>
-</ol>
-<p><strong>局限性</strong>：</p>
-<ul>
-<li>论文提到，当前方法在训练时需要访问动作序列以推断变分后验，这限制了其在纯观察性数据或无动作标签数据上的应用。</li>
-<li>潜在空间的解释性仍然有限，虽然能建模不确定性，但每个潜在查询的具体语义难以直接对应到人类可理解的动作概念。</li>
-</ul>
-<p><strong>对后续研究的启示</strong>：</p>
-<ul>
-<li><strong>更丰富的先验</strong>：可以探索融入物理知识或技能库的更复杂先验分布。</li>
-<li><strong>离线与在线学习结合</strong>：利用贝叶斯框架自然地进行在线自适应学习，通过更新后验来适应新环境。</li>
-<li><strong>层次化潜在结构</strong>：将潜在动作查询扩展到层次化结构，以分别建模高级任务规划和低级动作执行，可能进一步解决长视野任务。</li>
-</ul>
+<p>本文的核心贡献有三点：1）识别并实证验证了当前VLA训练中因数据集偏差导致的“视觉捷径”病理，即模型倾向于忽略语言指令；2）提出了LangForce框架，通过潜在动作查询和双分支贝叶斯目标，从有偏数据中恢复出真正的语言条件策略；3）在多个基准测试上证明了LangForce的有效性，特别是在OOD泛化上取得了显著提升（如SimplerEnv上11.3%的改进）。</p>
+<p>论文自身提及的局限性包括其为“进行中的工作”，且所有实验均在模拟环境中进行。对后续研究的启示在于：为缓解数据偏差问题，除了收集更平衡的数据外，从模型架构和训练目标层面进行干预（如本文的贝叶斯分解和信息最大化）是一条有效路径。潜在动作查询作为一种灵活的瓶颈设计，为连接VLM与下游控制模块提供了新思路。最大化动作与指令的互信息这一原则，可能泛化至其他需要多模态对齐的任务中。</p>
 
       </section>
       <section class="detail-tldr">
         <h2>💡 一句话总结</h2>
-        <p>根据当前仅有的论文标题《BayesianVLA: Bayesian Decomposition of Vision Language Action Models via Latent Action Queries》，无法获取正文内容以撰写符合要求的总结。  
-若仅基于标题推断，本文可能**研究如何对视觉-语言-动作模型进行贝叶斯分解，其核心方法是引入潜在动作查询**。但缺乏正文细节，无法确认具体问题、技术要点及实验数据。  
-建议提供论文正文，以便生成准确、完整的总结。</p>
+        <p>本文针对视觉-语言-动作（VLA）模型在泛化至新指令或多任务场景时性能下降的问题，指出其根源在于目标驱动数据集导致“信息塌缩”，即语言指令可从视觉观察中完全预测，使得模型退化为忽略语言的纯视觉策略。为解决此问题，作者提出LangForce框架，通过贝叶斯分解强制模型遵循指令。其核心方法是引入可学习的潜在动作查询，构建双分支架构分别估计视觉先验p(a|v)与语言条件后验π(a|v,ℓ)，并通过最大化动作与指令间的条件点互信息来优化策略，从而惩罚视觉捷径。实验表明，该方法无需新数据，即在OOD基准上显著提升泛化能力，如在SimplerEnv上性能提升11.3%。</p>
       </section>
       <div class="detail-actions">
         <a href="http://arxiv.org/abs/2601.15197" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
@@ -102,8 +94,8 @@
     </article>
   </main>
   <footer class="site-footer">
-    <span>数据抓取来源于 Robotics arXiv Daily</span>
-    <span>本页由 GitHub Actions 定时更新</span>
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
   </footer>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"

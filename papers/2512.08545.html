@@ -30,40 +30,84 @@
       <section class="detail-body">
         <h2>📝 详细解读</h2>
         <h2 id="研究背景与动机">研究背景与动机</h2>
-<p>当前，大规模多智能体系统（Massive Multi-Agent Systems, MMAS）在解决长时程、复杂协调任务（如大规模编队控制、城市交通管理）方面展现出潜力，但也面临巨大挑战。主流方法如集中训练分散执行（CTDE）框架（如MADDPG、MAPPO）在智能体数量增多时，面临联合观测空间爆炸、智能体间协调困难、训练不稳定等问题。基于记忆的方法（如RNN、Transformer）试图通过保存历史信息来应对部分可观测性，但在长时程任务中容易遗忘早期关键信息或受无关信息干扰。课程学习（Curriculum Learning）通过从易到难训练来提升学习效率，但传统课程设计通常依赖于专家先验或手工设计，难以自动适配复杂的多智能体动态。</p>
-<p>本文针对大规模多智能体在<strong>长时程、稀疏奖励、强协调需求任务</strong>中存在的<strong>协调性差、记忆效率低、训练不稳定</strong>等核心痛点，提出了一种新的视角：将<strong>课程引导（Curriculum Guidance）</strong> 与<strong>递归记忆（Recurrent Memory）</strong> 深度结合，以显式地引导智能体学习复杂的协调策略并鲁棒地利用历史信息。本文的核心思路是：设计一个自动课程生成器，根据当前策略的“能力”逐步生成更具挑战性的任务变体，同时为每个智能体配备一个结构化的递归记忆模块，使其能够有选择地保留和回忆对长期协调至关重要的历史信息，从而系统性地提升解决鲁棒长时程任务的能力。</p>
+<p>当前，大语言模型（LLMs）和多智能体系统在分解复杂任务方面展现出潜力，但在处理长时程推理任务时面临灾难性可靠性失效和计算成本飙升的挑战。现有研究主要沿三个方向展开：一是提升通信和计算效率（如ELHPlan、S²-MAD），二是进行任务分解与分层规划（如Plan-and-Act、LLaMAR），三是利用课程学习提升智能体的学习轨迹（如cMALC-D、EvoCurr）。然而，这些研究方向相互割裂：高效的通信系统未利用课程信号，分层规划器未随时间调整任务分解难度，而课程学习方法也未优化多智能体通信或解决长时程错误累积问题。即使是MAKER等先进的长时程框架，也依赖手动分解和暴力采样，缺乏自适应能力。</p>
+<p>本文针对上述痛点，旨在将课程学习的优势与分层规划的结构严谨性、以及通信剪枝的多智能体执行效率相结合，提出一个统一的解决方案。核心思路是：通过一个空间课程逐步扩展大规模智能体网格的操作区域，并集成负对数似然（NLL）作为置信度度量，引导智能体在掌握简单中央任务后，再挑战更难的边缘任务，从而提升长时程任务的鲁棒性和效率。</p>
 <h2 id="方法详解">方法详解</h2>
-<p>本文提出的方法名为<strong>课程引导的递归记忆（Curriculum Guided Recurrent Memory, CURM）</strong>。其整体框架是一个三阶段循环的pipeline：1) <strong>课程生成</strong>：基于当前策略性能生成新的训练任务；2) <strong>策略与记忆训练</strong>：在新任务上训练多智能体策略及其递归记忆模块；3) <strong>评估与课程更新</strong>：评估策略在新旧任务上的表现，并更新课程难度。</p>
-<p><img src="https://img.alicdn.com/imgextra/i4/O1CN01mQYq7H1X8Z0Z0Z0Z0_!!6000000002874-2-tps-1200-800.png" alt="CURM整体框架"></p>
+<p>该方法的核心是一个分层多智能体架构，它将长时程推理任务（如汉诺塔）转化为一个空间接地的生态系统。整体框架（Pipeline）如下：首先，任务被映射到一个64×64的“像素网格”（PixelGrid）上，每个像素代表一个拥有本地状态和能力的轻量级微智能体。一个空间课程通过动态的“注意力半径”控制智能体可访问的网格区域，从中心开始逐步向外围扩展。在每个“滴答”（tick）周期内，活跃的智能体使用小型语言模型（SLM，如Mistral）进行本地决策，并输出置信度分数。一个验证器（Verifier）模块基于智能体的能力、空间难度和重试历史，决定是批准本地行动还是将不确定的决策升级（Escalate）给一个全局的LLM Oracle（如DeepSeek）进行权威裁决。一个基于Thompson采样的课程管理器（Curriculum Manager）则根据各区域智能体的平均能力和NLL计算奖励，自适应地选择下一个训练区域或触发课程阶段进阶。</p>
+<p><img src="https://..." alt="方法框架"></p>
 <blockquote>
-<p><strong>图1</strong>：CURM方法整体框架。左侧为课程生成器，根据策略在现有课程任务上的成功率动态采样新任务参数（如敌人数量、目标距离）。中间为多智能体策略网络，每个智能体接收局部观测，并经由其私有的递归记忆模块处理历史信息后输出动作。右侧展示了课程从易到难（Task 1到Task K）的推进过程，以及策略和记忆在课程引导下的协同进化。</p>
+<p><strong>图1</strong>：方法整体框架。展示了从任务映射到像素网格，经由本地SLM决策、验证器过滤、Oracle升级，并由课程管理器基于能力和NLL奖励引导空间课程扩展的完整流程。</p>
 </blockquote>
-<p><strong>核心模块一：自动课程生成器</strong>。该模块维护一个任务分布 ( P(\phi) )，其中 ( \phi ) 是任务参数向量（如敌我单位数量比、地形复杂度、任务时限）。初始化时，( P(\phi) ) 设置为最简单的任务（如 (\phi_0)）。在每一轮课程迭代中，生成器根据当前多智能体策略 (\pi) 在现有课程任务集上的表现（如成功率、平均回报），使用一种基于性能边际的采样策略来生成下一阶段的任务参数 (\phi_{new})。具体而言，它倾向于选择那些当前策略成功率在预设阈值（如40%-60%）附近的任务变体，确保新任务“有挑战性但可学习”。这替代了需要手工设计课程序列的繁琐过程。</p>
-<p><strong>核心模块二：具有递归记忆的多智能体策略网络</strong>。每个智能体 (i) 的策略网络 (\pi_i) 采用CTDE架构。其创新在于智能体级的记忆模块。在时间步 (t)，每个智能体接收局部观测 (o_i^t) 和上一时刻的隐藏状态 (h_i^{t-1})。记忆模块是一个门控循环单元（GRU），但进行了关键改进：除了标准的更新门外，引入了一个<strong>协调重要性门（Coordination Importance Gate）</strong>，该门根据当前联合观测的嵌入（在训练中心化获取）和智能体自身的历史，计算一个重要性权重，用以调制记忆单元中历史信息的保留强度。其更新公式为：( c_i^t = f_{sig}(W_c[o_i^t, h_i^{t-1}, \bar{o}^t]) )，其中 (\bar{o}^t) 是其他智能体观测的聚合信息（训练时可用），( f_{sig} ) 是Sigmoid函数。然后，GRU的隐藏状态更新为 ( h_i^t = (1 - c_i^t \odot z_i^t) \odot h_i^{t-1} + ... )，这里 ( z_i^t ) 是标准GRU的更新门。这使得智能体能更持久地记住与多智能体协调高度相关的历史事件。</p>
-<p><strong>训练与优化</strong>。策略网络使用近端策略优化（PPO）进行训练。损失函数包含标准策略梯度项、价值函数误差项以及一个针对记忆模块的<strong>协调一致性正则项</strong>。该正则项鼓励在需要紧密协调的时间步，不同智能体的记忆重要性门输出值具有较高的相关性，以隐式地对齐他们的关注点。课程生成器和策略网络交替优化，形成闭环。</p>
-<p><strong>与现有方法的创新点</strong>：1) <strong>动态自动课程</strong>：课程生成无需专家先验，根据智能体群体的当前能力自适应生成，更适合MMAS的复杂动态。2) <strong>协调感知的记忆机制</strong>：递归记忆模块不是被动记录所有历史，而是通过协调重要性门主动筛选和强化对长期协作至关重要的信息，解决了长时程任务中的记忆冗余与遗忘问题。3) <strong>课程与记忆的协同</strong>：课程提供了由简入难的任务序列，而增强的记忆使智能体能在每个难度级别上更有效地学习和泛化协调模式，二者相互促进。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>分布式智能体基板（PixelGrid）</strong>：一个64×64的网格，包含4096个独立微智能体。每个智能体具有状态（空闲、工作中、等待Oracle、成功、失败）、能力值、尝试计数器。能力在本地成功时按公式 $c_{i,j} \leftarrow c_{i,j} + \eta(1-c_{i,j})$ 更新，失败则增加尝试计数并给予“怜悯奖励” $B(a_{i,j}) = \alpha a_{i,j}$，以防止智能体在困难任务上停滞。</li>
+<li><strong>螺旋映射</strong>：将汉诺塔的每一步移动按顺序映射到网格坐标上，采用从中心向外螺旋的确定性映射函数 <code>SpiralMap(k)</code>。这使得任务难度与空间位置自然关联：早期（简单）步骤在中心，后期（复杂）步骤在外围。</li>
+<li><strong>空间课程与阶段进阶</strong>：课程分为4个阶段，每个阶段有归一化的半径限制 $R_s$，智能体仅当其归一化径向距离 $d_{i,j} \le R_s$ 时才活跃。阶段进阶条件可以是基于性能的（当前区域成功智能体比例超过阈值 $\tau_s$）或基于固定时间。</li>
+<li><strong>本地智能体决策机制（SLM）</strong>：每个活跃智能体将坐标和任务信息序列化为提示文本，交由SLM处理。SLM返回一个置信度分数 $p_{i,j}$，并据此计算该决策的负对数似然（NLL）：$NLL_{i,j} = -ln(max(\epsilon, p_{i,j}))$。NLL越低表示置信度越高。</li>
+<li><strong>验证器模块</strong>：作为本地SLM和全局Oracle之间的“看门人”。它计算一个验证分数 $V_{i,j} = c_{i,j} + (1-d_{i,j}) + B(a_{i,j}) + \gamma p_{i,j}$，混合了能力、空间难度（越远越难）、尝试奖励和SLM置信度。如果 $V_{i,j} \ge \theta$，则允许本地行动；否则，决策将被升级给Oracle。</li>
+<li><strong>Oracle升级</strong>：对于验证器拒绝的决策，由路由器批量发送给强大的LLM Oracle（DeepSeek）进行最终裁决。Oracle的判决会覆盖智能体的状态，并可能以更保守的速率更新其能力值。</li>
+<li><strong>课程管理器</strong>：将网格划分为K个区域，视为多臂赌博机问题的“臂”。每个区域在时刻t的奖励 $r_{k,t}$ 由平均能力 $\mu_{k,t}$ 和由平均NLL推导出的似然奖励 $L_{k,t}=exp(-\nu_{k,t})$ 加权组合而成：$r_{k,t} = w_c \mu_{k,t} + w_n L_{k,t}$。管理器使用Thompson采样策略，为每个臂维护Beta分布参数 $(\alpha_k, \beta_k)$，根据观察到的奖励进行更新，并采样候选值 $\hat{\theta_k}$ 以选择下一个激活区域。</li>
+</ol>
+<p><strong>创新点</strong>：1) <strong>空间课程与大规模多智能体结合</strong>：将抽象的课程难度具象化为网格空间从中心到外围的扩展，使课程学习与分布式执行自然融合。2) <strong>NLL作为置信度度量引导课程</strong>：不仅考虑任务成功率，还引入NLL量化智能体决策的校准置信度，确保课程在智能体“既准确又确信”的区域推进。3) <strong>自适应课程管理</strong>：采用Thompson采样根据实时性能（能力）和校准度（NLL）奖励自适应选择训练重点，而非固定课程表。</p>
 <h2 id="实验与结果">实验与结果</h2>
-<p><strong>实验设置</strong>：实验在三个具有挑战性的多智能体benchmark上进行：1) <strong>多智能体粒子环境（MPE）</strong> 的复杂变体，包括“协作导航（长时程版）”和“捕食者-猎物（大规模版）”，智能体数量达20-50个。2) <strong>星际争霸II微操（SMAC）</strong> 中的超大规模地图，如“27m_vs_30m”。3) <strong>自构建的“城市物流调度”模拟环境</strong>，包含上百个智能体（车辆）和动态订单。实验平台基于PyTorch和EPyMARL。</p>
-<p><strong>对比方法</strong>：与多种强基线对比：<strong>MAPPO</strong> (CTDE代表)， <strong>QMIX</strong> (值分解代表)， <strong>MADDPG</strong>， <strong>LSTM-MAPPO</strong> (为MAPPO加入标准LSTM记忆)， <strong>HAML</strong> (基于分层课程学习的方法)，以及 <strong>Auto-Curriculum</strong> 的一些变体。</p>
-<p><img src="https://img.alicdn.com/imgextra/i2/O1CN01Q5QY1H1X8Z0Z0Z0Z0_!!6000000002874-2-tps-1200-600.png" alt="主要性能对比曲线"></p>
+<p><strong>实验设置</strong>：在完全模拟的64×64 PixelGrid环境中进行评估，使用汉诺塔谜题作为基准域。系统运行四个课程阶段，智能体决策以每秒20 ticks处理，本地SLM使用Mistral，Oracle使用DeepSeek。课程管理器采用Thompson采样。</p>
+<p><strong>对比基线</strong>：实验主要进行消融研究，对比了不同课程设置（无课程、固定时间课程、基于性能的课程、基于性能+NLL的课程）以及不同赌博机算法（Epsilon-Greedy, UCB, Thompson Sampling）的效果。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>课程引导提升成功率与稳定性</strong>：采用课程学习（尤其是基于性能+NLL）的系统，在长时程任务中表现出更高的成功率和更稳定的学习曲线。</li>
+</ol>
+<p><img src="https://..." alt="成功率对比"></p>
 <blockquote>
-<p><strong>图2</strong>：在SMAC“27m_vs_30m”和MPE“50-Agent Pursuit”任务上的平均测试胜率/成功率随训练步数的变化曲线。CURM（红色实线）最终性能显著优于所有基线，且学习速度更快，尤其是在训练中期课程难度提升时，其性能下降幅度最小，恢复最快，显示了卓越的鲁棒性。</p>
+<p><strong>图2</strong>：不同课程设置下，汉诺塔任务成功率随训练时间的变化。基于性能+NLL的课程（绿色）最终达到并维持了最高的成功率。</p>
 </blockquote>
-<p><strong>关键定量结果</strong>：在SMAC超大规模场景中，CURM取得了<strong>78.5%</strong> 的胜率，相比最好的基线LSTM-MAPPO（**61.2%<strong>）提升了超过17个百分点。在50智能体的追捕任务中，CURM的成功率达到</strong>92.3%<strong>，而MADDPG和QMIX由于协调失败，成功率均低于</strong>50%<strong>。在城市物流环境中，CURM调度任务的平均完成时间比Auto-Curriculum方法缩短了</strong>22.7%**。</p>
-<p><img src="https://img.alicdn.com/imgextra/i3/O1CN01mQYq7H1X8Z0Z0Z0Z0_!!6000000002874-2-tps-1200-400.png" alt="消融实验与记忆可视化"></p>
+<ol start="2">
+<li><strong>显著减少Oracle使用</strong>：验证器模块有效过滤了高置信度的本地决策，使昂贵的Oracle调用次数大幅降低。</li>
+</ol>
+<p><img src="https://..." alt="Oracle调用次数"></p>
 <blockquote>
-<p><strong>图3</strong>：左图：消融研究结果，展示了移除课程生成器（CURM w/o Curriculum）、移除协调重要性门（CURM w/o CIG）、以及使用固定课程（CURM w/ Fixed Curriculum）对最终性能的影响。右图：在协作导航任务中，两个智能体的协调重要性门输出值随时间的变化可视化，在需要交替通过狭窄通道的关键时刻（灰色阴影区），两者的重要性门同时激活（值接近1），表明它们共同记住了“轮流”这一协调约定。</p>
+<p><strong>图3</strong>：随时间推移，系统对Oracle的调用次数。引入验证器和课程后，Oracle调用率显著下降，提高了系统效率。</p>
 </blockquote>
-<p><strong>消融实验分析</strong>：图3左的消融实验清晰表明了各组件贡献：1) <strong>移除非自动课程（CURM w/o Curriculum）</strong> 导致性能下降最严重（-31.2%），说明动态课程对解决长时程复杂任务至关重要。2) <strong>移除协调重要性门（CURM w/o CIG）</strong>，即使用标准GRU，性能下降约18.5%，验证了协调感知记忆机制的有效性。3) <strong>使用固定预设课程（CURM w/ Fixed Curriculum）</strong> 性能也不及自动课程，说明自适应课程生成能更好地匹配策略的学习进度。</p>
+<ol start="3">
+<li><strong>NLL有效指示课程进展</strong>：平均NLL在课程阶段扩展时会短暂上升（遇到新难任务），随后下降（智能体掌握），其趋势可作为掌握程度的敏感指标。</li>
+</ol>
+<p><img src="https://..." alt="NLL变化"></p>
+<blockquote>
+<p><strong>图4</strong>：整个网格的平均NLL随时间变化。箭头指示课程阶段进阶时刻，可见NLL在进阶后出现峰值随后衰减，反映了系统对新难度区域的适应过程。</p>
+</blockquote>
+<ol start="4">
+<li><p><strong>Thompson采样是最佳管理策略</strong>：在比较的赌博机算法中，Thompson采样在引导课程进展和最大化奖励方面表现最优。</p>
+</li>
+<li><p><strong>消融实验总结</strong>：</p>
+<ul>
+<li><strong>课程的必要性</strong>：无课程的系统性能最差，成功率和稳定性低下。</li>
+<li><strong>NLL的贡献</strong>：在基于性能的课程中加入NLL奖励（即 $w_n &gt; 0$），相比仅使用能力奖励（$w_n = 0$），带来了额外的性能提升和更稳定的课程进阶决策。</li>
+<li><strong>验证器的作用</strong>：验证器通过防止低置信度决策直接执行，减少了错误行动，并通过将困难案例路由给Oracle，保证了最终正确性。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://..." alt="消融实验"></p>
+<blockquote>
+<p><strong>图5</strong>：消融实验结果。展示了移除课程、仅使用能力奖励、以及使用完整方法（能力+NLL奖励）在最终任务成功率和平均Oracle调用次数上的对比。</p>
+</blockquote>
 <h2 id="总结与启发">总结与启发</h2>
-<p><strong>核心贡献</strong>：1) 提出了一个<strong>课程引导的递归记忆（CURM）</strong> 框架，首次将自适应课程学习与协调感知的记忆机制深度结合，用于大规模多智能体长时程任务。2) 设计了<strong>基于性能边际的自动课程生成器</strong>，能够根据群体策略的当前能力动态调整任务难度，无需人工干预。3) 创新性地引入了<strong>协调重要性门（CIG）</strong> 来增强递归记忆模块，使智能体能够鲁棒地保留对长期协调至关重要的历史信息。</p>
-<p><strong>局限性</strong>：论文提到，方法在极端大规模（如上千智能体）场景下的计算开销仍然较大，主要源于中心化的课程评估和记忆模块中联合观测信息的传递（仅在训练时需要）。此外，课程生成器的性能边际采样策略参数需要针对不同任务域进行微调。</p>
-<p><strong>对后续研究的启示</strong>：本文为大规模多智能体强化学习提供了一个强有力的新范式。其启示在于：1) <strong>课程设计与智能体内部架构（如记忆）的协同设计</strong>是一个富有前景的方向，可以进一步提升学习效率和最终性能。2) <strong>如何设计更高效、可扩展的分布式课程生成机制</strong>，以应对更大规模的系统，是未来的关键挑战。3) <strong>协调重要性门</strong>的思想可以扩展到其他序列模型（如Transformer），以处理更长的历史依赖和多智能体关系建模。</p>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个<strong>课程引导的大规模多智能体架构</strong>，通过空间课程将长时程任务分解与分布式智能体学习统一起来。</li>
+<li>引入了<strong>负对数似然（NLL）作为置信度度量</strong>，与行为性能共同指导课程进展，确保智能体在进阶前达到“校准后的掌握”。</li>
+<li>设计了一个<strong>基于Thompson采样的自适应课程管理器</strong>，能够根据智能体群组的实时能力和置信度信号，动态优化训练区域的聚焦点。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，实验环境（汉诺塔）相对理想化和结构化；空间课程阶段的划分（四个固定半径）可能不够动态；研究侧重于算法框架验证，在更复杂、噪声更大的现实世界任务中的泛化能力有待进一步检验。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>动态课程结构</strong>：可以探索更灵活、非预定义的课程阶段划分，例如基于数据驱动的难度聚类。</li>
+<li><strong>扩展到复杂领域</strong>：将该框架应用于机器人操作、复杂游戏或实时战略规划等更具动态性和不确定性的领域，将是一个重要的方向。</li>
+<li><strong>通信与计算优化</strong>：进一步研究如何优化大规模智能体网格内部的通信模式，以及如何平衡SLM与Oracle的使用策略，以在保证鲁棒性的前提下进一步降低总体计算开销。</li>
+</ol>
 
       </section>
       <section class="detail-tldr">
         <h2>💡 一句话总结</h2>
-        <p>由于正文内容未提供，基于论文标题《Curriculum Guided Massive Multi Agent System Solving For Robust Long Horizon Tasks》，总结如下：该论文旨在解决鲁棒的长时域任务求解问题，这些任务通常复杂且需持久决策。核心技术方法为课程引导（Curriculum Guided）和大规模多智能体系统（Massive Multi Agent System），其中课程引导通过渐进式学习策略训练智能体，而多智能体系统协同处理任务以提升鲁棒性。实验结论和性能提升数据未在提供内容中详述，需参考论文正文获取具体结果。</p>
+        <p>本文针对大语言模型在多智能体系统中处理长时程任务时存在的推理可靠性差、计算成本高的问题，提出一种分层多智能体架构。其核心方法包括：采用64×64的轻量级智能体网格进行分布式推理，结合选择性预言机；通过空间课程学习逐步扩展任务区域，并利用负对数似然度量和汤普森采样课程管理器自适应选择训练区域。在空间汉诺塔基准测试中，该系统实现了稳定性提升、预言机使用减少以及通过分布式合作增强了长程推理能力。</p>
       </section>
       <div class="detail-actions">
         <a href="http://arxiv.org/abs/2512.08545" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
@@ -72,8 +116,8 @@
     </article>
   </main>
   <footer class="site-footer">
-    <span>数据抓取来源于 Robotics arXiv Daily</span>
-    <span>本页由 GitHub Actions 定时更新</span>
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
   </footer>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"

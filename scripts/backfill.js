@@ -15,6 +15,7 @@
 const fs = require("fs");
 const path = require("path");
 const { marked } = require("marked");
+const pdfParse = require("pdf-parse");
 const { OUTPUT_PATH } = require("./config");
 const { runConcurrent, generateSummary, generateDetailedSummary } = require("./llm");
 
@@ -67,6 +68,23 @@ const fetchArxivContent = async (htmlUrl) => {
   } catch (e) {
     console.warn(`Failed to fetch arXiv HTML: ${e.message}`);
     return { fullText: "", imageUrls: [] };
+  }
+};
+
+const fetchArxivPdfText = async (absUrl) => {
+  try {
+    const pdfUrl = absUrl.replace("/abs/", "/pdf/");
+    console.log(`    Fetching PDF: ${pdfUrl}`);
+    const r = await fetch(pdfUrl, { redirect: "follow" });
+    if (!r.ok) return "";
+    const buffer = Buffer.from(await r.arrayBuffer());
+    const data = await pdfParse(buffer);
+    const text = (data.text || "").replace(/\s+/g, " ").trim();
+    console.log(`    PDF text extracted: ${text.length} chars`);
+    return text;
+  } catch (e) {
+    console.warn(`    Failed to extract PDF text: ${e.message}`);
+    return "";
   }
 };
 
@@ -234,6 +252,11 @@ const main = async () => {
       const content = await fetchArxivContent(htmlLink);
       fullText = content.fullText;
       imageUrls = content.imageUrls;
+    }
+
+    // Fallback: extract text from PDF if HTML unavailable
+    if (!fullText) {
+      fullText = await fetchArxivPdfText(absUrl);
     }
 
     // Generate summaries

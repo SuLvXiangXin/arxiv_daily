@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { marked } = require("marked");
+const pdfParse = require("pdf-parse");
 const { SOURCE_URL, OUTPUT_PATH, MAX_ITEMS } = require("./config");
 const { runConcurrent, filterByRelevance, generateSummary, generateDetailedSummary } = require("./llm");
 

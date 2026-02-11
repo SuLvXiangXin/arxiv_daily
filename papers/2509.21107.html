@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Cross-Modal Instructions for Robot Motion Generation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Cross-Modal Instructions for Robot Motion Generation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.21107" target="_blank" rel="noreferrer">2509.21107</a></span>
+        <span>作者: Barron, William, Dong, Xiaoxiang, Johnson-Roberson, Matthew, Zhi, Weiming</span>
+        <span>日期: 2025/09/25</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，教授机器人新技能的主流范式是模仿学习（或从演示中学习），这通常需要通过遥操作或动觉示教（即物理引导机器人）来收集运动演示数据。尽管已有工作探索使用人类草图来指定期望行为，但数据收集过程仍然繁琐，演示数据集难以扩展。本文针对模仿学习需要大规模、繁琐的物理演示这一关键痛点，提出了一种替代范式——<strong>从跨模态指令中学习</strong>。该范式旨在仅使用包含自由形式草图（如线条、箭头）和文本标签的粗略标注作为演示，来替代物理运动数据。本文的核心思路是：引入CrossInstruct框架，将跨模态指令作为上下文示例输入给基础视觉-语言模型（VLM），通过大VLM进行高层任务推理并协同一个微调的小型指向模型精确定位关键点，最终在多视图2D草图的基础上合成并融合出机器人工作空间中的3D运动轨迹。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>CrossInstruct框架的目标是将人类提供的跨模态指令 $\mathcal{I}=\{I, S, T\}$（其中 $I$ 为场景图像，$S$ 为草图，$T$ 为可选文本）转换为机器人工作空间 $\mathbb{R}^3$ 中的可执行运动轨迹。该框架通过一个<strong>层次化精度耦合模块</strong>，整合了一个大型推理VLM $\mathcal{R}$（本文使用OpenAI o3）和一个小型微调的指向模型 $\mathcal{G}$（本文使用Molmo），以同时实现高层语义意图理解和低层像素级空间定位。</p>
+<p><img src="https://arxiv.org/html/2509.21107v1/figures/overview_n_2.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图3</strong>：CrossInstruct框架概述（左）及关键点精确定位示例（右）。层次化精度耦合模块使推理模型能够利用微调的小型VLM精确识别相关关键点，进而引导机器人末端执行器运动。</p>
+</blockquote>
+<p><strong>整体流程</strong>如下：给定指令 $\mathcal{I}$ 和一组多视图图像 $\mathcal{V}=\{I_1, I_2\}$ 及其位姿 $\mathcal{P}$：</p>
+<ol>
+<li><strong>推理与关键点描述生成</strong>：大型推理VLM $\mathcal{R}$ 首先根据指令和场景，生成一组 $N$ 个语义关键点描述符 $\mathcal{K}=\{k_i\}_{i=1}^{N}$，每个 $k_i=(\ell_i, \alpha_i)$ 包含自然语言标签 $\ell_i$ 和辅助文本元数据 $\alpha_i$。</li>
+<li><strong>精确定位</strong>：将每个关键点描述符 $\ell_i$ 分别输入给指向模型 $\mathcal{G}$，并传入多视图图像 $I_1, I_2$。$\mathcal{G}$ 为每个关键点在每个视图上预测一个具体的像素坐标 $\{u_{i,m}, v_{i,m}\} = \mathcal{G}(\ell_i | I_m)$，从而获得跨视图的精确2D关键点集合。</li>
+<li><strong>2D轨迹生成</strong>：将精确的关键点坐标更新到推理模型 $\mathcal{R}$ 的上下文中。$\mathcal{R}$ 基于此生成两条分别对应于两个视图的2D轨迹 $\xi_1, \xi_2$。</li>
+<li><strong>3D轨迹提升</strong>：通过<strong>多视图射线投射</strong>将2D轨迹 $\xi_1, \xi_2$ 提升到3D工作空间，得到一个3D轨迹分布 $p(\tau | \xi_1, \xi_2, \mathcal{P})$。</li>
+<li><strong>完整动作合成</strong>：推理模型 $\mathcal{R}$ 将3D轨迹作为上下文示例，进一步指定末端执行器朝向和夹爪动作，最终形成完整的可执行运动序列 $\tau = \{(x_t, R_t, g_t)\}_{t=1}^{H}$。</li>
+</ol>
+<p><strong>多视图射线投射的技术细节</strong>：对于每个时间步 $t$，将2D轨迹点 $\xi_m(t)$ 视为一个图像空间中的高斯分布 $p(u_m, v_m | t)$ 的均值。通过相机标定参数，将该像素分布反向投影为3D空间中的一条射线区域 $R_t^m$。通过采样深度和像素坐标，并寻找两个视图射线区域 $R_t^1$ 和 $R_t^2$ 的交集 $\mathcal{R}_t$，得到一组3D空间样本 $\mathcal{S}_t$。对这些样本拟合高斯分布 $p(x_t | t) = \mathcal{N}(x_t | \mu_t, \Sigma_t)$，即得到该时间步的3D路点分布。对所有时间步重复此过程，得到完整的轨迹分布。</p>
+<p><img src="https://arxiv.org/html/2509.21107v1/figures/bg_pt.png" alt="2D到3D轨迹提升"></p>
+<blockquote>
+<p><strong>图4</strong>：CrossInstruct在多视图图像上生成2D轨迹（红色），随后融合成连贯的3D轨迹（蓝红渐变的路径点所示），进而可执行以将方块推到目标位置。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.21107v1/figures/proj_motion.png" alt="射线投射示意图"></p>
+<blockquote>
+<p><strong>图5</strong>：从不同位姿出发的射线相交示意图，用于将2D像素坐标提升至3D空间。</p>
+</blockquote>
+<p><strong>下游强化学习精化</strong>：生成的轨迹分布 $\mathbb{E}[\tau]$ 可直接作为开环计划执行，也可用于初始化并正则化一个下游强化学习策略。本文采用TD3+BC算法，其演员损失 $\mathcal{L}_{\text{actor}}$ 结合了行为克隆损失和基于价值的优化，确保策略在遵循指令意图的同时，能通过交互学习变得更鲁棒。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>仿真</strong>：在RLBench基准中使用7自由度Franka Emika Panda机械臂，评估了8项任务（如图7所示），包括Basketball-in-Hoop, Close Drawer等。</li>
+<li><strong>真实世界</strong>：在6自由度AgileX机械臂上部署，评估了“放置杯子”和“锯木块”两项任务。</li>
+<li><strong>数据</strong>：每个任务仅收集<strong>一个</strong>带草图标注的演示（在单个随机种子上），然后在20个未见过的随机种子上评估。</li>
+</ul>
+<p><strong>对比方法</strong>：</p>
+<ol>
+<li><strong>VLM-Reasoning（无精度耦合）</strong>：与CrossInstruct使用相同的演示和种子，但推理模型直接绘制轨迹，不调用指向模型 $\mathcal{G}$ 进行关键点精确定位。</li>
+<li><strong>纯强化学习（RL）</strong>：包括SAC和TD3算法，在没有演示数据的情况下，从零开始训练100万步。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.21107v1/figures/f1.png" alt="RLBench任务示例"></p>
+<blockquote>
+<p><strong>图7</strong>：评估中使用的RLBench基准中的代表性任务。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：<br>表I展示了CrossInstruct与基线方法在多项RLBench任务上的成功率对比。CrossInstruct在多数任务上显著优于基线。</p>
+<table>
+<thead>
+<tr>
+<th align="left">Method</th>
+<th align="left">basketball</th>
+<th align="left">peg</th>
+<th align="left">close drawer</th>
+<th align="left">slide block</th>
+<th align="left">jenga</th>
+<th align="left">lift block</th>
+<th align="left">rubbish</th>
+<th align="left">push button</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left"><strong>CrossInstruct</strong></td>
+<td align="left"><strong>0.90</strong></td>
+<td align="left">0.25</td>
+<td align="left">0.90</td>
+<td align="left"><strong>0.90</strong></td>
+<td align="left">0.55</td>
+<td align="left"><strong>0.95</strong></td>
+<td align="left"><strong>1.00</strong></td>
+<td align="left"><strong>0.95</strong></td>
+</tr>
+<tr>
+<td align="left">VLM-Reasoning</td>
+<td align="left">0.00</td>
+<td align="left"><strong>0.20</strong></td>
+<td align="left">0.45</td>
+<td align="left">0.20</td>
+<td align="left">0.00</td>
+<td align="left">0.00</td>
+<td align="left">0.00</td>
+<td align="left">0.30</td>
+</tr>
+<tr>
+<td align="left">Pure RL – SAC</td>
+<td align="left">0.00</td>
+<td align="left">0.00</td>
+<td align="left"><strong>0.95</strong></td>
+<td align="left">0.10</td>
+<td align="left">0.00</td>
+<td align="left">0.00</td>
+<td align="left">0.00</td>
+<td align="left">0.05</td>
+</tr>
+<tr>
+<td align="left">Pure RL – TD3</td>
+<td align="left">0.00</td>
+<td align="left">0.00</td>
+<td align="left">0.40</td>
+<td align="left">0.00</td>
+<td align="left">0.00</td>
+<td align="left">0.00</td>
+<td align="left">0.00</td>
+<td align="left">0.00</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表I</strong>：CrossInstruct与VLM推理基线和纯RL方法在RLBench任务上的对比。数字表示成功率（越高越好）。</p>
+</blockquote>
+<ul>
+<li><strong>精度敏感任务优势</strong>：在Basketball-in-Hoop（成功率0.90 vs 0.00）和Push Button（0.95 vs 0.30）等需要精确对齐的任务上，CrossInstruct因有关键点精确定位而表现突出。</li>
+<li><strong>消融实验验证</strong>：对比VLM-Reasoning基线，证明了层次化精度耦合模块（即使用指向模型 $\mathcal{G}$ ）对于在杂乱或低对比度场景中准确定位几何关键点至关重要。如图9和图10所示，没有精确定位会导致机器人无法触及目标或混淆相似物体。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2509.21107v1/figures/bb1.png" alt="精度耦合成功案例"></p>
+<blockquote>
+<p><strong>图8</strong>：通过层次化精度耦合，CrossInstruct能生成空间精确的运动，使机器人能够精确拾取篮球并投入篮筐。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.21107v1/figures/w_button.png" alt="无精度耦合的失败案例1"></p>
+<blockquote>
+<p><strong>图9</strong>：没有层次化精度耦合时，直接让VLM推理模型提供轨迹常导致机器人无法充分接触到需要交互的物体（如按钮、篮球和积木块）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.21107v1/figures/w_basket.png" alt="无精度耦合的失败案例2"></p>
+<blockquote>
+<p><strong>图10</strong>：没有精度耦合时，VLM推理推断的轨迹可能错误地将物体空间定位到颜色相似的其他物体上（右图，因蓝色方钉和蓝色方块导致错误轨迹）。</p>
+</blockquote>
+<ul>
+<li><strong>真实世界泛化</strong>：如图11所示，CrossInstruct能够将在一个场景（不同背景、光照、末端执行器外观）中收集的指令，成功泛化到新的真实世界部署场景中，完成“放置杯子”和“锯木块”任务，且能理解“重复3x”这样的文本指令。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2509.21107v1/figures/f5.png" alt="真实世界泛化"></p>
+<blockquote>
+<p><strong>图11</strong>：将跨模态指令泛化到新设置。左图为“放置杯子”任务，右图为“锯木块”任务。指令定义的设置与执行设置在视觉上不同，展示了方法的泛化能力。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了 <strong>“从跨模态指令中学习”</strong> 的新范式，用易于提供的草图加文本标注替代了繁琐的物理运动演示。</li>
+<li>设计了 <strong>CrossInstruct框架</strong>，通过层次化耦合大型推理VLM与小型指向VLM，实现了从高层语义理解到低层几何定位的贯通，并利用多视图射线投射将2D草图转化为可执行的3D机器人运动。</li>
+<li>在仿真和真实世界实验中验证了方法的有效性，<strong>无需额外微调</strong>即可生成可执行行为，并能作为高质量初始化数据显著提升下游强化学习的效率。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到的方法依赖于现成的大型VLM和指向模型，其性能受限于这些基础模型的能力。此外，需要已知的多视图相机标定参数。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>结合符号与几何</strong>：展示了如何有效结合大型模型的符号推理能力与小型模型的几何感知能力，为机器人任务规划提供了新思路。</li>
+<li><strong>高效的数据利用</strong>：证明了极少量（甚至单个）非传统形式的弱监督指令，可以引导机器人行为并高效启动强化学习，为降低机器人学习的数据需求指明了方向。</li>
+<li><strong>泛化性</strong>：方法在仿真到真实、不同形态机械臂间的泛化能力，显示了跨模态指令作为一种与具体 embodiment 解耦的任务指定方式的潜力。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人模仿学习依赖大量物理演示、难以扩展的问题，提出了一种从跨模态指令学习的新范式。核心方法是CrossInstruct框架：利用草图与文本标签作为指令，输入大型视觉语言模型进行高层任务推理；该模型通过迭代查询一个微调的细粒度指向模型，在多视角下合成运动，最终融合生成机器人工作空间中的3D运动轨迹分布。实验表明，该方法在模拟和真实硬件基准任务上有效，无需额外微调，并能作为策略初始化为后续强化学习提供良好基础。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.21107" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

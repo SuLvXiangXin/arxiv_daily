@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Agentic Retoucher for Text-To-Image Generation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Computer Vision and Pattern Recognition (cs.CV)</span>
+      <h1>Agentic Retoucher for Text-To-Image Generation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.02046" target="_blank" rel="noreferrer">2601.02046</a></span>
+        <span>作者: Shen, Shaocheng, Liang, Jianfeng, Cai, Chunlei, Geng, Cong, Duan, Huiyu, Zhang, Xiaoyun, Hu, Qiang, Zhai, Guangtao</span>
+        <span>日期: 2026/01/05</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，以SDXL和FLUX为代表的文本到图像（T2I）扩散模型已能生成高度逼真的图像，但小尺度失真（如肢体错位、面部不对称、文本不清等）仍然普遍存在。现有的改进方法主要分为三类：提示词增强、基于强化学习的优化和细粒度噪声空间对齐，这些方法虽能提升整体真实感，但缺乏显式的空间推理能力，无法解释或修正局部缺陷。后处理编辑流程（如Imagic、Bagel）允许局部细化，但依赖于手动绘制的掩码或启发式文本提示，无法自主识别需要修正的区域。视觉语言模型（VLM）因其语义推理能力被视为潜在的自动“批评家”，但其存在两个关键局限：一是为高层语义对齐优化，导致空间定位能力弱，容易遗漏细粒度伪影；二是其广泛的知识先验可能压倒视觉证据，产生“幻觉”判断，例如将六根手指的肖像判定为合理。这些局限性使得现有方法难以实现可靠、自主的生成后局部修正。</p>
+<p>本文针对T2I生成中局部失真难以自动检测和修正的痛点，提出了一个新颖的视角：将生成后修正重构为一个类人的“感知-推理-行动”循环。其核心思路是设计一个由三个协作智能体（感知、推理、行动）组成的层次化决策驱动框架，使扩散模型能够自主诊断并精细化修复其生成图像中的伪影。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Agentic Retoucher的整体框架是一个闭环的感知-推理-行动循环，旨在实现自主、可解释的生成后图像修正。其输入是待修复的图像 <code>I_t</code> 及其生成提示 <code>P</code>，输出是经过迭代修正后的高质量图像。</p>
+<p><img src="https://arxiv.org/html/2601.02046v2/x3.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：Agentic Retoucher 整体框架。该框架作为一个感知-推理-行动循环运行，用于AIGC的生成后修正。感知智能体通过跨模态显著性预测定位上下文相关的失真区域；推理智能体通过迭代推理执行人类对齐的诊断；行动智能体在推理输出的指导下执行自适应的局部修复，形成一个闭环自校正过程。</p>
+</blockquote>
+<p><strong>核心模块一：感知智能体 (Context-Aware Perception Agent)</strong><br>该模块负责从视觉-文本线索中检测上下文相关的失真，并生成失真显著性图 <code>S_t</code>。具体技术细节：采用双编码器（ViT编码图像，T5编码文本）骨干网络提取特征，随后通过自注意力机制融合以捕获视觉结构与文本语义间的对应关系。一个轻量级的注意力优化模块进一步聚合多尺度上下文线索，以提升对依赖全局图像可见性的失真的检测。模型使用混合损失进行优化：<code>ℒ_sal = αℒ_MSE(S, Ŝ) + (1-α)ℒ_KLD(S, Ŝ)</code>，其中Ŝ是真实显著性图。MSE项保证重建精度，KLD项鼓励与人类注视分布对齐，以保持模糊区域的判别力并防止过度平滑。生成的显著性图经过二值化和形态学膨胀后，形成用于后续推理的掩码候选区域 <code>{M_i}</code>。</p>
+<p><strong>核心模块二：推理智能体 (Human-Aligned Reasoning Agent)</strong><br>给定定位区域 <code>{M_i}</code>，该模块执行推理诊断，生成捕获失真类型、局部特征和上下文关系的文本描述 <code>{D_i}</code>。这需要与人类感知判断对齐的结构化推理。本文采用渐进偏好对齐范式，包含两个阶段：1) <strong>监督微调（SFT）</strong>：使用LoRA（低秩适应）进行高效参数更新，以建立结构化的响应格式和失真分类知识。2) <strong>组相对策略优化（GRPO）</strong>：通过强化学习信号（公式3）使推理行为与人类偏好对齐，奖励信号基于失真类型分类准确性和文本描述与人类标注的对齐程度。这一阶段旨在减少幻觉，使智能体能够跨不同失真模式产生一致、人类对齐的推理。</p>
+<p><strong>核心模块三：行动智能体 (Action Agent)</strong><br>该模块将推理输出 <code>{M_i, D_i}</code> 转化为可控的局部编辑操作。它决定每个区域的空间范围、工具选择和修复指令。根据计算约束或用户偏好，该智能体可以从模块化工具库中动态选择基于VLM的修复或掩码引导的修复。更新后的图像 <code>I_{t+1} = Φ_act(I_t, {M_i ∨ D_i})</code> 会重新被感知智能体评估，从而闭合感知-推理-行动循环。该过程迭代进行，直至所有显著失真被消除。</p>
+<p><strong>创新点</strong><br>与现有方法相比，本框架的创新性主要体现在：1) <strong>范式转变</strong>：将后生成编辑从静态的、反应式的修正，转变为主动推理的、闭环的决策过程。2) <strong>上下文感知</strong>：感知智能体融合图文信息进行显著性预测，专门针对AIGC图像中边界模糊、依赖上下文的失真。3) <strong>人类对齐推理</strong>：通过SFT+GRPO的渐进对齐策略，使诊断推理更符合人类判断，减少VLM常见的幻觉问题。4) <strong>自适应行动</strong>：行动智能体能够根据诊断结果灵活调用不同的修复工具，形成可解释的修正链条。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在自建的GenBlemish-27K数据集（6K图像，27K个标注失真区域）上评估框架效能和模块功能，并在SynArtifacts-1K数据集上验证泛化能力。评估指标包括来自RichHF的四个感知指标（合理性、美学性、对齐性、整体性），以及用于评估感知和推理模块的一系列标准指标（如AUC-Judd, NSS, 分类准确率，ROUGE等）。对比基线包括VLM-based修复方法（Qwen-Edit, Gemini 2.5 Flash Image）和Mask-based修复方法（Flux-fill, SD-inpainting）。</p>
+<p><strong>关键定量结果</strong>：<br><img src="https://arxiv.org/html/2601.02046v2/x1.png" alt="定量对比"></p>
+<blockquote>
+<p><strong>图1</strong>：左图展示了现有VLM在定位AIGC图像失真时的失败案例（即使给出显式区域提示），而本方法能准确定位并提供合理诊断。右图展示了本方法修复各种失真（文本、手、面部、交互）的前后对比效果。</p>
+</blockquote>
+<p>如表1所示，Agentic Retoucher在使用任何修复工具（VLM-based或Mask-based）时，在所有四个感知指标上均一致超越基线。在GenBlemish-27K上，合理性分数从44.21提升至47.10，整体分数从47.15提升至49.27。在SynArtifacts-1K上也观察到类似提升。</p>
+<p><img src="https://arxiv.org/html/2601.02046v2/x4.png" alt="人类偏好结果"></p>
+<blockquote>
+<p><strong>图4</strong>：不同提示下的修复结果定性对比。白色边界框内为放大的细粒度区域。Agentic Retoucher在保持全局视觉和谐的同时修复了局部失真和不合理性，优于VLM-based和Mask-based基线。</p>
+</blockquote>
+<p><strong>人类评估</strong>：如表2所示，在盲测中，83.2%的参与者认为本方法的输出优于未修复的原图（48.8%认为显著更好，34.4%认为稍好），显著优于基线模型。</p>
+<p><strong>感知模块分析</strong>：<br><img src="https://arxiv.org/html/2601.02046v2/x5.png" alt="感知模块对比"></p>
+<blockquote>
+<p><strong>图5</strong>：显著性预测的定性可视化。与RichHF和GLM4.1V相比，本方法能产生更清晰、更具上下文感知的定位。</p>
+</blockquote>
+<p>如表3所示，本方法的感知智能体在AUC-Judd (0.9336)、NSS (1.2087)、KLD (1.4313)等所有指标上达到最优，显著优于传统显著性检测器、深度显著性网络和通用VLM，证明了其在定位伪影区域方面的鲁棒性。</p>
+<p><strong>推理模块分析</strong>：如表4所示，在Qwen2.5-VL、GLM-4.1V、Ovis2.5等多个骨干模型上，采用本文渐进对齐策略（SFT+GRPO）的推理智能体，在失真类型分类准确率和所有语义对齐指标（SimCSE, Word2Vec等）上均达到最高分，优于零样本、仅SFT或仅GRPO的设置。</p>
+<p><strong>消融实验总结</strong>：</p>
+<ol>
+<li><strong>感知智能体</strong>（表5）：移除轻量级注意力机制会降低SIM和CC（全局一致性受损）；移除KLD损失会降低NSS和AUC-Judd（注视级定位精度下降）。二者共同优化实现了局部精度与全局感知的最佳平衡。</li>
+<li><strong>推理智能体</strong>（表4）：渐进对齐（SFT后接GRPO）策略持续优于单阶段配置。早期单独应用GRPO会导致响应格式不稳定和事实漂移。</li>
+<li><strong>行动智能体</strong>（表1）：无论使用VLM-based还是Mask-based工具，在框架闭环指导下的修复结果，其各项指标均显著高于单独使用该工具进行修复的结果。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 提出了 <strong>Agentic Retoucher</strong>，一种将后生成编辑重构为感知-推理-行动循环的新范式，使扩散模型能够自主诊断和修复伪影。2) 设计了一个协作的三智能体系统，实现了从上下文感知定位、人类对齐诊断到自适应局部修复的闭环。3) 构建了 <strong>GenBlemish-27K</strong> 数据集，提供了像素级掩码和跨12类失真的文本标注，为细粒度伪影感知与修正提供了数据基础。</p>
+<p><strong>局限性</strong>：论文虽未明确列出，但可推断其性能仍依赖于所集成的特定修复工具（如Qwen-Edit, Flux-fill）的质量。此外，迭代的感知-推理-行动循环可能带来额外的计算成本。</p>
+<p><strong>后续启示</strong>：本研究展示了智能体系统在AIGC生成后处理中的巨大潜力，将大模型（VLMs）作为“大脑”与领域专用模块（感知、修复工具）结合的架构，是实现可靠、可控、可解释生成的重要方向。同时，高质量、细粒度的标注数据集（如GenBlemish-27K）对于训练和评估此类系统至关重要，推动了AIGC评估从整体质量向局部保真度的深化。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对文本到图像生成模型中普遍存在的小尺度失真问题，提出Agentic Retoucher框架。该方法通过感知、推理、行动三个智能体构成的层次化决策流程，实现细粒度失真定位、人类对齐诊断与可控局部修复。关键技术包括基于文本-图像一致性的显著性学习、渐进偏好对齐推理以及自适应修复规划。实验表明，该方法在感知质量、失真定位和人类偏好对齐上均优于现有技术，并构建了包含2.7万标注失真区域的GenBlemish-27K数据集用于评估。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.02046" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VLM Q-Learning: Aligning Vision-Language Models for Interactive Decision-Making - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Machine Learning (cs.LG)</span>
+      <h1>VLM Q-Learning: Aligning Vision-Language Models for Interactive Decision-Making</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2505.03181" target="_blank" rel="noreferrer">2505.03181</a></span>
+        <span>作者: Grigsby, Jake, Zhu, Yuke, Ryoo, Michael, Niebles, Juan Carlos</span>
+        <span>日期: 2025/05/06</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，利用大型语言模型（LLMs）的通用知识和推理能力来构建智能体以完成交互环境中的任务已成为研究热点。视觉语言模型（VLMs）将LLMs扩展到多模态数据，为计算机自动化等新应用提供了必要的视觉推理能力。然而，在智能体任务所强调的技能上，可获取的开源权重VLMs落后于其对应的LLMs。具体表现在两个方面：1）遵循环境严格的输出语法要求的能力较弱；2）更侧重于开放式问答，而非决策。克服这些局限通常需要在特定任务的专家演示上进行监督微调（SFT），但SFT无法超越其训练数据中的最佳策略，且依赖收集成功的演示。</p>
+<p>本文从离线到在线强化学习（RL）的视角应对这些挑战。RL允许我们在微调VLMs适应智能体任务的同时，从自身模型或更强大（更大）模型的不成功决策中学习。本文探索了一种离策略RL解决方案，它在保留广泛使用的SFT工作流程的稳定性和简单性的同时，允许智能体自我改进并从低质量数据集中学习。核心思路是采用一种基于价值估计过滤演示数据的离线RL方法（过滤监督微调，FSFT），使VLMs能够超越演示数据的性能，并无缝地融入在线数据收集以持续改进。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文方法遵循对通过基础提示生成的任务特定数据执行SFT的流行框架，但通过过滤掉估计会降低智能体性能的令牌，允许智能体改进其数据集。这一过滤过程通过将VLM智能体微调转换为离策略演员-批评家RL问题来实现。</p>
+<p><img src="https://arxiv.org/html/2505.03181v1/extracted/6414383/figs/VLMQ_Fig_1_PNG.png" alt="VLM-环境交互"></p>
+<blockquote>
+<p><strong>图1</strong>：VLM-环境交互的整体框架。环境将文本和图像数据格式化为VLM的输入提示。VLM的文本回复被解析为环境执行的具体动作，产生奖励和VLM的新输入。</p>
+</blockquote>
+<p>整体流程如<strong>图1</strong>所示：环境提供文本和图像观察，经提示模板格式化后输入VLM；VLM生成文本动作，经解析后由环境执行，产生奖励和下一轮观察。目标是微调VLM参数以最大化奖励。</p>
+<p>方法的核心是将“基于轮次”的交互转换为“基于令牌”的RL问题。在基于轮次视图中，每个时间步是完整的对话轮次，动作是完整回复。为进行RL训练，需将其分解为基于令牌的决策序列。</p>
+<p><img src="https://arxiv.org/html/2505.03181v1/x1.png" alt="转换轮次→令牌"></p>
+<blockquote>
+<p><strong>图2</strong>：将轮次转换为令牌的示意图。通过将连续对话轮次输入VLM，并找到对应动作决策的输出表示，将每个回复令牌视为单个动作。提示令牌对应的输出被掩蔽忽略。得到的RL输入状态序列编号为(0,1,2,3,4)。</p>
+</blockquote>
+<p><strong>图2</strong>展示了转换过程：对于一个轮次内的动作回复，其每个生成令牌都被视为一个独立的RL步骤，状态是VLM在生成该令牌前的内部表示，动作是选择词汇表中的特定令牌，仅在轮次结束（生成终止符）时获得环境奖励。</p>
+<p>网络架构上，在标准VLM（仅解码器）的基础上增加了一个批评家输出头，形成演员-批评家架构。</p>
+<p><img src="https://arxiv.org/html/2505.03181v1/x2.png" alt="VLM演员-批评家"></p>
+<blockquote>
+<p><strong>图3</strong>：VLM演员-批评家架构。在标准解码器VLM基础上，增加第二个输出头（批评家）来估计选择词汇表中每个令牌所能实现的未来回报。批评家用于过滤语言建模头（演员）的数据集。</p>
+</blockquote>
+<p>如<strong>图3</strong>所示，<code>VLM_θ</code> 表示除末端令牌输出层外的所有参数，<code>L_φ</code> 是语言头（演员），将 <code>VLM_θ</code> 的输出映射到词汇表 <code>𝒱</code> 上的分布。新增的批评家头 <code>Q_ψ</code> 是一个线性层，将 <code>VLM_θ</code> 的同一隐藏状态映射为对每个令牌动作的Q值估计，即 <code>Q_ψ(h) ∈ ℝ^(|𝒱|)</code>，表示在状态 <code>h</code> 下选择每个令牌所能获得的预期回报。</p>
+<p>训练使用过滤监督微调（FSFT）损失。对于转换后的令牌级转移 <code>(h, a, r, d, h&#39;)</code>，首先通过时序差分目标更新批评家参数 <code>ψ</code>：<br><code>y = r + γ (1-d) max_{a&#39;} Q_ψ&#39;(h&#39;)[a&#39;]</code>，其中 <code>ψ&#39;</code> 是目标网络参数。<br>批评家损失为：<code>L_critic(ψ) = (Q_ψ(h)[a] - y)^2</code>。<br>演员（语言头）的更新则使用经过过滤的交叉熵损失。计算当前策略下选择动作 <code>a</code> 的优势估计：<code>A(h, a) = Q_ψ(h)[a] - mean_{b ∈ 𝒱}(Q_ψ(h)[b])</code>。<br>仅当优势 <code>A(h, a) &gt; 0</code> 时，才在损失中包含该令牌，否则其梯度被屏蔽：<br><code>L_actor(φ) = -1_{A(h,a)&gt;0} log(L_φ(h)[a])</code>。<br>这实质上是基于批评家判断，只模仿那些预期优于平均水平的决策，从而过滤掉低质量数据。</p>
+<p>与现有方法（如需要两阶段SFT+PPO的RL4VLM）相比，本文的创新点在于：1）<strong>单模型统一架构</strong>：在原有VLM上简单添加一个批评家头，无需训练额外的独立参考策略或价值模型，节省计算资源。2）<strong>离线到在线能力</strong>：FSFT在高质量数据集上退化为SFT，在低质量数据集上能超越行为策略，并可自然过渡到在线收集自身交互数据继续训练。3）<strong>处理稀疏奖励</strong>：通过为无效语法引入额外惩罚，帮助智能体更快获得学习信号，克服VLM初始语法能力弱导致的探索难题。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：使用了三个多模态智能体领域基准：1) **MiniWoB++**：网络导航任务，成功率作为指标。2) <strong>VisualWebArena</strong>：更复杂的网页交互任务。3) <strong>VizDoom</strong>：3D导航任务，使用任务完成分数。实验平台基于这些环境。测试了两种开源VLM：PaliGemma（2.9B）和MoonDream2（1.9B）。</p>
+<p><strong>对比方法</strong>：</p>
+<ul>
+<li><strong>SFT</strong>：标准的监督微调，作为基线。</li>
+<li>**FSFT (Ours)**：本文提出的过滤监督微调。</li>
+<li><strong>CRR</strong>：保守Q学习，一种更复杂的离线RL算法。</li>
+<li><strong>PPO</strong>：近端策略优化，一种在线RL算法。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2505.03181v1/x3.png" alt="主要结果"></p>
+<blockquote>
+<p><strong>图4</strong>：在MiniWoB++上的主要结果。FSFT在所有设置中均优于SFT基线，在使用低质量数据时提升尤其显著（例如，使用较弱模型数据时，FSFT比SFT成功率绝对提升15.5%）。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>MiniWoB++<strong>：如</strong>图4</strong>所示，当使用较弱模型（xGen-MM）生成的低质量演示数据时，FSFT在PaliGemma上达到58.2%的成功率，显著优于SFT的42.7%。即使使用高质量（GPT-4V）数据，FSFT（72.8%）也略优于SFT（70.1%）。FSFT性能与更复杂的CRR相当，但训练更简单。</li>
+<li><strong>VizDoom</strong>：FSFT显著提升性能。在PaliGemma上，FSFT平均得分达到3.44（满分5），而SFT仅为1.56，成功率翻倍。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2505.03181v1/x4.png" alt="VisualWebArena结果"></p>
+<blockquote>
+<p><strong>图5</strong>：在VisualWebArena上的结果。FSFT在更复杂的网页任务上同样一致优于SFT，证明了方法的泛化能力。</p>
+</blockquote>
+<ul>
+<li><strong>VisualWebArena</strong>：如<strong>图5</strong>所示，FSFT在三个不同任务上均超越了SFT，进一步验证了其有效性。</li>
+</ul>
+<p><strong>消融实验</strong>：</p>
+<p><img src="https://arxiv.org/html/2505.03181v1/x6.png" alt="消融研究"></p>
+<blockquote>
+<p><strong>图6</strong>：在VizDoom上的消融实验。展示了动作惩罚、在线数据收集以及批评家头初始化方式各自对FSFT最终性能的贡献。</p>
+</blockquote>
+<p>本文进行了详细的消融研究（<strong>图6</strong>）以分析各组件贡献：</p>
+<ol>
+<li><strong>动作语法惩罚</strong>：为无效输出添加负奖励至关重要。移除后，在VizDoom上性能从3.44下降至2.56，因为模型难以学到有效语法。</li>
+<li><strong>在线数据收集</strong>：允许FSFT智能体收集自身交互数据并加入训练集，带来了显著的额外性能提升（从3.44到3.94）。这体现了其从离线到在线无缝过渡的优势。</li>
+<li><strong>批评家头初始化</strong>：批评家头从零开始训练与从预训练权重初始化的性能接近，表明方法对初始化不敏感，易于应用。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.03181v1/x7.png" alt="定性比较"></p>
+<blockquote>
+<p><strong>图7</strong>：FSFT与SFT的定性比较案例。FSFT智能体学会了更有效的策略（例如，在VizDoom中先获取钥匙再开门），而SFT智能体则可能重复无效动作。</p>
+</blockquote>
+<p><strong>定性分析</strong>：如<strong>图7</strong>所示，定性案例表明，FSFT智能体能够学到比SFT演示数据更优的策略。例如在VizDoom任务中，SFT模型可能卡在重复尝试开锁的门前，而FSFT模型学会了先寻找钥匙这一更高效的序列。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出FSFT方法</strong>：将离策略RL中的价值过滤思想引入VLM智能体微调，提供了一个稳定、简单且能超越演示数据性能的训练框架，可作为SFT的直接升级替代。</li>
+<li><strong>实证有效性</strong>：在三个不同的多模态交互领域（MiniWoB++， VisualWebArena， VizDoom）和两个开源VLM上系统验证了FSFT的优势，特别是在利用低质量数据方面。</li>
+<li><strong>为VLM智能体训练提供新方向</strong>：展示了从离线RL视角处理VLM对齐问题的潜力，实现了离线到在线学习的平滑衔接，并强调了处理动作语法和稀疏奖励的重要性。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ul>
+<li>方法依赖于环境提供的解析器（<code>parse_env</code>）将文本动作转换为具体操作。若环境无法解析，智能体无法有效学习。</li>
+<li>探索能力有限：虽然在线数据收集有帮助，但FSFT本质上仍是一种基于现有数据过滤的方法，其探索新策略的能力可能不如一些旨在鼓励探索的RL算法。</li>
+</ul>
+<p><strong>后续研究启示</strong>：</p>
+<ul>
+<li>可以探索将FSFT与更复杂的探索策略结合，以进一步提升在全新任务上的性能。</li>
+<li>方法可扩展至更复杂的动作空间（如代码生成）和更长期的规划任务。</li>
+<li>研究如何将价值过滤的思想与其他VLM微调技术（如参数高效微调）结合，以降低大规模VLM微调的成本。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出VLM Q-Learning方法，旨在解决视觉语言模型在交互式决策任务中输出语法适应性差、长上下文规划能力不足的问题。该方法采用离线到在线强化学习框架，结合监督微调的稳定性，使模型能从自身或更大模型的失败决策中学习，实现自我改进。实验在两个开源VLM和三个多模态代理领域验证了该方法的有效性，使VLM能更好地遵循环境语法并完成复杂任务。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2505.03181" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

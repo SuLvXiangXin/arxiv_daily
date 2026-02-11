@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LookPlanGraph: Embodied Instruction Following Method with VLM Graph Augmentation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>LookPlanGraph: Embodied Instruction Following Method with VLM Graph Augmentation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.21243" target="_blank" rel="noreferrer">2512.21243</a></span>
+        <span>作者: Onishchenko, Anatoly O., Kovalev, Alexey K., Panov, Aleksandr I.</span>
+        <span>日期: 2025/12/24</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，利用大型语言模型作为规划器来完成具身指令跟随任务的方法已很普遍。为使LLM成功规划，必须将其“接地”到机器人运行的环境中。一个主流解决方案是使用包含所有必要信息的场景图。然而，现有方法通常依赖于预先构建的静态场景图，并假设所有与任务相关的信息在规划开始时都是已知且准确的。这种方法没有考虑在场景图构建之后、任务执行之前，环境中可能发生的物体位置变化或新物体出现等动态情况，这严重限制了其在动态现实环境中的有效性。虽然已有一些动态构建图的方法被提出，但它们主要关注视觉语言导航，并未完全解决涉及目标状态推断和多个物体重排等复杂操作任务的挑战。</p>
+<p>本文针对静态场景图无法适应环境动态变化这一具体痛点，提出了将基于图的规划与动态场景更新相结合的新视角。其核心思路是：利用一个由静态资产和物体先验位置构成的记忆图作为规划基础，在执行计划的过程中，通过视觉语言模型处理智能体的第一视角图像，持续验证已有先验或发现新实体，从而动态更新场景图，使规划能够适应环境变化。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LookPlanGraph的整体流程是一个迭代的计划-执行-感知循环。其输入是自然语言指令 <code>I</code> 和初始的静态环境图 <code>G</code>，输出是可在环境中执行的一系列高级动作。方法的核心是<strong>记忆图</strong>、<strong>场景图模拟器</strong>和<strong>图增强模块</strong>。</p>
+<p><img src="https://arxiv.org/html/2512.21243v1/images/overview.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：LookPlanGraph方法整体框架。流程始于指令和静态环境图（1）。记忆图初始化后，与任务描述一同输入给语言模型（2）。LM建议的动作由场景图模拟器检查可行性，并可能进行修正（3）。对于“discover_objects”这类需要感知的动作，环境将第一视角图像发送给VLM（4）。VLM生成增强的子图（5），用于更新记忆图（6）。此循环（2-6）重复直到任务完成。</p>
+</blockquote>
+<p><strong>1. 记忆图</strong>：为应对环境的动态性，方法开始时将初始图 <code>G</code> 复制到记忆图 <code>M</code> 中，并将所有物体节点标记为“未看见”。记忆图并非在每一步都查询整个庞大的场景图，而是作为一个中间表示，仅过滤并抽象出最相关的信息。它包含已知地点列表、智能体节点，以及智能体当前周围环境（如同一个房间）内的资产和“未看见”的物体。在任务执行过程中，所有被发现的物体和交互过的资产都会被增量式地添加到记忆图中，即使智能体移动到其他位置，这些信息也保持可见，从而作为一个持续的记忆模块，支持智能体回忆和利用先前获得的知识。</p>
+<p><strong>2. 场景图模拟器</strong>：SGS负责维护环境的动态表示，确保智能体在任务执行过程中保持上下文接地。它通过两种主要机制纠正LM产生的错误动作：<strong>重新提示</strong>和<strong>基于规则的修正</strong>。对于涉及不存在物体或动作的“幻觉”错误，SGS采用类似SayPlan的重新提示策略，向LM提供纠正性反馈。对于在当前环境下不可行的“执行错误”（例如试图从关闭的容器中拾取物品），SGS则应用基于规则的调整以减少代价高昂的重新提示。例如，若LM建议 <code>pick_up(apple-1)</code> 而苹果在关闭的容器内，SGS可自动添加 <code>open(container)</code> 作为前置步骤。本文还扩展了此方法，为LM引入了一个更高级的“rearrange”动作，允许SGS自动生成中间步骤，而无需LM显式生成每个单独动作。</p>
+<p><strong>3. 图增强模块</strong>：当LM选择“discover_objects”动作来检查某个资产或区域时，该模块被触发。它捕获智能体当前视野的图像，连同场景中已知物体名称列表以及关于物体的先验信息，一同输入给VLM。VLM被指示描述场景、检测物体、其状态及其与所观察资产的空间关系。随后，该描述被解析为结构化格式（节点和边），并整合到记忆图中，供后续交互使用。</p>
+<p><img src="https://arxiv.org/html/2512.21243v1/images/prompts.png" alt="提示结构"></p>
+<blockquote>
+<p><strong>图3</strong>：LookPlanGraph的提示结构。提示由静态部分（所有指令中保持不变）、动态部分（由当前记忆图和先前动作构建）以及用于图增强的VLM特定提示组成。图中展示了文本序列化的记忆图表示示例。</p>
+</blockquote>
+<p>与现有方法相比，LookPlanGraph的创新点具体体现在：1) <strong>动态图更新</strong>：通过VLM驱动的图增强模块，在任务执行中实时验证和发现物体，突破了静态场景图的假设。2) <strong>记忆图抽象</strong>：使用过滤后的记忆图而非完整场景图进行提示，降低了交互成本并可能提升模型推理性能。3) <strong>增强的模拟器纠错</strong>：结合重新提示和基于规则的修正，特别是引入高级“rearrange”动作，使规划更鲁棒和高效。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在VirtualHome和OmniGibson模拟器的动态环境以及新提出的<strong>GraSIF</strong>数据集上进行。GraSIF数据集包含来自SayPlan Office、BEHAVIOR-1K和VirtualHome RobotHow的514个任务，专注于移动操作任务，并提供初始与目标场景图以及轻量级自动化验证框架。</p>
+<p>对比的基线方法包括：<strong>LLM-as-P</strong>（一次性生成完整动作序列）、<strong>LLM+P</strong>（将指令转为PDDL后用经典规划器）、<strong>SayPlan</strong>（两阶段：语义搜索子图后规划）、<strong>SayPlan Lite</strong>（本文实现的SayPlan变体，严格分离搜索与规划阶段）以及<strong>ReAct</strong>（动态方法，依赖模拟器反馈和历史交互）。</p>
+<p>评估指标包括：<strong>成功率</strong>（SR，任务完全成功的比例）、<strong>平均计划精度</strong>（APP，生成计划中正确修改节点数与总需修改节点数之比）和<strong>每动作令牌数</strong>（TPA，衡量计算效率与成本）。</p>
+<p><strong>在动态环境中的性能</strong>：如表II所示，在物体位置被修改的动态任务中，LookPlanGraph在SR和APP上 consistently 优于所有基线。例如，在VirtualHome中使用Llama3.2-90B时，LookPlanGraph的SR达到0.60，而表现次佳的SayPlan Lite为0.39。静态规划器（如标准SayPlan）未能超过50%的SR，揭示了其在动态场景中的根本局限性。当使用地面真值信息进行增强时（“GT”行），LookPlanGraph与其它规划器的性能差距进一步拉大（SR达0.92），突显了其规划框架的有效性。</p>
+<p><strong>图增强能力评估</strong>：如表III所示，图增强模块使用GPT-4o时，在OmniGibson的各种资产中，能在60%的情况下生成准确的图。在VirtualHome中性能相似，但准确率随物体数量增加而下降（例如，VLM常低估重复实例的数量）。使用较小的模型（Llama3.2-90b）会导致整体识别能力下降和结构化输出问题，成功率降至33%。</p>
+<p><strong>在GraSIF数据集上的规划性能</strong>：如表IV所示，在涵盖不同复杂度的三个规划领域中，LookPlanGraph在SayPlan Office领域取得了最高的SR（0.62）和APP（0.73）。在BEHAVIOR-1K领域，其性能（SR 0.60）与SayPlan Lite（SR 0.61）相当。在RobotHow领域，ReAct略占优（SR 0.89 vs 0.87），但LookPlanGraph在更复杂环境（SayPlan Office）中展现了更好的泛化能力。消融实验（虽未在提供摘要中详述，但正文提及）表明，记忆图的持续更新功能和SGS的纠错机制对性能有重要贡献。</p>
+<p><img src="https://arxiv.org/html/2512.21243v1/images/real_example.png" alt="真实世界示例"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界办公室环境中的任务执行示例。指令是：“把桌子上的遥控器放到抽屉里”。智能体首先发现桌子上的遥控器（1），拾起它（2），然后打开抽屉（3），最后将遥控器放入抽屉（4）。这展示了LookPlanGraph在现实动态场景中的应用。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1) 提出了 <strong>LookPlanGraph方法</strong>，一种集成了动态场景图更新的自适应规划框架，在动态环境中实现了最佳性能。2) 设计了 <strong>图增强模块</strong>，利用VLM根据实时观察动态更新场景图。3) 构建并开源了 <strong>GraSIF数据集与验证框架</strong>，为基于图的指令跟随研究提供了标准的评测基准。</p>
+<p>论文自身提到的局限性包括：方法仍依赖于某种形式的预构建图（包含资产和物体先验）；图增强模块的准确性受限于VLM的识别能力，在物体数量多或遮挡情况下可能出错；对于非常长的任务序列，规划可能面临挑战。</p>
+<p>本文对后续研究的启示在于：1) <strong>动态环境下的规划至关重要</strong>，纯粹依赖静态世界模型的规划器实用性有限。2) <strong>感知与规划的紧密耦合</strong>（通过VLM增强图）是提高系统在未知或变化环境中鲁棒性的有效途径。3) 需要继续探索更<strong>高效、可靠的规划架构</strong>，以处理长视野任务并减少对大型模型的依赖。GraSIF数据集的发布有望推动该领域更公平、可重复的比较与研究。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>论文针对动态环境中机器人指令跟随任务中，预构建场景图无法适应对象位置变化的核心问题，提出LookPlanGraph方法。该方法利用视觉语言模型（VLM）实时处理自我中心视图，动态更新由静态资产和对象先验组成的记忆图，以验证先验或发现新实体。在VirtualHome和OmniGibson模拟环境的实验中，该方法优于基于静态场景图的方法，并在真实世界验证了实用性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.21243" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

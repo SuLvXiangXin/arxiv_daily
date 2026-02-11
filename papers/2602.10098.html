@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VLA-JEPA: Enhancing Vision-Language-Action Model with Latent World Model - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>VLA-JEPA: Enhancing Vision-Language-Action Model with Latent World Model</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.10098" target="_blank" rel="noreferrer">2602.10098</a></span>
+        <span>作者: Sun, Jingwen, Zhang, Wenyao, Qi, Zekun, Ren, Shaojie, Liu, Zezhi, Zhu, Hanxin, Sun, Guangzhong, Jin, Xin, Chen, Zhibo</span>
+        <span>日期: 2026/02/10</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，利用互联网规模的视频数据预训练视觉-语言-动作模型已成为机器人学习的重要途径。主流方法是通过“隐动作”学习，即从无标签视频中提取并预测代表帧间变化的隐变量，再将其适配到下游控制任务。然而，现有方法存在关键局限性：1）基于像素差异的监督目标使表示偏向于外观变化而非动作相关的状态转移；2）真实世界视频中的相机运动和无关背景变化成为噪声；3）训练中未来帧信息泄露，导致隐动作编码捷径而非有意义的转移动态；4）为缓解上述问题而设计的多阶段训练流程复杂且脆弱。</p>
+<p>本文针对这些痛点，提出了从“预测像素变化”转向“预测隐状态转移”的新视角。其核心思路是采用一种JEPA风格的、泄漏无关的隐状态预测框架，在隐空间而非像素空间对齐未来状态，从而学习对相机运动和背景干扰鲁棒的动作相关动态抽象。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>VLA-JEPA的整体框架是一个简洁的两阶段流程：首先进行基于JEPA的隐世界模型预训练，然后对接一个动作预测头进行微调。其核心设计是“泄漏无关的状态预测”：目标编码器从未来帧（上下文）中提取隐状态作为监督目标，而学生路径（VLM主干）仅接收当前观测。未来信息仅作为目标，绝不作为输入，从而避免了信息泄露导致的隐动作坍缩。</p>
+<p><img src="https://arxiv.org/html/2602.10098v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：VLA-JEPA模型架构。左侧为目标编码器，从未来上下文（如短视频片段）中提取隐状态作为目标。右侧为学生路径，VLM主干仅处理当前观测和语言指令，输出可学习的隐动作表示。一个预测器基于历史隐状态和隐动作预测未来隐状态，并通过JEPA对齐损失进行训练。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>模型主干与可学习令牌</strong>：采用Qwen3-VL作为核心VLM。为了从VLM中提取连续的、编码状态转移信息的隐动作表示，引入了一系列可学习令牌，如 <code>&lt;latent_i&gt;</code>（表示状态 <code>s_i</code> 到 <code>s_{i+1}</code> 的转移）和 <code>&lt;action&gt;</code>。</li>
+<li><strong>世界状态编码器</strong>：采用自监督的V-JEPA2编码器作为单视角视频状态表示器。对于多视角观测，通过向量拼接操作聚合各视角表示，形成统一的世界状态表示 <code>s_ti</code>。</li>
+<li><strong>基于世界建模的隐动作预训练</strong>：这是JEPA预训练的核心。VLM基于初始观测和语言指令，将 <code>&lt;latent_i&gt;</code> 令牌映射为隐表示 <code>z_ti</code>。随后，一个基于自回归Transformer的世界模型，以历史世界状态序列 <code>s_{t0:i}</code> 和对应的条件变量 <code>z_{t0:i}</code> 为输入，预测下一段未来状态 <code>\hat{s_{t1:i+1}}</code>。世界模型采用时间因果注意力机制。训练目标是在隐空间中对齐预测状态与目标编码器产生的状态，损失函数为 <code>ℒ_WM = Σ( \hat{s}_{tk} - s_{tk})</code>，其中 <code>s_{tk}</code> 是冻结的V-JEPA2编码器产生的目标。</li>
+<li><strong>动作预测与联合优化</strong>：在微调阶段，引入用于机器人动作生成的 <code>&lt;action&gt;</code> 令牌。VLM根据初始观测、语言指令和已学习的 <code>&lt;latent_i&gt;</code> 令牌，生成全局动作条件表示 <code>z_a</code>。采用<strong>条件流匹配</strong>作为动作头，建模连续动作轨迹的分布。动作头参数化一个向量场 <code>v_θ</code>，其训练目标是匹配从噪声到真实动作轨迹的插值流。最终，机器人数据的整体训练目标是流匹配损失 <code>ℒ_FM</code> 与世界建模损失 <code>ℒ_WM</code> 的加权和。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.10098v1/x2.png" alt="训练流程"></p>
+<blockquote>
+<p><strong>图2</strong>：VLA-JEPA支持在人类视频和机器人数据上进行跨领域训练。对于无动作标签的人类视频，使用隐世界建模目标下的对齐损失进行训练；对于有动作标签的机器人数据，使用由对齐损失和机器人动作预测损失组成的联合目标进行训练。</p>
+</blockquote>
+<p><strong>创新点</strong>：与现有方法相比，VLA-JEPA的核心创新在于其“泄漏无关”的设计和“隐空间预测”的目标。它不直接重建未来像素或压缩帧间差异，而是预测由强大目标编码器产生的、蕴含语义的未来隐状态。这迫使模型学习与状态转移相关的高层动态，而非低级外观变化，从而实现了对干扰的鲁棒性，并将训练流程简化为两阶段。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：论文在3个模拟基准（LIBERO、LIBERO-Plus、SimplerEnv）和1个真实世界Franka机器人环境上进行评估。预训练使用了大规模人类动作数据集Something-Something-v2（22万视频）和机器人数据集Droid（7.6万轨迹）。对比的基线方法包括最新的隐动作VLA（如LAPA、UniVLA）、未来预测VLA以及最先进的开源VLA（如OpenVLA-OFT、π0、π0.5等）。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>LIBERO基准</strong>：如表1所示，VLA-JEPA在4个任务套件中的2个上达到最佳性能，并以**97.2%**的平均成功率位列总体第一。即使在不使用人类视频预训练的消融版本（w/o human videos）下，也取得了96.1%的优异表现，超越了多数依赖大量机器人数据预训练的基线。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.10098v1/x4.png" alt="LIBERO结果"></p>
+<blockquote>
+<p><strong>表1</strong>：LIBERO基准上的任务成功率对比。VLA-JEPA取得了最佳的平均性能（97.2%），展示了其卓越的泛化能力。</p>
+</blockquote>
+<ol start="2">
+<li><strong>SimplerEnv基准</strong>：如表2所示，在存在“真实到模拟”差距的更具挑战性的环境中，VLA-JEPA在Google Robot上取得了最高平均成功率（51.7%），在WidowX Robot上取得第二高（57.3%）。值得注意的是，VLA-JEPA使用的训练数据量远少于表现最佳的villa-X（&lt;1%），这证明了其预训练方法的数据效率和高优越性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.10098v1/x5.png" alt="SimplerEnv结果"></p>
+<blockquote>
+<p><strong>表2</strong>：SimplerEnv基准上的结果。VLA-JEPA在数据量有限的情况下，在Google和WidowX机器人上均取得了极具竞争力的性能。</p>
+</blockquote>
+<ol start="3">
+<li><strong>LIBERO-Plus鲁棒性基准</strong>：如表3所示，在系统性地引入语言、光照、背景等七种扰动的测试中，VLA-JEPA在<strong>7种扰动中的5种</strong>上表现最佳，显著优于所有基线。特别是在语言、光照、背景和布局扰动上优势明显，验证了其隐动作能够有效处理与任务无关的干扰，学习到更鲁棒和泛化的策略。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.10098v1/x6.png" alt="LIBERO-Plus结果"></p>
+<blockquote>
+<p><strong>表3</strong>：LIBERO-Plus鲁棒性基准上的结果。VLA-JEPA在大多数扰动类型上领先，显示出强大的抗干扰能力。</p>
+</blockquote>
+<ol start="4">
+<li><strong>真实世界实验与消融研究</strong>：<ul>
+<li>真实世界任务：在3个真实世界操控任务中，VLA-JEPA取得了高成功率，如图4所示。</li>
+<li>人类视频比例消融：图5表明，在预训练中混合使用人类视频和机器人数据能持续提升性能，纯人类视频预训练也有效果。</li>
+<li>动作预测可视化：图6和图7定性展示了VLA-JEPA预测的动作轨迹与真实轨迹高度吻合，且其隐动作表示能聚焦于任务相关物体的状态变化。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.10098v1/Figures/experiments/realworld_figure.png" alt="真实世界实验"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界Franka机器人上的任务设置与执行示例。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.10098v1/Figures/experiments/human_video_proportion.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图5</strong>：预训练数据中人类视频比例对LIBERO性能影响的消融实验。混合数据训练效果最佳。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>系统分析了隐动作预训练的缺陷</strong>：明确指出并形式化了当前基于未来监督的隐动作学习方法存在的四大问题——外观偏差、噪声运动敏感、信息泄露和流程复杂。</li>
+<li><strong>提出了VLA-JEPA框架</strong>：设计了一种泄漏无关的、JEPA风格的隐状态预测预训练方法，通过隐空间对齐学习动作相关的状态转移语义，简化了训练流程。</li>
+<li><strong>实现了更好的泛化性与鲁棒性</strong>：在多个模拟和真实基准上验证了VLA-JEPA的优越性，尤其是在存在分布外扰动和“真实到模拟”差距的场景下。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，方法依赖于一个固定的目标编码器（V-JEPA2），其表示能力可能存在上限；此外，联合训练中世界建模损失与流匹配损失的权重 <code>β</code> 需要调整。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>目标编码器的探索</strong>：可以研究更强大或可协同训练的目标编码器，以进一步提升隐状态表示的质量。</li>
+<li><strong>JEPA原则的扩展</strong>：将“泄漏无关的隐状态预测”这一核心原则扩展到更多模态（如触觉、音频）或更长期的序列预测中，是富有前景的方向。</li>
+<li><strong>简化流程的验证</strong>：VLA-JEPA成功地将多阶段流程简化为两阶段，这鼓励后续工作继续探索如何以更简洁、端到端的方式学习可迁移的机器人表示。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有视觉-语言-动作模型在视频预训练中易受外观偏差、无关运动和信息泄漏干扰的问题，提出VLA-JEPA框架。其核心方法是**无泄漏状态预测**：目标编码器从未来帧提取潜在表示，学生路径仅基于当前观测进行预测，未来信息仅作为监督目标。该方法在潜在空间而非像素空间预测，从而学习对相机运动和背景变化鲁棒的动态抽象。实验表明，VLA-JEPA在LIBERO等多个基准上实现了泛化性与鲁棒性的持续提升。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.10098" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

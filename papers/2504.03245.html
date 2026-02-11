@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Seeing is Believing: Belief-Space Planning with Foundation Models as Uncertainty Estimators - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Artificial Intelligence (cs.AI)</span>
+      <h1>Seeing is Believing: Belief-Space Planning with Foundation Models as Uncertainty Estimators</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2504.03245" target="_blank" rel="noreferrer">2504.03245</a></span>
+        <span>作者: Zhao, Linfeng, McClinton, Willie, Curtis, Aidan, Kumar, Nishanth, Silver, Tom, Kaelbling, Leslie Pack, Wong, Lawson L. S.</span>
+        <span>日期: 2025/04/04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在开放世界环境中实现可泛化的机器人移动操作面临着长时程、复杂目标和部分可观测性的重大挑战。当前主流方法之一是使用参数化技能库进行规划，任务规划器将这些技能排序以实现结构化语言（如基于符号事实的逻辑表达式）指定的目标。虽然视觉语言模型（VLM）可用于对这些表达式进行接地（grounding），但它们通常假设环境完全可观测，导致当智能体缺乏足够信息来确切评估事实时，其行为是次优的。另一类处理部分可观测环境的策略是直接在完整观察历史上学习策略，但这需要大量训练数据；或者使用手工构建的信念状态估计器和信念空间转移模型进行信念空间规划，这需要大量人工工程。</p>
+<p>本文针对的痛点是：现有的基于基础模型（如VLM）的规划方法在系统推理、不确定性建模以及需要战略信息收集的长时程任务中表现不佳。本文提出了一个新视角：将VLM作为一个灵活的感知模块来估计不确定性并促进符号接地，而非直接用于端到端规划。核心思路是：构建一个符号信念表示，并使用信念空间规划器生成包含战略信息收集的不确定性感知计划，使智能体能有效推理部分可观测性和属性不确定性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的框架名为BKLVA（Belief-space planning with K-fluents, LLM-based goal-grounding, VLM-based perception and estimation, and information-gathering Actions），其核心是一个观察-更新-规划-执行的循环。</p>
+<p><img src="https://arxiv.org/html/2504.03245v1/x1.png" alt="管道概述"></p>
+<blockquote>
+<p><strong>图3</strong>：系统管道概述。系统集成了感知、信念状态更新和规划。示例任务是将空杯子移到垃圾桶，系统必须评估杯子属性并规划相应的操作动作。在运行前，文本目标首先被翻译成符号规范，并与动作一起确定化以供任务规划器使用。在运行时的信念状态更新步骤中，给定观察结果（来自机器人的图像和传感器输入），系统并行执行两个过程：（1）物体指向和分割以维持物体的空间记忆；（2）谓词评估以接地信念谓词（例如，<code>Empty</code>， <code>On</code>）。规划器基于符号信念状态生成符号计划，执行第一个动作以产生新的观察。信念状态基于新观察进行更新，该过程重复直到目标满足。</p>
+</blockquote>
+<p><strong>整体流程与核心模块</strong>：</p>
+<ol>
+<li><strong>目标翻译</strong>：使用LLM将自然语言目标 <code>g_text</code> 翻译为基于领域谓词 <code>P</code> 的一阶逻辑表达式 <code>G</code>。该表达式可以是提升的（lifted），允许匹配执行过程中新发现的物体。</li>
+<li><strong>感知与信念更新</strong>：利用VLM处理观察 <code>o</code>。此模块包含两个并行子过程：<ul>
+<li><strong>物体检测与定位</strong>：使用MOLMO模型进行物体指向，并结合SAM进行分割，以识别和定位物体，维护物体的空间记忆（几何信息）。</li>
+<li><strong>谓词评估</strong>：对于每个相关谓词 <code>P</code>（如<code>Empty(cup)</code>），VLM被查询以评估其真值。结果用于更新“K-fluents”：<code>K_P</code>（已知为真）或 <code>K_¬P</code>（已知为假）。若无法确定，则两者均为假，表示未知。</li>
+</ul>
+</li>
+<li><strong>规划</strong>：基于当前符号信念状态 <code>b</code>（包含物体集合 <code>O</code> 和所有谓词的K-fluent值）、目标 <code>G</code> 和动作描述 <code>A</code>，使用Fast Downward等符号规划器生成一个动作序列 <code>p</code>。关键创新在于对信息收集动作的处理：每个非确定性的信息收集动作（如<code>ObserveEmptiness</code>）被“乐观确定化”为两个独立的确定性动作（<code>ObserveEmptiness+</code> 和 <code>ObserveEmptiness-</code>），分别对应观察到 <code>K_P</code> 和 <code>K_¬P</code> 的结果。规划器可以“选择”其中一个乐观结果来生成计划。</li>
+<li><strong>执行与重规划</strong>：执行计划 <code>p</code> 中的第一个动作。执行后获得新观察，并更新信念状态。如果动作的实际效果与规划器假设的乐观结果不符（例如，执行<code>LookInDrawer+</code>但发现抽屉非空），则触发<strong>重规划</strong>，基于更新后的信念重新开始规划循环。此循环持续直至信念状态满足目标 <code>G</code>。</li>
+</ol>
+<p><strong>信念表示的技术细节</strong>：采用基于三值谓词（真、假、未知）的符号信念表示，并通过K-fluents（<code>K_P</code> 和 <code>K_¬P</code>）实现。若 <code>P</code> 未知，则 <code>K_P</code> 和 <code>K_¬P</code> 均为假。信息收集动作的前提条件是 <code>¬K_P ∧ ¬K_¬P</code>。系统还支持<strong>附带物体发现</strong>：通过容器状态谓词（如<code>EmptyContainer(drawer)</code>）的评估，当发现容器非空时，将新物体加入信念中的物体集合 <code>O</code>。</p>
+<p><strong>与现有方法的核心创新点</strong>：</p>
+<ol>
+<li><strong>VLM作为不确定性感知器</strong>：将VLM灵活集成到信念空间规划框架中，用于动态评估任意谓词的不确定性，替代了手工构建的状态估计器。</li>
+<li><strong>基于K-fluents的轻量级信念空间规划</strong>：采用三值逻辑和K-fluents形式化信念，并将非确定性信息收集动作乐观确定化，使得能够使用高效的经典符号规划器进行在线信念空间规划。</li>
+<li><strong>战略信息收集的自动化</strong>：通过上述机制，系统能够自动生成并穿插执行信息收集动作（如打开抽屉查看、从上方观察杯子），以主动减少不确定性，从而做出更可靠的决策。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在合成环境（使用真实图像）和真实的Boston Dynamics Spot机器人上进行了移动操作任务评估。任务需要机器人基于执行过程中发现的属性重新排列物体，例如：将空杯子放入垃圾桶、清理抽屉内物品、按重量分类密封盒子。</p>
+<p><strong>对比基线</strong>：</p>
+<ol>
+<li><strong>VLM端到端规划</strong>：使用VLM（GPT-4V）直接根据观察和目标生成可执行动作序列。</li>
+<li><strong>VLM状态估计</strong>：使用VLM进行状态估计（将场景转化为符号描述），然后由符号规划器进行规划，但<strong>不进行信念空间推理</strong>（即假设VLM的每次评估都是确定且全面的）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2504.03245v1/extracted/6334754/figures/experiment-demo-v1.png" alt="实验演示"></p>
+<blockquote>
+<p><strong>图4</strong>：合成环境中的实验评估结果。左图显示了在“空杯移除”任务中，本文方法（BKLVA）与两个基线相比的成功率。右图展示了在四个不同任务上，BKLVA与VLM状态估计基线的成功率和平均计划长度对比。</p>
+</blockquote>
+<p><strong>关键定量结果（合成环境）</strong>：</p>
+<ul>
+<li>在“空杯移除”任务中，本文方法（BKLVA）的成功率达到 **80%**，显著高于VLM端到端规划的 <strong>20%</strong> 和VLM状态估计基线的 **40%**。</li>
+<li>在四个任务的平均表现上，BKLVA的成功率（**85%<strong>）远高于VLM状态估计基线（</strong>37.5%**）。BKLVA生成的平均计划长度也更长，因为它包含了必要的信息收集步骤。</li>
+<li><strong>结果说明</strong>：VLM端到端规划因缺乏系统推理和战略信息收集能力而失败；VLM状态估计基线由于在部分可观测下盲目信任VLM的单一评估（可能返回“未知”或错误），导致规划失败。BKLVA通过显式建模不确定性并规划信息收集动作，取得了最佳性能。</li>
+</ul>
+<p><strong>真实机器人演示</strong>：论文展示了在真实Spot机器人上完成的长时程任务，例如“将抽屉内的任何物体放到纸箱里”。机器人成功地执行了序列：移动到关闭的抽屉前（未知其中内容）-&gt; 打开抽屉（信息收集）-&gt; 发现蓝色积木 -&gt; 抓取并放入纸箱。这验证了系统在部分可观测环境下进行战略决策和信息收集的能力。</p>
+<p><strong>消融实验</strong>：虽然没有独立的消融实验图，但论文通过对比不同基线，实质上验证了“信念空间推理”和“战略信息收集”这两个核心组件的贡献。VLM状态估计基线缺乏信念空间推理，性能大幅下降；端到端基线两者均缺乏，性能最差。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种<strong>通用框架</strong>，将VLM作为感知模块和不确定性估计器，与基于K-fluents的信念空间规划相结合，用于处理部分可观测环境中的移动操作任务。</li>
+<li>实现了<strong>战略信息收集</strong>的自动化，使机器人能够主动规划并执行动作以减少关于物体属性的不确定性。</li>
+<li>在合成与真实机器人任务中进行了验证，表明该框架在<strong>长时程、部分可观测任务</strong>中优于直接的VLM端到端规划和简单的VLM状态估计方法。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>假设<strong>感知完美准确</strong>（VLM评估无噪声），且不建模信息随时间丢失。</li>
+<li>当前主要处理<strong>属性不确定性</strong>，对于物体搜索的支持有限（仅支持附带发现，不支持对未知位置物体的主动搜索）。</li>
+<li>依赖经典的符号规划器，可能受限于规划领域的规模和复杂性。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>基础模型与符号规划的结合</strong>：展示了利用基础模型（VLM）处理开放世界感知，同时利用符号规划进行系统、不确定性感知推理的可行性和优势。</li>
+<li><strong>处理感知不确定性</strong>：未来的工作可以专注于集成更复杂的概率信念状态表示，以处理VLM的感知噪声和不可靠性。</li>
+<li><strong>扩展不确定性类型</strong>：当前框架可扩展至处理更广泛的不确定性类型，如物体身份、数量以及动态环境变化。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>这篇论文针对部分可观测环境下机器人长时程操作的核心挑战，即视觉语言模型（VLM）用于符号接地时因假设完全可观测而产生的次优行为。作者提出了一种新框架：将VLM用作不确定性估计器来构建符号信念表示，并采用信念空间规划器生成包含战略信息收集的不确定性感知计划。模拟实验表明，该方法通过主动规划信息收集，性能优于基于VLM的端到端规划和状态估计基线。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2504.03245" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

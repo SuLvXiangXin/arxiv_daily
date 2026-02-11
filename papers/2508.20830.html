@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Estimating 2D Keypoints of Surgical Tools Using Vision-Language Models with Low-Rank Adaptation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Computer Vision and Pattern Recognition (cs.CV)</span>
+      <h1>Estimating 2D Keypoints of Surgical Tools Using Vision-Language Models with Low-Rank Adaptation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.20830" target="_blank" rel="noreferrer">2508.20830</a></span>
+        <span>作者: Duangprom, Krit, Lambrou, Tryphon, Bhattarai, Binod</span>
+        <span>日期: 2025/08/28</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>手术工具的理解是智能医学影像发展的关键，准确的2D关键点估计是3D姿态估计、空间分析和AR/VR手术模拟等下游任务的基础。目前的主流方法依赖于在特定任务数据集上训练的卷积神经网络（CNN）或视觉Transformer（ViT）。尽管这些模型在受限场景中表现良好，但它们通常在小型医疗数据集上容易过拟合，泛化能力不足，尤其是在处理复杂或新型工具时。此外，为每个特定任务重新训练此类模型限制了其可扩展性。</p>
+<p>本文针对手术工具标注数据稀缺、传统模型易过拟合且泛化能力弱的痛点，提出利用大规模预训练视觉语言模型（VLM）的泛化能力，结合低秩适应（LoRA）轻量微调技术，将其应用于手术工具2D关键点估计任务。本文的核心思路是：将结构化的关键点定位任务重构为基于提示的视觉问答（VQA）问题，通过精心设计的提示对齐视觉特征与语义关键点描述，并采用LoRA高效注入任务特定知识，实现在极少量训练周期和参数更新下达到与专用视觉模型相当的性能。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法是一个基于视觉语言模型的语义2D关键点估计流程。该方法将关键点估计任务重新定义为基于提示的视觉问答问题。模型输入为一张RGB图像和一个固定的自然语言提示：“What is/are this/these tool(s) and find 12 keypoints?”，输出是一个包含工具名称及其12个语义关键点坐标的文本序列。</p>
+<p><img src="https://arxiv.org/html/2508.20830v1/images/idea_VLM.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：基于VLM的关键点估计流程总览。模型接收图像和提示作为输入，联合处理，并输出工具名称及其12个语义关键点。</p>
+</blockquote>
+<p>整个流程的核心是利用一个大型视觉语言模型（如Qwen2.5-VL-3B或DeepSeek-VL2）进行端到端的序列生成。模型需要同时理解图像内容（识别工具）并进行空间推理（预测关键点坐标）。学习目标是使模型生成的输出序列（工具名+坐标）与真实标注序列尽可能一致。为此，论文采用标准的因果语言建模（CLM）损失进行自回归训练，如公式(1)所示。该损失鼓励模型通过文本生成过程同时学习语义理解和空间推理。</p>
+<p><strong>低秩适应（LoRA）微调</strong>是实现高效适配的关键技术。为了避免全参数微调大型VLM的巨大开销，并缓解在小规模数据集上的过拟合，论文采用LoRA技术。其核心思想是在预训练模型冻结的权重矩阵（例如自注意力模块中的查询、键、值、输出投影矩阵）上注入可训练的低秩更新。</p>
+<p><img src="https://arxiv.org/html/2508.20830v1/images/idea_LoRA.png" alt="LoRA原理"></p>
+<blockquote>
+<p><strong>图2</strong>：低秩适应（LoRA）示意图。一个冻结的权重矩阵 W0 通过两个可训练的低秩矩阵 A 和 B 进行更新，即 W = W0 + AB。</p>
+</blockquote>
+<p>具体而言，对于一个冻结的权重矩阵 W0 ∈ R^{d×h}，LoRA将其更新为 W = W0 + AB，其中 A ∈ R^{d×r}, B ∈ R^{r×h} 为可训练参数，r 为远小于 d 和 h 的秩。在微调过程中，只有 A 和 B 被更新，原始权重 W0 保持不变。论文中，LoRA被应用于所有注意力投影层，设置秩 r=8，缩放因子 α=16，丢弃率为0.05。这种方法的创新点在于，仅需更新极少量参数（例如，对于30亿参数的Qwen模型，仅更新2070万个参数），即可将通用的VLM有效适配到结构化的关键点定位任务上。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>数据集与评估指标</strong>：实验在SurgeoNet数据集上进行，该数据集包含13,649张训练图像和1,763张测试图像，涵盖14种手术器械，每张图像标注了12个语义2D关键点。评估采用两个标准指标：平均每关节位置误差（MPJPE，越低越好）和正确关键点百分比（PCK@α，在阈值α=0.05和0.10下计算，越高越好）。</p>
+<p><img src="https://arxiv.org/html/2508.20830v1/images/surgeonet_examples.png" alt="数据集示例"></p>
+<blockquote>
+<p><strong>图3</strong>：SurgeoNet数据集示例。左侧为合成图像，右侧为真实世界图像。</p>
+</blockquote>
+<p><strong>对比方法与结果</strong>：基线方法包括CNN-based的YOLOv8-Pose（2640万参数）以及在其基础上添加ViT模块的SurgeoNet（额外100万参数），两者均训练超过100轮。本文方法使用Qwen2.5-VL-3B和DeepSeek-VL2-tiny模型，仅通过LoRA微调2个epoch。</p>
+<table>
+<thead>
+<tr>
+<th align="left">Model</th>
+<th align="left">MPJPE ↓</th>
+<th align="left"><a href="mailto:&#x50;&#x43;&#75;&#x40;&#48;&#46;&#x30;&#x35;">&#x50;&#x43;&#75;&#x40;&#48;&#46;&#x30;&#x35;</a> ↑</th>
+<th align="left"><a href="mailto:&#x50;&#67;&#x4b;&#x40;&#x30;&#x2e;&#49;&#x30;">&#x50;&#67;&#x4b;&#x40;&#x30;&#x2e;&#49;&#x30;</a> ↑</th>
+<th align="left">Trainable Params ↓</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">YOLOv8-Pose</td>
+<td align="left">0.0672</td>
+<td align="left">0.6572</td>
+<td align="left">0.8466</td>
+<td align="left">26.4 M</td>
+</tr>
+<tr>
+<td align="left">SurgeoNet (monocular camera)</td>
+<td align="left">0.0651</td>
+<td align="left">0.6711</td>
+<td align="left">0.8519</td>
+<td align="left">1 M (on top of Yolov8)</td>
+</tr>
+<tr>
+<td align="left">DeepSeek-VL2 (w/o fine-tune)</td>
+<td align="left">0.4251</td>
+<td align="left">0.0076</td>
+<td align="left">0.0296</td>
+<td align="left">-</td>
+</tr>
+<tr>
+<td align="left">DeepSeek-VL2 (fine-tune)</td>
+<td align="left">0.0796</td>
+<td align="left">0.6432</td>
+<td align="left">0.7961</td>
+<td align="left">38.8 M</td>
+</tr>
+<tr>
+<td align="left">Qwen2.5-VL-3B (w/o fine-tune)</td>
+<td align="left">0.4270</td>
+<td align="left">0.0067</td>
+<td align="left">0.0300</td>
+<td align="left">-</td>
+</tr>
+<tr>
+<td align="left">Qwen2.5-VL-3B (fine-tune)</td>
+<td align="left"><strong>0.0627</strong></td>
+<td align="left"><strong>0.6767</strong></td>
+<td align="left"><strong>0.8908</strong></td>
+<td align="left">20.7 M</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表1</strong>：各模型在MPJPE和PCK指标上的对比结果。未经微调的VLM性能极差，经LoRA微调后性能大幅提升。Qwen2.5-VL-3B微调后取得了最佳MPJPE和<a href="mailto:&#x50;&#x43;&#75;&#64;&#48;&#46;&#49;&#48;">&#x50;&#x43;&#75;&#64;&#48;&#46;&#49;&#48;</a>，且可训练参数量远少于基线模型。</p>
+</blockquote>
+<p>关键结果表明：1）未经微调的VLM无法完成关键点定位任务（MPJPE高达0.42以上）；2）仅经过2个epoch的LoRA微调，VLM性能发生质的飞跃。其中，Qwen2.5-VL-3B微调后的MPJPE（0.0627）优于所有基线模型，<a href="mailto:&#x50;&#67;&#75;&#64;&#x30;&#x2e;&#48;&#53;">&#x50;&#67;&#75;&#64;&#x30;&#x2e;&#48;&#53;</a>（67.67%）和<a href="mailto:&#x50;&#67;&#75;&#64;&#48;&#x2e;&#x31;&#x30;">&#x50;&#67;&#75;&#64;&#48;&#x2e;&#x31;&#x30;</a>（89.08%）也达到领先或可比水平，同时仅更新了2070万个参数，展示了极高的效率。</p>
+<p><strong>消融实验</strong>：论文对LoRA的秩（r）进行了消融研究，结果如下表所示。当秩r=8时，模型取得最佳性能。秩过小（r=4）导致模型容量不足，性能显著下降；秩过大（r=16）并未带来增益，反而可能导致在相同训练条件下收敛不佳或轻微过拟合。</p>
+<table>
+<thead>
+<tr>
+<th align="left">LoRA Rank</th>
+<th align="left">MPJPE ↓</th>
+<th align="left"><a href="mailto:&#80;&#67;&#75;&#x40;&#48;&#46;&#48;&#x35;">&#80;&#67;&#75;&#x40;&#48;&#46;&#48;&#x35;</a> ↑</th>
+<th align="left"><a href="mailto:&#x50;&#67;&#75;&#64;&#48;&#x2e;&#49;&#x30;">&#x50;&#67;&#75;&#64;&#48;&#x2e;&#49;&#x30;</a> ↑</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">Rank = 4</td>
+<td align="left">0.0955</td>
+<td align="left">56.25%</td>
+<td align="left">79.81%</td>
+</tr>
+<tr>
+<td align="left">Rank = 8</td>
+<td align="left"><strong>0.0627</strong></td>
+<td align="left"><strong>67.67%</strong></td>
+<td align="left"><strong>89.08%</strong></td>
+</tr>
+<tr>
+<td align="left">Rank = 16</td>
+<td align="left">0.0796</td>
+<td align="left">62.42%</td>
+<td align="left">85.00%</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表2</strong>：在Qwen2.5-VL-3B上进行的LoRA秩消融研究。适中的秩（r=8）在模型适应能力和训练稳定性间取得了最佳平衡。</p>
+</blockquote>
+<p><strong>定性结果</strong>：<br><img src="https://arxiv.org/html/2508.20830v1/images/project2_vis.png" alt="微调前后对比"></p>
+<blockquote>
+<p><strong>图4</strong>：LoRA微调前后关键点预测的定性对比。左图为微调前，预测杂乱无章；右图为微调后，预测的关键点（红点）与真实标注（绿点）基本对齐，能准确反映手术工具的结构。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.20830v1/images/project2_vis2.png" alt="模型预测对比"></p>
+<blockquote>
+<p><strong>图5</strong>：在合成测试数据上，不同模型关键点预测的定性对比。VLM-based方法（Qwen2.5-VL）的预测结果与专用视觉模型（YOLOv8-Pose, SurgeoNet）在视觉上相似，甚至在某些细节上贴合更好。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1）<strong>任务重构</strong>：创新性地将手术工具2D关键点估计任务构建为基于提示的视觉问答问题，充分利用了VLM的语义理解和序列生成能力。2）<strong>高效适配</strong>：成功应用低秩适应（LoRA）技术对大规模VLM进行轻量级微调，仅用2个训练周期和极少量的参数更新，就在数据稀缺的医疗领域达到了与专用模型相当甚至更优的性能。3）<strong>性能验证</strong>：通过系统的实验证明了经过适当微调的通用VLM能够胜任结构化的空间定位任务，为VLM在更复杂医疗视觉任务（如3D姿态估计、手-工具交互理解）中的应用奠定了基础。</p>
+<p>论文自身提到的局限性并不显著，但可以推断其性能仍依赖于提示的设计和基础VLM的视觉语言预训练质量。此外，虽然微调参数量少，但推理阶段仍需加载整个大型VLM，对计算资源有一定要求。</p>
+<p>本文的启示在于：1）<strong>挖掘VLM的结构化任务潜力</strong>：通用VLM通过合适的适配方法，可以突破开放式图像理解的范畴，应用于需要精确几何输出的任务。2）<strong>轻量微调的有效性</strong>：在数据稀缺的领域，LoRA等参数高效微调技术是快速利用大规模预训练模型强大泛化能力的有效途径。3）<strong>迈向更复杂场景</strong>：该方法为后续扩展到手-工具联合估计、3D手术场景理解等更复杂、动态的任务提供了可行的技术框架和思路。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对手术工具2D关键点估计中，传统CNN或Transformer方法在小规模医学数据集上易过拟合、泛化能力差的问题，提出了一种新方法。该方法利用预训练视觉语言模型（VLMs）的泛化能力，采用低秩适应（LoRA）技术进行轻量微调，通过设计提示创建指令调优数据集，对齐视觉特征与语义关键点描述。实验结果表明，仅需两个epoch的微调，适应后的VLM性能即超越基线模型，证明了LoRA在低资源场景下的有效性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.20830" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

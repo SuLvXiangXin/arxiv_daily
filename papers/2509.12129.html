@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Embodied Navigation Foundation Model - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Embodied Navigation Foundation Model</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.12129" target="_blank" rel="noreferrer">2509.12129</a></span>
+        <span>作者: Zhang, Jiazhao, Li, Anqi, Qi, Yunpeng, Li, Minghan, Liu, Jiahang, Wang, Shaoan, Liu, Haoran, Zhou, Gengze, Wu, Yuze, Li, Xingxing, Fan, Yuxin, Li, Wenjun, Chen, Zhibo, Gao, Fei, Wu, Qi, Zhang, Zhizheng, Wang, He</span>
+        <span>日期: 2025/09/15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，利用视觉语言模型进行导航是具身AI领域的主流方法，其具备强大的泛化能力且任务形式与导航匹配。然而，现有方法大多局限于狭窄的任务设置（如单一室内导航）和特定的机器人形态架构。具体而言，在跨任务导航中，先前方法通常假设机器人具有固定的摄像头配置；在跨形态导航中，现有方法虽能隐式学习不同形态的先验知识，但常被限制于特定导航任务。这种任务与形态之间的割裂，凸显了缺乏一个能够处理不同形态下多样化任务的通用导航基础模型。</p>
+<p>本文针对这一痛点，旨在构建一个跨任务、跨形态的具身导航基础模型。其核心思路是：提出一个统一的架构，通过引入时间-视角指示符令牌来嵌入不同形态的摄像头视角信息和任务的时间上下文，并采用预算感知的时间采样策略在有限的令牌长度预算下动态管理观测令牌，从而在包含四足机器人、无人机、轮式机器人和车辆等八百万导航样本上协同训练，实现无需任务特定微调即可在多种导航任务上获得强大性能。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>NavFoM的整体框架是一个双分支架构，同时处理导航和问答任务。模型输入为语言指令L和从N个不同摄像头捕获的、时间步1到T的RGB图像序列I。输出为预测的导航轨迹τ，其中每个航路点a包含位置(x, y, z)和偏航角θ（z仅用于无人机）。对于问答任务，模型以自回归方式预测下一个令牌。</p>
+<p><img src="https://arxiv.org/html/2509.12129v2/x3.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：NavFoM的流程框架。提供了一个统一框架来处理图像问答、视频问答和导航等多种任务。使用时间-视角指示符令牌组织文本和视觉令牌。导航任务使用规划头直接预测轨迹，问答任务使用传统的语言建模头。</p>
+</blockquote>
+<p>核心模块包括：</p>
+<ol>
+<li><strong>观察编码</strong>：使用预训练的DINOv2和SigLIP视觉编码器提取图像特征，沿通道维度拼接后，采用网格平均池化策略生成紧凑表示。细粒度特征（64个令牌/图像）用于最新观测，粗粒度特征（4个令牌/帧）用于历史观测和视频数据。最后通过一个跨模态投影器将视觉特征映射到LLM的潜在空间。</li>
+<li><strong>时间-视角指示符令牌</strong>：为解决视觉令牌缺乏时空信息的问题，本文引入了TVIT令牌。它由可学习的基嵌入、时间嵌入和角度嵌入组成，通过两个MLP进行投影。对于导航任务，TVIT包含全部三种嵌入；对于视频问答，仅包含基嵌入和时间嵌入；对于图像问答，仅包含基嵌入。这种设计使LLM能够明确区分不同时间步和不同摄像头视角的令牌。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.12129v2/x4.png" alt="TVI令牌可视化"></p>
+<blockquote>
+<p><strong>图4</strong>：时间-视角指示符令牌的可视化。使用聚类算法将高维嵌入映射到2D空间，结果显示令牌根据视角θ（彩虹色条）和时间步t（颜色深浅）被清晰区分。</p>
+</blockquote>
+<ol start="3">
+<li><strong>预算感知的时间采样策略</strong>：为应对实际部署中的内存和推理速度限制，BATS策略根据一个受令牌预算约束的“遗忘曲线”，动态采样导航历史令牌。采样概率P(t)呈指数衰减，确保保留更多近期信息，同时维持一定的历史上下文下限。该策略能自适应不同时间步长和摄像头数量，保持稳定的推理速度。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.12129v2/x5.png" alt="BATS策略可视化"></p>
+<blockquote>
+<p><strong>图5</strong>：BATS策略及其时间成本的可视化。(a) 固定令牌预算B=1600时，不同时间步t的采样概率。(b) 最大时间步T=125时，不同令牌预算B下的采样概率分布。(c) 使用BATS与不使用BATS（保留所有帧）的推理时间对比。</p>
+</blockquote>
+<ol start="4">
+<li><strong>LLM前向传播与令牌组织</strong>：如图6所示，对于不同任务，采用不同的TVIT令牌组合来组织视觉和语言令牌，然后输入LLM。对于导航，预测的动作隐藏状态通过一个三层MLP构成的规划模型解码为归一化的轨迹航路点，最后根据任务特定的缩放因子α_task还原为绝对坐标。损失函数为导航的均方误差损失和问答的交叉熵损失的加权和。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.12129v2/x6.png" alt="令牌组织策略"></p>
+<blockquote>
+<p><strong>图6</strong>：NavFoM在不同任务中的令牌组织策略。(a) 图像问答使用细粒度视觉令牌和仅含基嵌入的TVIT。(b) 视频问答使用粗粒度视觉令牌和包含基嵌入、时间嵌入的TVIT。(c) 导航任务混合使用细粒度（最新观测）和粗粒度（历史观测）视觉令牌，TVIT包含全部三种嵌入。</p>
+</blockquote>
+<p>与现有方法相比，创新点主要体现在：1) 提出了统一的跨任务、跨形态导航基础模型框架；2) 设计了显式编码时空信息的TVIT令牌，增强了模型对多视角、长序列输入的理解；3) 提出了BATS策略，在固定计算预算下优化了历史信息的利用效率，提升了实用性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：模型在包含802万导航样本和476万开放世界知识样本的数据集上训练。在七个公共基准测试上进行了零样本评估，包括：VLN-CE RxR（视觉语言导航）、HM3D-OVON（物体目标导航）、GoToObj（Habitat）、GoToRoom（Habitat）、Vis4D（主动视觉跟踪）、CARLA Town05 Short/Long（自动驾驶）。</p>
+<p><strong>对比方法</strong>：包括跨任务基线（Uni-Navid， VIENNA）和各任务特定的SOTA方法（如M3A， OVRL-V2， GELA， AVT等）。</p>
+<p><strong>关键结果</strong>：</p>
+<ol>
+<li><strong>视觉语言导航</strong>：在VLN-CE RxR上，NavFoM在多摄像头设置下将成功率从56.3%提升至64.4%，在单摄像头设置下从51.8%提升至57.4%。</li>
+<li><strong>物体目标导航</strong>：在HM3D-OVON的零样本设置下达到45.2% SR，超过了之前需要微调的SOTA方法（43.6% SR）。</li>
+<li><strong>其他任务</strong>：在物体搜索（GoToObj， GoToRoom）、目标跟踪（Vis4D）和自动驾驶（CARLA）任务上，NavFoM均达到了具有高度竞争力或SOTA的性能，展示了其广泛的通用性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.12129v2/x2.png" alt="基准性能对比"></p>
+<blockquote>
+<p><strong>图2</strong>：NavFoM在各基准测试上的性能。与每个基准上的SOTA基线方法进行比较，展示了其在跨任务和跨形态上的优越性。</p>
+</blockquote>
+<p><strong>消融实验</strong>：</p>
+<ul>
+<li><strong>TVIT令牌</strong>：移除TVIT或使用替代的位置编码方法均会导致性能显著下降，证明了其有效性。</li>
+<li><strong>BATS策略</strong>：与保留所有帧或均匀采样相比，BATS在固定令牌预算下取得了最佳的性能与效率平衡。</li>
+<li><strong>网格池化</strong>：使用网格池化压缩令牌比直接使用所有图像块特征更能提升性能。</li>
+<li><strong>多任务协同训练</strong>：联合训练导航与问答数据相比仅训练导航数据，能带来显著的性能提升。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2509.12129v2/x7.png" alt="训练数据量对比"></p>
+<blockquote>
+<p><strong>图7</strong>：与先前方法训练样本数量的对比。NavFoM使用了总计1270万样本，远超先前方法。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.12129v2/x8.png" alt="详细实验结果1"></p>
+<blockquote>
+<p><strong>图8</strong>：在VLN-CE RxR基准上的详细定量结果（单摄像头）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.12129v2/x9.png" alt="详细实验结果2"></p>
+<blockquote>
+<p><strong>图9</strong>：在VLN-CE RxR基准上的详细定量结果（多摄像头）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.12129v2/x10.png" alt="消融实验1"></p>
+<blockquote>
+<p><strong>图10</strong>：TVIT令牌的消融实验结果，证明了其设计的必要性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.12129v2/x11.png" alt="消融实验2"></p>
+<blockquote>
+<p><strong>图11</strong>：BATS策略的消融实验结果，展示了其在性能和效率上的优势。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.12129v2/x12.png" alt="消融实验3"></p>
+<blockquote>
+<p><strong>图12</strong>：网格池化策略的消融实验结果。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.12129v2/x13.png" alt="消融实验4"></p>
+<blockquote>
+<p><strong>图13</strong>：多任务协同训练的消融实验结果。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.12129v2/x14.png" alt="定性结果1"></p>
+<blockquote>
+<p><strong>图14</strong>：在VLN-CE RxR和HM3D-OVON上的定性导航结果。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.12129v2/x15.png" alt="定性结果2"></p>
+<blockquote>
+<p><strong>图15</strong>：在CARLA自动驾驶模拟器上的定性结果。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了首个大规模、跨任务、跨形态的具身导航基础模型NavFoM，通过统一架构处理多样化的导航输入。</li>
+<li>引入了时间-视角指示符令牌和预算感知的时间采样策略，分别解决了多视角时空信息编码和实际部署中计算效率的关键问题。</li>
+<li>构建并开源了一个包含802万样本的大规模多任务、多形态导航数据集，为通用导航研究提供了重要资源。</li>
+</ol>
+<p><strong>局限性</strong>：论文指出，尽管NavFoM在多数任务上表现优异，但在部分任务（如特定自动驾驶场景）上仍落后于高度专门化的模型。此外，BATS策略中的超参数（如衰减率k）可能需要针对不同应用场景进行调整。</p>
+<p><strong>研究启示</strong>：</p>
+<ol>
+<li><strong>统一框架的可行性</strong>：证明了使用单一模型处理高度异构的导航任务和机器人形态是可行的，为构建更通用的具身智能体指明了方向。</li>
+<li><strong>结构化令牌设计</strong>：TVIT令牌的成功表明，为LLM提供显式、结构化的模态与时空信息标识，能有效提升其对复杂多模态序列的理解和推理能力，这一思路可推广至其他多模态序列建模任务。</li>
+<li><strong>面向部署的算法设计</strong>：BATS策略强调了在模型设计阶段即考虑实际部署约束（如内存、实时性）的重要性，这对推动AI模型从实验室走向实际应用具有关键意义。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出导航基础模型NavFoM，旨在解决现有具身导航方法局限于特定任务与机器人架构、通用性不足的核心问题。其关键技术在于采用统一架构，通过标识符令牌嵌入不同机器人的相机视图与任务时间上下文，并设计动态采样策略以高效处理多模态输入。模型在包含四足机器人、无人机等八百万样本上训练，并在七个基准测试中实现跨任务与跨机器人的先进性能，无需任务特定微调，验证了其强大的泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.12129" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

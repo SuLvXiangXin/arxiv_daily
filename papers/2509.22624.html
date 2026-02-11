@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SPARK: Synergistic Policy And Reward Co-Evolving Framework - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Computer Vision and Pattern Recognition (cs.CV)</span>
+      <h1>SPARK: Synergistic Policy And Reward Co-Evolving Framework</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.22624" target="_blank" rel="noreferrer">2509.22624</a></span>
+        <span>作者: Liu, Ziyu, Zang, Yuhang, Ding, Shengyuan, Cao, Yuhang, Dong, Xiaoyi, Duan, Haodong, Lin, Dahua, Wang, Jiaqi</span>
+        <span>日期: 2025/09/26</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，大型语言模型（LLM）和大型视觉语言模型（LVLM）通常使用强化学习（RL）进行后预训练对齐与提升。主流方法主要有两种：一是基于可验证奖励的RL（RLVR），适用于数学、代码等有明确答案的客观任务；二是基于人类反馈的RL（RLHF），通过训练独立的奖励模型来处理主观任务。然而，RLHF依赖昂贵且有限的人类偏好数据，且独立的奖励模型训练会导致奖励-策略不匹配、奖励黑客等问题。而RLVR方法在每次策略更新后，会丢弃生成的多个候选回答（rollouts）及其正确性信号，造成了监督信号的浪费。本文针对这些局限性，提出了一种新视角：回收利用RLVR中产生的rollouts数据，将模型本身同时训练成一个生成式奖励模型，使策略和奖励能力在一个统一模型内协同进化。其核心思路是：利用RLVR过程产生的“免费”正确性信号，通过多种目标（点对点评分、成对比较、基于反思的评估）训练模型评估和改进自身回答，从而构建一个策略与奖励相互促进的正向反馈循环，无需独立奖励模型和人类偏好数据。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>SPARK是一个在RLVR基础上构建的、高效的、同策略的协同进化框架。其整体流程分为训练和推理两个阶段，旨在将策略模型和奖励模型的训练整合到一个统一模型中。</p>
+<p><img src="https://arxiv.org/html/2509.22624v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：SPARK框架。(a) 训练阶段：方法回收由可验证奖励引导生成的有价值的rollouts，同时将统一的策略模型π_θ训练成一个生成式奖励模型。(b) 推理阶段：在测试时，这个单一的统一模型可以处理推理、判断和反思任务，用于测试时缩放，无需外部奖励或评判模型。</p>
+</blockquote>
+<p><strong>训练阶段（图2a）</strong>：</p>
+<ol>
+<li><strong>采样答案组</strong>：给定一个样本（对于VLM是<code>(q, a, I)</code>，对于纯文本LLM是<code>(q, a)</code>），模型生成一个包含n个候选答案的组<code>G = {(o_cot^i, o_ans^i)}</code>，其中包含推理轨迹<code>o_cot</code>和最终答案<code>o_ans</code>。</li>
+<li><strong>计算可验证奖励</strong>：基于规则计算每个最终答案的奖励<code>r^i</code>（正确为1，错误为0）。</li>
+<li><strong>计算优势</strong>：采用GRPO风格的归一化，计算每个候选答案的标准优势<code>A^i = (r^i - r̄) / s</code>，用于后续策略梯度更新。</li>
+<li><strong>策略优化目标</strong>：总体目标是最大化期望的可验证奖励，同时用KL散度约束当前策略<code>π_θ</code>不要偏离参考策略<code>π_ref</code>太远。</li>
+</ol>
+<p><strong>核心创新：同策略奖励数据生成与训练</strong><br>与仅优化策略的早期RL方法不同，SPARK的关键在于利用上述步骤中产生的奖励值<code>r^i</code>，在线生成三种形式的奖励与反思数据，用于同步训练模型自身的奖励判断能力：</p>
+<ul>
+<li><strong>点对点数据</strong> <code>D_pointwise</code>：格式为<code>(q, o_ans^i, r^i)</code>，训练模型判断单个答案是否正确。</li>
+<li><strong>成对数据</strong> <code>D_pairwise</code>：格式为<code>(q, o_ans^i, o_ans^j, r^i, r^j)</code>，训练模型比较两个答案并选择更好的一个。</li>
+<li><strong>反思数据</strong> <code>D_reflect</code>：当答案错误时（<code>r^i=0</code>），将问题和不正确答案反馈给模型，要求其进行反思并生成修正后的答案，以激发自我反思能力。<br>将这三类数据合并为<code>D_on-policy</code>，用于进一步优化统一的策略-奖励模型。值得注意的是，<code>o_ans</code>可以替换为推理轨迹<code>o_cot</code>，从而将监督信号转向中间推理步骤。</li>
+</ul>
+<p><strong>推理阶段（测试时缩放，图2b）</strong>：<br>得益于策略与奖励能力的协同进化，训练后的SPARK模型兼具强大的推理和评判能力。在测试时，模型可以采用自我反思的迭代流程：对于一个问题，模型首先生成一个候选答案<code>o_t</code>；然后通过特定的判断提示，让模型自我评估该答案的正确性，得到<code>r_t ∈ {0,1}</code>；如果判断为正确（<code>r_t=1</code>）则接受答案，如果判断为错误（<code>r_t=0</code>）则通过反思提示生成一个修订后的答案<code>o_{t+1}</code>。此过程迭代进行，直到模型输出一个自认为正确的答案为止。</p>
+<p><strong>与现有方法的创新点</strong>：</p>
+<ol>
+<li><strong>数据与计算高效</strong>：无需额外的人类偏好数据标注或独立的奖励模型训练循环，所有监督信号均来自RLVR训练中本会被丢弃的rollouts。</li>
+<li><strong>同策略与稳定</strong>：奖励数据持续从模型当前行为中采样并校准，减少了奖励-策略不匹配。</li>
+<li><strong>协同进化</strong>：提升的奖励准确性为策略提供了更好的梯度，进而产生更高质量的rollouts，这些rollouts又能进一步优化奖励模型，形成正向反馈循环。</li>
+<li><strong>统一开发</strong>：框架支持RL训练和测试时缩放，消除了对外部奖励模型的依赖，节省了GPU内存并减少了通信开销。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准测试</strong>：涵盖三类——数学推理（如MathVista, GSM8k）、奖励相关（RewardBench2, VL-RewardBench）和通用多模态能力（如MMBench, MMStar）。</li>
+<li><strong>基线方法</strong>：基于Qwen2.5-VL和Qwen2.5模型系列，对比了VL-Rethinker、MM-Eureka、Vision-R1等代表性RL方法，以及标准的GRPO变体（仅策略训练、仅奖励训练、策略与奖励联合训练）。</li>
+<li><strong>评估模型</strong>：SPARK-VL-7B、SPARK-7B（纯文本）、SPARK-VL-32B。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2509.22624v1/iclr2026/figures/logo_v1.png" alt="性能对比"></p>
+<blockquote>
+<p><strong>图1</strong>：(c) SPARK在多个推理和奖励模型基准上持续优于早期的RL方法。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>SPARK-VL-7B性能</strong>（表1）：相比Qwen2.5-VL-7B基线，在7个数学推理基准上平均提升**9.7%<strong>，在2个奖励基准上平均提升</strong>12.1%<strong>，综合平均提升</strong>10.6%**。GRPO消融实验表明，仅策略训练对推理略有帮助，仅奖励训练对判断能力提升更大，而两者结合（Policy&amp;Reward）则优于单一变体，证明了策略与奖励监督的互补性。SPARK在此基础上通过协同进化和反思数据实现了进一步的性能飞跃。</li>
+<li><strong>SPARK-7B性能</strong>（表2）：在纯文本LLM上，SPARK-7B在数学基准上平均提升**5.4%<strong>，在奖励基准上平均提升</strong>12.0%<strong>，综合提升</strong>7.1%**，展示了方法的通用性。</li>
+<li><strong>SPARK-VL-32B性能</strong>（表3）：在更大规模模型上，SPARK-VL-32B在数学基准上提升**7.8%<strong>，在奖励基准上提升</strong>3.0%**，证明了框架的良好可扩展性。</li>
+<li><strong>通用能力评估</strong>（表4）：在8个通用多模态基准上，SPARK-VL-7B取得了平均<strong>1.5%</strong> 的提升，表明其增强的能力能够泛化到数学和判断任务之外的领域。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.22624v1/x3.png" alt="判断准确性分析"></p>
+<blockquote>
+<p><strong>图4</strong>：模型奖励准确性研究。评估模型判断自身答案正确性的能力，SPARK在召回率、精确率和F1分数上均持续优于基线。</p>
+</blockquote>
+<ol start="5">
+<li><strong>自我判断准确性分析</strong>（图4）：在多个数学数据集上评估模型自我评判的准确性（召回率、精确率、F1），SPARK-VL-7B在所有指标上均显著优于基线Qwen2.5-VL-7B，证明了其无需人工标注即可获得强大自我判断能力。</li>
+</ol>
+<p><strong>消融实验总结</strong>：</p>
+<ul>
+<li><strong>测试时缩放（TTS）的有效性</strong>（表5）：将TTS应用于基线模型会导致性能下降（因其判断能力弱），应用于GRPO+Policy模型仅有边际收益。而SPARK得益于其内建的增强能力，能够通过TTS获得显著的性能提升，证明了其集成推理、判断、反思能力的有效性。</li>
+<li><strong>数据生成策略</strong>（表6）：对比仅使用最终答案（Ans）、仅使用思维链（CoT）以及两者结合（Ans&amp;CoT）生成奖励数据。结果显示，<strong>结合两者</strong>的策略取得了最佳性能（Avg-All: 57.1），表明答案和思维链提供的互补监督信号能更有效地增强模型学习。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个高效、同策略、稳定的协同进化框架SPARK，它回收利用RLVR中通常被丢弃的rollouts数据，将模型本身训练成生成式奖励模型，消除了对独立奖励模型和人类偏好数据的依赖。</li>
+<li>设计了一种策略与奖励能力协同进化的机制，通过正向反馈循环（更好的奖励模型→更好的策略梯度→更高质量的rollouts→更好的奖励模型）共同提升模型性能。</li>
+<li>实现了统一的训练与推理框架，使单个模型在测试时能够进行自我评判和反思迭代（测试时缩放），无需依赖外部奖励模型，降低了部署成本。</li>
+</ol>
+<p><strong>局限性</strong>：论文主要针对具有可验证奖励的任务（如数学推理）进行框架设计和实验验证。虽然结果表明其奖励判断能力可以泛化到其他领域，但在完全开放式的、高度主观的任务上的有效性仍需进一步探索。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>协同训练范式</strong>：证明了在一个模型内协同训练策略和奖励能力的可行性与优势，为后续构建更统一、高效的模型对齐框架提供了新思路。</li>
+<li><strong>内部监督信号的利用</strong>：展示了如何从模型自身生成过程中挖掘“免费”的监督信号（如正确性、对比、反思），这可以启发更多利用内部反馈进行自我改进的方法。</li>
+<li><strong>测试时推理机制</strong>：SPARK的测试时缩放展示了将训练获得的元能力（自我评估、反思）应用于提升推理可靠性的潜力，可推动更复杂的自我改进型推理机制的研究。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出SPARK框架，解决现有RL方法（如RLHF成本高、奖励-策略不匹配，RLVR浪费监督信号）的局限性。其核心方法是让策略与奖励协同共演：回收模型产生的轨迹和正确性数据，通过点对评分、成对比较等混合目标，将模型自身训练为生成式奖励模型，无需外部奖励模型或人类标注。实验表明，SPARK-VL-7B在7个推理基准上平均提升9.7%，在2个奖励基准上提升12.1%，在8个通用基准上提升1.5%，验证了其高效性与泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.22624" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

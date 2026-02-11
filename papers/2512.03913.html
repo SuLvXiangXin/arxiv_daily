@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Hierarchical Vision Language Action Model Using Success and Failure Demonstrations - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Hierarchical Vision Language Action Model Using Success and Failure Demonstrations</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.03913" target="_blank" rel="noreferrer">2512.03913</a></span>
+        <span>作者: Park, Jeongeun, Yoon, Jihwan, Jeon, Byungwoo, Park, Juhan, Shin, Jinwoo, Cho, Namhoon, Lee, Kyungjae, Yun, Sangdoo, Choi, Sungjoon</span>
+        <span>日期: 2025/12/03</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前主流的视觉-语言-动作模型通常在成功的遥操作演示数据上进行训练，而丢弃了数据收集中自然产生的众多失败尝试。然而，这些失败数据编码了策略可能脆弱之处（如不稳定抓取、碰撞）的信息，可用于提升策略的鲁棒性。现有方法在利用混合质量（成功与失败）数据集方面面临挑战：模仿学习直接惩罚失败倾向的转换需要精细调参以避免扭曲策略；而端到端的VLA模型缺乏显式的失败感知推理机制。本文针对如何有效利用离线数据集中固有的失败信号这一具体痛点，提出将失败数据整合到决策循环中的新视角。本文的核心思路是提出一个分层VLA框架，将高层推理与低层控制分离，使失败数据可作为结构化的学习信号（用于训练规划器的价值模块），而非噪声监督，从而将VLA的广泛能力转化为鲁棒的执行。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的VINE是一个分层视觉-语言-动作框架，其整体流程遵循“规划-执行”范式。在推理时，System 2首先在初始状态下基于场景图和指令进行模型驱动的树搜索，生成并评估候选的高层计划（子目标序列），选择成功概率最高的路径。随后，System 1执行该路径上的当前子目标，生成低层动作直至终止条件触发，若执行结果与预测的下一个状态匹配，则推进到路径上的下一个子目标。</p>
+<p><img src="https://arxiv.org/html/2512.03913v1/x2.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图2</strong>：VINE架构与整体流程。左侧System 2通过思维树进行规划，预测节点成功价值以选择最高价值路径（绿色）；右侧System 1将选定的子目标作为动作块执行，并输出完成信号。两者共享一个带有适配器的视觉-语言主干网络。</p>
+</blockquote>
+<p>核心模块分为高层规划系统（System 2）和低层控制系统（System 1），两者均构建在一个共享的多模态主干网络上。该主干网络融合了预训练VLA模型π₀（用于动作生成）和PaliGemma语言模型（用于文本生成）的参数，并通过线性插值进行合并。两个系统通过添加独立的LoRA适配器进行微调，从而共享感知-语言表征，同时保持推理与控制解耦。</p>
+<p><strong>System 2（推理与规划）</strong> 作为HRL中的元控制器，负责在抽象的2D场景图（节点）上进行可行性引导的树搜索。其具体作用和技术细节包括：</p>
+<ol>
+<li><strong>节点与边生成</strong>：通过语言建模头自回归地生成候选的下一个场景图节点（文本描述）和连接当前节点与下一节点的子目标边（文本描述）。使用束搜索获取多样候选，并通过语法模板和场景图一致性进行过滤。训练采用标准语言建模损失。</li>
+<li><strong>节点评估</strong>：核心是训练一个失败感知的价值估计器Vθ(n)。该价值函数估计从当前节点n出发，在进入吸收性失败集ℱ之前成功到达目标集𝒢的概率。此估计通过监督学习进行，监督信号来自数据中的实际成功/失败结果。这使得规划器能够区分可行与不可行的分支。</li>
+<li><strong>树搜索</strong>：基于生成的候选边和预测的下一节点构建搜索树。使用价值函数对叶节点进行评分，并通过回溯（如取子节点价值的最大值）来计算内部节点的价值，从而选择整体价值最高的路径τ*。</li>
+</ol>
+<p><strong>System 1（动作建模）</strong> 负责执行System 2选定的子目标（边）。其输入包括当前原始状态s、语言指令ℓ、当前要执行的边e以及预测的下一节点n‘。它包含两个专家模块：</p>
+<ol>
+<li><strong>动作专家</strong>：输出低层连续动作块，采用流匹配目标函数，支持高频控制。</li>
+<li><strong>完成专家</strong>：一个终止检测器，预测当前子目标是否已完成（即状态是否已到达预测的节点n‘附近）。</li>
+</ol>
+<p>与现有方法相比，VINE的创新点具体体现在：1) 显式地将失败数据作为监督信号，训练一个用于规划的价值函数，实现失败感知推理；2) 在HRL框架下明确分离高层规划与低层执行，并将失败信号仅注入高层决策回路，不改变智能体的核心技能；3) 将规划过程具体化为在场景图抽象上的树搜索，并通过可行性评分进行剪枝和路径选择。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在模拟环境和真实机器人平台上进行。使用的基准/数据集包括：RLBench（模拟，8项任务）、ManiSkill2（模拟，2项任务）以及真实机器人环境（插拔电源线、开关抽屉）。实验平台涉及Franka Emika Panda机械臂。</p>
+<p>对比的基线方法包括：π₀（强大的VLA基线）、π₀.5（π₀的改进版）、GR00T（在异构数据上训练的最新模型）以及SayCan（使用语言模型进行规划的方法）。</p>
+<p><img src="https://arxiv.org/html/2512.03913v1/x3.png" alt="模拟环境结果"></p>
+<blockquote>
+<p><strong>图3</strong>：在RLBench和ManiSkill2模拟任务上的成功率对比。VINE在所有任务上均优于基线，在RLBench上平均比π₀.5高出14.7%。</p>
+</blockquote>
+<p>关键实验结果：在RLBench的8项任务上，VINE取得了最高的平均成功率（80.0%），相比π₀.5（65.3%）和GR00T（66.3%）有显著提升。在ManiSkill2的“Plug”和“Drawer”任务上，VINE也达到了最高成功率（分别为93.3%和80.0%）。</p>
+<p><img src="https://arxiv.org/html/2512.03913v1/figures/real_data.png" alt="真实机器人结果"></p>
+<blockquote>
+<p><strong>图4</strong>：真实机器人任务（插拔电源线、开关抽屉）的成功率。VINE在两项任务上均达到100%成功率，而π₀.5在插拔任务上为80%，在开关抽屉任务上为60%。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.03913v1/x4.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图5</strong>：消融研究结果。移除失败感知价值估计（“w/o failure”）或树搜索（“w/o tree”）均会导致性能显著下降，证明了这两个组件的关键作用。</p>
+</blockquote>
+<p>消融实验总结了每个组件的贡献：1) <strong>失败感知价值估计</strong>：移除后（仅用成功数据训练价值函数）平均成功率下降9.5%；2) <strong>树搜索</strong>：移除后（仅贪婪选择价值最高的边）平均成功率下降7.0%；3) <strong>场景图抽象</strong>：使用更简单的表示（如边界框）也会导致性能下降。这证明了利用失败数据进行价值估计、通过树搜索进行前瞻性规划以及使用丰富场景图进行抽象的重要性。</p>
+<p><img src="https://arxiv.org/html/2512.03913v1/figures/treev2.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图6</strong>：VINE树搜索过程的定性示例。规划器评估了多个候选子目标（如“抓取插头”和“抓取杯子”），并基于价值估计（绿色高，红色低）选择了可行性更高的路径，避免了可能导致失败的分支。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1) 提出利用离线失败数据训练System 2的价值模型，并将其整合到一个基于树搜索的规划器中，该规划器通过预测的成功概率对每个候选步骤进行评分；2) 引入了一个基于分层强化学习的分层VLA框架，将可行性感知的高层规划与低层动作执行分离；3) 通过全面的实证评估表明，在操作任务上，该方法相比强大的VLA基线在成功率和鲁棒性上均有显著提升。</p>
+<p>论文自身提到的局限性包括：对场景图抽象质量的依赖，以及树搜索带来的额外计算开销（尽管是在执行前离线进行）。</p>
+<p>本文对后续研究的启示在于：失败数据是提升机器人策略鲁棒性的宝贵资源，应被系统性地利用；分层规划与基础技能解耦是一种有效的架构选择，可使智能体在不改变底层能力的情况下进行更安全的决策；将规划问题转化为在可解释抽象（如场景图）上的搜索与评分，能增强模型的可解释性和可靠性。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有视觉语言动作（VLA）模型仅使用成功演示训练、忽略失败数据的问题，提出利用混合质量数据集（含成功与失败演示）提升模型鲁棒性。方法引入分层VLA模型VINE，采用分层强化学习框架，分离高层推理（System 2）与低层控制（System 1）：System 2基于2D场景图进行可行性引导的树搜索，预测子目标成功概率并修剪脆弱分支；System 1执行低层动作。模型完全从离线遥操作数据训练，将失败经验整合到决策中。实验表明，在复杂操作任务中，该方法能持续提高成功率和鲁棒性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.03913" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

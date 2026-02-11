@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Recurrent-Depth VLA: Implicit Test-Time Compute Scaling of Vision-Language-Action Models via Latent Iterative Reasoning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Recurrent-Depth VLA: Implicit Test-Time Compute Scaling of Vision-Language-Action Models via Latent Iterative Reasoning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.07845" target="_blank" rel="noreferrer">2602.07845</a></span>
+        <span>作者: Tur, Yalcin, Naghiyev, Jalal, Fang, Haoquan, Tsai, Wei-Chuan, Duan, Jiafei, Fox, Dieter, Krishna, Ranjay</span>
+        <span>日期: 2026/02/08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前视觉-语言-动作模型通常采用固定的计算深度，无论任务简单（如调整抓握）还是复杂（如杂乱空间中的精确导航），都消耗相同的计算资源。以思维链为代表的显式推理方法虽然实现了可变计算，但其内存占用随推理链长度线性增长，且不适合连续动作空间。现有方法在输出空间（如生成文本、深度图或坐标）进行推理，迫使模型在连续内部状态与离散化输出之间反复投影，造成信息瓶颈和量化噪声，限制了推理保真度。</p>
+<p>本文针对上述计算效率与推理质量的核心痛点，提出了在潜在表示空间进行隐式迭代推理的新视角。其核心思路是：设计一个权重绑定的循环动作头，在固定的低维潜在空间（而非高带宽的输出空间）内迭代优化一个“潜在便签本”，从而实现测试时计算深度的自适应扩展，并保持恒定的内存占用。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RD-VLA的整体框架旨在将计算深度与预训练视觉语言主干网络的固定架构解耦。其核心是一个模块化的动作头，可与任何能产生密集潜在表示的VLM主干结合。该架构将动作头分解为三个功能阶段：序曲、循环核心和尾声，形成一个专为迭代推理优化的潜在流形。</p>
+<p><img src="https://arxiv.org/html/2602.07845v1/figure2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：RD-VLA架构。序曲通过交叉注意力将学习到的查询与VLM中间层特征进行对齐。权重绑定的循环核心在K次迭代中迭代优化一个带噪声的潜在便签本，交叉关注最终层VLM表示和本体感知。尾声将收敛的状态解码为动作。推理时，循环深度K根据任务复杂度动态调整。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>序曲</strong>：这是一个非循环接口层，接收一组K=8个可学习的查询。首先，这些查询进行双向自注意力；然后，通过交叉注意力作用于VLM第12层的视觉与潜在令牌特征，将这些查询转化为一个“接地”的潜在基础<code>S_pre</code>。同时，从一个截断正态分布初始化一个噪声“潜在便签本”<code>S_0</code>，作为推理过程的演化状态。这种噪声初始化迫使模型学习一个稳定的精炼算子。</li>
+<li><strong>循环核心</strong>：这是一个权重绑定的Transformer块，是迭代精炼发生的核心。为防止在长展开过程中出现表征崩溃，采用了<strong>持续输入注入</strong>策略。在每一步<code>k</code>，循环块观察当前便签本状态<code>S_{k-1}</code>和由序曲提供的静态基础<code>S_pre</code>。两者沿特征维度拼接后，通过一个适配器层映射回流形维度，并输入循环核心<code>R_θ</code>。<code>R_θ</code>执行双向自注意力后，进行门控交叉注意力，其中查询来自适配后的输入，而键/值来自一个静态的条件流形，该流形由VLM最终层的视觉/潜在令牌以及机器人当前的本体感知<code>p</code>拼接而成。输出即为更新后的便签本状态<code>S_k</code>。</li>
+<li><strong>尾声</strong>：这是一个非循环解码器。当循环达到所需深度<code>r</code>后，收敛的便签本<code>S_r</code>被送入尾声。尾声通过自注意力并交叉关注高层VLM特征，将表示移出潜在流形。最后，一个输出投影层将这些精炼后的特征映射到机器人动作空间。</li>
+<li><strong>训练与推理策略</strong>：训练时，采用<strong>通过时间截断的反向传播</strong>，每次前向传播的迭代次数<code>N</code>从一个重尾的对数正态泊松分布中采样，且梯度仅通过最后<code>d=8</code>次迭代传播。这迫使网络学会从任何噪声初始化迭代精炼便签本至稳定状态。推理时，采用<strong>自适应计算机制</strong>：基于连续迭代间动作分布的KL散度（近似为动作空间的均方误差）设计停止准则。当动作变化小于阈值δ时停止迭代，使模型能够自我调节，为简单运动即时终止，为复杂情况分配更多计算。</li>
+</ol>
+<p><strong>创新点</strong>：与现有在输出空间生成显式推理令牌（如文本CoT、轨迹点）的方法相比，RD-VLA的创新在于将<strong>推理过程完全置于连续的潜在表示空间内部</strong>。通过权重绑定的循环核心迭代优化内部状态，实现了：1) 测试时计算深度的隐式、自适应扩展；2) 恒定的内存占用（不随迭代次数增加）；3) 避免了输出空间离散化带来的信息损失和序列生成的开销。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在仿真基准LIBERO和CALVIN以及真实世界双手机器人平台上进行。对比的基线包括三类：端到端VLA、基于令牌推理的VLA以及本文的潜在推理方法。</p>
+<p><strong>关键定量结果</strong>：<br>在LIBERO基准上（表I），RD-VLA（固定12次迭代）以仅0.5B的参数量，取得了93.0%的平均成功率，超越了所有更大规模的端到端和令牌推理基线。其自适应计算版本（阈值5e-4）也达到92.5%的成功率，同时平均仅需7.93次迭代。</p>
+<p><img src="https://arxiv.org/html/2602.07845v1/figures/fig4.png" alt="性能随迭代次数变化"></p>
+<blockquote>
+<p><strong>图4</strong>：在LIBERO上不同递归次数的性能。所有任务类别的性能都随计算深度增加而持续提升，模型平均在8-12次迭代间收敛。单次迭代性能仅8.4%，4次迭代跃升至84.1%，显示出循环深度对成功的关键作用。</p>
+</blockquote>
+<p><strong>消融研究与分析</strong>：<br>表II的消融实验系统评估了固定递归深度与各种自适应策略。结果表明：</p>
+<ol>
+<li><strong>性能对迭代次数敏感</strong>：从1次迭代到4次迭代，平均成功率从8.4%急剧提升至84.1%；从4次到8次，进一步提升至92.6%；之后性能饱和。这证明<strong>循环深度是模型成功的关键</strong>，且存在一个效益递减的饱和点。</li>
+<li><strong>自适应计算的有效性</strong>：采用KL散度停止准则的自适应策略（如Binary, τ=5e-4）在保持高性能（92.5%）的同时，将平均迭代次数降至7.93次，实现了计算效率的优化。</li>
+<li><strong>任务依赖的收敛行为</strong>：如图5所示，不同长视野任务需要不同的迭代次数才能达到高成功率。例如，任务4在2次迭代后接近80%成功率，而任务5在2次迭代时成功率为0，到第3次迭代才跃升至约70%。这<strong>自然涌现出任务依赖的计算需求</strong>，强有力地支持了自适应计算策略的必要性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.07845v1/figures/fig5.png" alt="不同任务的收敛行为"></p>
+<blockquote>
+<p><strong>图5</strong>：LIBERO中精选的5个长视野任务随迭代次数的性能变化。每个任务展现出独特的收敛曲线，证明模型所需的迭代次数由任务上下文自然决定，而非预设。</p>
+</blockquote>
+<p><strong>自适应计算案例</strong>：<br><img src="https://arxiv.org/html/2602.07845v1/figures/fig3.png" alt="自适应计算案例"></p>
+<blockquote>
+<p><strong>图3</strong>：在LIBERO任务执行中的自适应计算案例。模型根据执行状态动态选择不同的迭代次数后终止。在步骤1和30（导航、放置等简单运动）使用较少迭代（7-9次），在步骤10和25（抓取等复杂动作）使用更多迭代（约14次）。</p>
+</blockquote>
+<p><strong>其他结果</strong>：在CALVIN基准上，RD-VLA取得了平均任务长度3.39和任务-5成功率45.3%，展示了强大的长视野泛化能力。论文还报告了在真实世界烤面包、叠毛巾等复杂长视野任务上的成功转移。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>架构创新</strong>：提出了首个通过权重绑定的循环核心在潜在空间进行隐式迭代推理的VLA模型RD-VLA，将测试时计算深度与模型参数数量解耦。</li>
+<li><strong>自适应计算机制</strong>：引入基于潜在表示收敛的自适应停止准则，使模型能根据任务复杂度动态分配计算资源，实现高效推理。</li>
+<li><strong>效率与性能优势</strong>：该方法在保持恒定内存占用的同时，在多个基准上达到SOTA性能，并相比基于令牌推理的VLA实现了高达80倍的推理加速。</li>
+</ol>
+<p><strong>局限性</strong>：论文指出，该方法在非常长的序列任务中，循环核心可能面临长期依赖的挑战。此外，自适应停止的阈值δ需要根据任务分布进行调整。</p>
+<p><strong>后续启示</strong>：RD-VLA为机器人学习提供了一条可扩展的测试时计算路径。其潜在空间推理范式可启发更多工作探索如何将“思考”过程更紧密地整合于表征学习内部，而非外化为显式序列。未来研究可探索更精细的自适应执行调度，或将此框架扩展至更广泛的多模态决策任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型在测试时计算资源固定、无法根据任务复杂度自适应调整的问题，提出RD-VLA架构。其核心方法是采用潜在迭代推理取代显式标记生成，通过循环权重共享的动作头实现任意深度推理且内存占用恒定，训练使用TBPTT，推理时基于潜在状态收敛自适应停止计算。实验表明，该方法能显著提升复杂任务性能：单次迭代失败的任务经四次迭代成功率超90%，同时相比此前基于推理的VLA模型获得最高80倍推理加速，并保持恒定内存使用。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.07845" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

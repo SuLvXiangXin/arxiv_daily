@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LaViPlan : Language-Guided Visual Path Planning with RLVR - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>LaViPlan : Language-Guided Visual Path Planning with RLVR</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2507.12911" target="_blank" rel="noreferrer">2507.12911</a></span>
+        <span>作者: Oh, Hayeon</span>
+        <span>日期: 2025/07/17</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <p>自动驾驶中的分布外（OOD）场景对现有规划器构成了严峻挑战，因为规划器难以泛化到训练经验之外，导致不安全或意外的行为。视觉语言模型（VLMs）通过提供高级场景理解和用户对齐的决策，在处理此类场景上展现出潜力。然而，现有VLMs存在一个关键问题：其基于语言的推理与动作级规划所需的低级轨迹之间存在错位，即“视觉-语言-动作错配”。当前主流方法包括端到端自动驾驶和集成VLMs的模型，但它们往往难以在保持语义一致性的同时生成精确的轨迹。</p>
+<p>本文针对这一具体痛点，提出利用基于可验证奖励的强化学习（RLVR）来微调VLMs，使用规划导向的指标（如轨迹误差）作为奖励信号，旨在引导VLMs生成与情境推理一致的、面向动作的决策。本文的核心思路是：通过一个两阶段框架，先进行监督微调使模型获得基本规划能力，再使用RLVR进行强化微调，以可验证的规划指标直接优化轨迹生成，从而弥合语言推理与动作规划之间的鸿沟。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的LaViPlan框架是一个两阶段方法，旨在通过强化学习与可验证奖励（RLVR）来对齐视觉语言模型的推理与轨迹规划。</p>
+<p><img src="https://arxiv.org/html/2507.12911v4/x2.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：方法整体框架。(a) 第一阶段：使用成对的图像-指令-轨迹数据进行监督微调，训练视觉语言模型。(b) 第二阶段：基于格式准确性和轨迹对齐的可验证奖励进行强化微调。策略模型通过KL散度与监督参考模型保持接近，并使用组大小为G的组相对策略优化（GRPO）进行优化。</p>
+</blockquote>
+<p><strong>整体流程</strong>：输入为查询q（包含图像和指令），输出为轨迹o。第一阶段（监督微调，SFT）使用标准监督学习，在图像-指令-轨迹数据上微调VLM，得到一个参考策略π_ref。第二阶段（强化微调，RFT）以π_ref为参考模型，使用RLVR进行优化，其奖励函数结合了格式奖励和规划奖励。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>强化学习与可验证奖励（RLVR）</strong>：目标函数是最大化期望奖励，同时通过KL散度惩罚防止策略过度偏离参考策略。公式为：max_π_θ E_{o∼π_θ(q)}[R(q, o) - β KL(π_θ(o|q) || π_ref(o|q))]。其中R(q, o)为奖励函数，β为权衡系数。</li>
+<li><strong>组相对策略优化（GRPO）</strong>：这是RLVR的具体优化算法，扩展了近端策略优化（PPO）。其核心创新是使用组内统计量（均值和标准差）对优势函数进行归一化：Â_i,t = (R_i - mean({R_i}<em>{i=1}^G)) / std({R_i}</em>{i=1}^G)。这种方法通过组内相对比较来减少奖励尺度变化的影响，稳定训练。目标函数结合了PPO的裁剪替代目标与组相对优势。</li>
+<li><strong>规划导向的奖励函数</strong>：奖励R由两部分组成：R = R_format + R_planning。<ul>
+<li>R_planning：基于轨迹评估指标平均位移误差（ADE）和最终位移误差（FDE）设计。具体为：R_planning = -log(1 + (1/N) Σ_{i=1}^N ||p̂_i - p_i||_2) - log(1 + ||p̂_N - p_N||_2)。第一项鼓励整个预测轨迹接近真实轨迹（ADE），第二项惩罚最终时刻的偏差（FDE）。使用对数平滑以增强数值稳定性和学习动态。</li>
+<li>R_format：鼓励模型遵循指定的输出格式（即，将推理过程放在<code>&lt;think&gt;&lt;/think&gt;</code>标签内，将预测轨迹放在<code>&lt;answer&gt;&lt;/answer&gt;</code>标签内）。</li>
+</ul>
+</li>
+<li><strong>两阶段训练策略</strong>：首先在大量数据（如4K样本）上进行监督微调，获得一个具有基本规划能力和格式遵循能力的参考模型。然后，在一个更小的子集（如1K样本）上应用RLVR进行强化微调，直接优化规划指标。</li>
+</ol>
+<p><strong>创新点</strong>：</p>
+<ol>
+<li><strong>奖励设计</strong>：首次将规划性能指标（ADE/FDE）直接作为可验证的奖励信号用于微调VLMs，使优化目标与下游任务（轨迹规划）直接对齐。</li>
+<li><strong>训练效率</strong>：与需要大量标注数据进行监督微调相比，RLVR阶段仅需少量样本（文中为20%）即可实现性能提升，表明其能更有效地利用数据，尤其是在处理困难案例时。</li>
+<li><strong>对齐范式</strong>：提供了一种后训练范式（RLVR），专门用于解决VLMs中语言推理与动作级规划之间的错配问题，而不是仅仅追求语言上的忠实度。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>数据集与实验平台</strong>：</p>
+<ul>
+<li><strong>域内数据集</strong>：ROADWork数据集，专注于道路施工场景，包含5,430个带有图像、场景描述和图像平面轨迹的样本。将其划分为4,344个样本用于SFT，1,086个样本用于RFT。并进一步根据轨迹横向方差划分为“简单”（直线轨迹）和“困难”（转弯轨迹）子集。</li>
+<li><strong>域外数据集</strong>：CODA-LM数据集，包含各种角落案例（如施工、恶劣天气）并带有自然语言描述，用于评估OOD泛化能力。由于没有真实轨迹，使用2D边界框评估安全性。</li>
+<li><strong>基线模型</strong>：以Qwen2VL-2B-Instruct为主要基线，并对比了其他VLMs（Qwen2VL-7B, Qwen2.5-VL-3B, LLaMA3.2-11B）以及领域特定模型（Senna, DriveLM）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2507.12911v4/x1.png" alt="域内性能对比表"></p>
+<blockquote>
+<p><strong>表2</strong>：在ROADWork数据集上的模型性能对比。LaViPlan（强化微调）在所有指标（Easy/Hard子集的ADE和FDE）上均取得了最佳性能，优于仅进行监督微调的模型和基线模型。</p>
+</blockquote>
+<ol>
+<li><strong>域内规划性能</strong>：如表2所示，未经微调的基线VLMs规划能力很差。监督微调（SFT）显著提升了性能。LaViPlan在SFT基础上进一步降低了误差。例如，在Easy子集上，LaViPlan的ADE为3.62%，比SFT的Qwen2VL-2B（4.52%）提升了约19.9%；在Hard子集上，ADE从5.66%降至4.83%，提升了约14.7%。</li>
+<li><strong>语言一致性与功能推理的权衡</strong>：<br><img src="https://arxiv.org/html/2507.12911v4/x3.png" alt="定性对比"><blockquote>
+<p><strong>图3</strong>：SFT模型（上）与LaViPlan模型（下）在六个场景中的推理定性对比。SFT倾向于产生冗长、类人的描述，而LaViPlan的推理更简洁，专注于与规划相关的核心要素（如锥桶、障碍物、工程车辆）。<br>如表3所示，与SFT相比，LaViPlan的BERTScore下降了4.81%，蕴含关系比例下降了15.85%，中立和矛盾比例上升。这表明强化微调后，模型的输出在语言上与真实描述的相似度降低，但如图3所示，其推理更侧重于对规划至关重要的危险元素，实现了从“语言忠实”到“功能准确”的转变。</p>
+</blockquote>
+</li>
+<li><strong>域外安全性评估</strong>：<br><img src="https://arxiv.org/html/2507.12911v4/x4.png" alt="安全性评分表"><blockquote>
+<p><strong>表4</strong>：在不同权重方案下的安全性评分。LaViPlan在平衡、安全优先和等权方案下均获得最高分，表明其在OOD场景下具有更优的安全性能。<br>如表4所示，在CODA-LM数据集上，使用多种权重方案（平衡、安全优先、性能优先、等权）计算综合安全分数。LaViPlan在除性能优先外的所有方案中均得分最高，特别是在安全优先方案下（0.73）显著优于SFT（0.59），说明其生成的轨迹更能避免碰撞和侵入。</p>
+</blockquote>
+</li>
+<li><strong>消融实验</strong>：<ul>
+<li><strong>强化微调的有效性</strong>：如表5所示，在SFT（4k样本）基础上增加RFT（1k样本）后，性能持续提升。在Easy和Hard子集上，ADE分别相对降低了12.1%和9.1%，FDE降低了13.3%和6.5%。</li>
+<li><strong>训练样本难度比例的影响</strong>：如表6和表7所示，在总样本数固定下，调整用于RFT的样本中“简单”与“困难”的比例。对于域内性能，6:4（易:难）的比例表现最佳。对于域外安全性，7:3的比例在安全相关指标上表现最好，表明暴露于更多困难场景有助于学习安全优先的策略。</li>
+<li><strong>推理引导的作用</strong>：如表8和表9所示，在SFT阶段加入推理能带来小幅性能提升。在RFT阶段，保留推理的模型持续优于无推理的模型，且在困难场景中优势更明显，说明显式的推理过程有助于模型在复杂情况下进行与规划目标一致的结构化理解。</li>
+</ul>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了LaViPlan框架，首次将基于可验证奖励的强化学习（RLVR）应用于自动驾驶的视觉语言模型微调，直接使用规划指标（ADE/FDE）作为奖励，有效对齐了语言推理与动作级轨迹规划。</li>
+<li>通过实验揭示了RLVR微调导致的一个关键权衡：模型输出从追求语言相似性转向追求功能准确性。尽管语言指标下降，但规划性能和安全性得到提升，这挑战了仅以语言忠实度评估VLM的传统观念，倡导在安全关键领域进行任务感知的评估。</li>
+<li>证明了RLVR作为一种后训练范式的数据效率：仅使用少量样本（全数据集的20%）进行强化微调，即可在监督微调的基础上实现显著性能增益，尤其是在处理困难样本时泛化能力更强。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，RLVR微调后，模型的输出在语言上与真实描述的相似度（如BERTScore）有所下降。这表明在追求规划性能最优的同时，可能牺牲了部分语言层面的自然性或与人类标注的严格对齐。</p>
+<p><strong>启示</strong>：</p>
+<ol>
+<li><strong>奖励设计是关键</strong>：对于将高级模型（如VLMs）与低级控制任务结合的研究，设计能够准确反映下游任务目标的、可验证的奖励函数至关重要。</li>
+<li><strong>评估标准需多元化</strong>：在自动驾驶等安全关键领域，评估VLM不应局限于语言相似度，而应结合任务特定的功能指标（如规划误差、安全性指标）。</li>
+<li><strong>困难样本的价值</strong>：在有限的数据预算下，有策略地纳入具有挑战性的样本（困难案例）进行强化学习，可以更有效地提升模型的泛化能力和安全性。</li>
+<li><strong>两阶段训练的有效性</strong>：先通过监督学习获得基本能力，再通过强化学习进行针对性优化，是一种有效的范式，尤其适用于存在“对齐鸿沟”的任务。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出LaViPlan框架，解决自动驾驶中视觉语言模型（VLMs）在分布外场景下，语言推理与底层轨迹规划不对齐的核心问题。方法采用基于可验证奖励的强化学习（RLVR），以规划导向指标作为奖励信号，通过格式推理验证和轨迹对齐进行微调，并施加KL正则化约束。实验表明，该方法提升了域内和域外数据集的规划性能，虽然语言保真度略有下降，但输出仍保持连贯。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2507.12911" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -30,68 +30,48 @@
       <section class="detail-body">
         <h2>📝 详细解读</h2>
         <h2 id="研究背景与动机">研究背景与动机</h2>
-<p>当前，基于Transformer的架构已成为人形机器人视觉感知任务的主流方法。然而，这些方法存在两个关键局限性：首先，标准的Vision Transformer（ViT）及其变种通常计算复杂度较高，这限制了其在资源受限的机器人平台上的部署。其次，它们主要关注空间域的特征学习，可能无法充分捕捉对机器人感知至关重要的高频细节信息（如物体的精细边缘和纹理），这些信息对于精确的物体识别、定位和交互至关重要。</p>
-<p>本文针对上述痛点，提出了一个新的视角：将小波变换（Wavelet Transform）与Transformer架构相结合，以同时应对计算效率和特征表示能力两方面的挑战。小波变换能够将图像分解到不同的频率子带，为在频域内进行高效、细粒度的特征增强提供了基础。本文的核心思路是设计一个频率增强的小波Transformer（FEWT），它利用小波变换对输入图像进行多分辨率分解，然后在频域内对关键的高频信息进行增强处理，最后将增强后的频域特征输入到一个轻量化的Transformer编码器中，从而在降低计算负担的同时提升感知性能。</p>
+<p>在模仿学习领域，人形机器人的学习效果通常取决于专家演示的质量与多样性以及感知表示的质量。机器人对环境的感知主要通过RGB图像实现，尽管计算机视觉取得了巨大进展，但学习适用于机器人应用的鲁棒且通用的视觉表示仍然是一个重大挑战。现有方法如高效多尺度注意力（EMA）模块擅长目标检测，能有效增强特征表示，但其仅关注跨空间特征增强，忽略了频域信息。与此同时，小波变换（如离散小波变换DWT）是捕获频域特征的强大工具，在视觉任务中已展现出优势。本文针对EMA模块在特征表示中缺乏频域信息这一具体痛点，提出将小波变换与注意力机制相结合，以更全面地捕获多尺度特征。核心思路是：提出一个名为频率增强小波变换器（FEWT）的模仿学习框架，通过其两个核心模块——频率增强高效多尺度注意力（FE-EMA）和时间序列离散小波变换（TS-DWT）——动态融合跨空间与频域特征，并增强对时间序列多尺度特征的捕捉，从而提升人形机器人的感知表示与任务成功率。</p>
 <h2 id="方法详解">方法详解</h2>
-<p>FEWT方法的整体流程如下：给定输入图像，首先通过二维离散小波变换（2D-DWT）将其分解为四个频率子带（LL, LH, HL, HH）。这些子带经过一个频率增强模块（FEM）进行处理，以突出对机器人感知任务重要的高频成分。处理后的频域特征被重新组合并送入一个轻量化的Transformer编码器（LTE）进行特征提取。最后，编码器的输出特征被送入任务特定的头部（如分类或检测头）以生成最终预测。</p>
-<p><img src="https://raw.githubusercontent.com/your-repo/image/main/fig1.png" alt="FEWT框架"></p>
+<p>FEWT的整体框架基于动作分块变换器（ACT）策略，并训练为一个条件变分自编码器（CVAE），包含编码器和解码器。编码器将动作序列、关节观测和惯性测量单元（IMU）数据压缩为“风格变量”z。解码器则以三个不同视角的图像、关节位置、IMU数据和z为条件，使用变换器编码器生成特征，再通过变换器解码器预测未来k步的动作序列。在测试阶段，z被设为零。</p>
+<p><img src="https://..." alt="方法框架"></p>
 <blockquote>
-<p><strong>图1</strong>：FEWT方法整体框架。输入图像首先经过2D-DWT分解为四个子带（LL, LH, HL, HH）。频率增强模块（FEM）处理LH, HL, HH子带以增强高频信息。增强后的子带与LL子带拼接，经过一个卷积层后送入轻量化Transformer编码器（LTE）。LTE的输出由任务头进行处理。</p>
+<p><strong>图2</strong>：频率增强小波变换器（FEWT）的模型框架。(a) FEWT的详细架构；(b) 频率增强高效多尺度注意力（FE-EMA）模块的网络架构；(c) 时间序列离散小波变换（TS-DWT）模块的网络架构。</p>
 </blockquote>
-<p>核心模块包括：</p>
+<p>框架的核心创新在于两个新模块：FE-EMA和TS-DWT。</p>
 <ol>
-<li><p><strong>小波分解与频率增强模块（FEM）</strong>：该模块是FEWT的第一个创新点。它使用Haar小波进行2D-DWT，将图像分解为低频近似（LL）和三个方向的高频细节（LH水平，HL垂直，HH对角线）。FEM并非平等对待所有高频子带，而是包含一个可学习的注意力机制，为LH、HL、HH子带生成自适应的权重，公式为：<code>增强后子带 = 原始子带 + α * 原始子带</code>，其中α是由一个小型网络根据子带内容生成的标量权重。这使得模型能够动态地强调对当前任务最有益的高频信息。</p>
-</li>
-<li><p><strong>轻量化Transformer编码器（LTE）</strong>：这是第二个创新点。为了降低计算成本，LTE采用了两个关键设计：（a）<strong>缩减的注意力机制</strong>：在多头自注意力（MSA）中，将查询（Q）和键（K）的维度降至原始维度的一半，而保持值（V）的维度不变。这显著减少了注意力矩阵的计算量。（b）<strong>渐进式下采样</strong>：在Transformer块之间插入步长为2的卷积层，逐步降低特征图的空间分辨率，同时增加通道数。这模仿了CNN的层次结构，并在早期阶段减少了后续Transformer块需要处理的令牌（Token）数量。</p>
-</li>
+<li><strong>频率增强高效多尺度注意力（FE-EMA）</strong>：此模块在EMA基础上进行了两项关键改进。首先，<strong>频域增强</strong>：利用（哈尔）小波变换将输入特征图X分解为低频近似分量（cA）和水平（cH）、垂直（cV）、对角线（cD）三个方向的高频细节分量，以捕获多尺度频域特征。其次，<strong>自适应融合</strong>：通过一个可学习的标量权重α，动态调整跨空间特征（X_spatial）与经过小波处理后的频域特征（X_fre）的融合比例（X_fused = α·X_spatial + (1-α)·X_fre）。权重α由全局平均池化和线性层生成。该模块还采用分组卷积处理下采样特征，在减少计算量（FLOPs）的同时提升性能（如表I所示）。</li>
+<li><strong>时间序列离散小波变换（TS-DWT）</strong>：本文将DWT的创新性应用扩展到时间序列建模。该模块将输入的时间序列张量通过DWT分解为低频（cA）和高频（cD）分量，上采样拼接后，使用一维卷积（Conv1d）进行特征混淆，再通过全连接层计算频域注意力权重，最终与输入张量相乘得到增强后的时间序列特征输出。</li>
 </ol>
-<p>与现有方法相比，FEWT的创新点具体体现在：1) <strong>频域先验的引入</strong>：通过小波变换显式地将图像分解到频域，使模型能够直接操作和增强特定的频率成分，这是标准ViT所不具备的能力。2) <strong>计算效率优化</strong>：结合了频域处理的紧凑表示（小波系数通常更稀疏）和LTE的结构化设计，在保持性能的同时降低了整体FLOPs和参数量。</p>
-<p><img src="https://raw.githubusercontent.com/your-repo/image/main/fig2.png" alt="LTE结构"></p>
-<blockquote>
-<p><strong>图2</strong>：轻量化Transformer编码器（LTE）块结构。每个块包含层归一化（LN）、缩减的多头自注意力（Reduced MSA）、残差连接、另一个LN以及多层感知机（MLP）。Reduced MSA部分明确展示了Q、K维度减半的操作。</p>
-</blockquote>
+<p>与现有方法相比，创新点具体体现在：1) 将小波变换引入视觉注意力机制，首次在机器人感知中实现了跨空间与频域特征的自适应平衡融合；2) 将主要用于图像处理的DWT拓展至时间序列分析，增强了模型对动作序列中多尺度时间特征的捕捉能力；3) 整体框架为即插即用式，可有效集成于现有的ACT等模仿学习基线中。</p>
 <h2 id="实验与结果">实验与结果</h2>
-<p><strong>实验设置</strong>：论文在多个标准机器人视觉感知数据集上进行了评估，包括ImageNet-1K（图像分类）、COCO（目标检测和实例分割）以及一个自定义的人形机器人操作场景数据集（包含抓取和避障任务）。实验平台使用PyTorch，并在NVIDIA RTX 3090 GPU上运行。</p>
-<p><strong>对比方法</strong>：Baseline包括经典的CNN模型（如ResNet系列）、标准的Vision Transformer（ViT）及其高效变种（如DeiT, Swin Transformer），以及一些专门为移动设备设计的模型（如MobileNetV3）。</p>
-<p><strong>关键实验结果</strong>：</p>
-<ol>
-<li><strong>图像分类（ImageNet-1K）</strong>：FEWT-S（小型变体）在Top-1准确率达到81.2%，与参数量相近的DeiT-Ti（72.2%）相比有显著提升，甚至接近更大的Swin-T（81.3%），但计算量（FLOPs）更低。</li>
-<li><strong>目标检测与分割（COCO）</strong>：在Mask R-CNN框架下，以FEWT为骨干网络，在COCO val2017上达到42.1%的AP^box和38.0%的AP^mask，优于同等复杂度的ResNet50骨干网络（38.0% AP^box和34.7% AP^mask）。</li>
-<li><strong>机器人操作任务</strong>：在自定义数据集上，FEWT在物体抓取成功率上达到94.5%，比基于ResNet50的基线（89.1%）高出5.4个百分点；在动态避障任务中，碰撞率降低了31%。</li>
-</ol>
-<p><img src="https://raw.githubusercontent.com/your-repo/image/main/fig3.png" alt="分类与检测结果"></p>
+<p>实验在MuJoCo仿真环境和真实世界人形机器人平台（HBK）上进行。使用了多个仿真与真实任务数据集进行评估，包括立方体转移（Cube Transfer）、双手插入（Bimanual Insertion）、积木搭建（Building blocks）、抽屉存储（Drawer Storage）等（任务细节见表II、表IV）。对比的基线方法包括原始ACT、EMA+ACT、扩散策略（DP）的DDPM和DDIM版本。</p>
+<p><strong>关键实验结果</strong>：在仿真任务中，FEWT将原始ACT基线的成功率最高提升了30%（例如在双手插入任务的“插入”阶段，从32%提升至62%，见表III）。在真实世界移动双手操作任务中，FEWT（带IMU数据）能将ACT基线的成功率提升6-12%（见表IV、V）。例如，在“玩偶存储”任务中，成功率从70%提升至82%。</p>
+<p><img src="https://..." alt="消融实验表III"></p>
 <blockquote>
-<p><strong>图3</strong>：在ImageNet分类（左）和COCO检测（右）上的性能对比图。左图显示FEWT在准确率-计算量（FLOPs）的帕累托前沿上具有优势。右图显示FEWT骨干在不同模型尺寸下均获得更高的AP。</p>
+<p><strong>表III</strong>：ACT仿真任务消融实验的成功率（%）对比。结果表明，单独使用FE-EMA或TS-DWT模块均能提升性能，而二者结合（FEWT）效果最佳，尤其在复杂任务（如Bimanual Insertion）上提升显著。</p>
 </blockquote>
-<p><strong>消融实验</strong>：<br>论文通过消融研究验证了各核心组件的贡献：</p>
-<ul>
-<li><strong>移除频率增强模块（FEM）</strong>：性能下降最明显，分类准确率下降2.1%，抓取成功率下降3.8%。这表明动态高频增强至关重要。</li>
-<li><strong>使用标准MSA代替缩减MSA</strong>：计算量增加约35%，但性能提升不足0.5%，验证了缩减设计的有效性。</li>
-<li><strong>移除小波变换，直接使用原始图像块</strong>：性能全面下降，且计算成本增加，证明了小波分解在提供高效、有益表示方面的作用。</li>
-</ul>
-<p><img src="https://raw.githubusercontent.com/your-repo/image/main/fig4.png" alt="消融实验"></p>
+<p><img src="https://..." alt="对比实验表V"></p>
 <blockquote>
-<p><strong>图4</strong>：消融实验柱状图。从左至右依次为：完整FEWT、移除FEM、使用标准MSA、移除小波变换。图表清晰展示了每个组件对最终分类准确率和计算效率的贡献。</p>
+<p><strong>表V</strong>：不同机器人学习策略在仿真与真实任务上的成功率对比实验。FEWT（带IMU）在绝大多数任务上超越了ACT和扩散策略（DP），展示了其优越性。</p>
 </blockquote>
+<p><img src="https://..." alt="Grad-CAM可视化图3"></p>
+<blockquote>
+<p><strong>图3</strong>：仿真与真实任务的热力图可视化对比。使用Grad-CAM可视化模型注意力区域。可见，在骨干网络ResNet18中引入FE-EMA模块后，模型对任务关键区域（如物体、抓手）的关注更加集中和准确，这解释了成功率提升的原因。</p>
+</blockquote>
+<p><img src="https://..." alt="动态权重α变化图6"></p>
+<blockquote>
+<p><strong>图6</strong>：训练过程中FE-EMA模块动态权重α的变化可视化。在立方体转移和双手插入任务中，α值在训练过程中动态调整，表明模型能够自适应地平衡跨空间与频域特征的融合比例。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：表III的消融实验清晰展示了各组件贡献。FE-EMA模块在提升特征提取能力上作用关键（如双手插入任务提升26%）；TS-DWT模块对优化时间序列预测也有明确贡献（提升10%）；两者结合（FEWT）实现了最佳性能，证明了模块设计的有效性。此外，表V表明集成移动底盘IMU数据进一步提升了在动态真实任务中的性能。</p>
 <h2 id="总结与启发">总结与启发</h2>
-<p><strong>核心贡献</strong>：</p>
-<ol>
-<li>提出了<strong>FEWT</strong>，一种新颖的频率增强小波Transformer架构，首次将小波变换的频域分析能力与Transformer的全局建模能力系统性地结合用于机器人感知。</li>
-<li>设计了<strong>频率增强模块（FEM）</strong>，能够自适应地增强对机器人任务关键的高频视觉信息，从而提升模型对细节的感知能力。</li>
-<li>引入了<strong>轻量化Transformer编码器（LTE）</strong>，通过缩减注意力维度和渐进式下采样，在保证性能的同时显著降低了模型的计算复杂度和参数量，更适合机器人平台部署。</li>
-</ol>
-<p><strong>局限性</strong>：论文自身提到，目前的小波变换使用的是固定的Haar小波，未来可以探索<strong>可学习的小波基</strong>以适应不同的任务和数据分布。此外，方法在极端低光照或剧烈运动模糊下的鲁棒性仍有待进一步验证。</p>
-<p><strong>对后续研究的启示</strong>：</p>
-<ol>
-<li><strong>频域与空域融合</strong>：FEWT展示了在频域进行特征工程与增强的潜力，启发研究者探索更多信号处理工具（如傅里叶变换、曲波变换）与深度学习模型的结合。</li>
-<li><strong>面向机器人的高效架构设计</strong>：LTE的设计思路（即保持性能的同时激进地优化效率）为开发真正适用于嵌入式机器人系统的视觉感知模型提供了参考范式。</li>
-<li><strong>跨模态感知</strong>：这种频域增强的思想可能扩展到其他传感器模态，如利用频域分析处理激光雷达点云或声音信号，以实现更鲁棒的多模态机器人感知。</li>
-</ol>
+<p>本文的核心贡献可概括为三点：1) 开发了包含人形机器人HBK和外骨骼式遥操作舱的硬件平台，用于收集拟人化动作数据；2) 提出了创新的FEWT模仿学习框架，其FE-EMA模块通过小波变换与自适应融合首次实现了对视觉特征跨空间与频域信息的平衡考量，TS-DWT模块则将小波变换成功应用于时间序列建模以捕获多尺度时间特征；3) 通过详尽的仿真与真实实验验证了FEWT的优越性，其性能显著超过ACT、扩散策略等主流方法，并利用Grad-CAM可视化等手段对模型机理进行了解释。</p>
+<p>论文自身提到的局限性包括：扩散策略因高计算量限制了实时图像处理，而本文未明确讨论FEWT的推理速度或计算复杂度是否仍存在瓶颈。此外，实验主要围绕桌面操作任务，在更复杂、非结构化环境中的泛化能力有待进一步验证。</p>
+<p>本文的启示在于：将信号处理领域的经典工具（如小波变换）与深度学习模型（如Transformer）结合，是增强机器人感知表示的一条有效路径。关注特征表示在频域的特性，并设计机制实现与空间域特征的自适应融合，对未来开发更鲁棒、高效的机器人视觉感知模型具有借鉴意义。同时，构建低成本、易用的硬件平台与数据收集系统，对于推动仿人机器人算法研究至关重要。</p>
 
       </section>
       <section class="detail-tldr">
         <h2>💡 一句话总结</h2>
-        <p>FEWT论文旨在解决人形机器人在复杂环境中感知能力不足的核心问题。提出了一种频率增强的小波变换Transformer（FEWT）方法，通过结合频域分析和小波变换来优化Transformer架构，以增强特征提取和鲁棒性。具体实验结论和性能提升数据需参考正文内容，但该方法聚焦于改进感知模型的准确性和效率。</p>
+        <p>本文针对仿人机器人感知中视觉表示缺乏频域信息的问题，提出了一种名为FEWT的模仿学习框架。其核心技术包括频率增强高效多尺度注意力（FE-EMA）模块和时序离散小波变换（TS-DWT），通过小波分解与残差网络结合，动态融合跨空间与频域的多尺度特征，以增强模型鲁棒性。实验表明，该框架在仿真任务中将先进算法（ACT）的成功率提升高达30%，在真实世界中提升6-12%。</p>
       </section>
       <div class="detail-actions">
         <a href="http://arxiv.org/abs/2509.11109" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
@@ -100,8 +80,8 @@
     </article>
   </main>
   <footer class="site-footer">
-    <span>数据抓取来源于 Robotics arXiv Daily</span>
-    <span>本页由 GitHub Actions 定时更新</span>
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
   </footer>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"

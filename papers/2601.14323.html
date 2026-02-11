@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SilentDrift: Exploiting Action Chunking for Stealthy Backdoor Attacks on Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Cryptography and Security (cs.CR)</span>
+      <h1>SilentDrift: Exploiting Action Chunking for Stealthy Backdoor Attacks on Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.14323" target="_blank" rel="noreferrer">2601.14323</a></span>
+        <span>作者: Xu, Bingxin, Shang, Yuzhang, Wang, Binghui, Ferrara, Emilio</span>
+        <span>日期: 2026/01/20</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）模型通过端到端架构统一感知与控制，正加速部署于医疗、制造等安全关键领域。然而，其安全性研究仍不充分。现有针对VLA的后门攻击（如BadVLA、GoBA、TabVLA）通常会导致突然的恶意行为（如错误抓取、提前释放），这些行为会引入运动学不连续性（如速度、加速度突变）和分布异常，容易被基于动态的轨迹验证过滤器或人工质量检查所检测，限制了其在实际严格部署环境中的可行性。</p>
+<p>本文识别出现代VLA架构设计中一个被忽视的安全漏洞：<strong>动作分块</strong>（预测未来K步动作序列）与<strong>增量位姿表示</strong>（编码相对位置变化）的结合，在单个分块执行期间创建了一个<strong>分块内视觉开环</strong>。在此开环窗口内，机器人盲目地积分执行预测的动作，缺乏视觉反馈的中间修正，使得微小的每步扰动能够通过积分累积成显著的轨迹漂移（例如，每步1毫米的漂移在K=50的分块中可累积为5厘米的偏差），最终导致操作失败。现有攻击方法将VLA输出视为整体预测，忽视了这种由动作分块引入的时间结构漏洞。</p>
+<p>本文的核心思路是：利用动作分块的开环漏洞，设计运动学一致（C²连续）的平滑扰动，使其在分块内积分累积，并选择性地在关键操作阶段（如接近目标时）注入，从而实现视觉上难以察觉、动态检测器无法识别的隐蔽后门攻击。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>SilentDrift是一个利用VLA模型时间结构的隐蔽黑盒后门攻击框架。其整体流程是：在数据投毒阶段，对干净的演示轨迹进行分析，识别出关键操作阶段（如末端执行器接近目标物体时），在该阶段的图像中嵌入触发模式（如红色圆形贴片），并同时对该阶段对应的动作序列注入由Smootherstep函数调制的平滑扰动；模型在包含少量此类毒化数据的数据集上微调后，在部署阶段，当触发模式出现且机器人处于对应关键阶段时，模型会输出被扰动的动作分块，由于分块内开环执行，扰动积分导致最终位姿偏离，任务失败。</p>
+<p><img src="https://arxiv.org/html/2601.14323v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：动作分块的漏洞。与单步执行（上图）中视觉反馈不断纠正错误不同，动作分块在序列执行期间（下图）以开环方式运行。这种反馈的缺乏导致微小偏差复合为显著漂移。</p>
+</blockquote>
+<p>核心模块一：<strong>基于Smootherstep的扰动生成</strong>。为确保扰动满足运动学一致性（位置、速度、加速度连续，且加速度有界），从而规避基于动态的异常检测，作者采用Smootherstep函数——一个保证C²连续性的五次多项式：<code>S(τ) = 6τ⁵ - 15τ⁴ + 10τ³</code>，其中τ∈[0,1]为攻击窗口内的归一化时间。该函数及其一阶导（速度）、二阶导（加速度）在边界τ=0和τ=1处均为零，确保了扰动平滑地开始和结束，与自然的人类演示轨迹特征匹配。给定干净动作<code>u_t_clean</code>、触发开始时间<code>t_start</code>、攻击窗口时长<code>T_window</code>、目标偏差方向向量<code>d</code>和最大偏差尺度α，毒化动作构造为：<code>u_t_poison = u_t_clean + α · d · S̃((t - t_start)/T_window)</code>。</p>
+<p><img src="https://arxiv.org/html/2601.14323v1/x3.png" alt="Smootherstep特性"></p>
+<blockquote>
+<p><strong>图3</strong>：Smootherstep攻击特性。（左）末端执行器随时间累积的空间偏差，显示逐渐达到目标偏移的平滑漂移。（右）运动学剖面图展示了C²连续性：位置从0平滑插值到1，而速度和加速度在两端边界恰好为零——这与自然人类演示的特征相符。</p>
+</blockquote>
+<p>核心模块二：<strong>关键帧攻击策略</strong>。该策略旨在最大化攻击效果的同时最小化统计可检测性。1) <strong>投毒阶段的选择性投毒</strong>：并非毒化整个轨迹，而是仅选择关键操作阶段（如抓放任务中，末端执行器与目标物体距离小于阈值<code>d_th</code>的最终接近阶段）注入扰动。这使毒化数据在整体训练数据分布中的足迹最小化，规避基于分布的异常检测。2) <strong>攻击阶段的上下文感知触发</strong>：在部署时，攻击采用条件逻辑，持续监控末端执行器与目标物体的空间关系，仅当机器人处于关键“无法回头”阶段时才激活触发。这确保了触发的时间稀疏性（最小化视觉足迹），并使毒化的动作分块在开环执行中积累的漂移在下次规划周期前已无法挽回，导致任务必然失败。</p>
+<p>与现有方法相比，SilentDrift的创新点在于：首次系统性利用并形式化分析了VLA中“动作分块+增量位姿”架构导致的<strong>分块内视觉开环漏洞</strong>；提出了首个保证<strong>C²运动学连续性</strong>的扰动构造方法，从根本上规避了动态检测；设计了<strong>关键帧攻击策略</strong>，实现了攻击效果与隐蔽性的最优权衡。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在LIBERO仿真基准（包含Spatial, Object, Goal, Long四个任务套件，每套10个任务）上评估。针对两个代表性的VLA架构：VLA-Adapter（参数高效模型）和π0（基于流匹配的基础模型）。攻击为黑盒、模型无关，仅需注入毒化数据。采用极低的<strong>2%投毒率</strong>（每个任务仅注入一条毒化轨迹）。触发为红色圆形贴片（半径5像素），物理扰动（Smootherstep漂移，幅度0.3米）仅在末端执行器接近目标物体（距离&lt;0.15米）时注入。评估指标：清洁任务成功率（CTSR）和攻击成功率（ASR = (CTSR - SR_trigger) / CTSR）。</p>
+<p><strong>主要结果</strong>：<br><img src="https://arxiv.org/html/2601.14323v1/x4.png" alt="主要结果表"></p>
+<blockquote>
+<p><strong>图4</strong>：LIBERO基准测试上的攻击性能。‘Baseline SR’表示清洁模型成功率。对于后门模型，CTSR和ASR分别评估其在清洁和毒化任务上的性能。一个成功的隐蔽攻击表现为高ASR同时保持高CTSR。</p>
+</blockquote>
+<p>如表1所示，SilentDrift在VLA-Adapter上取得了平均<strong>93.2%的ASR</strong>，同时保持了<strong>95.3%的CTSR</strong>（清洁基线为96.6%）；在π0上取得了平均92.7%的ASR和92.4%的CTSR。这表明攻击在高效触发恶意行为的同时，未对模型在清洁输入上的性能造成显著损害（即未发生灾难性遗忘）。不同任务复杂度的ASR存在差异，较简单的Object任务攻击成功率更高。</p>
+<p><strong>定性结果</strong>：<br><img src="https://arxiv.org/html/2601.14323v1/x5.png" alt="可视化结果"></p>
+<blockquote>
+<p><strong>图5</strong>：SilentDrift在LIBERO Spatial任务“拿起黑碗放在盘子上”的可视化。（左）展示良性（上）和触发（下）执行的对比帧序列。攻击在接近阶段诱导了视觉上难以察觉的平滑漂移。（右）3D末端执行器路径：清洁轨迹（绿色）成功抵达目标，而毒化轨迹（红色）积累了C²连续的漂移，导致微小偏差和任务失败，同时保持了正常的运动学剖面。</p>
+</blockquote>
+<p>图5表明，毒化后的执行过程在视频帧序列中与良性执行视觉上无法区分，3D轨迹图揭示了仅在最终接近阶段发生的平滑漂移，验证了攻击的隐蔽性。</p>
+<p><strong>消融与分析</strong>：<br><img src="https://arxiv.org/html/2601.14323v1/x6.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图6</strong>：评估攻击有效性对四个因素的敏感性。（a）动作分块大小K：ASR随K增大而显著提升，证实了分块越大，开环窗口越长，漂移累积效应越强。（b）攻击激活时机（与目标距离）：在关键接近阶段（距离约0.1-0.2米）激活攻击效果最佳。（c）投毒率：即使投毒率低至0.5%，ASR仍超过80%，证明了攻击的数据效率。（d）扰动函数：Smootherstep（C²）在保持高ASR的同时，其运动学剖面（速度、加速度）最自然；线性或低阶多项式（C0, C1）扰动会产生可检测的运动学异常。</p>
+</blockquote>
+<p>图6的消融实验总结：1) <strong>动作分块大小K</strong>是漏洞的关键，K越大ASR越高；2) <strong>攻击激活时机</strong>需要精准选择在关键接近阶段；3) 攻击具有<strong>高数据效率</strong>，极低投毒率即有效；4) <strong>Smootherstep（C²）扰动函数</strong>在攻击有效性和运动学自然性上均优于其他函数。</p>
+<p><strong>训练隐蔽性</strong>：图4（论文中应为图7，根据上下文描述对应训练曲线）显示，后门模型与清洁模型的训练损失曲线在所有任务套件上几乎无法区分，证明攻击在训练阶段也不会引入可感知的异常。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) <strong>识别并形式化了一个根本性的VLA安全漏洞</strong>：即动作分块与增量位姿表示结合产生的分块内视觉开环，为隐蔽攻击创造了系统性攻击面。2) <strong>提出了SilentDrift攻击框架</strong>：利用Smootherstep函数构造保证C²运动学连续性的扰动，理论上满足动态一致性约束，从而规避检测。3) <strong>设计了关键帧攻击策略</strong>：通过选择性毒化关键阶段和上下文感知触发，在最大化攻击效果的同时，最小化了投毒足迹和触发暴露，实现了高隐蔽性。</p>
+<p><strong>局限性</strong>：论文提到，该攻击主要针对采用增量位姿表示和较大动作分块（K&gt;1）的VLA模型。对于使用绝对位姿表示或分块大小很小（K≈1）的系统，其有效性可能会降低，因为错误无法有效累积。</p>
+<p><strong>启示</strong>：本研究揭示了VLA模型架构设计选择（如动作分块）可能无意中引入新的安全风险。对后续研究的启示包括：1) <strong>防御方向</strong>：需要开发能够检测这种平滑、累积性漂移的新型验证机制，或许需要结合更密集的视觉反馈或对预测动作序列的在线一致性检查。2) <strong>安全设计</strong>：在VLA模型架构设计初期就应考虑安全性，例如探索对分块内误差更具鲁棒性的表示方法或引入安全感知的动作生成机制。3) <strong>评估基准</strong>：未来的VLA安全性评估应包含对这类隐蔽、运动学一致攻击的测试。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作（VLA）模型的安全漏洞，提出一种隐蔽的后门攻击方法SilentDrift。核心问题是利用VLA中动作分块与delta位姿表示结合产生的**块内视觉开环**机制，使逐步扰动在动作序列执行中累积。关键技术包括：采用**Smootherstep函数**构建具有C²连续性的扰动，确保轨迹边界处速度与加速度为零以满足运动学约束；并设计**关键帧攻击策略**，仅毒化关键接近阶段以最大化影响并最小化触发暴露。在LIBERO数据集上的实验表明，该方法在毒化率低于2%的情况下，实现了**93.2%的攻击成功率**，同时保持了**95.3%的清洁任务成功率**。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.14323" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

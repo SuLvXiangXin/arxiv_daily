@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MergeVLA: Cross-Skill Model Merging Toward a Generalist Vision-Language-Action Agent - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>MergeVLA: Cross-Skill Model Merging Toward a Generalist Vision-Language-Action Agent</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2511.18810" target="_blank" rel="noreferrer">2511.18810</a></span>
+        <span>作者: Fu, Yuxia, Zhang, Zhizhen, Zhang, Yuqi, Wang, Zijian, Huang, Zi, Luo, Yadan</span>
+        <span>日期: 2025/11/24</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）模型通过在海量机器人演示数据上微调大型视觉语言模型（VLM），在单一任务或单一机器人形态（embodiment）上表现出色。然而，现实世界的通用智能体需要掌握多种技能、适应不同形态和环境。一个自然的思路是使用模型合并（Model Merging）技术，将多个独立微调的单一技能VLA专家模型集成到一个统一模型中，而无需联合重训练或原始数据。尽管该技术在纯语言和视觉语言模型中已被证明有效，但当应用于不同操作任务上训练的VLA专家时，合并后的模型成功率几乎为零。这表明VLA微调过程引发了跨任务不兼容的结构性特化，阻碍了多技能整合。本文旨在探究阻碍VLA模型掌握多种技能的根本原因，并设计一个从架构上就保持“可合并性”（mergeability）的VLA模型。核心思路是通过实证分析识别出VLA不可合并的两个关键根源（VLM中LoRA适配器的发散性更新以及动作专家中由自注意力反馈引起的层间依赖），并据此重新设计VLA架构，引入任务掩码、仅含交叉注意力的动作专家以及测试时任务路由器，以实现高效、高性能的多技能模型合并。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>MergeVLA的整体框架旨在解决已识别的两个不可合并性问题，其设计包含三个核心部分：用于稳定VLM合并的任务掩码、为可合并性重新设计的动作专家，以及用于未知任务推理的测试时任务路由器。</p>
+<p><img src="https://arxiv.org/html/2511.18810v1/images/mergevla.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：不同VLA架构对比。OpenVLA使用标准VLM进行基于令牌的动作生成。VLA-Adapter增加了一个包含交叉和自注意力层的动作专家。MergeVLA通过移除不可合并的自注意力层来简化此设计，以实现有效合并。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2511.18810v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：MergeVLA架构概览。(1) 为应对微调后VLM中破坏性的LoRA参数干扰，对所有合并后的LoRA模块应用任务掩码，以选择性激活对任务相关响应有贡献的合并参数，同时抑制误导其他任务的参数。(2) 为解决动作专家的不兼容性，将其重新设计为仅包含交叉注意力块，并使用sigmoid门来保留并依赖稳健的VLM特征。除因任务特化而保留未合并的深层块（专家头）外，大多数块均可合并。(3) 为应对测试时任务身份未知的情况，采用免训练的测试时任务路由器，通过计算合并动作专家基于值的子空间中VLM隐藏状态的任务相关性，动态选择任务指定的组件。</p>
+</blockquote>
+<p><strong>1. 针对VLM中LoRA冲突的任务掩码（解决Q1）</strong><br>问题：对VLM主干进行LoRA微调时，任务特定的更新会激活几乎不相交的通道子集，产生大量“自私参数”（仅对一个任务有用），导致直接合并产生严重冲突。<br>方法：在标准合并得到全局合并更新向量 <code>τ_merge</code> 后，为每个任务 <code>m</code> 学习一个二进制任务掩码 <code>S_m</code>。该掩码基于参数一致性测试构建：仅当任务特定向量 <code>τ_m</code> 的绝对值显著大于其与合并向量残差的绝对值时（<code>|τ_m| &gt; λ|τ_merge - τ_m|</code>），该参数才被保留。最终，执行任务 <code>m</code> 时使用的VLM参数为 <code>Θ_merge^(m) = Θ_0 + S_m ⊙ τ_merge</code>。这种稀疏激活策略能抑制跨任务干扰，并有助于保留预训练的视觉-语言表征。</p>
+<p><strong>2. 为可合并性重新设计的动作专家（解决Q2）</strong><br>问题：即使VLM完美合并，直接平均VLA-Adapter等架构中从头训练的动作专家仍会失败。因其自注意力层会累积并传播任务特定差异，导致深层块参数严重分化、不可调和。<br>方法：MergeVLA对动作专家进行两项关键修改：（1）<strong>移除自注意力层</strong>，仅保留交叉注意力层。这迫使专家依赖稳健、共享的VLM特征，而非自身任务特定的内部状态。（2）将原始的<code>tanh</code>门替换为**<code>sigmoid</code>门<strong>。<code>tanh</code>门的负激活可能抑制VLM信号，而<code>sigmoid</code>确保VLM信息始终被保留和平衡。<br>合并策略：由于动作专家从头训练，没有共享的初始化，因此采用简单的权重平均进行合并。实验发现，该策略对动作专家的浅层块有效，但对深层块（称为</strong>专家头** <code>H^(l→L)</code>）无效，因其高度特化于各任务的动作分布。因此，MergeVLA选择不合并专家头（通常仅为最后一层 <code>L</code>），每个任务保留自己的专家头。</p>
+<p><strong>3. 测试时任务路由（解决Q3）</strong><br>问题：在任务身份未知的混合任务评估场景下，模型需动态选择正确的任务掩码和专家头。<br>方法：提出一种免训练的测试时路由机制。其核心思想是利用微调将不同任务推入可区分的参数子空间这一现象。路由器工作流程如下：</p>
+<ul>
+<li>对每个候选任务 <code>m</code>，使用其任务掩码 <code>S_m</code> 获得对应的VLM隐藏状态 <code>[h_T^(l-1), h_A^(l-1)]</code>。</li>
+<li>将隐藏状态输入到合并动作专家的第 <code>(l-1)</code> 块，并分析该块中两个交叉注意力路径的<strong>值（Value）投影矩阵</strong> <code>V_T^(l-1)</code> 和 <code>V_A^(l-1)</code>。选择值子空间是因为它更稳定且具有判别性。</li>
+<li>对这两个值矩阵进行奇异值分解（SVD），保留前 <code>k_r</code> 个右奇异向量构成主导内容成分矩阵 <code>P_T^(l-1)</code> 和 <code>P_A^(l-1)</code>。</li>
+<li>计算任务 <code>m</code> 的隐藏状态在这两个子空间上的激活强度：<code>r_T,m = ||P_T^(l-1) h_A,m^(l-1)||_2</code>, <code>r_A,m = ||P_A^(l-1) h_T,m^(l-1)||_2</code>。</li>
+<li>综合两个分数，通过 softmax 得到路由概率，选择概率最高的任务 <code>m*</code>。随后，模型固定使用掩码 <code>S_m*</code> 和专家头 <code>H_m*^(l→L)</code> 执行整个回合。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>仿真基准</strong>：LIBERO（评估多技能能力）、LIBERO-Plus（引入七种扰动评估泛化性）、RoboTwin 2.0（跨形态双臂操作基准）。</li>
+<li><strong>真实世界实验</strong>：在SO101机械臂上执行立方体抓取、堆叠、推动三个任务。</li>
+<li><strong>对比基线</strong>：单任务微调的OpenVLA、VLA-Adapter，以及应用不同合并方法（TA, TIES, DARE, WUDI, EMR, TSV, KnOTS）的变体。</li>
+<li><strong>实现细节</strong>：视觉语言主干为Qwen2.5-0.5B。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2511.18810v1/x2.png" alt="实验结果"></p>
+<blockquote>
+<p><strong>图3</strong>：左图：使用TA和TIES方法合并不同数量任务时，掩码的自私参数比例。自私比例按公式4计算。右图：所有任务对之间，动作专家各模块的平均相对L2距离。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>LIBERO基准上的主要结果（表1）</strong>：在混合任务评估下，MergeVLA（使用TIES合并+任务掩码）在Spatial, Object, Goal, Long四个任务套件上分别取得94.8%、94.6%、91.8%、79.4%的成功率，平均达**90.2%<strong>，与单任务微调的VLA-Adapter（平均98.5%）和MergeVLA（平均96.7%）性能接近，且显著优于其他合并方法。而直接合并OpenVLA或VLA-Adapter（TA方法）会导致</strong>0%**成功率。</li>
+<li><strong>消融实验与组件贡献</strong>：<ul>
+<li><strong>任务掩码的必要性</strong>：对OpenVLA应用TA合并时，仅合并视觉主干成功率为44.2%，合并全部参数则降至0%。加入任务掩码后，成功率提升至62.4%。</li>
+<li><strong>动作专家重新设计的关键作用</strong>：在VLA-Adapter架构上，即使应用任务掩码，若仅排除专家头（<code>H^(L→L)</code>）不合并，成功率也仅为23.1%。这印证了自注意力层导致的不兼容性。</li>
+<li><strong>架构改进带来的OOD泛化提升</strong>：仅进行移除自注意力和替换门控两项架构修改（未合并），新设计在LIBERO-Plus的OOD测试中比VLA-Adapter高出**18.7%**的成功率。</li>
+</ul>
+</li>
+<li><strong>跨环境与跨形态泛化</strong>：<ul>
+<li><strong>LIBERO-Plus</strong>：MergeVLA在七种扰动下平均成功率达**72.2%**，优于单任务专家（68.3%）和其他合并方法。<br> <img src="https://arxiv.org/html/2511.18810v1/x3.png" alt="实验结果"><blockquote>
+<p><strong>图4</strong>：LIBERO-Plus基准上的七种扰动类型示例。</p>
+</blockquote>
+</li>
+<li><strong>RoboTwin 2.0</strong>：在跨形态、跨技能评估中，MergeVLA取得**70.7%**的平均成功率，展示了强大的组合泛化能力。<br> <img src="https://arxiv.org/html/2511.18810v1/x4.png" alt="实验结果"><blockquote>
+<p><strong>图5</strong>：RoboTwin 2.0基准中使用的三种机器人形态和四项任务。</p>
+</blockquote>
+</li>
+</ul>
+</li>
+<li><strong>真实世界实验</strong>：在SO101机械臂的三个任务上，MergeVLA实现了**90.0%**的平均成功率，验证了其在实际场景中的有效性。<br> <img src="https://arxiv.org/html/2511.18810v1/x6.png" alt="实验结果"><blockquote>
+<p><strong>图6</strong>：真实世界实验设置：SO101机械臂及三项操作任务（抓取、堆叠、推动）。</p>
+</blockquote>
+</li>
+<li><strong>任务路由器有效性</strong>：测试时任务路由器在LIBERO上实现了**88.6%**的路由准确率，且仅需在回合开始时（t=0）执行一次即可。<br> <img src="https://arxiv.org/html/2511.18810v1/x7.png" alt="实验结果"><blockquote>
+<p><strong>图7</strong>：测试时任务路由器的路由准确率及其对最终成功率的影响。</p>
+</blockquote>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>诊断了VLA模型不可合并的根本原因</strong>：通过实证分析，首次明确指出了导致VLA多技能合并失败的两种互补机制——VLM中LoRA适配器的极端任务排他性更新，以及动作专家中因自注意力反馈产生的强层间任务依赖。</li>
+<li><strong>提出了一个“为合并而设计”的VLA架构</strong>：MergeVLA通过引入任务掩码、移除自注意力并重构门控的动作专家、以及免训练的测试时任务路由器，系统性地解决了上述问题，首次实现了VLA模型的高性能多技能合并。</li>
+<li><strong>验证了模型合并作为通向通用具身智能体的可行路径</strong>：在仿真和真实世界多个基准上的实验表明，合并后的单一模型在跨技能、跨环境、跨形态评估中均能达到与单任务专家相当甚至更优的性能，证明了其有效性和鲁棒性。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ul>
+<li>专家头（通常为最后一层）由于高度任务特化而未被合并，仍需为每个任务保留一份副本，并非完全统一的单一模型。</li>
+<li>需要为每个任务维护一个任务掩码，当任务数量极大时，存储和路由计算开销可能增加。</li>
+</ul>
+<p><strong>启示</strong>：</p>
+<ul>
+<li>本文表明，通过精心设计模型架构以保持其模块化和可组合性，可以克服特定领域（如VLA）中模型合并的障碍。这为构建大规模通用智能体提供了一种高效、可扩展的替代方案，无需对海量多任务数据进行联合训练。</li>
+<li>所提出的任务掩码和基于值子空间的路由机制，可能为其他存在严重参数冲突的模型合并场景提供新思路。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型在合并多个任务专家时性能骤降的核心问题，提出MergeVLA架构。其关键技术包括：在视觉语言模型中使用带任务掩码的稀疏激活LoRA适配器以减少参数冲突；在动作专家中以交叉注意力块取代自注意力，使任务专业化保持局部可组合；并设计测试时任务路由器进行自适应任务推断。在LIBERO等多个仿真与真实机器人实验平台上，MergeVLA实现了与独立微调专家相当甚至更优的性能，验证了其在跨任务、跨具身与环境中的强泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2511.18810" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

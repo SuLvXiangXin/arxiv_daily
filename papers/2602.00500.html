@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Inject Once Survive Later: Backdooring Vision-Language-Action Models to Persist Through Downstream Fine-tuning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Inject Once Survive Later: Backdooring Vision-Language-Action Models to Persist Through Downstream Fine-tuning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.00500" target="_blank" rel="noreferrer">2602.00500</a></span>
+        <span>作者: Zhou, Jianyi, Wei, Yujie, Zhen, Ruichen, Zhao, Bo, Xia, Xiaobo, Shao, Rui, Su, Xiu, Yang, Shuo</span>
+        <span>日期: 2026/01/31</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>视觉-语言-动作（VLA）模型已成为现代具身AI系统的基础，通过整合视觉感知、语言理解和动作规划，能够在多样环境中执行通用任务。然而，其安全性研究仍显不足，尤其是在后门攻击方面，这在物理世界部署中构成现实威胁。现有方法，如BadVLA，尝试向VLA模型注入后门，但这些后门在下游适配过程中极易被清除。用户使用干净数据进行微调会显著改变模型参数，导致后门失效，这在实际应用中不切实际。本文针对“后门无法在用户下游微调后持续存在”这一具体痛点，提出了一个新视角：通过分析不同微调场景下的参数敏感性，识别出在微调过程中保持相对不变的模块（微调不敏感模块），并将后门选择性地注入这些稳定模块中。本文的核心思路是：在模型分发前的预训练阶段，将后门植入那些在下游微调中几乎不会被更新的模块，从而确保恶意行为在用户使用干净数据定制模型后依然有效。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>INFUSE方法包含三个阶段，旨在构建一个即使经过用户侧干净数据微调后门依然有效的VLA基础模型。</p>
+<p><img src="https://arxiv.org/html/2602.00500v1/x2.png" alt="INFUSE pipeline overview"></p>
+<blockquote>
+<p><strong>图2</strong>：INFUSE流程概览。包含三个阶段：(1) 微调不敏感模块识别：通过在多个干净环境上微调基础VLA模型，分析参数变化，识别保持稳定的模块。(2) 在微调不敏感模块上进行选择性后门注入：构建包含触发器和恶意目标动作的中毒数据集，然后仅微调不敏感模块并冻结敏感模块，产生中毒的基础VLA模型。(3) 用户侧微调：使用来自不同环境的干净数据集对中毒基础模型进行微调，模拟真实的用户适配过程，证明注入的后门在用户定制后仍然有效。</p>
+</blockquote>
+<p><strong>第一阶段：微调不敏感模块的识别</strong><br>核心原则是：在不会被适配覆盖的地方注入。为实现这一原则，通过三个互补的漂移度量计算模块级稳定性分数，并选择在代表性下游适配中 consistently 表现出低漂移的模块。</p>
+<ol>
+<li><strong>平均绝对参数差（MAD）</strong>：衡量参数更新的原始幅度，值越小表示几何更新越小。</li>
+<li><strong>Fisher归一化差（FND）</strong>：根据每个参数对损失的敏感性（通过经验Fisher信息估计）重新加权参数更新。低<code>F_i</code>值的模块不仅更新较少，而且更新的方向对损失不敏感。</li>
+<li><strong>激活偏移（AS）</strong>：通过计算微调前后同一输入集上模块激活的CKA相似度，捕捉特征空间中的表征稳定性。激活偏移越小，意味着模块的功能行为在参数更新后得以保持。</li>
+</ol>
+<p>随后，对这三个异质尺度的指标应用对数变换和min-max归一化，并使用统一分数<code>S_i = αD̂_i + βF̂_i + γÂ_i</code>进行融合（论文中采用等权重α=β=γ=1/3）。根据稳定性分数<code>S_i</code>升序排序模块，并纳入直到累积Fisher加权漂移份额达到预设阈值<code>P%</code>的模块，从而得到目标模块集合<code>S</code>。这些模块既高度稳定，又在总适配引起的变更中占比有限。</p>
+<p><strong>第二阶段：选择性后门注入</strong><br>在识别出稳定模块后，通过仅更新这些模块来选择性注入后门，构建中毒基础模型。</p>
+<ul>
+<li><strong>中毒数据集构建</strong>：通过将基于现实物体的触发器（如蓝色马克杯）插入模拟环境，并通过示教控制重新收集演示来生成中毒轨迹。每个中毒场景在任务和布局上与干净副本保持一致，确保产生物理合理、时间连贯的长时程任务轨迹。</li>
+<li><strong>选择性注入</strong>：冻结所有其他组件，仅使用中毒数据对第一阶段识别出的稳定模块进行约束更新。优化目标包含两项损失：在干净数据上的标准任务损失，以及在中毒数据上引导模型输出恶意目标动作<code>y*</code>的损失。通过将更新局部化到微调不敏感模块，后门被嵌入到对下游适配鲁棒的区域中。</li>
+</ul>
+<p><strong>第三阶段：用户侧微调</strong><br>此阶段模拟典型的下游适配过程，用户使用自己任务特定的干净数据集对中毒基础模型进行微调。由于后门被选择性地注入到微调不敏感模块中，而这些模块在用户侧干净数据微调过程中相对不变，因此后门得以基本保持完整，确保了跨部署场景的持续攻击能力。</p>
+<p>与现有方法相比，INFUSE的核心创新点在于：1) <strong>攻击阶段前置</strong>：在模型分发前的预训练阶段注入后门，而非假设攻击者能影响下游微调；2) <strong>选择性注入策略</strong>：基于系统的参数稳定性分析，精准定位并仅在后门留存概率最高的模块中进行注入。</p>
+<p><img src="https://arxiv.org/html/2602.00500v1/x3.png" alt="Module sensitivity on OpenVLA-OFT"></p>
+<blockquote>
+<p><strong>图3</strong>：OpenVLA-OFT模型的模块敏感性分析。条形图以对数尺度报告了在跨越Spatial、Goal、Object、LIBERO-10和真实世界轨迹的下游适配中，微调前后模块的平均绝对差异、Fisher归一化差异和基于CKA的激活偏移。(d) 面板显示了归一化的总体敏感性分数<code>S_i</code>。分数越低表示模块越不敏感，是第二阶段选择性注入的目标。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在三个主流开源VLA架构上评估INFUSE：OpenVLA-7B、π-0.5和SpatialVLA-4B。使用LIBERO-90进行预训练阶段的后门植入，并在下游任务（LIBERO-Spatial/Goal/Object/10、Bridge数据集/SimplerEnv WidowX任务）上进行干净微调以评估持久性。真实世界实验在配备RGB-D相机的Franka Research 3机械臂上进行，执行桌面操作任务。评估指标为攻击成功率（ASR），同时报告有/无触发器时的任务成功率（SR(w/)和SR(w/o)）以衡量攻击有效性和隐蔽性。</p>
+<p><strong>对比基线</strong>：包括BadNet（经典数据投毒）、Adversarial-VLA（基于对抗性补丁的模型投毒）和BadVLA（针对VLA的先进后门攻击方法）。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>模拟环境性能</strong>：如表1、2、3所示，INFUSE在多种架构和环境中均取得卓越的攻击性能。<ul>
+<li>在OpenVLA-7B的LIBERO任务上，INFUSE平均ASR达95.3%，且干净任务成功率（92.2-98.0%）与正常模型（95.1-98.1%）相当。而BadVLA在用户微调后平均ASR骤降至31.7%。</li>
+<li>在π-0.5模型上，INFUSE平均ASR为85.9%，BadVLA为45.2%。</li>
+<li>在SpatialVLA-4B的SimplerEnv任务上，INFUSE平均ASR为91.7%，BadVLA为39.4%。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.00500v1/x1.png" alt="Attack persistence comparison"></p>
+<blockquote>
+<p><strong>图1</strong>：在四个LIBERO任务上，用户侧干净微调前后攻击持久性对比。左图：基线方法在干净微调后攻击成功率（ASR）急剧下降，表明后门被移除。右图：INFUSE在干净微调后仍保持高ASR，证明了后门的持久性。</p>
+</blockquote>
+<ol start="2">
+<li><p><strong>真实世界验证</strong>：如表4所示，在Franka机械臂的真实操作任务中，INFUSE实现了平均79.8%的ASR，同时保持了与正常模型（29.3%）相近的干净任务性能（28.3%），显著优于BadVLA（36.6% ASR）。这证明了从模拟到真实的迁移能力和实际威胁可行性。</p>
+</li>
+<li><p><strong>消融实验</strong>：如表5所示，对比了三种注入策略：全模型注入、敏感模块注入和不敏感模块注入（INFUSE）。结果表明，针对不敏感模块的注入策略效果最佳（平均ASR 95.3%）。全模型注入效果中等但不稳定（平均ASR 42.2%），而敏感模块注入效果最差（平均ASR 10.8%），因为植入在这些被大量更新的模块中的后门在用户微调时基本被清除了。这证实了针对稳定模块注入对于创建持久后门至关重要。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.00500v1/x5.png" alt="Ablation study results"></p>
+<blockquote>
+<p><strong>图5</strong>：选择性注入策略的消融研究结果。比较了在四个LIBERO环境中，全模型注入、敏感模块注入和不敏感模块注入（我们的方法）在用户微调后的攻击成功率（ASR）。不敏感模块注入 consistently 取得最优结果。</p>
+</blockquote>
+<ol start="4">
+<li><strong>防御评估</strong>：如表6所示，INFUSE在JPEG压缩、高斯噪声添加和权重更新审计（<code>ΔW</code> Auditing）三种标准防御下均表现出一定的鲁棒性。即使在较强的压缩或噪声干扰下，ASR仍能保持较高水平，例如在JPEG质量降至20%时ASR为87.5%，在高斯噪声<code>ε=0.08</code>时ASR为91.5%。权重审计需要剪裁相当比例（20%）的参数更新才能将ASR降至90.4%，表明后门具有隐蔽性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.00500v1/x6.png" alt="Defense evaluation results"></p>
+<blockquote>
+<p><strong>图6</strong>：INFUSE在三种防御措施下的评估结果：不同质量<code>q</code>的JPEG压缩、标准差为<code>ε</code>的加性高斯噪声、以及剪裁不同比例<code>Ratio</code>参数更新的权重审计（<code>ΔW</code> Auditing）。数据显示INFUSE对这些防御具有一定的抵抗力。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>首次提出了针对预训练VLA基础模型的后门攻击方法（INFUSE），该后门在用户侧使用干净数据进行下游微调后仍能高度有效，揭示了在模型分发前植入持久威胁的现实风险。</li>
+<li>提出了一种新颖的选择性注入框架，通过参数稳定性分析识别微调不敏感模块，并仅在这些组件中注入后门，从而确保后门在用户微调中存活并保持正常性能。</li>
+<li>在多个VLA架构、模拟环境和真实机器人任务上进行了全面实验，证明了INFUSE的卓越有效性、泛化性和从模拟到真实的迁移能力，其性能远超现有基线方法。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，攻击者需要在注入阶段预定义触发器和对应的恶意行为。此外，虽然方法对几种标准防御具有鲁棒性，但并未探索所有可能的先进防御机制。</p>
+<p><strong>对后续研究的启示</strong>：本文揭示了一个关键的安全漏洞：对手通过访问基础模型，可以植入能存活于用户适配过程的持久后门。这强调了在部署前对预训练模型进行严格安全审计的必要性。同时，它也激励后续研究开发更鲁棒的防御方法，例如能够检测或清除嵌入在稳定模块中的后门的技术，以及设计对微调更敏感的模型架构以降低此类持久性攻击的风险。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对Vision-Language-Action (VLA)模型的后门攻击在用户下游微调时易被清除的安全问题，提出了INFUSE框架。该方法通过分析参数敏感性识别微调不敏感模块，选择性注入后门并冻结敏感部分，确保恶意行为在任意用户微调后持续存在。实验显示，INFUSE在用户端干净微调后，于模拟环境和真实机器人任务中分别保持91.0%和79.8%的平均攻击成功率，显著超越基线BadVLA（38.8%和36.6%），且正常任务性能无损。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.00500" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

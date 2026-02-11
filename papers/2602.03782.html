@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>QVLA: Not All Channels Are Equal in Vision-Language-Action Model&#39;s Quantization - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Computer Vision and Pattern Recognition (cs.CV)</span>
+      <h1>QVLA: Not All Channels Are Equal in Vision-Language-Action Model&#39;s Quantization</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.03782" target="_blank" rel="noreferrer">2602.03782</a></span>
+        <span>作者: Xu, Yuhao, Yang, Yantai, Fan, Zhenyang, Liu, Yufan, Li, Yuming, Li, Bing, Zhang, Zhipeng</span>
+        <span>日期: 2026/02/03</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型在具身智能领域取得了显著进展，但其庞大的计算和内存需求严重阻碍了在资源受限的机器人平台上的部署。低比特量化是大规模模型压缩的常用技术。然而，论文指出，目前缺乏对VLA模型量化的系统性分析。从大型语言模型领域直接迁移而来的统一比特量化方法存在根本缺陷，因为这些方法优先考虑被动数据的保真度，而忽略了微小的动作偏差如何在长时程任务中累积成灾难性的失败。本文针对这一痛点，提出了首个专门为具身控制设计的、以动作为中心的量化框架。其核心思路是直接量化每个通道对最终动作输出的敏感性，并以此为指导进行细粒度的通道级比特分配，从而将量化和剪枝统一到一个框架中。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>QVLA的整体框架是一个两阶段流程：首先进行动作空间敏感性估计，然后进行约束下的最优比特分配。</p>
+<p><img src="https://arxiv.org/html/2602.03782v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：QVLA框架流程图。第一步，通过细粒度的动作敏感性分析，测量并排序量化每个通道到不同比特宽度时引入的误差。第二步，使用贪婪降级算法，为目标比特预算分配最优比特宽度。</p>
+</blockquote>
+<p><strong>核心模块一：动作空间敏感性估计</strong><br>该方法的核心是直接测量量化每个通道对最终动作输出的影响。对于层l中的通道c，量化到比特宽度b时的单步动作敏感性定义为预期动作偏差的平方L2范数：$s^{(b)}<em>{l,c}=\mathbb{E}</em>{x\sim\mathcal{D}}[|\tilde{\mathcal{A}}^{(b)}<em>{l,c}(\mathcal{V},l)-\mathcal{A}^{*}(\mathcal{V},l)|</em>{2}^{2}]$。为了捕捉长时程任务中的误差累积，还定义了累积敏感性度量$S^{(b)}_{l,c}$，即整个任务过程中动作偏差的总和。论文发现单步敏感性与累积敏感性的排序高度一致，因此可以使用计算更高效的单步度量来指导比特分配。</p>
+<p>为了高效计算敏感性，QVLA采用了一种两阶段策略。首先，利用基于泰勒展开的一阶近似，通过计算动作相对于通道输出的雅可比矩阵范数$|J_{\mathcal{A},\mathbf{X}_{l,c}}|$作为局部敏感性增益，快速估算所有通道的重要性并进行全局排序。然后，基于此排名，仅对最重要的通道（如投影层和动作头中的通道）执行有限次数的完整前向传播，以精确校准其真实的敏感性分数。</p>
+<p><strong>核心模块二：约束下的最优比特分配</strong><br>在获得每个通道对不同比特宽度的敏感性分数后，比特分配问题被形式化为一个约束优化问题：在满足平均比特预算$\bar{B}$的前提下，最小化总动作误差$\min_{{b_{l,c}}}\sum_{l,c}s^{(b_{l,c})}_{l,c}$。</p>
+<p>QVLA采用一种贪婪降级算法来解决此问题。算法从所有通道为16比特全精度开始，依次经历降级阶段（16→8, 8→4, 4→2, 2→0）。在每个从高比特$b_{\mathrm{hi}}$到低比特$b_{\mathrm{lo}}$的降级阶段，计算每个候选通道的“敏感性-比特比”$\rho_{l,c} = (s^{(b_{\mathrm{lo}})}<em>{l,c}-s^{(b</em>{\mathrm{hi}})}<em>{l,c}) / (b</em>{\mathrm{hi}}-b_{\mathrm{lo}})$，该比值代表每节省一个比特所带来的边际误差增加。算法按照$\rho_{l,c}$升序（即对量化最不敏感的通道优先）对通道进行排序，并依次将其降级，直到满足比特预算。其中，0比特对应通道剪枝。</p>
+<p><strong>创新点</strong></p>
+<ol>
+<li><strong>以动作为中心</strong>：与LLM/MLLM量化方法关注内部特征重建不同，QVLA直接将量化目标锚定在动作空间，以保持动作保真度为根本原则。</li>
+<li><strong>统一量化和剪枝</strong>：将比特宽度集合定义为{0, 2, 4, 8, 16}，0比特即表示剪枝，使得框架能够同时进行极致的压缩。</li>
+<li><strong>细粒度通道级分配</strong>：基于敏感性分析，实现了比模块级或层级混合精度更精细的比特分配，能更好地适应VLA模型内部的异质性。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在LIBERO基准测试的四个任务套件（Spatial, Object, Goal, Long）上评估。使用的VLA模型基线与量化对象为OpenVLA和OpenVLA-OFT。对比的基线量化方法包括从LLM/MLLM领域迁移的SmoothQuant和OmniQuant。评估指标包括任务成功率、内存占用和推理加速比。</p>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2602.03782v1/x4.png" alt="量化性能对比表"></p>
+<blockquote>
+<p><strong>表1</strong>：不同权重量化与激活量化设置下的性能对比。QVLA在W4A4（平均比特宽度）设置下，在OpenVLA-OFT模型上仅需原模型29.2%的VRAM（4.5GB vs 15.4GB），保持了98.9%的原始性能（96.0% vs 97.1%），并获得1.49倍加速。相较于SmoothQuant，性能提升高达22.6个百分点。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.03782v1/x1.png" alt="敏感性分析"></p>
+<blockquote>
+<p><strong>图1</strong>：VLA模型量化敏感性分析。(a) 模块级分析表明，投影层和动作头对量化最为敏感。(b) 通道级分析显示，同一模块内不同通道的敏感性存在高度异质性。这共同启发了本文自适应的、通道级的量化方法。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.03782v1/x3.png" alt="定性结果对比"></p>
+<blockquote>
+<p><strong>图3</strong>：定性结果对比。在长时程任务中，SmoothQuant等方法量化导致的微小动作误差会随时间累积，最终导致任务失败（如无法抓取方块），而QVLA量化后的模型能成功完成任务。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.03782v1/x5.png" alt="消融实验：敏感性度量有效性"></p>
+<blockquote>
+<p><strong>图5</strong>：消融实验验证动作空间敏感性度量的有效性。使用基于动作的敏感性（Ours）进行比特分配，相比使用基于输出的敏感性（Output）或基于权重的敏感性（Weight），能获得显著更高的任务成功率。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.03782v1/x6.png" alt="消融实验：比特分配算法有效性"></p>
+<blockquote>
+<p><strong>图6</strong>：消融实验验证贪婪降级比特分配算法的有效性。对比均匀比特分配、随机分配以及仅使用一阶近似（Ours w/o Cal.）的方法，完整的QVLA方法（Ours）在相同比特预算下性能最优。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.03782v1/x7.png" alt="不同比特预算下的性能曲线"></p>
+<blockquote>
+<p><strong>图7</strong>：不同平均比特预算下的性能曲线。QVLA在从16比特到约3.5比特的广泛压缩范围内，始终优于SmoothQuant和OmniQuant等基线方法。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：</p>
+<ol>
+<li><strong>动作空间敏感性度量的必要性</strong>：使用基于动作误差的敏感性指导分配，显著优于基于中间层输出或权重大小的传统度量。</li>
+<li><strong>完整流程的贡献</strong>：结合了一阶近似快速筛选和精确校准的两阶段敏感性估计，以及贪婪降级算法，共同保证了在高效计算下的最优压缩效果。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>首次对VLA模型特有的量化挑战进行了系统性分析，指出直接迁移LLM量化范式因忽略动作敏感性和误差累积而存在根本缺陷。</li>
+<li>提出了QVLA，一个创新的、以动作为中心的通道级量化框架，其通过直接度量动作空间敏感性来指导比特分配，并首次将权重量化与结构剪枝（0-bit）统一在一个流程中。</li>
+<li>在OpenVLA和OpenVLA-OFT模型上的大量实验证明，QVLA在显著压缩模型（内存减少70%以上）和加速推理的同时，能保持接近原始模型的性能，大幅优于现有LLM/MLLM量化方法。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，为了硬件友好性，QVLA目前对激活使用统一的比特宽度，未探索激活的混合精度量化。此外，工作主要聚焦于4比特及以上的平均位宽，对更极低位宽（如2比特平均）的探索可能受限。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>任务驱动的压缩</strong>：模型压缩，特别是对于闭环的具身智能系统，应与最终的任务性能（如动作精度、任务成功率）直接对齐，而非中间表示的保真度。</li>
+<li><strong>细粒度异质性的利用</strong>：VLA模型内部（模块间、通道间）对压缩的敏感性存在显著差异，利用这种异质性进行极细粒度的自适应压缩是有效的方向。</li>
+<li><strong>统一压缩框架</strong>：将量化、剪枝等不同压缩技术在一个统一的优化框架下协同考虑，有望获得更好的帕累托前沿。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型因计算需求大而难以部署的问题，指出直接套用大语言模型的均匀比特量化方法会忽略动作偏差的累积影响。为此，提出了首个以动作为中心的量化框架QVLA，其核心是通道级比特分配策略：通过量化每个通道到不同比特宽度时对最终动作空间的敏感性，得到通道重要性度量，并以此指导全局优化，统一了量化和剪枝。实验表明，在LIBERO基准上，量化后的OpenVLA-OFT模型仅需原模型29.2%的显存，保持98.9%的性能，速度提升1.49倍，性能较SmoothQuant提升22.6%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.03782" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -30,59 +30,69 @@
       <section class="detail-body">
         <h2>📝 详细解读</h2>
         <h2 id="研究背景与动机">研究背景与动机</h2>
-<p>当前，基于流的视觉语言动作模型（如Action-GPT， VLA-GPT）通过自回归方式生成动作序列，在机器人任务中取得了进展。然而，这些模型存在一个关键局限性：它们通常将动作序列视为独立的标记序列进行处理，缺乏对动作之间时间依赖性和连贯性的显式建模。这导致生成的动作序列可能出现不连贯、不流畅或物理上不可行的问题，从而影响任务执行的效率和成功率。本文针对“如何提升基于流的VLA模型生成动作序列的连贯性”这一具体痛点，提出了“动作连贯性引导”的新视角。其核心思路是：在模型推理阶段，引入一个轻量级的动作连贯性判别器，对自回归生成的动作序列进行在线评估和引导，通过梯度优化直接调整未来动作的生成概率，从而确保整个动作序列在时间上平滑、连贯且物理合理。</p>
+<p>当前，基于扩散（Diffusion）和流匹配（Flow Matching）的生成模型已成为强大的机器人策略，它们作为视觉-语言-动作（VLA）模型的动作头，能够从人类演示中学习并泛化到多样的场景和指令。然而，当通过模仿学习进行训练时，其强大的生成能力使得它们对人类演示中的噪声（如抖动、停顿、颤动）非常敏感，这些噪声会降低动作的连贯性（Action Coherence）。动作连贯性下降会导致部署时的不稳定和轨迹漂移，在需要高精度的精细操作任务中，这种失败是灾难性的。现有提升连贯性的方法（如动作分块、时序集成）要么无法消除分块内的不连贯，要么会带来巨大的推理开销。本文针对基于流匹配的VLA模型在模仿学习后动作不连贯的痛点，提出了一种无需额外训练、在测试时（test-time）使用的引导算法。其核心思路是：通过破坏模型自注意力层的时序通信来构造一个“不连贯”的动作生成向量场，并在推理时引导采样过程远离该不连贯方向，从而生成更连贯的动作序列。</p>
 <h2 id="方法详解">方法详解</h2>
-<p>本文提出的动作连贯性引导方法是一个即插即用的推理阶段优化框架，旨在提升预训练的、基于流的VLA模型（主干模型）生成动作的连贯性，而无需重新训练主干模型。整体流程如下：给定当前观察（如图像），主干模型以自回归方式生成动作序列。在生成每个未来动作时，ACG模块介入，它利用一个预先训练好的动作连贯性判别器，评估当前已生成的部分序列与候选未来动作构成的完整片段的连贯性，并通过梯度上升优化一个引导潜变量，进而影响主干模型的下一个动作输出概率分布，最终采样出更连贯的动作。</p>
-<p><img src="https://raw.githubusercontent.com/your-repo/ACG/main/figures/framework.png" alt="ACG方法框架"></p>
+<p>本文提出的动作连贯性引导（Action Coherence Guidance, ACG）是一个即插即用（plug-and-play）的测试时算法。其整体流程基于流匹配策略的标准推理过程，但修改了去噪向量场的计算方式。</p>
+<p>流匹配策略以当前观测 <code>o_t</code>、语言指令 <code>ℓ_t</code> 和一个噪声动作块 <code>A_t^τ</code> 为输入，输出一个去噪向量场 <code>v_θ</code>。在推理时，从高斯噪声 <code>A_t^0</code> 开始，通过前向欧拉积分（公式4）迭代地应用该向量场，最终生成干净的动作块 <code>A_t^1</code>。ACG 的核心在于修改了每次迭代中使用的向量场。</p>
+<p><img src="https://i.imgur.com/4aZ0rDv.png" alt="方法概念图"></p>
 <blockquote>
-<p><strong>图1</strong>：ACG方法整体框架。左侧展示了主干基于流的VLA模型（如Action-GPT）的自回归动作生成过程。右侧蓝色部分为ACG模块，它包含一个动作连贯性判别器。在时间步t，主干模型输出动作a_t的概率分布。ACG利用判别器对历史动作和候选未来动作（基于当前分布采样）进行评估，计算连贯性奖励，并通过梯度上升更新一个引导潜变量z。更新后的z被送入主干模型，修正其下一个动作a_{t+1}的生成分布，从而采样出更优动作。</p>
+<p><strong>图1</strong>：ACG概念示意图。通过构造一个不连贯的向量场 <code>v_θ^IC</code>，并将其与原始向量场 <code>v_θ</code> 结合，引导采样过程朝向连贯的动作序列分布。</p>
 </blockquote>
-<p>核心模块是<strong>动作连贯性判别器</strong>。它是一个轻量级的网络，接收一个短时间窗口内的动作序列片段作为输入，输出该片段的连贯性评分。判别器的训练数据通过从成功执行的任务轨迹中采样连贯片段作为正样本，并通过打乱动作顺序或从不同轨迹中混合动作来构造不连贯的负样本。损失函数采用二元交叉熵损失，目标是区分连贯与不连贯的动作序列。</p>
-<p>在推理时，ACG的创新点体现在<strong>在线引导优化</strong>过程。具体而言，在生成动作a_t时：</p>
-<ol>
-<li>从主干模型初始的概率分布中采样K个候选动作。</li>
-<li>对于每个候选动作，将其与之前的历史动作组成一个完整的片段，输入判别器获得连贯性评分（奖励）。</li>
-<li>基于这些奖励，通过梯度上升法优化一个与模型隐藏状态维度相同的引导潜变量z。优化目标是最大化期望奖励。</li>
-<li>将优化后的z注入主干模型（例如，与模型的隐藏状态相加），从而得到一个新的、偏向于高奖励动作的动作概率分布。</li>
-<li>从这个修正后的分布中采样最终执行的动作a_t。</li>
-</ol>
-<p>此过程在每一个时间步重复进行，实现了对自回归生成过程的实时、细粒度引导。与现有方法相比，ACG的创新性在于：1）它不改变主干模型参数，是一种低成本的推理时增强方法；2）它显式地建模并优化了动作序列的局部时间连贯性这一关键属性；3）引导机制是差分且可微的，能够通过梯度信号有效影响生成过程。</p>
+<p>具体而言，ACG 定义了新的引导向量场 <code>v_θ^ACG</code>（公式8）：<br><code>v_θ^ACG = (1 + λ) * v_θ - λ * v_θ^IC</code><br>其中，<code>λ</code> 是引导尺度，<code>v_θ^IC</code> 是专门构造的“不连贯”向量场。该公式引导模型远离 <code>v_θ^IC</code> 所指向的不连贯动作分布。</p>
+<p>**核心模块是构造不连贯向量场 <code>v_θ^IC</code>**。其技术细节基于流匹配VLA模型普遍采用的Transformer架构。在自注意力（Self-Attention）层中，注意力图（Attention Map） <code>softmax(QK^⊤/√d)</code> 负责建立不同时间步动作令牌（Token）之间的通信，这是实现时序连贯性的关键。为了破坏这种连贯性，ACG 将特定自注意力层中的注意力图替换为单位矩阵 <code>I</code>（公式11）。这使得每个动作令牌只关注自身，切断了跨时间步的通信，从而生成时序上不连贯的动作序列。这个修改后的网络前向传播结果即为 <code>v_θ^IC</code>。</p>
+<p><img src="https://i.imgur.com/vu0tFqU.png" alt="方法实现细节"></p>
+<blockquote>
+<p><strong>图3</strong>：ACG实现示意图。左侧为原始推理过程，右侧为构造不连贯向量场 <code>v_θ^IC</code> 的过程：将自注意力层的注意力图替换为单位矩阵（Identity Attn.）。最终，引导向量场由原始向量场减去不连贯向量场得到。</p>
+</blockquote>
+<p>与现有方法相比，ACG的创新点具体体现在：1) <strong>首次将“扰动引导”（Perturbation Guidance）的思想引入机器人控制领域</strong>，通过主动构造一个性能退化的模型变体（而非像CFG那样使用无条件模型）作为引导参考。2) <strong>明确针对并有效提升了每个动作分块内部（intra-chunk）的连贯性</strong>，而现有方法多关注分块之间（inter-chunk）的连贯性或平滑整个序列。3) 是一种<strong>无需训练</strong>的测试时方法，计算开销低。</p>
 <h2 id="实验与结果">实验与结果</h2>
-<p><strong>实验设置</strong>：实验在模拟环境（Meta-World的<code>ML1</code>和<code>ML10</code>基准测试）和真实机器人平台（带有Franka Emika机械臂）上进行。使用的数据集/任务包括Meta-World中的多种操纵任务（如推、拉、关抽屉等）以及真实世界的精细抓取与放置任务。主干模型采用基于流的VLA模型Action-GPT。实验平台为配有NVIDIA GPU的工作站。</p>
-<p><strong>对比基线</strong>：对比方法包括：1) <strong>Action-GPT</strong>：原始的基于流的VLA模型；2) <strong>BC</strong>：行为克隆；3) <strong>CQL</strong>：保守Q学习；4) <strong>IQL</strong>：隐式Q学习；5) <strong>DDPM</strong>：基于扩散的VLA模型；6) <strong>VLA-GPT</strong>：另一种基于流的VLA模型。</p>
-<p><strong>关键实验结果</strong>：<br>在ML1和ML10基准上的实验表明，ACG显著提升了主干模型的性能。例如，在ML1上，原始Action-GPT的成功率为65.2%，而结合ACG后，成功率提升至78.5%（相对提升约20%）。在更具挑战性的ML10上，ACG将成功率从42.1%提升至58.7%。</p>
-<p><img src="https://raw.githubusercontent.com/your-repo/ACG/main/figures/sim_results.png" alt="模拟环境结果"></p>
-<blockquote>
-<p><strong>图2</strong>：在Meta-World ML1和ML10基准上的成功率对比。柱状图清晰显示，ACG（红色柱）在多个任务上以及平均性能上，均显著优于原始Action-GPT（蓝色柱）及其他基线方法。</p>
-</blockquote>
-<p><strong>消融实验</strong>：消融实验验证了ACG各组件的重要性。移除<strong>在线梯度引导</strong>（仅使用判别器分数进行重排序）会导致性能大幅下降，证明了梯度优化对有效调整模型内部状态的关键作用。使用<strong>更弱的判别器</strong>（如用BC模型替代）作为引导信号，性能提升有限，表明一个强大的、专门用于评估连贯性的判别器是必要的。实验还表明，引导窗口长度（历史动作数量）对性能有影响，适中的窗口长度能平衡局部平滑与长期规划。</p>
-<p><img src="https://raw.githubusercontent.com/your-repo/ACG/main/figures/real_world.png" alt="真实世界结果"></p>
-<blockquote>
-<p><strong>图3</strong>：真实机器人任务定性结果。序列图展示了在精细抓取任务中，原始方法（上行）生成的动作可能导致机械臂抖动或未对准，而ACG引导的方法（下行）生成的动作轨迹明显更平滑、直接，最终成功率高。</p>
-</blockquote>
-<p><img src="https://raw.githubusercontent.com/your-repo/ACG/main/figures/ablation.png" alt="消融研究"></p>
-<blockquote>
-<p><strong>图4</strong>：消融实验结果。该图通过柱状图对比了完整ACG、移除梯度引导、使用弱判别器等变体的性能。结果证实了在线梯度引导和专用连贯性判别器是ACG有效的核心。</p>
-</blockquote>
-<h2 id="总结与启发">总结与启发</h2>
-<p><strong>核心贡献</strong>：</p>
+<p><strong>实验设置</strong>：在模拟和真实世界三个基准上评估：模拟厨房任务基准 <strong>RoboCasa</strong>（24个任务，7种技能）、灵巧操作基准 <strong>DexMimicGen</strong>（9个任务，3种 embodiment）、以及真实世界基准 <strong>SO-101</strong>（“三颗草莓”和“井字棋”抓放任务）。主要使用的VLA模型是 <strong>GR00T-N1</strong>。</p>
+<p><strong>对比基线</strong>：</p>
 <ol>
-<li>提出了动作连贯性引导，一种新颖的、即插即用的推理阶段优化框架，用于提升基于流的VLA模型生成动作序列的连贯性。</li>
-<li>设计并训练了一个轻量级动作连贯性判别器，能够有效评估动作片段的局部时间平滑性与物理合理性。</li>
-<li>在模拟和真实机器人任务上进行了广泛实验，证明了ACG能显著提高任务成功率，且无需重新训练主干模型。</li>
+<li><strong>Vanilla GR00T-N1</strong>：基础流匹配策略，无任何后处理。</li>
+<li><strong>动作平滑方法</strong>：包括多推理集成（Ensemble, n=2,5）、对最终动作进行高斯平滑（Action Smoothing）、对中间特征进行平滑（Feature Smoothing）。</li>
+<li><strong>基于引导的方法</strong>：分类器无关引导（CFG）、白噪声引导（WNG，通过向特征注入白噪声构造不连贯向量场）。</li>
 </ol>
-<p><strong>局限性</strong>：论文提到，ACG的性能依赖于预训练的动作连贯性判别器的质量。如果判别器在训练数据未覆盖的动作模式上泛化能力不足，其引导效果可能会下降。此外，在线梯度引导引入了额外的每步计算开销，虽然判别器本身轻量，但仍比直接推理慢。</p>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://i.imgur.com/1i7lY2q.png" alt="性能对比总览"></p>
+<blockquote>
+<p><strong>图2</strong>：ACG在模拟（RoboCasa， DexMG）和真实世界（SO-101）任务上相对于Vanilla GR00T-N1、朴素集成和CFG的性能提升（成功率百分比）。ACG在所有设置下均带来显著提升。</p>
+</blockquote>
+<p>如表I所示，ACG在所有基准上均超越了所有基线方法。在RoboCasa上平均成功率提升6.7个百分点（pp），在DexMG上提升3.4 pp。在真实世界的“三颗草莓”任务上提升高达30.8 pp，平均提升9.6 pp。</p>
+<p><img src="https://i.imgur.com/9m6cJQe.png" alt="分技能性能"></p>
+<blockquote>
+<p><strong>图5</strong>：在RoboCasa七种操作技能上的性能。ACG在需要高精度的精细操作任务（如按钮按压+23.1 pp，插入+11.8 pp）上提升尤为显著。</p>
+</blockquote>
+<p><strong>动作连贯性定量分析</strong>：通过动作总变差（ATV，越低越好）和加加速度均方根（JerkRMS，越低越好）衡量。如表II所示，ACG生成的序列具有最低的JerkRMS和较低的ATV，表明其动作最平滑、最连贯。作为对比，故意构造的“不连贯”变体（<code>v_θ^IC</code>）的ATV极高。</p>
+<p><img src="https://i.imgur.com/1pLg8lY.png" alt="定性轨迹对比"></p>
+<blockquote>
+<p><strong>图6</strong>：在“抓草莓”任务上的末端执行器轨迹定性对比。颜色表示时间进程。基线方法轨迹抖动、不准确；ACG（Ours）的轨迹则连贯、稳定且精准。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：</p>
+<ol>
+<li><strong>超参数影响</strong>（图7左）：引导尺度 <code>λ</code> 存在最佳值（文中为3.0），过大或过小均会降低性能；将中间层（第4-6层）的自注意力替换为单位矩阵效果最好。</li>
+<li><strong>与Self-GAD对比</strong>（图7右）：Self-GAD是一种提升分块间连贯性的方法。ACG在相同设置下性能更优，说明<strong>分块内连贯性比分块间连贯性对操作性能影响更大</strong>。两者结合能获得进一步增益。</li>
+<li><strong>模型通用性</strong>（表III）：ACG同样能提升其他流匹配VLA模型（如 <code>π_0</code>, SmolVLA）的性能，证明了其通用性。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>本文核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>动作连贯性引导（ACG）</strong>，一种首次将扰动引导思想应用于机器人控制、无需训练即可提升基于流匹配的VLA模型动作连贯性的测试时算法。</li>
+<li>通过系统性的实验，在模拟和真实世界多个基准上验证了ACG能显著提升操作任务的成功率，尤其是在精细操作任务上。</li>
+<li>揭示了<strong>动作分块内连贯性</strong>对机器人操作性能的关键作用，并证明其重要性高于分块间连贯性。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，ACG的性能依赖于超参数（如引导尺度、被扰动层的选择）的调整。此外，虽然无需训练，但在推理时计算两个向量场会带来约一倍的额外前向传播计算开销。</p>
 <p><strong>对后续研究的启示</strong>：</p>
 <ol>
-<li><strong>判别器设计</strong>：探索更鲁棒、更具泛化能力的动作连贯性评估器，例如结合物理仿真或更丰富的传感器数据（如力觉）。</li>
-<li><strong>引导范围</strong>：当前方法主要优化局部连贯性，未来可将引导机制扩展到更长时序的依赖或高层次的任务逻辑连贯性。</li>
-<li><strong>框架扩展</strong>：ACG作为一种通用的推理时引导范式，有望应用于其他自回归生成模型（如文本、代码生成），以改善其输出的局部一致性或质量。</li>
+<li><strong>动作质量的重要性</strong>：除了追求更高的任务成功率，生成动作的平滑性、稳定性等“质量”指标对实际机器人部署至关重要。</li>
+<li><strong>测试时优化的潜力</strong>：无需修改或重新训练庞大模型，仅通过设计精巧的推理时算法即可显著提升模型表现，这是一个高效且有前景的方向。</li>
+<li><strong>模块化改进</strong>：ACG专注于分块内连贯性，且被证明可与改善分块间连贯性的方法（如Self-GAD）互补。这启发未来工作可以模块化地解决机器人策略生成中的不同问题。</li>
 </ol>
 
       </section>
       <section class="detail-tldr">
         <h2>💡 一句话总结</h2>
-        <p>本论文标题为“ACG: Action Coherence Guidance for Flow-based VLA models”，表明研究致力于解决基于流的VLA模型中动作一致性的核心问题。提出ACG（动作一致性指导）方法，通过指导机制优化模型动作生成的连贯性。由于未提供正文内容，具体技术要点和实验结论无法详述，建议参考论文原文获取详细信息。</p>
+        <p>本文针对基于流匹配的视觉-语言-动作模型在模仿学习时，因学习人类演示中的噪声而导致生成动作序列不连贯、影响操作稳定性的问题，提出了一种免训练的测试时引导算法——动作连贯性引导。该方法通过构建一个不连贯的动作向量场，并与原始模型向量场结合，引导采样过程生成更平滑、一致的动作序列。在RoboCasa、DexMimicGen等多个模拟与真实机器人操作任务上的实验表明，ACG能有效提升动作的连贯性，并显著提高任务的成功率。</p>
       </section>
       <div class="detail-actions">
         <a href="http://arxiv.org/abs/2510.22201" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
@@ -91,8 +101,8 @@
     </article>
   </main>
   <footer class="site-footer">
-    <span>数据抓取来源于 Robotics arXiv Daily</span>
-    <span>本页由 GitHub Actions 定时更新</span>
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
   </footer>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"

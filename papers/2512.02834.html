@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Steering Vision-Language-Action Models as Anti-Exploration: A Test-Time Scaling Approach - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Steering Vision-Language-Action Models as Anti-Exploration: A Test-Time Scaling Approach</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.02834" target="_blank" rel="noreferrer">2512.02834</a></span>
+        <span>作者: Yang, Siyuan, Zhang, Yang, He, Haoran, Pan, Ling, Li, Xiu, Bai, Chenjia, Li, Xuelong</span>
+        <span>日期: 2025/12/02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于流匹配或扩散目标的视觉-语言-动作模型通过在大规模多模态数据集上进行预训练，在机器人操作任务中展现出强大的性能。然而，在预训练阶段，VLA模型吸收了来自不同数据源的广泛行为模式，而在针对下游任务进行有监督微调时，微调数据集本身可能包含次优或不良的行为模式。这导致微调后的VLA策略中仍存在与任务成功无关的冗余动作模式，引发了推理时的不稳定性。如图1所示，即使在同一微调后的VLA模型上，仅因采样噪声的不同，成功率就会在0%到80%之间剧烈波动。本文将此不稳定性归因于VLA策略与下游任务稳定成功模式所诱导的策略之间的分布偏移。为此，本文提出了TACO，一种测试时扩展框架，它将一个轻量级的伪计数估计器作为动作块的高保真验证器。核心思路是：在推理时，从多个采样的动作块候选中选择伪计数最高的动作来执行，从而防止分布偏移，同时仅需在推理时施加约束，保留了VLA的泛化能力。</p>
+<p><img src="https://arxiv.org/html/2512.02834v1/imgs/taco_good.png" alt="推理不稳定性示例"></p>
+<blockquote>
+<p><strong>图1</strong>：推理不稳定性示例。固定VLA模型（π0和RDT）的初始去噪噪声为<code>noise1</code>或<code>noise2</code>，在相同场景下评估成功率，结果显示成功率因噪声不同而差异巨大。</p>
+</blockquote>
+<h2 id="方法详解">方法详解</h2>
+<p>TACO是一个两阶段的测试时扩展框架，其整体流程如图2所示。训练阶段（Stage 1）：利用SFT数据集训练一个耦合的伪计数估计器。推理阶段（Stage 2）：VLA模型生成多个候选动作及其内部表征，伪计数估计器作为选择器，挑选伪计数最高的动作执行。</p>
+<p><img src="https://arxiv.org/html/2512.02834v1/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：TACO方法总览。左侧（Stage 1）为训练阶段，通过向专家动作添加噪声并利用VLA去噪来提取内部表征，用于训练CFN。右侧（Stage 2）为推理阶段，VLA生成多个候选动作，CFN根据内部表征的伪计数选择最佳动作执行。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>理论基础与问题形式化</strong>：本文将VLA推理不稳定性视为离线强化学习中的分布外问题。受反探索原则启发，目标是在测试时约束生成的动作落在SFT数据集中成功模式的支持域内。通过将任务建模为上下文赌博机，并假设演示密度与任务成功概率成正比，将反探索目标简化为寻找具有最大访问计数（即密度）的动作块（公式6）。</li>
+<li><strong>耦合伪计数估计器</strong>：为实现上述目标，需要一个伪计数估计器。本文采用硬币翻转网络作为估计器。关键设计是使用VLA模型本身的内部表征<code>h_θ</code>作为CFN的输入，而非训练单独的编码器。这种耦合设计高效且能利用VLA的预训练知识。</li>
+<li><strong>高保真特征搜索</strong>：对于基于去噪（扩散/流匹配）的VLA，其训练时只见过带噪声的动作。为了从SFT数据集的干净动作<code>a</code>中提取VLA特征空间内的高保真表征，提出了特征搜索程序：对每个数据点<code>(o, l, a)</code>，用N个不同噪声级别<code>σ_i</code>查询VLA，得到N个预测动作<code>a_pre^(i)</code>和对应特征<code>h_θ^(i)</code>。然后选择预测动作最接近真实动作<code>a</code>的那个特征<code>h_θ^(i*)</code>（公式8）。由此构建的特征集<code>D_h</code>既在VLA分布内，又能高保真地代表原始动作。</li>
+<li><strong>CFN训练</strong>：在获得高保真特征集<code>D_h</code>后，按照CFN的标准方法（公式1）训练一个轻量级MLP头<code>f_φ</code>。训练完成后，一个特征<code>h_θ</code>对应的伪计数与<code>1/||f_φ(h_θ)||^2</code>成正比（公式9）。</li>
+<li><strong>测试时扩展作为反探索</strong>：推理时分为生成和验证两个阶段。<ul>
+<li><strong>生成</strong>：给定观测<code>o_t</code>和指令<code>l</code>，VLA通过采样M个不同的初始噪声向量，以批处理并行方式生成M个候选动作块<code>{â^(i)}</code>，并同时提取对应的内部特征<code>{h_θ^(i)}</code>。</li>
+<li><strong>验证与选择</strong>：使用训练好的CFN <code>f_φ</code>为每个候选特征<code>h_θ^(i)</code>计算伪计数<code>1/||f_φ(h_θ^(i))||^2</code>，并选择伪计数最高的动作<code>â^*</code>执行。</li>
+</ul>
+</li>
+<li><strong>KV缓存优化</strong>：为了降低多次采样的计算开销，本文观察到昂贵的VLA计算（如Transformer主干）仅依赖于共享的上下文令牌<code>(o, l)</code>。因此，只需计算一次共享上下文的键值缓存，并在所有M个并行动作生成过程中复用。如图4（左）所示，该优化显著降低了推理时间。</li>
+</ol>
+<p><strong>创新点</strong>：</p>
+<ul>
+<li><strong>新视角</strong>：首次将VLA推理不稳定性系统性地诊断为分布外问题，并从离线RL的反探索原理中汲取灵感。</li>
+<li><strong>轻量级验证器</strong>：提出使用VLA内部特征耦合的轻量级CFN作为伪计数估计器，无需修改VLA主干网络参数，也无需复杂的RL训练。</li>
+<li><strong>高效推理</strong>：通过KV缓存重用技术，使得测试时扩展的边际计算成本极低，实现了高性能的实用化。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2512.02834v1/x2.png" alt="伪计数与动作距离相关性"></p>
+<blockquote>
+<p><strong>图3</strong>：伪计数与动作距离相关性。散点图显示，由耦合CFN估计的伪计数与候选动作到真实专家动作的L2距离呈强负相关（皮尔逊系数-0.85），验证了CFN能有效惩罚分布外动作。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.02834v1/x3.png" alt="KV缓存优化效果"></p>
+<blockquote>
+<p><strong>图4</strong>：KV缓存优化效果。左图显示，当采样32个候选动作时，使用KV缓存优化可使推理时间比朴素的并行推理减少73.2%。右图展示了不同候选动作数量下的成功率和延迟权衡。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：四个模拟基准（SimplerEnv, LIBERO, RoboTwin1.0, RoboTwin2.0）共64个任务，以及一个真实世界双臂平台上的5个任务。</li>
+<li><strong>VLA模型</strong>：评估了三种类型的VLA策略：基于扩散的RDT、基于流匹配的π0，以及自回归的OpenVLA。</li>
+<li><strong>基线方法</strong>：对比了微调后的原始VLA（SFT）、使用优势函数作为验证器的READ、使用状态-动作值函数的VGPS，以及使用似然性的Verifier-free等方法。</li>
+<li><strong>评估指标</strong>：任务成功率。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>总体性能提升</strong>：如图5、6、7所示，TACO在所有测试的VLA模型和基准上均一致且显著地提升了成功率。例如，在RoboTwin2.0上，TACO将π0的成功率从65.0%提升至78.0%（相对提升20%），将RDT的成功率从42.0%提升至56.0%（相对提升33.3%）。在LIBERO上，TACO将OpenVLA的成功率从70.8%提升至79.2%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2512.02834v1/x4.png" alt="RoboTwin2.0结果"></p>
+<blockquote>
+<p><strong>图5</strong>：在RoboTwin2.0基准上的结果。TACO（红色）相较于SFT基线（蓝色）和其他测试时扩展方法，在π0和RDT模型上均取得了最高的平均成功率。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.02834v1/x5.png" alt="LIBERO结果"></p>
+<blockquote>
+<p><strong>图6</strong>：在LIBERO基准上的结果。TACO在OpenVLA模型上显著提升了成功率，并优于其他验证器方法。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.02834v1/x6.png" alt="SimplerEnv结果"></p>
+<blockquote>
+<p><strong>图7</strong>：在SimplerEnv基准上的结果。TACO在π0模型上取得了最佳性能，并展示了随着候选动作数量增加，性能持续提升的趋势。</p>
+</blockquote>
+<ol start="2">
+<li><strong>真实世界实验</strong>：在真实双臂机器人上的5个任务评估表明，TACO能稳定提升π0模型的性能，例如在“放置葡萄”任务中，成功率从60%提升至100%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2512.02834v1/x7.png" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>图8</strong>：真实世界双臂操作任务结果。TACO在所有任务上均优于SFT基线，并取得了最高的平均成功率。</p>
+</blockquote>
+<ol start="3">
+<li><strong>消融实验</strong>：<ul>
+<li><strong>内部表征 vs. 原始输入</strong>：如图9所示，使用VLA内部表征作为CFN输入，相比使用原始观测-动作对，能获得更高的成功率，证明了耦合设计的有效性。</li>
+<li><strong>高保真特征搜索的必要性</strong>：对于去噪类VLA，直接使用干净动作提取特征会导致性能下降，而高保真特征搜索能恢复性能（图10）。</li>
+<li><strong>CFN vs. 其他计数方法</strong>：对比了CFN与基于KNN和基于编码器的方法，CFN在估计准确性和最终成功率上均表现最佳（图11）。</li>
+<li><strong>候选动作数量M的影响</strong>：如图12所示，成功率随着候选动作数量M的增加而提升并趋于饱和，而延迟通过KV缓存优化保持线性增长，展示了性能与效率的权衡。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2512.02834v1/x8.png" alt="内部表征消融"></p>
+<blockquote>
+<p><strong>图9</strong>：内部表征消融实验。使用VLA内部特征（Ours (Repr)）比使用原始观测和动作（Ours (Raw)）能带来更显著的性能提升。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.02834v1/x9.png" alt="高保真特征搜索消融"></p>
+<blockquote>
+<p><strong>图10</strong>：高保真特征搜索消融。对于RDT模型，直接使用干净动作（w/o HFFS）会损害性能，而启用高保真特征搜索（Ours）能有效恢复并提升性能。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.02834v1/x10.png" alt="计数方法消融"></p>
+<blockquote>
+<p><strong>图11</strong>：计数方法消融。CFN在估计伪计数的准确性（左，与真实计数的相关性）和带来的成功率提升（右）上均优于KNN和编码器方法。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2512.02834v1/x11.png" alt="候选数量影响"></p>
+<blockquote>
+<p><strong>图12</strong>：候选动作数量M的影响。左图显示成功率随M增加而提升；右图显示通过KV缓存优化，延迟呈线性增长，证明了方法的可扩展性。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了TACO，首个将离线强化学习中的反探索原则应用于VLA模型测试时推理的框架，通过选择伪计数最高的动作，有效缓解了微调后的分布偏移问题，显著提升了推理稳定性和成功率。</li>
+<li>设计了一种耦合的伪计数估计器，利用VLA模型的内部表征，并结合针对去噪类VLA的高保真特征搜索方法，实现了高效且准确的分布内动作验证。</li>
+<li>引入了KV缓存重用优化，使得测试时扩展的额外计算开销极小，实现了高性能下的低延迟推理，方法具有实用性。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文提到，方法的性能提升依赖于SFT数据集的质量，如果数据集中成功模式样本不足或噪声过多，可能影响伪计数估计的效果。此外，虽然KV缓存优化降低了开销，但生成多个候选动作相比单次采样仍会引入额外的计算成本。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>新诊断视角</strong>：为理解生成式VLA模型的不稳定性提供了“分布外/反探索”的理论框架，可启发更多关于VLA校准和鲁棒性研究。</li>
+<li><strong>轻量级测试时优化</strong>：展示了无需修改模型参数、仅通过测试时计算扩展即可显著提升性能的路径，为资源受限的部署场景提供了思路。</li>
+<li><strong>表征的利用</strong>：证明了预训练VLA内部表征对于判断动作“常见性”或“质量”具有丰富信息，可探索将其用于其他形式的策略引导或模型诊断。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型在下游任务适配时，因预训练数据模式多样与微调数据次优导致的分布偏移及推理不稳定问题，提出TACO测试时缩放框架。该方法采用轻量级伪计数估计器作为动作块的高保真验证器，基于反探索原理从采样动作中选择伪计数最高的动作执行，仅在推理时施加约束以保持模型泛化能力，且无需梯度更新，计算高效。实验表明，该方法在多个仿真基准与实物平台上显著提升了模型推理稳定性和下游任务成功率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.02834" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

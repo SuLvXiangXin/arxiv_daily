@@ -30,81 +30,79 @@
       <section class="detail-body">
         <h2>📝 详细解读</h2>
         <h2 id="研究背景与动机">研究背景与动机</h2>
-<p>当前，基于视觉-语言模型（VLMs）的机器人操作规划方法取得了显著进展。主流方法主要分为两类：1）<strong>端到端方法</strong>，将VLM直接作为策略，根据视觉和语言指令生成动作；2）<strong>VLM作为规划器</strong>，将VLM生成的高层技能序列（如“拿起杯子”）作为目标，再由低层控制器执行。然而，这两类方法都存在关键局限性。端到端方法通常需要大量机器人数据训练，泛化能力有限，且难以解释和调试。VLM作为规划器的方法虽然利用了VLM强大的语义理解能力，但面临严重的<strong>“幻觉”问题</strong>，即VLM生成的技能序列可能不符合当前物理场景（例如，场景中没有“杯子”却规划了“拿起杯子”），导致规划失败。</p>
-<p>本文针对VLM规划器在机器人操作中因“幻觉”导致规划不可靠这一具体痛点，提出了一个新视角：<strong>将VLM的规划过程“接地”（Grounded）到具体的物理场景和机器人能力上</strong>。核心思路是引入一个<strong>场景感知的规划模块</strong>，该模块基于当前视觉观察，动态地、有选择性地查询VLM，仅获取在当前场景下可行且相关的技能选项，从而生成一个既符合语义指令又物理可行的技能序列。</p>
+<p>机器人操作领域面临的一个核心挑战是如何泛化到未见过的物体、环境以及由多样化语言指令指定的任务。为提升泛化能力，近期研究开始引入大语言模型（LLMs）进行任务规划和动作执行。尽管前景广阔，但这些方法通常在视觉环境中生成“接地气”（grounded）的计划方面存在不足。虽然已有研究尝试对LLMs进行面向机器人操作的视觉指令微调，但现有方法通常受限于单视图图像输入，并且在精确的对象“接地”（grounding）方面存在困难。它们常使用诸如点、边界框或难以解释的潜在隐藏状态等中间表示，这些表示在三维环境中对于精确操作而言可能过于粗糙或不直观。此外，单视图输入加剧了由遮挡和有限视野带来的规划挑战。</p>
+<p>本文针对现有LLM/VLM规划方法在视觉“接地”精度和场景感知完整性上的局限性，提出了一个新颖的“接地”视觉语言规划视角。核心思路是构建一个名为Gondola的模型，它利用多视图图像和历史计划作为输入，生成交织着文本和目标物体/位置分割掩码的下一个动作计划，从而实现更精确的视觉“接地”和更鲁棒的场景理解。</p>
 <h2 id="方法详解">方法详解</h2>
-<p>Gondola的整体框架是一个分层的、闭环的规划系统，旨在根据语言指令和视觉观察，生成并执行可执行的技能序列。</p>
-<p><img src="https://raw.githubusercontent.com/your_image_host/gondola/main/fig1.png" alt="Gondola框架图"></p>
+<p>Gondola将高层任务规划形式化为一个视觉语言“接地”问题。给定一个语言指令 L 和来自 K 个摄像头的多视图视觉观测 I = {I_1, ..., I_K}，模型需要生成一个“接地”的视觉语言计划 P = (a, o, M_o, l, M_l)。其中，a 是动作名称，o 是被操作物体的描述并附带在所有视图上的对应分割掩码 M_o = {m^1_o, ..., m^K_o}，l 是目标位置描述及其关联的掩码 M_l。如果特定动作不需要操作物体或目标位置，则 o 或 l 可以为空。</p>
+<p><img src="https://..." alt="方法框架"></p>
 <blockquote>
-<p><strong>图1</strong>: Gondola方法整体框架。系统接收语言指令和视觉观察作为输入，通过场景感知规划器（Scene-Aware Planner）迭代地生成技能序列。规划器内部包含一个技能库和两个关键模块：场景解析器（Scene Parser）和技能接地器（Skill Grounder）。生成的技能由技能执行器（Skill Executor）执行，环境反馈形成闭环。</p>
+<p><strong>图1</strong>：机器人操作中用于高层规划的视觉语言模型对比。(a) 现有方法使用单视图输入并产生各种中间表示（如点、边界框、潜在状态）。(b) 我们的Gondola模型使用多视图输入，生成带有分割掩码的“接地”计划。多视图输入缓解了遮挡以改进3D场景感知，而分割掩码提供了更精确和紧凑的“接地”计划。</p>
 </blockquote>
-<p>整体流程如下：</p>
+<p><img src="https://..." alt="模型架构"></p>
+<blockquote>
+<p><strong>图2</strong>：左：Gondola模型架构，包含一个用于多视图图像的共享视觉编码器、一个用于生成动作和物体名称以及分割标记的LLM，以及一个用于解码掩码的SAM2。右：将Gondola与运动规划策略集成以执行任务。</p>
+</blockquote>
+<p>Gondola的架构基于密集“接地”VLM Sa2VA构建，主要包括三个核心组件：</p>
 <ol>
-<li><strong>输入</strong>：语言指令 ( L ) 和当前视觉观察（图像）( I_t )。</li>
-<li><strong>场景感知规划</strong>：这是核心模块，负责生成技能序列 ( \Pi = [\pi_1, \pi_2, ..., \pi_K] )。它并非一次性调用VLM生成整个序列，而是迭代进行：<ul>
-<li><strong>场景解析器 (Scene Parser)<strong>：该模块基于当前观察 ( I_t )，动态生成一组</strong>候选技能</strong>。具体而言，它使用一个预训练的开放词汇检测模型（如OWL-ViT）识别场景中所有可能的可操作物体及其类别。然后，它将检测到的物体类别列表与一个预定义的<strong>技能库</strong>（如 <code>pick</code>， <code>place</code>， <code>open</code>， <code>close</code> 等）相结合，通过模板生成候选技能描述（例如 <code>pick [apple]</code>， <code>place [bowl]</code>）。</li>
-<li><strong>技能接地器 (Skill Grounder)<strong>：该模块接收语言指令 ( L )、当前观察 ( I_t ) 和场景解析器生成的候选技能列表。其核心是一个VLM（本文使用GPT-4V），但查询方式与传统方法不同。Gondola不是让VLM“自由发挥”生成技能，而是向VLM提出一个</strong>多项选择题</strong>：给定当前场景（附上图像）和任务目标，哪一个候选技能应该是下一步的最佳选择？VLM从提供的候选列表中输出一个选择（或输出“任务完成”）。这确保了规划的每一步都“接地”于实际存在的物体和可行的技能。</li>
-<li>选择出的技能被添加到序列中，并用于更新一个内部的<strong>场景状态表示</strong>（追踪哪些物体被拿起了、放在了哪里等）。然后基于更新后的状态，进入下一轮规划，直到VLM输出“任务完成”。</li>
+<li><strong>图像编码器</strong>：采用预训练的视觉Transformer（ViT）InternVL-300M，输入图像分辨率为448×448，用于生成图像块嵌入。其后接一个可训练的2层MLP，用于将视觉特征适配到语言空间。ViT权重被冻结，MLP被训练。同一编码器应用于所有视图，视图之间通过特殊标记 <code>\n</code> 分隔。所有视图的图像标记被拼接成单个序列。</li>
+<li><strong>大语言模型（LLM）</strong>：采用InternVL-4B作为语言模型，保持其基础参数冻结，同时添加LoRA层进行微调。在Sa2VA的基础上，引入了专用词汇，包括一个用于触发掩码生成的 <code>&lt;seg&gt;</code> 标记，以及成对的定界符标记 <code>&lt;p&gt;</code> 和 <code>&lt;/p&gt;</code>，用于精确界定需要空间“接地”的物体和位置引用。为了在完成操作任务的连续步骤中保持上下文感知，模型还将先前生成的历史计划 H 编码为紧凑的文本标记作为额外输入。</li>
+<li><strong>分割模型</strong>：采用SAM2作为分割模型。当LLM预测出 <code>&lt;seg&gt;</code> 标记时，将其对应的隐藏嵌入 h_seg 通过一个2层MLP投影以生成提示嵌入。SAM2使用此提示为每个视图图像分别分割出对应的物体掩码，从而为每个被引用的物体或位置生成 K 个二值掩码。</li>
+</ol>
+<p><strong>训练数据</strong>：为了有效训练Gondola，研究利用RLBench模拟器中的GemBench训练集任务，构建了三种类型的数据集：</p>
+<ul>
+<li><strong>机器人“接地”规划数据</strong>：通过手动将任务轨迹分解为一系列计划（动作、物体、放置位置三元组），并利用模拟器语义标签自动提取对应的分割掩码，生成了约15k个训练元组。</li>
+<li><strong>多视图指代表达数据</strong>：自动提取场景中所有物体实例及其分割掩码，形成指代表达查询（如“请分割其中一个[物体名]”），旨在加强模型的多视图物体“接地”能力，共包含15k个多视图图像示例和58k个指代表达。</li>
+<li><strong>伪长视野任务数据</strong>：为了增强长视野规划能力，随机拼接两个不同的训练任务序列，并使用LLM生成连贯的联合指令，从而自动生成长视野组合任务数据。</li>
 </ul>
-</li>
-<li><strong>输出与执行</strong>：规划器输出技能序列 ( \Pi )。每个技能 ( \pi_i ) 包含技能类型和对应的物体边界框。<strong>技能执行器</strong>是一个预训练或手工设计的低级控制器，接收 ( \pi_i ) 并生成具体的机器人关节运动或末端执行器动作来执行该技能。执行后获得新的观察 ( I_{t+1} )，系统重新进行场景感知规划，形成<strong>闭环</strong>，以适应执行误差和环境变化。</li>
-</ol>
-<p>与现有方法相比，Gondola的核心创新点在于：</p>
-<ol>
-<li><strong>场景驱动的候选生成</strong>：规划选项来源于对当前场景的解析，而非VLM的内部知识，从根本上避免了涉及不存在物体的“幻觉”。</li>
-<li><strong>基于选择的VLM查询</strong>：将VLM的角色从“生成器”转变为“判别器”，极大地约束了其输出空间，提高了规划的可靠性和与场景的一致性。</li>
-<li><strong>闭环的迭代规划</strong>：规划与执行交错进行，允许系统根据实际执行结果重新规划，增强了在面对不确定性时的鲁棒性。</li>
-</ol>
+<p><strong>训练目标</strong>：Gondola的训练联合优化计划生成和多视图物体“接地”。计划生成使用标准的交叉熵损失进行下一个标记预测。多视图物体“接地”则采用二元掩码预测的二元交叉熵损失和Dice损失的联合损失。</p>
 <h2 id="实验与结果">实验与结果</h2>
+<p><strong>评估设置</strong>：在GemBench基准上进行评估，该基准测试机器人操作在四个泛化层级上的能力：L1（新位置）、L2（新刚性物体）、L3（新铰接物体）和L4（未见过的长视野任务）。评估分为两种：</p>
+<ol>
+<li><strong>“接地”规划评估</strong>：纯规划性能评估，给定指令、多视图图像和真实历史计划，测量动作/物体名称预测的准确率以及预测掩码与真实掩码的交并比（IoU）。</li>
+<li><strong>任务完成评估</strong>：将Gondola与低层运动规划策略（采用3D-LOTUS++发布的相同策略）集成，在GemBench测试集上执行任务，报告成功率（SR）。采用迭代反馈循环，每一步都根据当前观测重新规划。</li>
+</ol>
+<p><img src="https://..." alt="消融实验表1"></p>
+<blockquote>
+<p><strong>表1</strong>：“接地”规划评估的性能对比。比较了边界框与掩码、单视图与多视图输入、以及是否使用历史计划的影响。结果显示，掩码“接地”、多视图输入和引入历史计划（在L2/L3上）能带来性能提升。</p>
+</blockquote>
+<p><img src="https://..." alt="消融实验表2"></p>
+<blockquote>
+<p><strong>表2</strong>：使用不同训练数据组合进行微调的效果。多视图指代表达数据能有效提升所有层级的“接地”质量，而伪长视野任务数据对缓解L4中历史计划分布偏移问题、提升长视野规划能力尤为关键。</p>
+</blockquote>
+<p><img src="https://..." alt="动作分块消融表3"></p>
+<blockquote>
+<p><strong>表3</strong>：任务执行中动作分块大小的影响。对于需要精细操作的任务，频繁重新规划（分块大小为1）效果更好；而对于受益于一致高层规划的长视野任务，使用较大的动作分块（大小为5）更为有效。</p>
+</blockquote>
+<p><img src="https://..." alt="SOTA对比表4"></p>
+<blockquote>
+<p><strong>表4</strong>：在GemBench测试集四个层级上的任务成功率对比。Gondola（集成运动规划策略，动作分块大小为5）在L2、L3和L4上均显著超越了之前的SOTA方法3D-LOTUS++，分别高出10.3%、10.9%和1.6%，平均绝对提升约10%。这证明了其强大的泛化能力。</p>
+</blockquote>
+<p><strong>关键实验结果总结</strong>：</p>
 <ul>
-<li><p><strong>实验平台与数据集</strong>：实验在模拟环境（包括 Ravens 和 RLBench 中的多个任务）和真实机器人（Franka Emika Panda 机械臂）上进行。评估任务涵盖多种操作类型，如堆叠、重新排列、开关抽屉、长视野多步骤任务等。</p>
-</li>
-<li><p><strong>Baseline方法</strong>：对比方法包括：1) <strong>SayCan</strong>：经典的VLM规划方法，自由生成技能并打分。2) <strong>VoxPoser</strong>：使用VLM生成3D值图来指导策略。3) <strong>端到端模仿学习策略</strong>。4) <strong>其他基于代码生成的VLM规划器</strong>。</p>
-</li>
-<li><p><strong>关键实验结果</strong>：<br><img src="https://raw.githubusercontent.com/your_image_host/gondola/main/fig2.png" alt="模拟环境结果"></p>
-<blockquote>
-<p><strong>图2</strong>：在模拟环境多任务上的成功率对比。Gondola在绝大多数任务上显著优于所有Baseline，尤其是在需要长视野规划和精确物体辨别的任务上（如“堆叠所有积木”），优势更为明显。例如，在某个复杂重新排列任务上，Gondola达到85%成功率，而SayCan仅为45%。</p>
-</blockquote>
-<p><img src="https://raw.githubusercontent.com/your_image_host/gondola/main/fig3.png" alt="真实机器人结果"></p>
-<blockquote>
-<p><strong>图3</strong>：真实机器人操作定性结果序列。图片展示了Gondola成功完成“将草莓放入碗中，然后合上抽屉”的任务。序列图清晰显示了其闭环规划过程：先识别并抓取草莓，放置后，重新规划识别抽屉把手并进行关闭操作。</p>
-</blockquote>
-<p><img src="https://raw.githubusercontent.com/your_image_host/gondola/main/fig4.png" alt="消融实验"></p>
-<blockquote>
-<p><strong>图4</strong>：消融实验结果。比较了Gondola完整系统与以下变体：1) <strong>开环规划</strong>：一次性生成所有技能然后执行；2) <strong>自由生成</strong>：取消候选列表，让VLM自由生成技能描述；3) <strong>无场景解析</strong>：使用固定的通用技能候选列表。结果表明，闭环、场景感知的候选生成和基于选择的查询三者缺一不可，其中“自由生成”变体性能下降最严重，验证了抑制“幻觉”的关键作用。</p>
-</blockquote>
-</li>
-<li><p><strong>消融实验总结</strong>：</p>
-<ul>
-<li><strong>闭环规划</strong>：贡献了约15%的成功率提升，主要应对执行误差和状态不确定性。</li>
-<li><strong>场景感知的候选生成</strong>：贡献了约30%的成功率提升，是避免“幻觉”的核心。</li>
-<li><strong>基于选择的VLM查询</strong>：相较于自由生成，贡献了超过40%的成功率提升，确保了规划的物理可行性。</li>
-</ul>
-</li>
+<li><strong>掩码 vs. 边界框</strong>：掩码“接地”方法在动作/物体预测准确率和掩码IoU上全面优于直接生成边界框的变体，后者常出现格式错误。</li>
+<li><strong>多视图输入</strong>：使用多视图图像相比单视图，能普遍提升L1-L3的规划与“接地”性能，缓解了遮挡问题。</li>
+<li><strong>历史计划</strong>：引入历史计划能提升L2和L3的规划连贯性，但在L4上因历史计划分布偏移导致性能下降，此问题可通过伪长视野任务数据训练缓解。</li>
+<li><strong>训练数据贡献</strong>：多视图指代表达数据显著提升了所有层级的“接地”质量；伪长视野任务数据专门改善了L4的长视野规划性能。</li>
+<li><strong>与SOTA对比</strong>：Gondola在任务完成评估中，于L2（新刚性物体）达到74.8% SR，L3（新铰接物体）达到52.4% SR，L4（长视野任务）达到19.0% SR，全面超越之前的LLM-based SOTA方法3D-LOTUS++。</li>
 </ul>
 <h2 id="总结与启发">总结与启发</h2>
-<p>本文的核心贡献在于：</p>
+<p>本文的核心贡献可概括为三点：</p>
 <ol>
-<li><strong>提出了“接地”的VLM规划范式</strong>：通过将规划选项锚定在具体视觉场景，有效解决了VLM在机器人规划中的“幻觉”问题。</li>
-<li><strong>设计了场景感知的规划器架构</strong>：创新性地结合了开放词汇检测（场景解析）和受限的VLM查询（技能接地），实现了可靠、可解释的多步骤规划。</li>
-<li><strong>展示了强大的泛化能力</strong>：在未见过的物体、场景和长视野指令任务上，Gondola表现出优异的性能，无需针对特定任务进行重新训练。</li>
+<li><strong>提出了Gondola模型</strong>：一个能够为可泛化机器人操作生成带有分割掩码的“接地”视觉语言计划的模型，其特色在于多视图场景理解和端到端的掩码“接地”生成。</li>
+<li><strong>构建了专用的模拟训练数据集</strong>：包括机器人“接地”规划、多视图指代表达和伪长视野任务数据，为训练此类模型提供了有效的数据基础。</li>
+<li><strong>实现了新的SOTA性能</strong>：在GemBench泛化基准上取得了领先的性能，并在真实机器人上验证了可靠性。</li>
 </ol>
-<p>论文自身提到的局限性包括：</p>
-<ul>
-<li><strong>依赖预定义的技能库和低级执行器</strong>：无法处理技能库之外的原子动作，执行器的性能上限也会影响整体成功率。</li>
-<li><strong>场景解析的精度瓶颈</strong>：开放词汇检测模型在复杂、遮挡或新颖物体上的识别错误会直接影响候选技能生成。</li>
-</ul>
-<p>对后续研究的启示：</p>
-<ul>
-<li>探索如何动态扩展或组合技能库，以处理更复杂的动作。</li>
-<li>研究将场景解析与规划进行更紧密的联合学习或端到端优化。</li>
-<li>该“接地”思想可推广至其他涉及VLM与物理世界交互的领域，如具身导航、自动驾驶等。</li>
-</ul>
+<p><strong>局限性</strong>：论文自身提到，当前的Gondola模型在子计划内部未编码细粒度的历史信息，这可能限制了其在子计划层面进行连贯决策的能力（如表3中动作分块大小的影响所示）。此外，在L4评估中，直接引入历史计划会因分布偏移导致性能下降，虽可通过额外数据缓解，但仍指出了历史信息处理中的挑战。</p>
+<p><strong>对后续研究的启示</strong>：Gondola的工作表明，将高层规划视为一个视觉语言“接地”问题，并采用多视图感知、历史感知的规划以及精细的分割掩码输出，是提升机器人操作泛化能力的有效途径。未来研究可进一步探索如何更好地建模和利用长视野任务中的历史状态，以及如何将这种方法更高效地迁移到真实世界数据和更复杂的场景中。</p>
 
       </section>
       <section class="detail-tldr">
         <h2>💡 一句话总结</h2>
-        <p>根据论文标题“Gondola: Grounded Vision Language Planning for Generalizable Robotic Manipulation”，本文介绍了一个名为Gondola的系统，旨在解决机器人操作中泛化能力不足的核心问题。该系统采用基于视觉语言的规划技术，整合视觉感知和语言指令，以提升机器人在多变环境中的任务适应性。关键技术为Grounded Vision Language Planning，涉及视觉与语言的 grounding 和任务规划。但由于正文内容未提供，无法给出具体实验结论或性能提升数据。</p>
+        <p>本文针对机器人操作在未见过的物体、环境和语言指令任务上泛化能力不足的问题。现有基于大语言模型（LLM）的方法通常依赖单视角图像，且难以生成在视觉环境中精确接地的行动计划。
+
+为此，作者提出了Gondola模型，一种基于LLM的接地视觉语言规划模型。其关键技术是**利用多视角图像和历史计划作为输入，输出交织着文本和目标物体分割掩码的下一步行动计划**。为训练此模型，构建了三种仿真数据集。
+
+实验表明，Gondola在GemBench数据集的所有四个泛化级别（新放置、刚性物体、铰接物体和长时程任务）上均优于现有最先进的基于LLM的方法。</p>
       </section>
       <div class="detail-actions">
         <a href="http://arxiv.org/abs/2506.11261" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
@@ -113,8 +111,8 @@
     </article>
   </main>
   <footer class="site-footer">
-    <span>数据抓取来源于 Robotics arXiv Daily</span>
-    <span>本页由 GitHub Actions 定时更新</span>
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
   </footer>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VLASH: Real-Time VLAs via Future-State-Aware Asynchronous Inference - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>VLASH: Real-Time VLAs via Future-State-Aware Asynchronous Inference</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.01031" target="_blank" rel="noreferrer">2512.01031</a></span>
+        <span>作者: Tang, Jiaming, Sun, Yufei, Zhao, Yilong, Yang, Shang, Lin, Yujun, Zhang, Zhuoyang, Hou, James, Lu, Yao, Liu, Zhijian, Han, Song</span>
+        <span>日期: 2025/11/30</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型（VLAs）在多样化机器人任务中展现出强大能力，但其真实世界部署仍然缓慢且低效。主流部署范式是同步推理：机器人先执行模型推理生成一个动作块，然后顺序执行这些动作，之后才启动下一个推理周期。这种顺序流水线引入了动作停顿和对环境变化的延迟反应，因为模型在执行动作期间处于空闲状态，无法实时更新感知。因此，许多VLA演示视频需要加速5-10倍以掩盖不连续和缓慢的运动。</p>
+<p>异步推理通过允许机器人在执行当前动作块的同时并行计算下一个动作块，有望消除动作停顿并实现平滑、连续的运动和更快的反应。然而，异步推理面临一个根本性挑战：由于推理过程中机器人和环境持续演变，导致预测区间（推理开始时）与执行区间（推理结束时）之间出现时间错位。这使得新生成的动作与机器人执行时的状态和环境不匹配，导致严重的控制不稳定性和精度下降。现有方法（如Naive Async、RTC、A2C2）要么牺牲精度，要么引入额外的运行时开销或架构修改来缓解此问题。</p>
+<p>本文针对异步推理中预测与执行错位这一具体痛点，提出了未来状态感知的新视角。其核心思路是：在推理时，通过利用已知的前一动作块将机器人状态向前滚动，估计出执行开始时的未来状态，并以此状态作为条件生成动作，从而在机器人状态层面弥合预测与执行的差距。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>VLASH是一个通用的VLA异步推理框架，旨在实现平滑、准确、快速的反应控制，且无需额外开销或架构改动。其整体流程是：在每次推理开始时，利用当前观测和已知的、正在执行的前一动作块，计算出一个“执行时”的机器人状态估计值，然后将此未来状态与当前观测一同输入VLA模型，生成适用于未来执行区间的动作块。</p>
+<p><img src="https://arxiv.org/html/2512.01031v1/figs/teaser/frame_000160.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：VLASH与现有方法对比。(a) 同步推理：推理期间机器人停顿。(b) 朴素异步：模型基于过时状态s1预测，但执行始于未来状态s3，导致错位。(c) VLASH：将机器人状态向前滚动（s3 = s1 + a1 + a2）并以执行时状态为条件，实现快速反应和平滑动作。</p>
+</blockquote>
+<p>VLASH的核心模块包括未来状态感知、带偏移的微调、高效共享观测微调以及动作量化。</p>
+<ol>
+<li><p><strong>未来状态感知</strong>：这是VLASH的核心思想。在异步推理中，当在时间t开始为新动作块进行推理时，机器人将继续执行前一个动作块中剩余的动作（例如a_t, a_{t+1}, ..., a_{t+Δ-1}，其中Δ为推理延迟步数）。由于这些动作已知，可以通过状态前滚（state roll-forward）准确计算出执行开始时刻t+Δ的机器人状态s_{t+Δ}。在模型前向传播时，同时输入当前环境观测o_t和这个滚动得到的未来状态s_{t+Δ}，使模型为执行时的状态生成动作。</p>
+</li>
+<li><p><strong>带偏移的微调</strong>：论文发现现有VLA模型往往未能充分利用机器人状态输入。为了教会模型有效利用未来状态，作者设计了一种可无缝集成到标准微调流程中的训练增强方法。给定轨迹数据，标准微调训练模型从(o_t, s_t)预测动作块a_{t:t+H-1}。VLASH的增强方法包括两步：(i) <strong>对状态和动作一起应用偏移</strong>：随机采样一个偏移量δ（例如0到Δ_max），构造训练目标为未来状态s_{t+δ}和对应的未来动作块a_{(t+δ):(t+δ+H-1)}。(ii) <strong>固定环境观测</strong>：对于每个时间步t，无论δ如何变化，始终使用相同的视觉输入o_t。因此，模型被训练从配对(o_t, s_{t+δ})预测a_{(t+δ):(t+δ+H-1)}。这迫使模型关注状态输入，并学会将s_{t+δ}解释为用于动作选择的有意义的未来状态。随机采样δ使模型能兼容不同的推理延迟，同时保持同步情况下的性能。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2512.01031v1/figs/teaser/frame_000163.png" alt="高效微调注意力模式"></p>
+<blockquote>
+<p><strong>图4</strong>：具有共享观测的高效微调注意力模式。将一个共享观测o_t和多个偏移分支(s_{t+δ}, A_{t+δ})打包进单个序列。蓝色和黄色单元格表示允许的注意力，灰色表示被屏蔽的注意力。</p>
+</blockquote>
+<ol start="3">
+<li><p><strong>高效微调与共享观测</strong>：上述偏移增强会为同一观测o_t创建多个状态-动作对。为了提升训练效率，作者设计了一种高效的注意力模式（如图4），将单个观测和多个偏移分支打包进一个序列：[o_t, (s_t, A_t), (s_{t+1}, A_{t+1}), ..., (s_{t+Δ_max}, A_{t+Δ_max})]。并应用块稀疏自注意力掩码：所有观测令牌可以相互关注；每个偏移分支的状态-动作令牌可以关注所有观测令牌和同一分支内的令牌，但不能关注其他分支的令牌。这样，模型仅需编码一次观测o_t，即可同时处理多个偏移目标，显著提高了训练效率。</p>
+</li>
+<li><p><strong>动作量化</strong>：为了进一步突破机器人物理执行速度的限制，VLASH借鉴了LLM权重量化的思想，提出了动作量化。其方法是将连续多个细粒度微动作（micro-actions）分组为一个更粗粒度的宏动作（macro-action）。例如，对于量化因子q，宏动作 â_i = a_{iq} + a_{iq+1} + ... + a_{(i+1)q-1}。执行宏动作而非所有微动作，增加了每个控制步骤移动的距离，从而有效加快了机器人运动速度，为部署时提供了可调节的速度-精度权衡。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2512.01031v1/figs/teaser/frame_000165.png" alt="动作量化"></p>
+<blockquote>
+<p><strong>图5</strong>：用于高效执行的动作量化。将连续的细粒度微动作分组为更粗的宏动作以加速机器人运动。</p>
+</blockquote>
+<p>与现有方法相比，VLASH的创新点具体体现在：1) <strong>未来状态感知</strong>：通过状态前滚精确估计执行时状态，从根本上解决状态错位问题，而无需像RTC那样进行动作修复或像A2C2那样增加校正头。2) <strong>无额外开销的微调增强</strong>：仅通过修改训练数据构造方式（偏移微调）即可使模型获得利用未来状态的能力，不改变模型架构或引入推理开销。3) <strong>高效的训练策略</strong>：共享观测的注意力模式大幅提升了偏移微调的效率。4) <strong>动作量化</strong>：提供了一种新的系统加速维度。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>论文在模拟和真实世界环境中进行了广泛评估。使用的Benchmark/数据集包括：动态模拟机器人操作基准<strong>Kinetix</strong>、流行的VLA评估基准<strong>LIBERO</strong>（包含Spatial, Object, Goal, LIBERO-10四个子基准）。实验平台涉及模拟器以及真实机器人平台Galaxea R1 Lite和LeRobot SO-101。对比的Baseline方法包括：<strong>Sync</strong>（同步推理）、<strong>Naive Async</strong>（朴素异步推理）、<strong>RTC</strong>（实时分块）。</p>
+<p>在Kinetix基准上的关键结果显示，VLASH能够紧密跟踪同步推理的性能上限。在推理延迟Δ=4步时，VLASH取得了81.7%的成功率，而Naive Async仅为51.2%，带来了<strong>30.5%的精度提升</strong>。RTC在延迟增大时性能也迅速下降。</p>
+<p><img src="https://arxiv.org/html/2512.01031v1/figs/teaser/frame_000170.png" alt="Kinetix性能"></p>
+<blockquote>
+<p><strong>图6</strong>：Kinetix基准上的性能。VLASH在不同执行视野K和推理延迟Δ下均能保持高成功率，显著优于朴素异步和RTC基线。</p>
+</blockquote>
+<p>在LIBERO基准上使用π_0.5模型进行评估，结果如表1所示。在较小推理延迟下，VLASH在保持与同步推理相当精度的同时，实现了<strong>1.17倍至1.31倍的速度提升</strong>。在更高延迟下，速度提升可达<strong>1.47倍</strong>，同时精度下降可控。</p>
+<p><img src="https://arxiv.org/html/2512.01031v1/x1.png" alt="真实世界评估结果"></p>
+<blockquote>
+<p><strong>图7</strong>：真实世界操作任务评估结果。左图：VLASH在三个任务上的得分百分比与基线对比。右图：任务完成时间，绿色箭头表示VLASH（q=2）相对于同步基线的加速比。</p>
+</blockquote>
+<p>真实世界实验评估了三个操作任务。如图7所示，VLASH在保持高成功率（与同步推理相当或更高）的同时，实现了显著的加速：在“Pick and Place”任务上速度提升<strong>1.33倍</strong>，在“Stack”任务上提升<strong>1.52倍</strong>，在“Drawer”任务上提升<strong>2.03倍</strong>。此外，反应延迟相比同步推理降低了<strong>高达17.4倍</strong>。动作量化（q=2）能进一步将速度提升至<strong>2.29倍</strong>，且成功率仅轻微下降。</p>
+<p>消融实验方面，论文验证了各组件贡献：1) <strong>未来状态感知</strong>是解决错位问题的核心。2) <strong>偏移微调</strong>对于让模型学会利用未来状态至关重要，仅在前向传播时输入未来状态而不经微调效果不佳。3) <strong>共享观测微调</strong>显著提升了训练效率。4) <strong>动作量化</strong>提供了有效的速度-精度权衡工具。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li><strong>提出了未来状态感知的异步推理框架VLASH</strong>：通过状态前滚估计执行时状态，使VLA模型生成的动作为正确的未来状态量身定制，从根本上解决了异步推理中的预测-执行错位问题，且无需引入额外运行时开销或模型架构修改。</li>
+<li><strong>设计了一种高效且无缝集成的微调增强方法</strong>：通过偏移状态-动作对并固定观测的微调策略，使现有VLA模型获得利用未来状态信息的能力，并通过共享观测的注意力模式大幅提升了训练效率。</li>
+<li><strong>引入了动作量化概念</strong>：借鉴模型压缩思想，通过将细粒度动作合并为宏动作来加速机器人物理执行，为实时系统提供了新的加速维度。</li>
+</ol>
+<p>论文自身提到的局限性包括：未来状态感知主要纠正了机器人状态的错位，但环境观测（视觉输入）仍然是“过时”的，对于环境动态变化极快的任务，这可能仍是一个限制。此外，动作量化虽然加速了运动，但可能损失一些动作的精细度。</p>
+<p>本文的成果对后续研究具有重要启示：它证明了通过巧妙的系统层设计和训练策略，大型VLA模型能够处理乒乓球、打地鼠等需要快速反应和高精度的动态交互任务，这为将VLAs扩展到更动态、更具物理交互性的机器人领域开辟了道路。其未来状态感知的思想和动作量化的方法，也可能启发其他序列决策模型在实时部署方面的优化。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型（VLA）在实时部署中因同步推理导致的动作停滞与反应延迟问题，提出VLASH异步推理框架。其核心方法是**未来状态感知**：通过将机器人状态与上一动作块向前滚动，预测执行时刻的状态，以消除推理与执行间的时间错位。实验表明，VLASH相比同步推理最高提速2.03倍，降低反应延迟达17.4倍，且不损失原有精度，使VLA能完成打乒乓球等高速高精度任务。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.01031" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

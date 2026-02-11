@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning to Accelerate Vision-Language-Action Models through Adaptive Visual Token Caching - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Learning to Accelerate Vision-Language-Action Models through Adaptive Visual Token Caching</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.00686" target="_blank" rel="noreferrer">2602.00686</a></span>
+        <span>作者: Wei, Yujie, Fan, Jiahan, Guo, Jiyu, Zhen, Ruichen, Shao, Rui, Su, Xiu, Xie, Zeke, Yang, Shuo</span>
+        <span>日期: 2026/01/31</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>视觉-语言-动作（VLA）模型通过结合大规模多模态预训练和自回归动作解码，在机器人操作任务中展现出卓越的泛化能力。然而，其高昂的计算开销是实际部署的关键障碍。现有的加速方法（如基于规则的令牌缓存或剪枝）通常与任务目标解耦，依赖于注意力分数或视觉显著性等代理指标，无法适应动态场景变化。这些启发式策略的决策（模型关注哪里）与任务实际需求（任务需要什么）之间存在根本错位，导致在速度与准确性之间做出次优权衡。</p>
+<p>本文针对这一痛点，提出将推理加速重新定义为一个可学习的策略优化问题。核心思路是引入一个轻量级的、可学习的自适应缓存框架（LAC），通过两个协同模块动态决定视觉令牌的重用策略，并利用来自最终任务损失的梯度进行端到端优化，使计算分配策略直接与任务成功对齐。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LAC框架的核心是在一个预训练并冻结的VLA主干网络上，插入两个轻量级的协同决策模块：<strong>缓存令牌选择器</strong> 和<strong>缓存比率预测器</strong>。前者负责评估令牌级的重要性，生成显著性分数；后者评估整体场景动态，从一个离散集合中选择合适的缓存比率。它们共同生成一个二进制掩码，指导每个时间步哪些令牌需要重新计算，哪些可以从缓存中重用。</p>
+<p><img src="https://arxiv.org/html/2602.00686v1/x2.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：LAC的两阶段训练框架总览。<strong>阶段I：初始化</strong>。缓存令牌选择器通过模仿VLA内部的注意力图进行预训练，以获得稳定且信息丰富的初始化。<strong>阶段II：联合优化</strong>。随后，缓存令牌选择器和缓存比率预测器与冻结的VLA主干联合优化。来自任务损失 ℒ_VLA 的梯度通过可微选择机制反向传播到两个模块，实现自适应计算的端到端策略学习。</p>
+</blockquote>
+<p>为了有效感知场景动态，两个模块的输入是视觉帧 I_t 与光流 O_t 的拼接 V_t = [I_t; O_t]。使用轻量级RAFT-small模型计算光流，以提供直接、高效的运动信号。</p>
+<p><strong>缓存令牌选择器</strong> 是一个小型CNN网络 f_sel，输入 V_t，输出一个显著性分数向量 S_t = {s_t^(1), ..., s_t^(N)}，其中 s_t^(i) ∈ [0,1]。分数越高表示该令牌越关键（如机械臂或操作物体在运动），需要重新计算。</p>
+<p><strong>缓存比率预测器</strong> 是另一个轻量级网络 f_pred，输入 V_t，输出一个在离散缓存比率集合 ℛ = {r_1, ..., r_C} 上的逻辑值向量 L_t。在推理时，选择逻辑值最高的比率。该模块学习根据场景动态调整计算预算：静态场景选择高缓存比以最大化效率，动态场景选择低缓存比以保持高性能。</p>
+<p><strong>两阶段训练流程</strong>：由于从零开始学习离散缓存策略不稳定，本文采用两阶段训练。</p>
+<ol>
+<li><strong>阶段I：通过注意力对齐进行初始化</strong>。训练选择器 f_sel 模仿专家VLA模型的注意力图 S_VLA，最小化MSE损失 ℒ_align = MSE(f_sel(V_t), S_VLA)。这为选择器提供了一个合理的初始策略。</li>
+<li><strong>阶段II：针对任务性能进行联合优化</strong>。初始化后，联合优化两个模块。总损失为 ℒ_total = ℒ_VLA + λℒ_ratio，其中 ℒ_VLA 是VLA任务损失，ℒ_ratio = -E[r] 是鼓励更高缓存比率的正则化项。</li>
+</ol>
+<p><strong>可微离散决策学习</strong>：决策的离散性（argmax, top-k）阻碍了梯度流动。为此，本文采用基于Gumbel-Softmax技巧和直通估计器（STE）的“硬前向，软反向”策略。</p>
+<ul>
+<li>对于<strong>缓存比率预测器</strong>，前向传播使用 argmax 得到硬性one-hot向量进行确定性的比率选择；反向传播时，梯度通过添加Gumbel噪声后得到的软概率向量 p̃_t 进行流动。</li>
+<li>对于<strong>缓存令牌选择器</strong>，前向传播根据预测的缓存比率 k_t 和显著性分数 S_t 使用硬性 top-k 操作生成二进制掩码 M_t；反向传播时，通过一个陡峭的sigmoid函数构造一个软掩码 M̃_t 来传递梯度。</li>
+</ul>
+<p><strong>推理过程</strong>：训练完成后，进行确定性推理。预测器选择最高逻辑值的缓存比率 r_t，选择器根据 r_t 选择重要性分数最低的 k_t = N·r_t 个令牌进行缓存。生成的掩码 M_t 将视觉令牌分为两组：活动令牌被重新编码以计算新的KV状态，缓存令牌的KV状态则直接从前一时间步重用。此外，引入一个<strong>随机恢复机制</strong>：每个时间步以一个小概率 p_recover，随机选择一部分“已缓存”令牌强制重新计算，以增强长时程鲁棒性并缓解错误累积。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在模拟环境和真实机器人平台上进行评估。框架与两个开源VLA模型集成：OpenVLA（在LIBERO基准测试）和CogAct（在SIMPLER基准测试）。对比的基线方法包括为VLM设计的SparseVLM、FastV，以及VLA专用的VLA-Cache。评估指标包括任务成功率、FLOPs和CUDA时间（实际运行时延）。</p>
+<p><img src="https://arxiv.org/html/2602.00686v1/x3.png" alt="LIBERO定性结果"></p>
+<blockquote>
+<p><strong>图3</strong>：学习型缓存与基于规则缓存的定性对比。LAC的策略（中/下图）使用学习到的显著性图将计算集中在移动的机械爪上，同时缓存静态背景（橙色）。相反，基于规则的方法（上图）有害地缓存了静态的目标篮子，这是一个与任务无关的错误，可能导致任务失败（机械臂卡在篮子边缘）。这证明了LAC学习方法的优越性，其稳定性通过恢复的令牌（绿色）得到进一步增强。</p>
+</blockquote>
+<p><strong>LIBERO基准主要结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2602.00686v1/x5.png" alt="LIBERO结果表"></p>
+<blockquote>
+<p><strong>表1</strong>：LIBERO基准测试结果。LAC方法在提升平均成功率1.9个百分点（从75.0%到76.9%）的同时，实现了1.76倍的墙钟加速，并将FLOPs降低了25.3%，在所有指标上均优于基线。</p>
+</blockquote>
+<p><strong>SIMPLER基准结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2602.00686v1/x6.png" alt="SIMPLER结果表"></p>
+<blockquote>
+<p><strong>表3</strong>：使用CogAct作为基础模型在SIMPLER基准上的结果。在视觉匹配和变体聚合两种设置下，LAC在保持最高效率（最低CUDA时间）的同时，平均成功率均优于基础模型和VLA-Cache基线。</p>
+</blockquote>
+<p><strong>缓存比率影响分析</strong>：</p>
+<p><img src="https://arxiv.org/html/2602.00686v1/figures/libero_curve.png" alt="缓存比率曲线"></p>
+<blockquote>
+<p><strong>图4</strong>：令牌重用/剪枝比率对LIBERO-Spatial任务的影响。左图：任务成功率。右图：CUDA推理时间。随着重用比率增加，LAC能保持稳定的高性能，而基于剪枝的方法（如SparseVLM）性能急剧下降。同时，LAC在所有设置下都实现了最低的CUDA延迟，证实了其真实的墙钟加速效果。</p>
+</blockquote>
+<p><strong>消融实验</strong>：</p>
+<p><img src="https://arxiv.org/html/2602.00686v1/x4.png" alt="消融实验表"></p>
+<blockquote>
+<p><strong>表2</strong>：关键组件的消融研究。仅使用选择器可获得82.2%的成功率；添加重用预测器将性能提升至83.4%（+1.2点），表明自适应场景级预算分配有效；最后引入随机恢复机制得到完整模型，性能达到85.6%（再+2.2点），增强了鲁棒性。每个组件都对效率-精度平衡有渐进式贡献。</p>
+</blockquote>
+<p><strong>真实机器人实验</strong>：在Franka机械臂上的四个操作任务评估中，LAC将平均成功率从70.0%提升至75.0%（相对提升5.0个百分点），同时保持了显著的加速效果。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了首个将启发式加速转化为VLA模型端到端可训练策略的<strong>可学习自适应缓存框架LAC</strong>；2) 设计了两个轻量级协同决策模块（缓存令牌选择器与缓存比率预测器），实现了细粒度和自适应的令牌重用；3) 在模拟和真实机器人实验中<strong>同时实现了效率提升与性能增益</strong>，例如在LIBERO上获得1.76倍加速且成功率提升1.9个百分点。</p>
+<p>论文提到的局限性包括：1) 对光流估计的依赖，在视觉纹理稀疏或运动模糊的场景中可能不可靠；2) 尽管模块本身轻量，但仍引入了额外的计算开销。</p>
+<p>本工作对后续研究的启示在于：证明了<strong>学习型计算分配策略</strong>在具身智能中的潜力，为构建既强大又高效的VLA模型开辟了新途径。其将离散决策问题转化为可微优化任务的方法（Gumbel-Softmax + STE），也可为其他需要动态资源分配的多模态模型加速问题提供参考。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型计算开销大、难以实时部署的问题，提出一种**自适应视觉令牌缓存学习框架**，将推理加速转化为可学习的策略优化。其核心是**缓存令牌选择器**与**缓存比率预测器**两个轻量协作模块，通过**可微松弛技术**实现端到端优化，使缓存决策与任务目标对齐。实验表明，该方法在LIBERO基准上实现**1.76倍**的推理加速，平均成功率从**75.0%提升至76.9%**，在真实任务中提升**5.0个百分点**，显著优于基于规则的基线方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.00686" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Using VLM Reasoning to Constrain Task and Motion Planning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Using VLM Reasoning to Constrain Task and Motion Planning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.25548" target="_blank" rel="noreferrer">2510.25548</a></span>
+        <span>作者: Yan, Muyang, Mengdibayev, Miras, Floros, Ardon, Guo, Weihang, Kavraki, Lydia E., Kingston, Zachary</span>
+        <span>日期: 2025/10/29</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在任务与运动规划领域，主流方法为解决高层任务规划与底层运动可行性之间的鸿沟，主要分为“采样优先”和“规划优先”两类。PDDLStream等“采样优先”方法在任务规划前采样可行的连续动作参数化，但会为大量可能无用的动作组合采样，效率低下。IDTMP、COAST等“规划优先”方法先生成完整的任务计划，在向下精化（即转为连续运动）失败时，将失败原因转化为任务级的约束以指导重规划。然而，这些现有约束方法均需在规划过程中遭遇精化失败后才能发现并添加约束，导致多次重规划，消耗大量搜索精力。</p>
+<p>本文针对上述“事后补救”的低效问题，提出了一个新视角：利用大规模预训练视觉语言模型（VLM）的常识空间推理能力，在规划开始前就预见到潜在的向下精化失败，并主动施加约束以避免它们。本文的核心思路是设计一个流程，引导VLM分析一个示例场景（图像与几何状态）和领域描述，推断出通用的任务级约束，并将其无缝集成到基于SMT的任务规划器中，从而在规划开始前就修剪掉不可行的搜索分支。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>VIZ-COAST 方法包含三个主要组件：基于SMT的任务规划器、视觉推理模块和基于流的运动精化模块。整体流程是：在针对某一领域进行规划前，视觉推理模块首先分析一个示例场景，生成约束代码；随后，对于该领域内的任何新问题实例，任务规划器结合原始PDDL描述与预生成的约束进行搜索，输出高层任务计划；最后，该计划被交给基于流的运动规划器进行向下精化，得到可执行的连续运动轨迹。</p>
+<p><img src="https://arxiv.org/html/2510.25548v1/ImagesTables/architecture.png" alt="方法架构"></p>
+<blockquote>
+<p><strong>图2</strong>：VIZ-COAST 架构。视觉推理模块以示例场景（图像和几何状态）、PDDL领域描述和合规输出示例为输入，生成一个通过高级API编码约束的Python文件。面对新问题实例时，任务规划器除了PDDL领域和新问题描述外，还将这些约束作为输入，以阻止几何上不可行的任务计划。</p>
+</blockquote>
+<p><strong>核心模块1：基于SMT的任务规划器</strong><br>该方法采用基于Z3的SMT求解器，并使用SATPlan编码。与需要直接修改PDDL文件（如COAST）或翻译为SAS+格式（如Fast Downward）的规划器不同，Z3的Python API允许以声明式的一阶逻辑表达式灵活地指定约束，从而在引入最小搜索开销的同时，实现高效、灵活的约束集成。</p>
+<p><strong>核心模块2：视觉推理模块</strong><br>这是本文的核心贡献。该模块利用VLM的常识视觉和空间推理能力，预先推断规划约束。如图3所示，它采用一个四步提示流程：</p>
+<p><img src="https://arxiv.org/html/2510.25548v1/ImagesTables/prompting.png" alt="提示流程"></p>
+<blockquote>
+<p><strong>图3</strong>：VIZ-COAST 视觉推理模块通过4步提示程序推断约束。首先，要求其基于示例问题实例的图像和PDDL领域描述提供场景解读。接着，要求其用自然语言阐明必要的约束。然后，要求VLM使用Z3的API，参考一个结构示例，用Python正式编码已识别的约束。最后，对脚本进行校对以确保句法合规。</p>
+</blockquote>
+<ol>
+<li><strong>场景解读</strong>：基于输入生成场景的自然语言描述，迫使VLM以语义方式理解场景。</li>
+<li><strong>约束识别</strong>：识别潜在的向下精化问题，并用自然语言描述缓解这些问题所需的约束。</li>
+<li><strong>代码生成</strong>：将上述约束正式编码为使用Z3 API的Python程序。</li>
+<li><strong>校对</strong>：检查输出代码，确保其句法合规且与自然语言描述语义一致。</li>
+</ol>
+<p>该模块的输出是一个Python脚本，其中包含通过调用高级API来约束任务规划器的函数。例如，在Containers领域，生成的约束会阻止对关闭容器执行拾取或放置动作。</p>
+<p><img src="https://arxiv.org/html/2510.25548v1/ImagesTables/constraints_example.png" alt="约束示例"></p>
+<blockquote>
+<p><strong>图4</strong>：视觉推理模块为Containers领域生成的约束文件的转述示例。VRM生成一个函数，该函数调用高级API来阻止特定条件下的动作分配，从而约束任务规划器的搜索空间。此代码阻止任何目标是关闭容器的拾取或放置动作。</p>
+</blockquote>
+<p><strong>核心模块3：运动规划</strong><br>本文在运动规划层面未做修改，直接采用COAST（继承自PDDLStream）的基于流的采样方法来对连续动作参数进行采样和精化。</p>
+<p><strong>创新点</strong><br>与现有方法相比，VIZ-COAST 的创新点主要体现在：1) <strong>主动性</strong>：利用VLM的推理能力，在规划开始前主动预见并添加约束，避免了在搜索过程中遭遇失败和重规划的开销。2) <strong>泛化性</strong>：从一个（或多个）示例场景推断出的约束，旨在适用于同一领域内的多个问题实例，实现零样本泛化。3) <strong>灵活性</strong>：通过SMT求解器接口集成约束，比直接在PDDL中添加辅助谓词（如COAST）更灵活且开销更小。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在两个具有挑战性的TAMP模拟域（PyBullet环境）中进行：1) <strong>Blocks域</strong>：在3x3网格中重新排列积木，目标是将红色积木移至中心。2) <strong>Containers域</strong>：将物品放入带盖的容器中以达成目标配置。</p>
+<p><img src="https://arxiv.org/html/2510.25548v1/ImagesTables/domains.png" alt="实验域"></p>
+<blockquote>
+<p><strong>图5</strong>：Block域（左）要求机器人重新排列积木，将红色积木移动到中心格子。末端执行器只能从单一方向接近网格。Containers域（右）要求机器人将物品放入目标容器中，根据需要移除和更换盖子。</p>
+</blockquote>
+<p><strong>对比基线</strong>：</p>
+<ul>
+<li><strong>COAST+FD</strong>：原始COAST系统，使用Fast Downward任务规划器。</li>
+<li><strong>COAST+Z3</strong>：将COAST适配到与VIZ-COAST相同的基于SMT的规划器的新基线。</li>
+<li><strong>VLM-only</strong>：一种朴素基线，直接提示VLM生成任务计划，失败时重新提示。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2510.25548v1/ImagesTables/line_blocks.png" alt="Blocks域结果"></p>
+<blockquote>
+<p><strong>图6</strong>：Blocks域的规划时间、精化失败次数和成功率，最多5次试验的平均值。VIZ-COAST在第一个1积木问题实例上被提示一次，产生的约束泛化到了所有35个包含最多7个积木的唯一问题实例。通过防止精化失败从而避免重规划，VIZ-COAST实现了比COAST+FD和COAST+Z3更低的规划时间。</p>
+</blockquote>
+<p>在Blocks域，VIZ-COAST仅使用第一个单积木实例的示例场景提示一次，生成的约束便成功<strong>零样本泛化</strong>到所有后续多达7个积木的实例，<strong>精化失败次数为0</strong>。而COAST基线在多个积木的实例上常遭遇5次或更多精化失败，导致总规划时间更长。VLM-only基线在5个或更多积木的实例上成功率为0%。</p>
+<p><img src="https://arxiv.org/html/2510.25548v1/ImagesTables/line_containers.png" alt="Containers域结果"></p>
+<blockquote>
+<p><strong>图7</strong>：Containers域的规划时间、精化失败次数和成功率，最多5次试验的平均值。VIZ-COAST在第一个1目标问题实例上被提示一次，然后在后续失败时重新提示。VIZ-COAST能够为所有问题实例生成成功计划，而COAST+FD在所有实例上都失败，COAST+Z3仅在某些1目标实例上成功。</p>
+</blockquote>
+<p>在Containers域，COAST+FD<strong>在所有实例上均失败</strong>，COAST+Z3仅能在单目标实例上部分成功。而VIZ-COAST能够为所有目标数量的实例生成成功计划，展示了其处理复杂几何直觉缺失（如“打开盖子”未在PDDL中表示为放置前提）问题的能力。</p>
+<p><strong>消融实验</strong>：<br>论文引入了 <strong>Condensed</strong> 作为消融实验，它将VIZ-COAST的四步提示简化为单步提示。在包含20个连续问题实例的6轮独立试验中，VIZ-COAST平均每轮遭遇 <strong>0.5次</strong> 运动精化失败，而Condensed为 <strong>2.0次</strong>。两者均能达到100%成功率，且规划时间相当（约0.3秒），但VIZ-COAST的四步提示流程显著提高了约束推断的<strong>稳健性</strong>，失败次数仅为Condensed的1/4。相比之下，COAST基线不仅失败次数多（COAST+FD: 147.5次，COAST+Z3: 126.5次），成功率也更低（92.5%和85%），规划时间也更长（约1.2-1.9秒）。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>主动约束生成</strong>：首次提出利用VLM的常识空间推理，在TAMP规划开始前主动预见并添加约束，避免了传统“失败后反应”方法带来的重规划开销。</li>
+<li><strong>可泛化的约束推断</strong>：设计了一个四步提示的视觉推理模块，能够从一个（或少数）示例场景中推断出适用于同一领域内多个问题实例的通用约束，实现了零样本泛化。</li>
+<li><strong>高效的集成框架</strong>：通过基于SMT（Z3）的任务规划器无缝集成VLM生成的约束，相比修改PDDL的方法引入了更小的搜索开销，并提供了更高的约束表达灵活性。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，如果向下精化仍然失败（即VLM推断的约束不完全），则需要重新运行提示流程。这表明方法的性能在一定程度上依赖于VLM的推理质量，可能需要对同一领域进行多次提示才能获得完备的约束集。</p>
+<p><strong>启示</strong>：</p>
+<ol>
+<li><strong>利用常识模型弥补符号-几何鸿沟</strong>：VLM等大型预训练模型所蕴含的常识性几何与物理知识，为弥补TAMP中符号抽象与连续几何之间的固有鸿沟提供了一条有效途径。</li>
+<li><strong>“预测优于反应”的规划范式</strong>：将学习或推理用于预测潜在失败并提前规避，比在失败发生后进行诊断和修复更具效率优势，尤其适合长视野规划问题。</li>
+<li><strong>多步提示提升可靠性</strong>：复杂的约束生成任务可能受益于结构化的多步推理提示（如场景理解、自然语言描述、形式化编码、校对），这比单步直接生成更能保证输出的正确性和泛化性。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对任务与运动规划中，高层任务计划因抽象世界模型缺失几何信息，导致向下细化为可行运动时经常失败、需反复重规划的问题，提出**VIZ-COAST**方法。该方法利用预训练视觉语言模型的常识空间推理能力，通过图像和领域描述**先验识别**可能存在的细化冲突，从而在任务规划阶段直接施加约束，避免搜索不可行分支。实验表明，该方法能大幅减少规划时间，并在某些案例中完全消除向下细化失败，且能零样本泛化至同一领域的不同实例。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.25548" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Grounded Vision-Language Interpreter for Integrated Task and Motion Planning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Grounded Vision-Language Interpreter for Integrated Task and Motion Planning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.03270" target="_blank" rel="noreferrer">2506.03270</a></span>
+        <span>作者: Siburian, Jeremy, Shirai, Keisuke, Beltran-Hernandez, Cristian C., Hamaya, Masashi, Görner, Michael, Hashimoto, Atsushi</span>
+        <span>日期: 2025/06/03</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人任务与运动规划领域，当前存在两种主流方法。一方面，基于大型语言模型或视觉语言模型的“即插即用”规划器能够将自然语言指令直接转换为动作序列，但其黑盒性质缺乏逻辑验证和物理可行性保证，安全性和可解释性不足。另一方面，经典的符号化任务与运动规划方法虽然能提供严格的安全验证，但需要大量的专家知识进行繁琐的设置（如定义PDDL领域和问题），难以适应灵活多变的用户指令。本文旨在弥合这一鸿沟，针对VLM直接规划缺乏可验证性以及经典TAMP方法缺乏灵活性的痛点，提出一种混合规划框架。其核心思路是：利用视觉语言模型将多模态输入（语言指令、场景观察）转换为结构化的、可解释的PDDL问题描述，然后驱动一个集成的TAMP系统进行符号和几何约束推理，生成可验证、无碰撞的动作轨迹，并通过一个纠正规划模块利用失败反馈来迭代修正问题描述。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>ViLaIn-TAMP框架包含三个主要组件：视觉语言解释器、集成的TAMP模块和纠正规划模块。整体流程是：给定语言指令和场景图像，ViLaIn模块生成完整的PDDL问题；该问题被送入TAMP模块，寻找符号化动作序列和对应的无碰撞运动轨迹；若成功则执行，若失败则将具体反馈传给纠正规划模块，由ViLaIn修订问题后重新规划。</p>
+<p><img src="https://arxiv.org/html/2506.03270v2/figures/vilain_tamp.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图2</strong>：ViLaIn-TAMP框架概览。左侧(A)为ViLaIn部分，将语言指令和场景图像转换为PDDL问题。右侧(B)为TAMP部分，使用符号规划器求解动作序列，并通过运动规划器（MTC）采样具体轨迹。若失败，则通过纠正规划模块将反馈传回ViLaIn进行修订。</p>
+</blockquote>
+<p><strong>1. 视觉语言解释器</strong>：此模块负责生成PDDL问题 <code>(O, I, G)</code>。它包含三个子模块：</p>
+<ul>
+<li><strong>对象估计器</strong>：输入场景图像 <code>S</code> 和领域知识 <code>D</code> 中的对象特征描述（如“盘子是一个白色的圆盘”），使用VLM直接生成带标签的边界框，并据此创建对象集合 <code>O</code>。</li>
+<li><strong>初始状态估计器</strong>：输入谓词集合 <code>P</code>、场景图像 <code>S</code> 以及边界框和对象标签，使用VLM直接生成初始状态 <code>I</code>。</li>
+<li><strong>目标状态估计器</strong>：输入谓词集合 <code>P</code> 和语言指令 <code>L</code>，生成目标状态 <code>G</code>。<br>与原始ViLaIn使用上下文学习示例不同，本文采用对PDDL域中每个谓词和动作的自然语言描述作为提示，以提升泛化能力。</li>
+</ul>
+<p><strong>2. 集成的TAMP系统</strong>：该模块采用“序列优先满足”策略。首先，使用符号规划器Fast Downward对ViLaIn生成的PDDL问题进行求解，得到一个高层动作序列（计划骨架）。然后，使用修改后的MoveIt任务构造器框架为每个抽象动作采样低层运动轨迹，将其映射为MTC的阶段。MTC通过受控的共参数采样来处理不同操作阶段间的相互依赖关系（如双臂协调）。对于切片等接触丰富的复杂技能，本文将其实现为模拟的MTC阶段集成到TAMP中，通过强制执行技能执行前后的起始和结束姿态约束，实现学习技能与原始轨迹间的无缝衔接。</p>
+<p><strong>3. 纠正规划模块</strong>：当规划失败时（任务级矛盾或运动级碰撞），该模块启动一个三步闭环修正过程：1) 将失败反馈 <code>E</code> 重新提示给模型；2) 模型修订PDDL问题；3) 使用修订后的问题重新规划。关键创新在于对MTC进行了显著修改，使其能提供三个抽象层次的详细失败反馈，以便VLM进行推理：原始的MTC失败注释、指明失败步骤的任务执行轨迹、以及从注释和轨迹中提取语义信息的合成消息。</p>
+<p><img src="https://arxiv.org/html/2506.03270v2/figures/cp_overview.png" alt="纠正规划流程"></p>
+<blockquote>
+<p><strong>图3</strong>：纠正规划模块概述。这是一个三步闭环过程：利用失败反馈重新提示模型，修订PDDL问题，然后重新规划。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.03270v2/figures/motion_failure.png" alt="失败反馈示例"></p>
+<blockquote>
+<p><strong>图4</strong>：运动规划失败反馈示例。展示了MTC提供的多层次失败信息，包括原始注释、执行轨迹和合成的个性化失败消息（例如，因机械臂间碰撞导致“equip_tool”动作失败）。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在烹饪领域设计了五个具有挑战性的双臂操作任务进行评估：Pick and Place（拾放）、Pick Obstacles Dual Arm（双臂避障拾放）、Pick Obstacles Single Arm（单臂避障拾放）、Slice Food（切片）、Slice and Serve（切片并上菜）。构建了包含PDDL域、问题、语言指令和场景观察的开源数据集。实验平台包括仿真和真实机器人系统。</p>
+<p><strong>对比方法</strong>：主要对比了两种配置的基线方法：<code>Baseline-No-CP</code>（VLM直接生成动作序列，无纠正规划）和<code>Baseline-CP</code>（带纠正规划）。同时，也评估了本文方法<code>ViLaIn-TAMP</code>在有(<code>-CP</code>)无(<code>-No-CP</code>)纠正规划下的表现。</p>
+<p><img src="https://arxiv.org/html/2506.03270v2/figures/main_results.png" alt="主要实验结果对比"></p>
+<blockquote>
+<p><strong>图5</strong>：ViLaIn-TAMP与基线方法在五个任务上的性能对比（CP最大尝试次数为3）。ViLaIn-TAMP在所有任务上均优于基线，且CP模块能显著提升两者成功率。</p>
+</blockquote>
+<p><strong>关键结果</strong>：</p>
+<ol>
+<li><strong>整体性能</strong>：<code>ViLaIn-TAMP-CP</code>取得了最高的平均成功率。与<code>Baseline-CP</code>相比，<code>ViLaIn-TAMP-CP</code>的平均成功率高出18%。任务越复杂，优势越明显。</li>
+<li><strong>纠正规划效果</strong>：纠正规划模块极大地提升了鲁棒性。<code>ViLaIn-TAMP-No-CP</code>的平均成功率为45%，而<code>ViLaIn-TAMP-CP</code>将其提升了32个百分点至77%。</li>
+<li><strong>失败模式分析</strong>：如图6所示，失败模式分为四类：检测到不存在的对象/位置、运动规划失败、任务规划失败、计划成功但目标错误。基线方法在“目标错误”上失败显著，而ViLaIn-TAMP由于使用了符号任务规划器，完全避免了此类“幻觉”，证明了符号表示对提高可靠性和可预测性的重要性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.03270v2/figures/failure_analysis.png" alt="失败模式分析"></p>
+<blockquote>
+<p><strong>图6</strong>：各方法的失败模式统计。ViLaIn-TAMP减少了运动规划失败，并完全避免了“成功但目标错误”的失败模式。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.03270v2/figures/cp_results.png" alt="纠正规划尝试次数影响"></p>
+<blockquote>
+<p><strong>图7</strong>：纠正规划尝试次数对ViLaIn-TAMP成功率的影响。更多的CP尝试能持续提高成功率。</p>
+</blockquote>
+<p><strong>消融实验</strong>：</p>
+<ol>
+<li><strong>上下文学习的影响</strong>：如表I所示，提供ICL示例能使<code>ViLaIn-TAMP-CP</code>的平均成功率提升约5.2%，并减少平均任务规划尝试次数，表明ICL有助于生成更一致、更正确的初始问题描述，但并非绝对必要。</li>
+<li><strong>基础模型选择</strong>：如图8所示，使用开源模型Phi-4和Qwen2.5-Coder-32B替代GPT-4o进行测试。在相对简单的拾放任务上，开源模型能达到与GPT-4o相当的性能，但在更复杂的切片上菜任务上，性能存在差距，表明当前开源模型在复杂逻辑推理方面仍有提升空间。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.03270v2/figures/os_results.png" alt="开源模型评估"></p>
+<blockquote>
+<p><strong>图8</strong>：使用开源基础模型（Phi-4, Qwen2.5-Coder）的性能评估。GPT-4o-CP-ICL的结果作为参考。在复杂任务上，GPT-4o表现更优。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了ViLaIn-TAMP，一个新颖的端到端混合规划框架，它通过将多模态输入转换为结构化的PDDL问题，并利用集成的TAMP系统进行可验证的符号与几何推理，实现了兼具灵活性、安全性和可解释性的长视野机器人操作。</li>
+<li>构建了一个用于真实世界双臂烹饪操作任务的开源综合数据集，包含自定义PDDL域、问题、语言指令和场景观察。</li>
+<li>通过显著修改MTC框架，实现了能够提供详细、多层次运动失败反馈的机制，并设计了纠正规划模块，利用该反馈进行闭环修正，大幅提升了执行鲁棒性。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，性能仍然依赖于基础模型（VLM/LLM）的能力；某些失败模式（如物体误识别、对条件谓词的误解）可能难以通过当前框架完全解决。</p>
+<p><strong>后续启示</strong>：</p>
+<ol>
+<li>探索更鲁棒、信息量更大的失败反馈表示方法，以进一步提升VLM对复杂物理约束的理解和修正能力。</li>
+<li>将框架扩展到包含更多样化、更复杂的技能（如搅拌、倾倒），并研究如何更高效地将学习技能集成到符号规划流程中。</li>
+<li>研究如何降低对大型专有基础模型的依赖，通过微调或设计更高效的提示策略，使开源模型能达到更优性能。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对语言引导机器人规划器缺乏安全保证、可解释性，而符号规划器设置复杂的问题，提出ViLaIn-TAMP混合规划框架。其关键技术包括：视觉语言解释器(ViLaIn)将多模态输入转为结构化问题描述；任务与运动规划(TAMP)系统通过符号与几何约束推理生成可行轨迹；纠正规划(CP)模块利用失败反馈优化规划。在烹饪操作任务实验中，ViLaIn-TAMP比VLM-as-a-planner基线平均成功率提升18%，添加CP模块后进一步提升32%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.03270" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

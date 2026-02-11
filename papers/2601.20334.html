@@ -30,54 +30,53 @@
       <section class="detail-body">
         <h2>📝 详细解读</h2>
         <h2 id="研究背景与动机">研究背景与动机</h2>
-<p>当前机器人操作领域的主流方法是视觉-语言-动作模型。这些方法虽然性能强大，但通常需要任务特定的演示数据进行微调，且在领域变化下泛化能力较差。本文针对VLA模型对演示数据和定制化执行流程的依赖这一关键痛点，提出了一个全新的视角：能否将最初为软件工程开发的通用大语言模型智能体框架，直接用作具身操作的控制范式？本文的核心思路是，利用通用前沿智能体（如Claude Agent SDK）固有的迭代推理和调试能力，通过试错和程序合成来发现成功的操作策略，从而完全无需任务演示或模型微调。</p>
+<p>当前机器人操作领域的主导范式是视觉-语言-动作模型。这类方法虽然性能强大，但通常需要针对每个任务收集专家演示数据并进行微调，且在面对环境变化时泛化能力较差。本文针对VLA模型对演示数据的依赖性这一核心痛点，提出了一个新颖的视角：能否将最初为软件工程开发的通用大型语言模型智能体框架，直接用作具身操作的控制范式？本文的核心思路是，不修改前沿的通用LLM智能体框架，直接将其应用于机器人操作，利用其迭代推理和调试代码的能力，让具身智能体通过试错来“思考”并发现成功的操作策略。</p>
 <h2 id="方法详解">方法详解</h2>
-<p>FAEA 方法的核心在于直接应用未经修改的通用软件工程智能体框架（Claude Agent SDK）来控制仿真环境中的机器人。其整体框架基于智能体标准的 ReAct 模式，形成一个“观察-推理-执行-调整”的循环。</p>
-<p><img src="https://raw.githubusercontent.com/robiemusketeer/faea-sim/main/figures/faea_architecture.png" alt="FAEA Architecture"></p>
+<p>FAEA方法的整体框架是直接应用通用LLM智能体框架（本文使用Claude Agent SDK）到机器人操作任务中。其输入是自然语言描述的任务指令ℓ，输出是最终能够成功完成任务的Python脚本。其核心工作流程遵循标准的ReAct模式：智能体接收任务，分析（Reason）当前状况并计划下一步，编写或修改脚本作为行动（Act），在仿真环境中执行脚本并观察（Observe）结果（包括成功信号、错误信息、状态反馈），然后根据结果调整策略，循环此过程直至任务成功或判断无法继续。</p>
+<p><img src="https://i.imgur.com/placeholder.png" alt="FAEA提示模板"></p>
 <blockquote>
-<p><strong>图2</strong>：FAEA 架构。Claude Agent SDK 编排 ReAct 循环：对任务进行推理、编写 Python 脚本，并通过 Gymnasium 接口观察来自 LIBERO/ManiSkill 仿真的执行结果。</p>
+<p><strong>图1</strong>：FAEA提示模板。黑色文本是基线FAEA使用的核心模板，定义了智能体的角色、成功标准和输出要求。蓝色文本是为增强版本添加的、源自初步实验失败案例分析的高层操作启发式建议（即“指导”）。</p>
 </blockquote>
-<p>具体流程如下：输入是任务指令 ℓ，通过一个提示模板初始化智能体。随后，智能体进入 ReAct 循环，直至任务成功或预算耗尽。在每次循环中，智能体首先<strong>推理</strong>，分析任务并规划方法；然后<strong>行动</strong>，编写或修改一个 Python 脚本 σ；接着<strong>观察</strong>，在仿真中执行该脚本并获得成功评估结果 ℰ(s_T)。最终输出是成功的脚本 episode.py 和成功状态。</p>
-<p>核心模块包括：</p>
-<ol>
-<li><strong>提示模板</strong>：定义了智能体的角色、成功标准和输出结构。任务指令被填入 <code>{{TASK_DESCRIPTION}}</code> 字段。研究评估了两种变体：基线 FAEA 使用核心模板；带指导的 FAEA 则在模板中加入了从初步实验失败案例中分析得到的高级操作启发式建议（如图1蓝字部分）。</li>
-<li><strong>工具集</strong>：智能体通过调用一组工具与仿真环境交互。主要工具包括 <code>Bash</code>（执行脚本）、<code>Write</code>（生成代码）、<code>Read</code>（检查输出）和 <code>WebFetch</code>（检索文档）。智能体能够自主发现仿真 API（如 <code>step()</code>, <code>reset()</code>, <code>check_success()</code>），并利用这些工具进行迭代的代码编写、测试和调试。</li>
-<li><strong>形式化框架</strong>：该方法被概念化为一个迭代程序合成问题。给定任务指令 ℓ 和工具集 𝒯，智能体生成一系列脚本尝试 {σ₁, σ₂, …} 直至成功或终止。每次尝试后，执行轨迹和观察结果（错误信息、视觉反馈、成功信号）被累积到上下文 𝒞_i 中，用于生成下一次尝试：σ_i ∼ LLM(ℓ, 𝒯, 𝒞_i)。整个过程没有梯度更新，策略发现完全通过上下文中的程序合成实现。</li>
-</ol>
-<p>与现有方法相比，FAEA 的核心创新点在于：它没有为机器人领域定制任何智能体基础设施（如提示工程、错误恢复机制），而是直接利用了为软件工程维护和优化的生产级智能体 SDK（具备结构化工具接口、错误处理和执行追踪功能），并将其应用于具身控制。这使机器人系统能够直接继承前沿模型和智能体基础设施的持续改进。</p>
+<p><img src="https://i.imgur.com/placeholder.png" alt="FAEA架构"></p>
+<blockquote>
+<p><strong>图2</strong>：FAEA架构。Claude Agent SDK协调ReAct循环：智能体对任务进行推理，编写Python脚本，并通过Gymnasium接口从LIBERO/ManiSkill仿真中观察执行结果。</p>
+</blockquote>
+<p>该方法的核心模块即智能体框架本身及其工具集。智能体被赋予一系列工具（如Bash执行、Write写代码、Read读输出、WebFetch获取文档），通过调用这些工具与仿真环境交互。具体而言，智能体通过阅读Gymnasium等仿真库的文档，自主发现并使用<code>step(action)</code>、<code>reset()</code>、<code>check_success()</code>和<code>get_obs()</code>等标准API来编写控制机器人的脚本。本文中，智能体被授予特权，可以访问环境的真实状态观测（如物体位置、夹爪状态），而非原始RGB图像，以此隔离并评估其通过迭代推理发现策略的能力。</p>
+<p>与现有方法相比，FAEA的核心创新点在于：1）<strong>直接复用</strong>：未对通用的、为软件工程优化的前沿智能体SDK做任何机器人专用的修改，直接将其用于具身控制。2）<strong>无需演示与训练</strong>：完全依赖智能体在测试时通过上下文中的程序合成进行试错来发现成功策略，不需要任何专家演示数据或梯度更新。这相当于将机器人操作重新定义为通过通用智能体进行迭代程序合成的问</p>
 <h2 id="实验与结果">实验与结果</h2>
-<p>实验在三个基准测试上进行：LIBERO（120个长视距任务）、ManiSkill3（14个带领域随机化的任务）和 MetaWorld（50个桌面操作任务）。对比的基线方法包括 SmolVLA、π₀、OpenVLA、Diffusion Policy 等 VLA 模型。FAEA 使用 Claude Opus 4.5 模型，并通过仿真 API 访问特权环境状态（如物体位置），而非原始 RGB 图像。</p>
-<p>关键实验结果如下：<br>在 LIBERO 上，免演示的 FAEA 基线方法取得了 84.9% 的平均成功率。加入一轮人工反馈作为优化（提供指导性提示）后，性能提升至 88.2%。这一表现与使用有限 LIBERO 微调数据（≤100演示/任务）训练的 VLA 模型（如 π₀ 的 86.0%，SmolVLA 的 88.75%）具有竞争力，但 FAEA 完全不需要演示或微调。</p>
-<p><img src="https://raw.githubusercontent.com/robiemusketeer/faea-sim/main/figures/table_libero.png" alt="LIBERO results"></p>
+<p>本文在三个互补的机器人操作基准上进行了评估：LIBERO（120个长视野任务，Franka Panda机器人）、ManiSkill3（14个带域随机化的任务）和MetaWorld（50个桌面任务，Sawyer机器人）。实验平台为仿真环境，使用Claude Opus 4.5模型。</p>
+<p>对比的基线方法包括多个先进的VLA模型，如SmolVLA、π系列、OpenVLA和Diffusion Policy，这些模型均需要不同数量的任务演示数据进行训练或微调。</p>
+<p>关键实验结果如下：在LIBERO上，无演示、无训练、仅使用特权状态的FAEA基线方法取得了84.9%的平均成功率，与使用有限LIBERO微调数据的VLA模型（如π0预训练版的86.0%）性能相当，并接近SmolVLA（88.75%）。加入一轮人类反馈（以提示形式提供高层操作建议）作为优化后，性能提升至88.2%。在ManiSkill3上，FAEA基线在5个种子、14个任务共70次试验中取得了85.7%的成功率，在粗粒度操作任务上匹配或超过了使用100条演示数据训练的模仿学习基线。在MetaWorld上，FAEA基线取得了96%的成功率（48/50），大幅超过了所有VLA基线（SmolVLA最高为68.2%）。</p>
+<p><img src="https://i.imgur.com/placeholder.png" alt="LIBERO结果表"></p>
 <blockquote>
-<p><strong>表I</strong>：LIBERO 基准结果。FAEA 基线（无尝试限制）达到 84.9%，与预训练的 π₀（86.0%）相当，并接近 SmolVLA（88.75%）。人工指导优化将性能提升至 88.2%。</p>
+<p><strong>表I</strong>：LIBERO基准结果。展示了FAEA在不同提示策略下的性能，并与需要演示数据的VLA基线对比。FAEA基线（84.9%）与π0预训练版（86.0%）性能接近。</p>
 </blockquote>
-<p>在 ManiSkill3 上，FAEA 在基线条件下取得了 85.7% 的成功率。在需要粗粒度操作的任務上（如 PickCube、PushCube），FAEA 的表现匹配甚至超过了使用 100 条演示数据训练的模仿学习基线。然而，对于需要亚厘米级精度的任务（如 PegInsertion），FAEA 的成功率为 0%。</p>
-<p><img src="https://raw.githubusercontent.com/robiemusketeer/faea-sim/main/figures/table_maniskill.png" alt="ManiSkill3 results"></p>
+<p><img src="https://i.imgur.com/placeholder.png" alt="ManiSkill3结果表"></p>
 <blockquote>
-<p><strong>表II</strong>：ManiSkill3 数据效率对比。在粗粒度操作任务上，FAEA 以零演示匹配或超越了使用 100 条演示训练的模型。精细精度任务对两种方法都具有挑战性。</p>
+<p><strong>表II</strong>：ManiSkill3数据效率对比（部分任务）。在粗粒度操作任务上，零演示的FAEA匹配或超过了使用100条演示训练的模型。精细精度任务（如PegInsertion）对两种方法都具挑战性。</p>
 </blockquote>
-<p>在 MetaWorld 上，FAEA 展现了出色的跨具身泛化能力（使用与 LIBERO 相同的设置，未作调整），基线成功率达到 96%，在加入指导后达到 100%，大幅超过了所有 VLA 基线（SmolVLA 为 68.2%）。</p>
-<p><img src="https://raw.githubusercontent.com/robiemusketeer/faea-sim/main/figures/table_metaworld.png" alt="MetaWorld results"></p>
+<p><img src="https://i.imgur.com/placeholder.png" alt="MetaWorld结果表"></p>
 <blockquote>
-<p><strong>表III</strong>：MetaWorld 基准结果。FAEA 取得 96-100% 的成功率，显著优于所有 VLA 基线。</p>
+<p><strong>表III</strong>：MetaWorld基准结果。FAEA（96-100%成功率）显著优于所有VLA基线。</p>
 </blockquote>
-<p>消融实验与分析：</p>
-<ol>
-<li><strong>尝试次数限制的影响</strong>：在 LIBERO 上，设置 10 次尝试上限的试点研究成功率为 70.6%。移除限制后，智能体在之前失败的 35 个任务中恢复了 17 个（48.6%），表明部分失败源于尝试上限而非能力不足。</li>
-<li><strong>指导的针对性</strong>：在 ManiSkill3 上应用从 LIBERO 得出的通用指导作为负控制，导致成功率从 85.7% 下降至 81.4%，同时 API 成本增加 47%，证实指导的益处是任务特定的，无关指导可能损害性能。</li>
-<li><strong>资源消耗</strong>：计算成本与任务难度强相关。例如在 ManiSkill 上，“困难”任务的平均成本（$5.60）是“简单”任务（$0.51）的 11 倍，耗时也更长（24.6分钟 vs 2.0分钟）。</li>
-<li><strong>智能体策略分析</strong>：对执行轨迹的分析显示，智能体采用系统化的、假设驱动的调试工作流，类似于软件调试。工具使用分布显示，<code>Bash</code>（执行）占主导（51%），其次是 <code>Write</code>（生成，30%）和 <code>Read</code>（检查，14%），构成了“编码-执行-检查”的核心循环。</li>
-</ol>
+<p>消融实验方面：1) <strong>提示策略</strong>：在LIBERO上，移除尝试次数上限后，智能体从先前的失败中恢复了17/35个任务，表明部分失败源于尝试次数不足而非能力问题。2) <strong>人类指导</strong>：在LIBERO上添加针对性的操作建议能提升性能（+11.4个百分点），但在ManiSkill3上应用相同的建议反而导致性能下降（从85.7%降至81.4%），表明指导的益处是任务特定的，无关建议可能有害。</p>
+<p><img src="https://i.imgur.com/placeholder.png" alt="资源消耗表"></p>
+<blockquote>
+<p><strong>表IV</strong>：按任务类别统计的每任务计算资源。任务难度与成本、时间强相关，例如ManiSkill的困难任务成本是简单任务的11倍。</p>
+</blockquote>
+<p><img src="https://i.imgur.com/placeholder.png" alt="工具使用表"></p>
+<blockquote>
+<p><strong>表V</strong>：工具使用分布。Bash（脚本执行）占主导（51%），其次是Write（脚本生成，30%）和Read（输出检查，14%），反映了典型的代码-执行-检查调试循环。</p>
+</blockquote>
 <h2 id="总结与启发">总结与启发</h2>
-<p>本文的核心贡献在于：1）<strong>实证展示了通用前沿智能体框架可直接用于具身操作</strong>，在多个基准测试上达到与需要少量演示数据的 VLA 模型相当的性能，而无需任何演示或微调；2）<strong>提供了一种免演示的机器人轨迹数据生成能力</strong>，可用于具身学习的数据增强；3）<strong>揭示了当前 LLM 智能体在机器人控制中的能力边界与权衡</strong>，即擅长需要深思熟虑的任务级规划，但在需要高精度或实时反应的控制上存在局限。</p>
-<p>论文自身指出的局限性包括：1）<strong>精度操作失败</strong>：需要亚厘米级精度的任务（如插 peg、插插头）持续失败，因为秒级的深思熟虑推理与毫秒级的精密控制不匹配；2）<strong>延迟问题</strong>：每次决策周期有 2-8 秒延迟，无法实现实时反应控制；3）<strong>评估范围</strong>：研究仅评估了单一智能体框架和模型，且所有实验均在仿真中进行。</p>
-<p>这项工作对后续研究的启示是深远的。它开辟了一条让机器人系统直接利用 actively maintained 的通用智能体基础设施的道路，从而能自动受益于前沿模型的持续进步。未来的方向可能包括：将 FAEA 生成的轨迹作为 VLA 模型的训练数据；探索智能体与低层实时控制器的分层结合以解决精度问题；以及在真实硬件上进行验证。</p>
+<p>本文的核心贡献在于：1）<strong>实证有效性</strong>：首次系统性地证明，未加修改的通用前沿LLM智能体框架能够胜任一类由深思熟虑的任务级规划主导的机器人操作任务，其性能可媲美需要少量演示数据训练的VLA模型。2）<strong>新范式</strong>：提供了一种完全“无需演示”的机器人控制解决方案，将操作重构为通过智能体进行迭代程序合成的问题。3）<strong>潜在应用</strong>：展示了此类智能体可作为仿真中自动探索新场景、为具身学习生成训练轨迹以进行数据增广的工具。</p>
+<p>论文自身提到的局限性包括：1）<strong>精度操作失败</strong>：需要亚厘米级精度的任务（如插孔、插充电器）持续失败，因为慎思推理的时间尺度与精确控制的精度要求不匹配。2）<strong>延迟问题</strong>：每次决策周期有2-8秒延迟，无法实现实时反应控制。3）<strong>评估范围</strong>：仅评估了单一智能体框架和模型，且所有实验均在仿真中进行。</p>
+<p>对后续研究的启示是：1）机器人学可以“继承”而非“重建”快速发展的通用智能体基础设施，直接受益于前沿模型的进步。2）FAEA可作为自动生成高质量演示数据以训练VLA模型的工具，解决数据收集瓶颈，与VLA模型形成互补而非替代关系。3）将此类方法部署到真实世界需要解决感知映射和安全性等关键挑战。</p>
 
       </section>
       <section class="detail-tldr">
         <h2>💡 一句话总结</h2>
-        <p>本文针对机器人操纵需任务特定演示和微调、泛化能力差的核心问题，探索通用大型语言模型（LLM）代理框架作为替代控制范式。提出FAEA方法，直接应用未修改的LLM代理（如Claude Agent SDK）到具身操纵，通过迭代推理实现策略规划。实验在LIBERO、ManiSkill3和MetaWorld基准上，FAEA在特权状态访问下成功率分别达84.9%、85.7%和96%，接近使用≤100演示训练的视觉-语言-动作模型，且无需演示或微调；通过一轮人类反馈优化，LIBERO性能提升至88.2%。</p>
+        <p>本文提出FAEA方法，解决机器人操纵依赖任务特定演示和微调、泛化能力差的问题。该方法将前沿LLM智能体框架直接应用于具身操纵，利用其迭代推理能力（类似代码调试）进行策略规划，无需任何演示或模型微调。在LIBERO、ManiSkill3和MetaWorld基准测试中，FAEA在拥有环境状态特权时分别取得84.9%、85.7%和96%的成功率，性能接近需大量演示训练的VLA模型；加入一轮人工反馈后，LIBERO任务成功率可提升至88.2%。</p>
       </section>
       <div class="detail-actions">
         <a href="http://arxiv.org/abs/2601.20334" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
@@ -86,8 +85,8 @@
     </article>
   </main>
   <footer class="site-footer">
-    <span>数据抓取来源于 Robotics arXiv Daily</span>
-    <span>本页由 GitHub Actions 定时更新</span>
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
   </footer>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
