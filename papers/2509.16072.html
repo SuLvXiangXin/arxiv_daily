@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>I-FailSense: Towards General Robotic Failure Detection with Vision-Language Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>I-FailSense: Towards General Robotic Failure Detection with Vision-Language Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.16072" target="_blank" rel="noreferrer">2509.16072</a></span>
+        <span>作者: Mohamed Chetouani Team</span>
+        <span>日期: 2025-09-19</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在开放世界中进行语言条件机器人操作不仅需要准确执行任务，还需要能够检测失败，以实现现实环境中的鲁棒部署。尽管视觉语言模型（VLMs）的最新进展显著提升了机器人的空间推理和任务规划能力，但它们在识别自身失败方面仍然有限。一个关键但未被充分探索的挑战在于检测语义错位失败，即机器人执行了一个在语义上有意义但与给定指令不一致的任务。现有基于VLM的失败检测研究主要针对控制错误（例如抓取失败、物体掉落），而鲜有关注语义错位错误。这类错误揭示了VLM及其构建的机器人智能体在视觉观察、动作与语义指令之间缺乏接地的根本局限性。从失败检测角度看，语义错位错误更具挑战性，因为它不仅需要将指令与物体级交互的空间维度对齐，还需要与机器人动作的时间维度对齐。</p>
+<p>本文针对语义错位失败检测这一具体痛点，提出了一种从现有语言条件操作数据集中构建针对性数据集的方法，并提出了一个名为I-FailSense的、带有接地仲裁机制的开源VLM框架。其核心思路是通过两阶段后训练（参数高效微调与轻量级分类头训练）来适配基础VLM，并利用其内部多层次语言表示进行聚合预测，以实现对语义错位失败的高精度检测，并展现出向其他失败类型和环境的强大泛化能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>I-FailSense的整体目标是对以语言指令为条件的机器人观察轨迹进行成功/失败的二元分类。其框架基于一个预训练的VLM（PaliGemma2-mix-3B），并采用两阶段后训练流程。</p>
+<p><img src="https://arxiv.org/html/2509.16072v2/x2.png" alt="方法架构"></p>
+<blockquote>
+<p><strong>图2</strong>：I-FailSense架构。(A) 模型输入为聚合为单张图像的观察轨迹 τ 和语义目标 g，输出二元预测 ŷ。模型分两阶段后训练：1) 使用LoRA适配器微调投影MLP和VLM语言模块；2) 冻结VLM，微调附加在语言模块上的FS块进行二元分类。FS块输出与VLM最终输出通过投票机制聚合产生最终预测。(B) FS块架构展示了一个由多头注意力（MHA）和MLP组成的混合注意力池化模块，其后是带有批量归一化的残差MLP块，最终接一个二元分类MLP。</p>
+</blockquote>
+<p><strong>第一阶段：监督微调（参数高效）</strong><br>此阶段对基础VLM进行后训练。具体而言，微调冻结视觉编码器（SigLIP）与基础语言模型之间的MLP投影层。同时，为了高效适配语言组件，在语言模型注意力块的关键-查询-值（KQV）投影层中引入低秩适配（LoRA）模块。此策略仅引入少量任务特定的可训练参数，同时保持大部分预训练模型权重冻结。模型输入为观察轨迹 τ（被聚合为单张图像，尺寸为 ℝ^(3×(H·N)×(W·T))，其中N为视角数，T为时间步数）和文本指令 g，通过固定提示模板 P(τ, g) 格式化。训练使用交叉熵损失，目标监督标记为 <code>&lt;success&gt;</code> 或 <code>&lt;fail&gt;</code>。</p>
+<p><strong>第二阶段：接地仲裁（核心创新）</strong><br>为了利用VLM学习到的多样化中间表示进行失败检测，作者在基础语言模型深度上均匀分布的 K 个层（实验中 K=3）上附加了分类头，称为FailSense块（FS块）。在此训练阶段，仅更新FS块，VLM保持冻结。</p>
+<ul>
+<li><strong>FS块架构</strong>：每个FS块以其对应的后训练VLM层的特征 f_k 作为输入。首先通过一个结合了MLP和多头注意力（MHA）的混合注意力池化机制聚合特征。然后，聚合后的特征经过一系列带有残差连接和批量归一化的MLP块处理。最后一个二元分类线性层预测概率 p_k = FS_ϕₖ(f_k)。训练时，基于第 k 个头预测 p_k 与真实标签 y 之间的二元交叉熵更新参数 ϕₖ。</li>
+<li><strong>投票策略</strong>：推理时，每个FS块输出一个概率分布 p_k，并转换为二元预测 y_k = arg max(p_k)。同时，将VLM的自由形式输出也转换为二元预测 y_vlm。最终预测 ŷ 通过加权投票机制计算：ŷ = 𝟙[ Σ(ω_k·y_k) + ω_vlm·y_vlm &gt; 0.5·(Σω_k + ω_vlm) ]。实践中，赋予FS块预测相等权重（ω_k = 1），并给予VLM预测双倍权重（ω_vlm = 2）以打破平局。</li>
+</ul>
+<p><strong>创新点</strong><br>与现有方法（如AHA专注于生成式自由形式推理，或SAFE仅使用VLA最终层特征）相比，I-FailSense的创新性体现在：1) 明确设计了针对语义错位失败的数据集构建流程；2) 提出了一个解耦的架构，将基础VLM的推理能力与专用的、可训练的失败分类头（FS块）相结合；3) 通过利用VLM多个内部层的表示并进行聚合（投票），实现了更鲁棒和准确的判别式失败分类，为触发恢复机制提供了更可靠的前提。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了多个基准数据集和仿真平台：1) <strong>SMF-CALVIN数据集</strong>：基于CALVIN仿真基准构建，用于训练和评估语义错位失败检测。2) <strong>AHA数据集</strong>：基于RLBench仿真基准构建，包含控制错误和一种语义错位错误（错误目标物体），用于评估泛化能力。3) <strong>SMF-DROID数据集</strong>：基于真实世界DROID数据集构建，用于评估向真实世界的迁移。</p>
+<p>对比的基线方法包括：1) 零样本SOTA VLM：GPT-4o、PaliGemma2-mix-3B（I-FailSense基础模型）、Qwen2.5-VL-7B。2) 专门在AHA数据集上训练的AHA模型（7B和13B版本）。</p>
+<p><strong>关键实验结果</strong></p>
+<ol>
+<li><strong>语义错位失败检测（Q1）</strong>：在SMF-CALVIN测试集上，I-FailSense（完整训练）达到了90.64%的准确率（单视角）和88.18%的准确率（双视角），显著优于所有零样本VLM。其中，零样本Qwen2.5-VL-7B准确率约为69%，但其精确度（0.65）远低于召回率（0.90），表明其存在将错位轨迹误判为成功的倾向（假阳性高）。I-FailSense则更好地平衡了精确度（0.89）和召回率（0.94），F1分数达到0.91。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.16072v2/x3.png" alt="语义错位数据示例"></p>
+<blockquote>
+<p><strong>图3</strong>：SMF-CALVIN数据集中的示例。顶部：指令与轨迹匹配的正例。底部：语义错位负例，机器人将粉色方块向右旋转，但指令要求向左旋转。</p>
+</blockquote>
+<ol start="2">
+<li><strong>跨错误类型泛化（Q2）与仿真环境泛化（Q3）</strong>：仅在SMF-CALVIN（语义错位）上训练的I-FailSense，在包含未见过的控制错误和RLBench仿真环境的AHA测试集上进行了零样本评估。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.16072v2/x6.png" alt="跨错误类型泛化结果"></p>
+<blockquote>
+<p><strong>图6</strong>：在AHA数据集上的失败检测率。I-FailSense（仅在SMF-CALVIN训练）零样本达到了89%的准确率，甚至超过了在AHA数据上专门训练的AHA-13B模型（70%准确率）19个百分点，展现了强大的跨错误类型和跨仿真环境的泛化能力。</p>
+</blockquote>
+<ol start="3">
+<li><strong>向真实世界迁移（Q4）</strong>：将在仿真数据上训练的I-FailSense的FS块，在少量真实世界SMF-DROID数据上进行微调后，在真实世界测试集上达到了74%的准确率，证明了其向真实场景的有效迁移。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.16072v2/x5.png" alt="真实世界数据示例"></p>
+<blockquote>
+<p><strong>图5</strong>：基于DROID构建的真实世界语义错位失败数据集示例。顶部：指令与轨迹匹配的正例。底部：指令与轨迹不匹配的负例。</p>
+</blockquote>
+<p><strong>消融实验</strong><br>论文通过比较仅完成第一阶段（LoRA only）和完整两阶段训练（ours）的性能，验证了第二阶段（FS块与投票机制）的贡献。在SMF-CALVIN数据集上，完整模型的准确率（90.64%）显著高于仅LoRA微调的模型（85.71%），F1分数也从0.86提升至0.91，证明了所提架构的有效性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了一种从现有语言条件操作数据集中系统构建语义错位失败检测数据集的方法。2) 提出了I-FailSense框架，通过两阶段后训练和附加在VLM多层上的轻量级分类头（FS块）及其聚合机制，显著提升了对语义错位失败的检测精度。3) 实验表明，仅在语义错位失败上训练的模型，能够零样本泛化到控制错误和新的仿真环境，并可通过最小微调迁移到真实世界，证明了该方法的通用性和有效性。</p>
+<p>论文自身提到的局限性包括：在真实世界数据上的准确率（74%）仍有提升空间，暗示仿真与真实世界之间的领域差距仍需进一步解决。</p>
+<p>这项研究对后续工作的启示在于：1) 语义错位失败是揭示和改善机器人智能体语言接地能力的关键测试平台。2) 利用并聚合VLM的内部多层次表示，是提升其对于需要时空和语义细粒度推理任务（如失败检测）性能的有效途径。3) 所展示的强大零样本泛化能力，为构建通用机器人失败感知系统提供了有希望的思路。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对开放世界中语言条件机器人操纵的失败检测问题，重点解决语义错位错误（即机器人执行任务语义有意义但与指令不一致）。提出I-FailSense开源视觉语言模型（VLM）框架，关键技术包括后训练基础VLM、附加轻量级FS块分类头至不同内部层，并通过集成机制聚合预测。实验表明，I-FailSense在语义错位错误检测上优于最先进VLMs（包括规模相当或更大的模型），且仅训练于此任务却能零样本泛化至更广泛失败类别，并有效迁移到其他模拟环境和真实世界。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.16072" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

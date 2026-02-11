@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Geometric Red-Teaming for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Geometric Red-Teaming for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.12379" target="_blank" rel="noreferrer">2509.12379</a></span>
+        <span>作者: Zackory Erickson Team</span>
+        <span>日期: 2025-09-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作领域的标准评估协议通常在精心策划的、分布内的测试集上评估策略性能，这限制了我们对策略在合理变化下如何失败的理解。现有方法主要关注符号参数、语言指令或场景级故障分类，缺乏针对物体几何这一核心交互维度的系统性鲁棒性评估框架。物体几何的细微变化会不可预测地改变可供性、破坏接触动力学并导致任务失败，而当前尚无正式框架来系统评估策略在合理、任务相关的几何扰动下的性能。</p>
+<p>本文针对这一痛点，提出了几何红队测试（GRT）的新视角，将问题构建为一个红队测试问题，旨在自动发现能引发灾难性策略失败的几何变形（称为CrashShapes），同时确保变形在物理上合理且语义连贯。核心思路是：将策略视为黑盒，通过结合基于雅可比场的变形模型与无梯度、模拟器在环的优化策略，在约束的几何先验下，自动搜索能最大化降低策略性能的物体网格变形。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>GRT框架旨在通过物体中心的几何扰动来探测策略鲁棒性，其整体流程包含四个关键组件：1）基于视觉语言模型（VLM）引导的网格变形接口定义；2）基于雅可比场的变形模型生成平滑扰动；3）通过模拟器 rollout 评估策略在变形物体上的性能；4）利用无梯度优化搜索变形参数空间以发现导致失败的变形。</p>
+<p><img src="https://arxiv.org/html/2509.12379v1/x1.png" alt="系统总览"></p>
+<blockquote>
+<p><strong>图2</strong>：GRT系统概览。给定任务描述和原始物体，使用视觉语言模型选择锚点和把手点。对把手位移进行采样以定义变形候选种群。每个样本通过基于雅可比场的优化转换为扰动后的网格，并在模拟器中用冻结的策略进行评估。诱导失败的变形被采样以指导下一轮种群。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><p><strong>VLM引导的网格变形</strong>：为了生成合理的变形，需要为物体网格指定一组可移动的<strong>把手点</strong>和固定的<strong>锚点</strong>。为了自动化并引入任务语义，GRT采用了一个两阶段的VLM提示策略（ChatGPT-4o）来选择把手点。</p>
+<ul>
+<li><strong>几何推理模板</strong>：首先生成一个包含带索引关键点的物体渲染视图面板，提示VLM根据物体几何和高级任务线索，推理并提出带有语义描述的把手点子集。</li>
+<li><strong>任务关键性排序模板</strong>：随后提示VLM根据变形后物体的<strong>合理性</strong>和<strong>诱导策略失败的假设潜力</strong>这两个目标，对候选把手点子集进行帕累托排序，最终产生一个紧凑的、任务感知的把手点集合。对于VLM可能失效的特定物体（如工业部件），允许回退到手动选择。</li>
+</ul>
+</li>
+<li><p><strong>基于雅可比场的变形模型</strong>：采用APAP网格编辑框架的第一阶段来生成结构连贯的3D网格变形。给定原始网格，通过指定把手点的目标位置和锚点的固定位置，求解一个线性系统以获得变形后的顶点位置，该过程通过可微的Cholesky求解器实现。软把手约束则通过梯度下降优化底层的雅可比场来施加。</p>
+</li>
+<li><p><strong>基于模拟器反馈的无梯度优化</strong>：策略性能评估通过模拟器rollout进行，这是一个不可微的黑盒过程。GRT采用基于TOPDM的选择性扰动策略进行优化。其核心是：在每次迭代中，仅随机扰动一部分把手点的位移，而非全部参数。这有助于在保持全局有效结构的同时，进行细粒度的局部优化。优化器维护一个关于变形参数θ的高斯分布种群，每轮评估候选变形，根据任务性能指标𝒥排名，并用精英样本更新提议分布。早期迭代广泛扰动以探索全局空间，后期迭代则进行局部微调。</p>
+</li>
+</ol>
+<p>与现有方法相比，GRT的创新点具体体现在：1）首次将红队测试框架明确应用于机器人操作的3D几何变形探索；2）通过VLM引导将高层任务语义融入几何扰动点的选择；3）采用选择性扰动的无梯度优化，高效地在高维变形空间中搜索细微但致命的几何变化。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>任务与策略</strong>：在三个机器人操作任务上评估：刚性物体抓取（使用Contact-GraspNet策略，在22个YCB物体上测试）、高精度工业插入（使用基于状态的策略和点云初始化策略）、关节操作（抽屉打开，使用基于状态的策略）。</li>
+<li><strong>基准方法</strong>：对比了VLM引导与人工手动选择把手点的效果，并设置了平滑性约束变体。</li>
+<li><strong>评估平台</strong>：模拟实验在NVIDIA IsaacGym中进行；实物验证使用xARM 6机械臂和Franka机械臂，通过3D打印制造CrashShapes。</li>
+<li><strong>评估指标</strong>：最终下降率（Final Drop，成功率相对下降均值）、迭代@50%（达到50%相对性能下降所需的平均迭代次数）、AUC（相对成功率下降曲线下面积）、Δ复杂度（变形相对于原始网格的几何偏差）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>表1结果显示，GRT在所有任务中都能可靠地发现导致策略性能崩溃的变形。例如，在抓取任务中，VLM引导的方法使性能最终下降76.3%，仅需7.3次迭代即可达到50%性能下降，且几何偏差（Δ复杂度）较小。在插入任务中，针对不同策略（状态基与点云基），不同把手选择策略（手动与VLM）各显优势，表明失效模式与策略感知模态相关。即使施加平滑性约束（限制平均把手位移），GRT仍能引发显著失败。</p>
+<p><img src="https://arxiv.org/html/2509.12379v1/figures/pull_figure.png" alt="红队测试结果"></p>
+<blockquote>
+<p><strong>图1</strong>：GRT通过微小、合理的几何编辑在真实机器人上引发策略失败。上图：原始螺丝刀、瓶子和USB插头成功。下图：CrashShapes分别导致错误的抓取姿态、抓取滑脱以及因插头在插座接触时在手爪内旋转而导致的插入失败。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>表2展示了在抓取任务上对关键组件的消融研究。对比了把手选择策略（启发式 vs. VLM引导）和变形搜索方法（高斯扰动 vs. 优化）。</p>
+<ul>
+<li><strong>优化 vs. 高斯扰动</strong>：使用优化（选择性扰动）比简单的高斯扰动在最终下降率（68.4% vs. 63.3%）和收敛速度（迭代@50%：8.95 vs. 10.00）上均有显著提升。</li>
+<li><strong>VLM引导 vs. 启发式</strong>：在相同优化器下，VLM引导的把手选择比启发式选择产生更严重的性能下降（76.3% vs. 68.4%）和更快的失效发现（迭代@50%：7.32 vs. 8.95）。</li>
+<li><strong>组件贡献</strong>：结果表明，VLM引导的语义先验和选择性扰动的优化策略共同贡献了高效、高质量的失效发现。</li>
+</ul>
+<p><strong>蓝队测试与实物验证</strong>：</p>
+<ul>
+<li><strong>蓝队测试</strong>：使用发现的CrashShapes对策略进行微调（称为蓝队测试）。如表3所示，在插入任务中，对特定CrashShape微调后，其成功率从20-45%提升至80-95%，同时保持了在原始物体上的性能。</li>
+<li><strong>实物验证</strong>：将模拟中发现的CrashShapes 3D打印并在真实机器人上测试。如表4所示，对于插入任务，原始物体成功率为90%，而CrashShapes CS-1和CS-2分别将成功率降至22.5%和55%。将模拟中蓝队测试后的策略直接部署到实物，成功率恢复至90%和82.5%，且不影响原始物体性能。抓取任务的实物实验也观察到一致的趋势。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2509.12379v1/figures/real_world.png" alt="实物世界验证"></p>
+<blockquote>
+<p><strong>图7</strong>：工业插入任务的实物验证设置与结果。展示了3D打印的原始USB插头和两个CrashShapes（CS-1, CS-2）以及在xARM 6上的测试。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了GRT，一个与策略无关、模拟器在环的框架，能够自动发现物理上合理的CrashShapes，导致预训练操作策略发生灾难性（&gt;50%）失败。</li>
+<li>在模拟中验证了GRT在插入、关节操作和抓取三个领域的可靠性，并证明了发现的CrashShapes可以转移到实物机器人。</li>
+<li>展示了红队测试结果的可操作性：通过简单的PPO微调（蓝队测试），可以针对CrashShapes显著恢复策略性能（提升高达60个百分点），且不损害在原始形状上的性能。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，VLM引导的把手选择在某些特定物体（如制造组件USB连接器）上可能失败，可能由于其在VLM预训练语料库中代表性不足。此时需要回退到手动选择。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>系统性评估</strong>：GRT为机器人操作提供了一个通用的、以物体为中心的结构化鲁棒性评估框架，弥补了当前静态基准测试的不足。</li>
+<li><strong>针对性改进</strong>：生成的CrashShapes不仅是漏洞诊断工具，更能作为有效的纠正性训练信号，为提升策略在特定几何扰动下的鲁棒性提供了直接途径。</li>
+<li><strong>跨模态探索</strong>：方法展示了结合高层语义（VLM）与底层物理优化进行失效探索的有效性，为探索其他模态（如材质、动力学参数）的鲁棒性测试提供了思路。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作策略在物体几何变化下鲁棒性评估不足的问题，提出了几何红队测试（GRT）框架。该方法通过基于雅可比场的变形模型与无梯度模拟器在环优化，自动生成结构有效且符合约束的“崩溃形状”（CrashShapes），以触发预训练策略的灾难性失败。实验表明，GRT在插入、关节与抓取任务中均能发现导致性能崩溃的几何变形；进一步通过“蓝队测试”对崩溃形状微调后，任务成功率可提升最高60个百分点。真实机器人验证显示，模拟生成的崩溃形状能将任务成功率从90%降至22.5%，而微调后可恢复至90%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.12379" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

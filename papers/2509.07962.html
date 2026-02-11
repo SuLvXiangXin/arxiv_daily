@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>TA-VLA: Elucidating the Design Space of Torque-aware Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>TA-VLA: Elucidating the Design Space of Torque-aware Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.07962" target="_blank" rel="noreferrer">2509.07962</a></span>
+        <span>作者: Hao Zhao Team</span>
+        <span>日期: 2025-09-09</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型在机器人操作中取得了显著进展，但其主要依赖视觉和语言输入，缺乏对力/扭矩等物理反馈信号的集成能力。然而，许多接触丰富的操作任务（如插拔、装配）需要感知和响应扭矩信号来判断任务成功与否并进行闭环控制。现有方法要么依赖昂贵的外部力传感器，要么需要从头训练策略，未能充分利用预训练VLA模型的优势。本文针对VLA模型无法集成物理反馈这一具体痛点，系统性地探索了将扭矩信号集成到现有VLA架构中的设计空间，旨在使模型具备接触敏感的决策能力。本文核心思路是：探究扭矩信号在何时（当前、历史、未来）、何处（编码器、解码器）、如何（单令牌、多令牌）集成最有效，并发现解码器侧集成、历史扭矩单令牌编码以及联合扭矩预测是关键。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文以π₀等VLA模型为基础框架进行探索。典型的VLA模型包含一个<strong>条件编码器</strong>和一个<strong>去噪解码器</strong>。编码器处理图像I和语言指令L，构建上下文表征；解码器则以当前机器人状态（如关节角度q_t）和噪声动作块为输入，逐步去噪生成未来动作序列A_{t:t+H}。本文的核心是研究如何将扭矩信号τ融入此框架。</p>
+<p><img src="https://arxiv.org/html/2509.07962v1/x1.png" alt="设计空间概览"></p>
+<blockquote>
+<p><strong>图1（c）</strong>：本文探索的扭矩集成设计空间，涵盖三个维度：信号类型（当前、历史、未来）、集成位置（编码器、解码器）和编码方式（单令牌、多令牌）。</p>
+</blockquote>
+<p><strong>核心模块一：扭矩作为观测的集成策略</strong><br>首先研究将当前扭矩τ_t作为额外观测集成的最佳位置。论文探索了三种架构（见图2）：</p>
+<ol>
+<li><strong>编码器嵌入</strong>：通过一个MLP适配器将τ_t编码为一个令牌，与图像、语言令牌拼接，作为编码器的额外条件输入。</li>
+<li><strong>解码器预拼接嵌入</strong>：将τ_t直接拼接到关节角度状态q_t的零填充维度中，形成一个组合状态令牌输入解码器。</li>
+<li><strong>解码器后拼接嵌入</strong>：通过MLP适配器将τ_t编码为一个单独的令牌，预置到解码器的状态输入序列中。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.07962v1/x2.png" alt="扭矩集成架构"></p>
+<blockquote>
+<p><strong>图2</strong>：将当前扭矩信号集成到VLA模型的三种架构示意图：(a)编码器嵌入，(b)解码器预拼接嵌入，(c)解码器后拼接嵌入。</p>
+</blockquote>
+<p>实验表明（表1），<strong>解码器侧集成（特别是后拼接方式）优于编码器侧集成</strong>。原因有二：第一，扭矩与关节角度同属本体感知信号，在解码器侧融合能更好地利用它们在接触交互中的相关性（通过HSIC分析验证，图3）；第二，解码器对输入变化更敏感（表2噪声实验），因此引入能反映细微接触变化的扭矩信号能更有效。</p>
+<p><strong>核心模块二：历史扭矩的编码方式</strong><br>由于扭矩在接触期间动态变化，单帧输入信息不足。论文进一步探索如何集成历史扭矩信号τ_{t-H+1:t}，比较了两种策略（见图4）：</p>
+<ol>
+<li><strong>逐帧令牌化</strong>：将历史中每一帧扭矩编码为独立令牌。</li>
+<li><strong>聚合令牌化</strong>：将整个历史序列编码为单个令牌。<br>同时，也比较了将历史信息插入编码器或解码器。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.07962v1/x4.png" alt="历史扭矩集成架构"></p>
+<blockquote>
+<p><strong>图4</strong>：集成扭矩历史的四种架构示意图：(a)编码器侧逐帧令牌，(b)编码器侧聚合令牌，(c)解码器侧逐帧令牌，(d)解码器侧聚合令牌。</p>
+</blockquote>
+<p>实验表明（表3），<strong>将整个扭矩历史编码为单个令牌并集成到解码器是最佳选择</strong>。原因在于，向解码器输入多个额外令牌会破坏其预训练学习到的输入模式完整性（表4的噪声令牌实验验证），虽然聚合令牌可能损失一些信息，但维持解码器输入模式的收益更大。</p>
+<p><strong>核心模块三：扭矩作为预测目标的联合训练</strong><br>受自动驾驶中联合预测与规划范式启发，论文提出不仅将扭矩作为输入，还将其作为辅助预测目标。具体方法是构建一个<strong>统一的动作-扭矩扩散模型</strong>（图5）。令A_t和T_t分别表示未来动作块和扭矩块，将它们拼接为干净联合令牌Z_t = [A_t; T_t]。在扩散过程中，模型v_θ需要同时预测去噪后的动作和扭矩分量。损失函数为两者预测损失的加权和：ℒ_joint(θ) = ℒ_action(θ) + βℒ_torque(θ)。这种方法鼓励模型学习动作与扭矩响应的因果关系，建立更具物理基础的内部表征。</p>
+<p><img src="https://arxiv.org/html/2509.07962v1/x5.png" alt="动作-扭矩扩散架构"></p>
+<blockquote>
+<p><strong>图5</strong>：动作-扭矩联合扩散模型架构。模型接收噪声化的动作-扭矩联合令牌及观测条件，输出对动作和扭矩的联合预测，分别计算损失。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在Cobot Magic ALOHA（7自由度双臂机器人）上进行真实世界实验。关节扭矩通过电机电流实时估计，无需外部力传感器。评估了10个任务（5个接触丰富任务如按钮推动、充电器插拔，5个常规任务如抓取瓶子）。对比的基线方法包括ACT、RDT和π₀。</p>
+<p><strong>关键实验结果</strong>：<br>主要结果如表5所示。在接触丰富任务上，仅集成扭矩观测（π₀+obs）或仅使用扭矩预测目标（π₀+obj）均能大幅提升基线π₀的性能。两者结合（π₀+obs+obj）效果最佳，例如在按钮推动任务上成功率从5/20提升至18/20，充电器插拔从0/20提升至17/20。值得注意的是，扭矩信号对常规任务也有轻微提升或保持原有性能，表明其具有广泛效用。</p>
+<p><img src="https://arxiv.org/html/2509.07962v1/x9.png" alt="定量结果表"></p>
+<blockquote>
+<p><strong>表5</strong>：各方法在10个任务上的成功率（每任务20次试验）。π₀+obs+obj在接触丰富任务上提升显著，在常规任务上也保持或略有提升。</p>
+</blockquote>
+<p><strong>扭矩预测可视化</strong>：<br><img src="https://arxiv.org/html/2509.07962v1/x6.png" alt="未来扭矩预测"></p>
+<blockquote>
+<p><strong>图6</strong>：模型预测的未来扭矩信号与真实值的对比。预测曲线与真实变化高度吻合，表明模型通过联合训练成功掌握了扭矩动态。</p>
+</blockquote>
+<p><strong>定性结果与泛化能力</strong>：<br><img src="https://arxiv.org/html/2509.07962v1/x7.png" alt="任务可视化"></p>
+<blockquote>
+<p><strong>图7</strong>：方法实现的任务可视化。(a)(b)展示了在接触任务中，利用扭矩反馈检测失败并自主重试的成功案例。(c)展示了完成的常规任务。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：<br>本文的消融实验贯穿方法部分，明确了每个设计选择的贡献：</p>
+<ol>
+<li><strong>集成位置</strong>：解码器侧集成显著优于编码器侧（表1）。</li>
+<li><strong>历史编码方式</strong>：解码器侧使用单聚合令牌优于多令牌或编码器侧集成（表3）。</li>
+<li><strong>预测目标</strong>：增加扭矩预测作为辅助目标能进一步提升性能（表5中π₀+obj vs π₀）。</li>
+<li><strong>组件组合</strong>：观测集成与预测目标结合（π₀+obs+obj）带来最大性能增益。</li>
+</ol>
+<p><strong>跨模型与跨本体泛化</strong>：<br>实验表明，将本文提出的扭矩观测集成与预测目标策略应用于另一个VLA模型RDT上，同样能带来显著性能提升（表6）。此外，在ROKAE SR机械臂上进行的充电器插入任务（图8）验证了方法在不同机器人本体上的有效性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文核心贡献在于：1) 首次系统探索了扭矩感知VLA模型的设计空间，并明确了最佳实践：将（当前及历史）扭矩编码为单个令牌集成到解码器。2) 提出了动作-扭矩联合扩散模型，通过预测未来扭矩作为辅助目标，使模型学习物理交互动态。3) 通过大量实验验证了所提方法能显著提升接触丰富任务的成功率、鲁棒性和泛化能力。</p>
+<p>论文提到的局限性在于：方法依赖于从电机电流到扭矩的准确估计，这可能因机器人硬件和校准差异而受限。</p>
+<p>本文的启示在于：为将物理信号（不限于扭矩）集成到预训练大模型中提供了可遵循的设计原则与分析范式（如HSIC分析、噪声敏感性测试）。联合预测物理量的范式可以扩展到其他模态，促使AI模型建立更贴近真实物理世界的内部表征。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本论文针对当前视觉-语言-动作（VLA）模型无法集成扭矩信号以感知物理交互的问题，提出扭矩感知VLA模型，系统探索扭矩集成设计空间。关键技术方法包括：将扭矩适配器引入解码器而非编码器；将扭矩历史总结为单个令牌；预测扭矩作为辅助输出以增强物理基础表示。实验在接触丰富的操作基准上验证了这些策略的有效性，表明解码器集成、历史总结和辅助预测能提升模型性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.07962" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

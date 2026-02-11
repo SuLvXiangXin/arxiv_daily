@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Robot Control Stack: A Lean Ecosystem for Robot Learning at Scale - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Robot Control Stack: A Lean Ecosystem for Robot Learning at Scale</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.14932" target="_blank" rel="noreferrer">2509.14932</a></span>
+        <span>作者: Florian Walter Team</span>
+        <span>日期: 2025-09-18</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型（VLA）代表了机器人学习的主要范式转变，其核心是通过大规模数据收集和针对特定设置的微调，取代了传统专家策略中专门化的架构和任务定制组件。在这种以模型和可扩展训练为中心的机器学习工作流中，传统的机器人软件框架（如ROS）成为了瓶颈，它们并非为需要并行扩展和同步操作的机器学习应用而设计。另一方面，面向机器人学习的模拟器（如Isaac Lab、LeRobot）虽然能很好地支持大规模并行化训练，但往往缺乏核心机器人功能，且对物理机器人控制的支持有限，导致虚实切换困难。因此，VLA及机器人学习的研究仍然需要为每个新设置、模型和任务进行大量定制化工作。本文针对这一痛点，提出了一种全新的、轻量级的软件生态系统视角，旨在弥合大规模模型训练与机器人软硬件控制之间的鸿沟。本文的核心思路是设计一个名为机器人控制栈（RCS）的、从头构建的、模块化且易于扩展的分层架构，为模拟和物理机器人提供统一接口，以无缝支持从大规模模拟训练到真实世界部署的完整VLA研究流程。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RCS的整体框架围绕“环境包装器”（environment wrapper）的概念构建。一个包装器是一个元组 $W = \langle f:S\to S^{\prime},g:A^{\prime}\to A,P^{\prime},R^{\prime}\rangle$，其中 $f$ 和 $g$ 是映射函数，用于转换马尔可夫决策过程（MDP）的状态和动作，$P^{\prime}$ 和 $R^{\prime}$ 是可选的新的状态转移概率和奖励函数。包装器 $W$ 可以应用于一个MDP $M$，产生一个新的MDP $M^{\prime}$，记作 $M^{\prime}=W\rhd M$。状态函数 $f$ 将包装后MDP $M$ 的状态映射到新MDP $M^{\prime}$ 的状态，而动作函数 $g$ 则将新MDP $M^{\prime}$ 的动作映射回包装后MDP $M$ 的动作。这一形式化可扩展至部分可观测MDP（POMDP），以匹配Gymnasium环境的实际API。</p>
+<p><img src="https://arxiv.org/html/2509.14932v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：RCS的分层架构。顶层的应用程序通过基于Gymnasium的Python API访问机器人、传感器和执行器，从而方便地在硬件和MuJoCo模拟之间切换。底层暴露C++ API用于性能关键的特性，使RCS同样适用于端到端策略学习和低级控制。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.14932v1/x2.png" alt="架构细节"></p>
+<blockquote>
+<p><strong>图2</strong>：RCS的架构。左侧的应用程序通过Gymnasium接口与右侧的环境（可以是模拟或真实机器人）交互。传感器、执行器和数据观察器通过包装环境来改变动作和/或观察空间。</p>
+</blockquote>
+<p>RCS的架构分为多个层次。最底层是一个C++接口，以抽象方式定义了控制机器人所需的所有功能。该接口具有Python绑定，因此对新机器人的支持可以用两种语言实现。基础环境根据控制类型（如笛卡尔空间或关节空间、同步或异步动作）进行配置，并利用接口函数。这种设计与实现无关，适用于任何机器人甚至MuJoCo场景。每个场景是一系列 $n$ 个包装器，每个包装器都可以改变环境的动作和/或观察空间。例如，夹爪包装器为动作和观察空间增加一个维度，相机包装器为观察空间增加一个相机帧等。形式上，在每个时间步，智能体（如策略或遥操作员）向包装后的MDP $M^{(n)} = W^{(n)} \rhd \dots \rhd W^{(1)} \rhd M$ 发出动作 $A_t = A_t^{(n)}$，然后该动作通过包装器的动作变换函数链传播，即 $A_t^{(0)} = g^{(1)}(\dots g^{(n)}(A_t^{(n)}))$。$A_t^{(0)}$ 随后被传递给基础MDP（即实现机器人的接口），产生观察状态 $S_t^{(0)}$。类似于动作，观察变换函数链更新状态：$S_t^{(n)} = f^{(n)}(\dots f^{(1)}(S_t^{(0)}))$ 并返回给智能体，此过程重复直到达到终止状态。恒等包装器可用于记录轨迹数据或在机器人与远程机器之间通过网络流式传输动作和观察。</p>
+<p>核心模块与技术细节包括：</p>
+<ol>
+<li><strong>硬件抽象</strong>：RCS为常见传感器和执行器定义了接口和现成的包装器（如遵循相机接口的相机轮询包装器、用于末端执行器的包装器）。默认情况下，RCS为模拟和硬件同步运行，仅在达到定义状态后才返回动作，但也支持异步配置。</li>
+<li><strong>模拟集成</strong>：RCS利用MuJoCo物理模拟，并为其API扩展了机器人用例的定制功能。它实现了围绕MuJoCo步进函数的回调机制，以支持同步操作和中断，模拟传统机器人软件在真实硬件上的高级功能。</li>
+<li><strong>机器人工具包</strong>：集成了Pinocchio用于运动学（提供开箱即用的逆运动学求解器）和OMPL用于运动规划。由于模拟和真实机器人使用相同接口，易于实现新工具，例如与真实机器人同步运行、接收相同动作的<strong>数字孪生</strong>，可用于碰撞检查或安全验证。</li>
+<li><strong>应用与生态</strong>：应用程序（Apps）是利用可用包装器的、针对特定用例和设置的高级脚本。RCS附带多种应用，如遥操作、轨迹生成器和策略推理引擎。为解决VLA策略依赖项冲突问题，RCS提供了一个名为“Agents”的专用应用层库，它作为轻量级Python包安装在策略环境中，通过RPC（远程过程调用）与运行RCS的环境通信，实现数据对齐和接口一致。</li>
+</ol>
+<p>与现有方法（如ROS、Ark、Isaac Lab、LeRobot）相比，RCS的创新点在于其<strong>轻量级、非分布式默认设计</strong>使其易于并行化且支持同步操作；<strong>基于包装器的统一架构</strong>实现了模拟与硬件的无缝切换和灵活扩展；<strong>完整的机器人功能集成</strong>（如运动学、规划、数字孪生）填补了专用模拟器在核心机器人能力上的空白。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与数据集</strong>：研究在四个不同的机器人设置上部署了RCS：FR3（7自由度，Franka Hand夹爪）、xArm7（7自由度，Tilburg Hand多指手）、UR5e（6自由度，Robotiq夹爪）和SO101（5自由度，内置夹爪）。为评估VLA策略，设计了一个名为“Pick-Cuboid”（拾取长方体）的基准任务，该任务可在真实世界和模拟中执行，且在不同设置间可复现。使用RCS的录制包装器，以30Hz频率收集了各设置的演示数据集（FR3: 143条，xArm7: 100条[任务调整为Pick-Toy]，UR5e: 167条，SO101: 120条）。此外，在模拟的FR3场景中通过脚本生成了2193条成功的模拟演示数据。</p>
+<p><strong>Baseline方法</strong>：评估了当前主流的开源VLA策略，包括Octo、OpenVLA和 $\pi_0$。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>$\pi_0$ 在不同设置上的性能</strong>：在四个真实机器人设置上分别微调并评估 $\pi_0$（各50次 rollout）。FR3性能最高（成功率约68%），部分原因是其预训练数据中包含Franka机器人。xArm7（使用多指手）表现良好（约62%），展示了跨具身泛化能力。UR5e表现次之（约50%），SO101性能最差（约10%），归因于其自由度低、尺寸小、部件精度差等因素。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.14932v1/x3.png" alt="π0在不同机器人上的成功率"></p>
+<blockquote>
+<p><strong>图8</strong>：$\pi_0$ 模型在四个不同设置的数据集上微调后的真实世界评估成功率。展示了模型在不同机器人平台上的泛化性能差异。</p>
+</blockquote>
+<ol start="2">
+<li><strong>不同VLA模型在FR3上的比较</strong>：在5Hz下同步下一步预测的对比中，$\pi_0$ 在真实和模拟环境中均表现最佳（真实约50%，模拟约80%），Octo次之，OpenVLA相对较差。这反映了不同模型架构和训练数据的影响。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.14932v1/x4.png" alt="不同VLA模型比较"></p>
+<blockquote>
+<p><strong>图9</strong>：上图：不同模型在FR3真实数据集上微调后，在真实世界和模拟场景中的评估成功率（5Hz下一步预测）。下图：使用不同混合比例（合成 vs. 真实数据）训练 $\pi_0$ 后，在真实和模拟场景中的评估成功率。显示了混合数据对性能的提升。</p>
+</blockquote>
+<ol start="3">
+<li><strong>合成与真实数据混合训练</strong>：探究了混合使用模拟（合成）数据和真实数据对 $\pi_0$ 在FR3上性能的影响。实验表明，<strong>混合数据能显著提升真实世界性能</strong>。仅使用3000条模拟数据时，真实世界成功率约30%；仅使用143条真实数据时，成功率约50%；而当混合3000条模拟数据和143条真实数据时，真实世界成功率提升至约65%，同时模拟环境中的性能也保持在较高水平（约85%）。这验证了利用RCS便捷生成的大规模模拟数据可以有效增强模型在真实世界的表现。</li>
+</ol>
+<p><strong>消融实验</strong>：虽然没有严格的组件消融实验，但通过在不同机器人上的部署、不同VLA模型的评估以及数据混合实验，全面展示了RCS生态系统在支持数据收集、模拟训练、策略评估和虚实迁移等全流程中的有效性和便利性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了<strong>Robot Control Stack (RCS)<strong>，一个专为大规模机器人学习（尤其是VLA）研究设计的、轻量级、模块化且易于扩展的软件生态系统；2) 其基于</strong>环境包装器的分层架构</strong>和<strong>统一的模拟/硬件接口</strong>，无缝连接了大规模模拟训练与真实世界实验，简化了研究流程；3) 通过在一系列机器人设置上的广泛实验，验证了RCS的实用性，并提供了对多个主流VLA模型的深入评估，同时揭示了<strong>混合合成与真实数据能有效提升策略的真实世界性能</strong>。</p>
+<p>论文自身提到的局限性包括其模拟支持目前主要依赖于MuJoCo，未来可能扩展到其他模拟器。此外，虽然支持多种机器人，但每个新硬件的集成仍需一定工作（尽管通过包装器接口已大大简化）。</p>
+<p>本研究对后续机器人学习研究的启示是：一个<strong>轻量、灵活、专注于机器学习工作流</strong>的软件栈对于加速VLA和机器人学习研究至关重要。RCS的成功实践表明，将机器人控制抽象为可组合的包装器，并实现深度的虚实统一，是推动该领域发展的有效路径。未来的工作可以基于RCS的架构，进一步探索更复杂的任务、更多样的传感器融合、以及更高效的分布式训练与数据收集机制。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人学习中传统软件框架成为瓶颈、仿真与真实实验转换困难的问题，提出Robot Control Stack（RCS）。这是一个轻量级生态系统，其核心是采用分层架构，提供统一的仿真与物理机器人接口，便于sim-to-real迁移。实验评估了Octo、OpenVLA等模型在多机器人平台上的性能，并验证了仿真数据对提升真实世界策略的有效性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.14932" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Self-evolved Imitation Learning in Simulated World - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Self-evolved Imitation Learning in Simulated World</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.19460" target="_blank" rel="noreferrer">2509.19460</a></span>
+        <span>作者: Zhihe Lu Team</span>
+        <span>日期: 2025-09-23</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>模仿学习（IL）通过利用大规模专家演示数据集，已在多种任务上取得了显著成功。然而，收集此类数据集通常耗时耗力，在某些领域甚至不切实际。这促使了对有限监督下模仿学习的研究，这是一个更实用且更具挑战性的场景。但在仅有少量演示的情况下学习，通常会导致性能大幅下降。例如，在一样本设置下，从头训练的扩散策略（Diffusion Policy）成功率仅为0.8%，而使用完整数据训练时可达50.5%。</p>
+<p>现有方法如利用大型语言或视觉基础模型，或使用生成模型增强专家演示，前者通常带来额外计算成本，后者可能产生不现实或有误导性的轨迹。本文针对少样本模仿学习（FIL）中监督信号有限的痛点，提出了一种新视角：利用模拟器环境，让一个从少量专家演示初始化得到的弱策略，通过与模拟器交互并收集成功的轨迹作为新的演示数据，进行迭代式的自我精炼。核心思路是：通过<strong>双级增强</strong>策略（模型级和环境级）确保生成轨迹的多样性，并利用一个<strong>轻量级选择器</strong>筛选出最具信息量的演示，以高效地驱动策略自我进化，从而在极少专家演示下达到有竞争力的性能。</p>
+<p><img src="https://arxiv.org/html/2509.19460v1/x1.png" alt="性能增长曲线"></p>
+<blockquote>
+<p><strong>图1</strong>：所提出的SEIL方法在Libero Long基准测试上的性能。横轴表示进化阶段数，纵轴表示每个阶段在基准测试上的成功率。我们报告了整个进化过程中的性能增长率。</p>
+</blockquote>
+<h2 id="方法详解">方法详解</h2>
+<p>Self-Evolved Imitation Learning (SEIL) 是一个旨在通过模拟器交互逐步精炼少样本模型的框架。其整体流程是一个“训练-记录-选择-训练”的迭代循环。</p>
+<p><img src="https://arxiv.org/html/2509.19460v1/x2.png" alt="SEIL整体框架"></p>
+<blockquote>
+<p><strong>图2</strong>：SEIL方法的整体框架。框架首先使用少量专家演示训练初始模型π₀。然后使用训练好的模型在模拟器中记录演示。在此过程中，我们应用模型级增强（训练好的策略π₀与EMA增强模型π₀′一同与模拟器交互）和环境级增强（持续改变初始状态以促进轨迹多样性）。从模拟器 rollout 中，我们保留成功的演示，并使用我们提出的选择器选择最具信息量的样本。选中的演示逐步扩展了演示池，使模型能够通过迭代的模仿学习更新进行进化，直到收敛到最终策略π_f。</p>
+</blockquote>
+<p><strong>核心模块1：双级增强 (Dual-Level Augmentation)</strong><br>为了丰富记录演示（RD）的多样性，SEIL提出了双级增强策略。</p>
+<ol>
+<li>**环境级增强 (E_Aug)**：在每次策略与模拟器交互之前，随机扰动每个物体的初始位置（公式：(x,y,z) → (x_new^t, y_new^t, z)）。这引入了环境初始条件的多样性。</li>
+<li><strong>模型级增强 (M_Aug)<strong>：引入一个辅助模型来生成额外的轨迹。为了避免在多阶段进化中产生额外的训练开销，该辅助策略被实现为</strong>主模型的指数移动平均（EMA）</strong>。EMA模型的参数 θ_t^EMA 通过公式 θ_t^EMA = τ·θ_{t-1}^EMA + (1-τ)·θ_t 更新，其中τ是衰减率。EMA模型作为在线模型参数的平滑版本，无需单独训练即可在策略空间中保持多样性，从而支持高效、可扩展的演示生成。</li>
+<li><strong>协作</strong>：将增强模型π‘（即EMA模型）和基础模型π与环境增强E_Aug同时部署，形成双级增强策略。仅使用E_Aug会导致进化仅依赖基础模型，行为变异性有限，进程缓慢；仅使用M_Aug则会在相同观测下产生不一致的输入-动作对（(O_t, A_t^Base) vs (O_t, A_t^EMA)），这对模仿学习不利。两者结合对于有效增强生成轨迹的多样性至关重要。</li>
+</ol>
+<p><strong>核心模块2：轨迹选择器 (Trajectory Selector)</strong><br>在通过双级增强生成演示池后，SEIL引入一个轻量级选择器来识别最具信息量的样本以供策略进化。选择器的设计权衡了效率和表征能力。</p>
+<p><img src="https://arxiv.org/html/2509.19460v1/x3.png" alt="轨迹选择器架构"></p>
+<blockquote>
+<p><strong>图3</strong>：所提出的轨迹选择器的架构。我们提出一个由图像编码器和动作编码器组成的轻量级轨迹选择器，分别处理首帧图像和相应的动作序列。编码后的特征被融合并通过一个LSTM，随后是一个输出每个轨迹置信度分数的MLP。</p>
+</blockquote>
+<ol>
+<li><strong>架构设计</strong>：选择器仅使用轨迹的<strong>第一帧图像x</strong>和对应的<strong>动作序列A</strong>作为输入。使用ResNet-18作为图像编码器Φ_i，多层感知机（MLP）作为动作编码器Φ_a，分别提取特征f_x和f_A。将两者拼接得到融合表示f_t = [f_x; f_A]，然后输入长短期记忆网络（LSTM）建模时序依赖，最终通过分类MLP输出任务逻辑值。整个选择器通过基于真实任务标签的交叉熵损失进行优化。</li>
+<li><strong>选择方案</strong>：训练完成后，选择器对RD进行评估并分配置信度分数。论文比较了三种采样策略：均匀采样、高置信度采样（选择最像专家数据的样本）、低置信度采样（选择与专家数据差异最大的样本）。实验表明，<strong>低置信度采样</strong>通过选择远离专家分布的演示来强调多样性，能带来更丰富的学习信号和更好的策略精炼效果，性能优于其他方案。</li>
+</ol>
+<p><strong>创新点</strong>：与依赖基础模型或生成模型进行数据增强的现有方法不同，SEIL的创新点在于构建了一个完整的<strong>自进化框架</strong>，利用模拟器交互产生基于真实交互动态的演示；提出了<strong>双级增强策略</strong>，以低成本确保生成数据的多样性；并设计了高效的<strong>混合表征（图像+动作）选择器</strong>，精准筛选互补样本，从而实现了在极少专家监督下的高效策略迭代提升。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准测试</strong>：使用LIBERO基准，包含四个子类：LIBERO-Spatial（空间推理）、LIBERO-Object（物体识别与操作）、LIBERO-Goal（目标泛化）和LIBERO-Long（长时域任务）。</li>
+<li><strong>基线方法</strong>：对比了Action-Chunking Transformer (ACT)、Diffusion Policy (DP)、RT-1以及作为基础模型的BAKU。</li>
+<li><strong>实现细节</strong>：在BAKU上实现SEIL。每轮允许两个模型（基础模型和EMA模型）在模拟器中各执行25次rollout，使用选择器从中选择15个样本来扩充演示池。EMA衰减参数τ设为0.999。所有方法均从头训练。评估指标为标准LIBERO评估下的成功率（SR）。</li>
+</ul>
+<p><strong>主要结果</strong>：<br>如表I所示，SEIL在各类少样本设置下均持续优于所有基线方法。</p>
+<ul>
+<li>在监督极其有限的情况下（如1-shot），SEIL表现出强大的鲁棒性。例如在Libero-Long上，SEIL取得了14.6%的成功率，相比BAKU的4.6%提升了**217.3%**。</li>
+<li>SEIL能够用更少的专家演示达到可比甚至更优的性能。例如在Libero-Spatial上，SEIL在4-shot设置下达到87.2%，超过了BAKU在8-shot设置下的83.6%。</li>
+<li>图4可视化了SEIL在不同任务上的进化过程，显示了跨阶段的稳定且一致的性能提升，最终在性能饱和时收敛。通常在第一轮就有显著改进（例如，在4-shot Libero Goal上，首轮即从71.6%提升至83.3%）。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2509.19460v1/x4.png" alt="进化过程成功曲线"></p>
+<blockquote>
+<p><strong>图4</strong>：Libero Goal、Object、Spatial和Long任务中不同少样本设置的成功率曲线。红线和蓝线分别表示基础模型和EMA模型在每一轮的成功率。此外，红色文本标出了进化前（Baseline）和进化后（Best Round）基础模型的成功率。</p>
+</blockquote>
+<p><strong>消融实验</strong>：</p>
+<ol>
+<li><strong>组件贡献分析（表II）</strong>：实验验证了各组件的重要性。仅使用基础模型记录的演示进行进化，成功率（SR₄）从基线63.4%提升至67.4%。但若同时加入未配合环境增强的模型级增强（M_Aug）演示，由于相同观测下动作不一致，SR₄反而降至67.2%。引入环境级增强（E_Aug）后，缓解了不一致性，SR₄提升至74.6%。最后，应用选择器筛选最具信息量的样本，SR₄进一步提升至**75.4%**。</li>
+<li><strong>不同rollout组合的效果（图5）</strong>：分析了由不同模型在不同环境下生成的各种rollout组合对单轮进化的影响。结果表明，仅使用EMA模型成功的rollout（P3+P4）进化基础模型，比使用基础模型成功的rollout（P1+P2）效果更好（提升4.8% vs 4.2%）。但简单合并两者所有成功rollout（P1+P2+P3+P4）会导致性能下降（67.3%），再次印证了不一致性问题。而将基础模型成功的rollout（P1+P2）与在环境增强下EMA模型成功的rollout（P5）结合，则取得了最佳的单轮进化性能（69.6%），证明了双级增强的有效性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.19460v1/x5.png" alt="不同rollout组合的消融研究"></p>
+<blockquote>
+<p><strong>图5</strong>：使用不同类型rollout进化的消融研究。我们首先在相同环境设置下记录基础模型和EMA模型的rollout。将演示池分为三类：仅基础模型成功（P1）、仅EMA模型成功（P4）以及两者都成功的情况（P2, P3）。我们进一步扩展此设置，记录EMA模型在变化环境设置下的rollout，记为P5。我们报告了基础模型和EMA模型在各种rollout组合上演化后的成功率（SR）。</p>
+</blockquote>
+<ol start="3">
+<li><strong>每轮尝试次数的影响（表III）</strong>：研究了每轮记录的演示数量（RD）的影响。当每轮仅使用10个rollout时，进化过程低效，每轮增益微弱。当rollout数量增加到50或100时，模型性能在早期几轮迅速饱和。这表明存在一个平衡点，过多的数据可能带来冗余，而过少则不足以驱动有效进化。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了**Self-Evolved Imitation Learning (SEIL)**框架，首次系统性地利用模拟器环境，使从少量专家演示初始化的策略能够通过迭代的“交互-收集-精炼”循环实现自我进化。</li>
+<li>设计了<strong>双级增强策略</strong>（模型级的EMA增强和环境级的初始状态扰动），以低成本确保了模拟器生成演示的多样性，这是驱动有效进化的关键。</li>
+<li>引入了<strong>轻量级轨迹选择器</strong>，它基于首帧图像和动作序列的混合表征，能够高效筛选出与专家数据互补、信息量高的演示，进一步优化了进化过程的效率和质量。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到的局限性主要隐含在方法设定中：SEIL依赖于一个能够提供成功/失败反馈的模拟器。模拟器与真实世界之间的差距（sim-to-real gap）可能影响该方法在现实机器人应用中的直接迁移效果。</p>
+<p><strong>后续研究启示</strong>：</p>
+<ol>
+<li><strong>缓解模拟到真实的差距</strong>：未来的工作可以探索将SEIL框架与领域自适应技术结合，以减轻模拟器偏差，或将模拟器中进化的策略更有效地迁移到物理世界。</li>
+<li><strong>选择器与增强策略的拓展</strong>：可以研究更先进的轨迹评估与选择机制，以及更复杂的环境与模型增强策略，以生成质量更高、多样性更丰富的合成数据。</li>
+<li><strong>应用于其他序列决策领域</strong>：SEIL自进化、利用合成数据迭代改进的核心思想，可推广至其他数据稀缺的序列决策问题，如自动驾驶、游戏AI等。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对模仿学习在有限监督下依赖大量专家数据的问题，提出自进化模仿学习框架。核心方法是通过模拟器交互收集成功轨迹作为新演示，并采用双级增强提升多样性：模型级使用EMA模型协作，环境级扰动初始物体位置；同时设计轻量选择器筛选优质轨迹。该方法在LIBERO基准的少样本模仿学习场景中达到最先进性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.19460" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

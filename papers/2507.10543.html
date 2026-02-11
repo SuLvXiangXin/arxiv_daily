@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MP1: Mean Flow Tames Policy Learning in 1-step for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>MP1: Mean Flow Tames Policy Learning in 1-step for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2507.10543" target="_blank" rel="noreferrer">2507.10543</a></span>
+        <span>作者: Mengyuan Liu Team</span>
+        <span>日期: 2025-07-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作领域的主流策略学习方法主要分为扩散模型和基于流匹配的方法。扩散模型（如Diffusion Policy, DP3）通过逐步去噪生成动作，能有效处理多模态动作分布，但需要多次网络评估（NFE），导致推理速度慢，难以满足实时性要求。基于流匹配的方法（如FlowPolicy）旨在实现一步（1-NFE）推理以提升速度，但通常需要依赖额外的“一致性约束”来确保输出轨迹的有效性，这引入了模型结构上的限制。</p>
+<p>本文针对生成模型在机器人学习中面临的“速度-质量”权衡痛点，提出了新的视角：将图像生成领域的“平均流”范式首次引入机器人学习。其核心思路是，通过直接学习从噪声到专家动作轨迹的“区间平均速度”，而非瞬时速度，从而在推理时无需进行数值ODE求解或施加一致性约束，实现既快速又高质量的一步轨迹生成。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>MP1的整体目标是以3D点云和机器人状态为条件，通过一次网络前向传播（1-NFE）生成未来的动作轨迹。其pipeline如下：历史观测点云 <strong>P</strong> 和机器人状态 <strong>S</strong> 分别通过视觉编码器和状态编码器，得到条件特征向量 <strong>c</strong>。该条件 <strong>c</strong> 与一个从标准高斯分布采样的噪声动作轨迹 <strong>A₁</strong> 一同输入到集成了平均流（MeanFlow）的UNet网络中。网络输出一个条件化的、经过分类器无关引导的平均速度估计 ( u_{\theta}^{cfg}(\mathbf{A}_1, 0, 1|\mathbf{c}) )。最终，干净的动作轨迹通过 ( \mathbf{A}_0 = \mathbf{A}<em>1 - u</em>{\theta}^{cfg} ) 一步计算得出。</p>
+<p><img src="https://arxiv.org/html/2507.10543v5/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：MP1方法整体框架。输入为历史观测点云和机器人状态，经编码后作为条件输入UNet集成的MeanFlow模块。网络预测从噪声到目标轨迹的平均速度，并计算回归损失 ( \mathcal{L}<em>{cfg} )。同时，对UNet隐藏状态施加分散损失 ( \mathcal{L}</em>{disp} )，二者共同优化网络。</p>
+</blockquote>
+<p><strong>核心模块一：基于平均流的一步轨迹生成</strong>。这是方法的核心创新。传统流匹配学习瞬时速度场 ( v(z_t, t) )，采样需积分求解ODE。平均流则学习区间 ([r, t]) 上的平均速度场 ( u(z_t, r, t) )，定义为总位移除以时间。利用“平均流恒等式” ( u(z_t, r, t) = v(z_t, t) - (t-r)\frac{d}{dt}u(z_t, r, t) )，可以将对平均速度的直接积分学习，转化为一个可训练的回归目标（公式3-4）。在MP1中，网络 ( u_{\theta} ) 学习以条件 <strong>c</strong> 和噪声轨迹 ( \mathbf{A}_t ) 为输入，预测将其转换为专家轨迹 ( \mathbf{A}<em>0 ) 所需的平均速度。通过结合分类器无关引导，进一步提升了生成轨迹的可控性，对应的损失为 ( \mathcal{L}</em>{cfg} )（公式5）。在推理时，设定 ( r=0, t=1 )，即可通过公式8一步生成轨迹，完全避免了迭代和ODE求解误差。</p>
+<p><strong>核心模块二：分散损失</strong>。仅使用回归损失 ( \mathcal{L}<em>{cfg} ) 可能导致特征空间“坍塌”，即不同的场景状态被映射到相似的隐表示，损害泛化能力，尤其是在小样本学习中。为此，MP1引入了一个轻量级的分散损失 ( \mathcal{L}</em>{Disp} )（公式6）。该损失作用于UNet下采样块的输出特征上，鼓励同一个训练批次中不同样本的隐嵌入 ( \mathbf{z}_{\mathbf{A}} ) 相互远离，起到类似“无需正样本对的对比损失”的作用。它仅在训练时计算，不影响推理速度，但能有效提升策略的判别力和泛化性能。</p>
+<p><strong>最终目标函数</strong>为 ( \mathcal{L}<em>{total}(\theta) = \mathcal{L}</em>{cfg}(\theta) + \lambda\mathcal{L}_{Disp}(\theta) )，其中 ( \lambda ) 设为0.5以平衡两项。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在仿真实验中，使用了Adroit（3个任务）和Meta-World（34个任务，分Easy, Medium, Hard, Very Hard四个难度）基准。对比的基线方法包括：基于扩散的DP、DP3、Simple DP3（均为10-NFE），基于流的AdaFlow（可变NFE）、FlowPolicy（1-NFE），以及基于一致性模型的CP（1-NFE）。使用10条专家演示进行训练，在NVIDIA RTX 4090 GPU上评估。</p>
+<p><strong>关键性能结果</strong>：如表1所示，MP1在全部37个任务上的平均成功率达到了78.9% ± 2.1%，显著超过了此前最好的FlowPolicy（71.6% ± 3.5%），相对提升7.3%；相比最好的扩散方法DP3（68.7% ± 4.7%），提升达10.2%。在Meta-World的不同难度任务上，MP1均取得了最佳成绩。</p>
+<p><img src="https://arxiv.org/html/2507.10543v5/x1.png" alt="性能对比图"></p>
+<blockquote>
+<p><strong>图1</strong>：MP1与SOTA方法在Adroit和Meta-World任务上的性能对比。MP1在成功率和推理时间（NFE=1）上均优于DP3（NFE=10）和FlowPolicy（NFE=1）。</p>
+</blockquote>
+<p><strong>推理速度</strong>：如表2所示，MP1的平均推理时间仅为6.8 ms，比FlowPolicy（12.6 ms）快近2倍，比Simple DP3（97.0 ms）快约14倍，且波动极小（±0.1 ms），展现了卓越的实时性。</p>
+<p><img src="https://arxiv.org/html/2507.10543v5/x4.png" alt="训练曲线"></p>
+<blockquote>
+<p><strong>图4</strong>：MP1、FlowPolicy和DP3在四个Meta-World任务上的训练成功率曲线。MP1收敛更快，最终成功率更高，且方差（阴影区域）更小，表明其训练更稳定。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：</p>
+<ol>
+<li><strong>分散损失的作用</strong>：如表3所示，移除分散损失（-Loss_dis）会导致在10个测试任务上的成功率平均下降约4-5个百分点，验证了其对提升泛化能力的有效性。</li>
+<li><strong>平均流比率的影响</strong>：如表4所示，当平均流比率 ( r \neq t )（即使用真正的平均流）时，性能最佳；当比率=0（退化为标准流匹配）时，性能下降；当比率=1.0（极端情况）时，性能崩溃。这说明适中的平均流区间是有效的。</li>
+<li><strong>演示数量影响</strong>：如图5所示，随着演示数量增加，所有方法性能提升。MP1在演示数很少时（如5条）即能取得不错性能，且始终优于FlowPolicy，凸显了其小样本学习优势。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2507.10543v5/x5.png" alt="演示数量影响"></p>
+<blockquote>
+<p><strong>图5</strong>：不同演示数量下MP1与FlowPolicy的性能对比。MP1在少样本场景下表现更优。</p>
+</blockquote>
+<p><strong>真实世界实验</strong>：在ARX R5双臂机器人上进行了5个任务测试。如表5所示，MP1在成功率（如锤子任务90% vs FlowPolicy 70%）和任务完成时间（普遍更短）上均优于对比方法。</p>
+<p><img src="https://arxiv.org/html/2507.10543v5/x3.png" alt="真实场景对比"></p>
+<blockquote>
+<p><strong>图3</strong>：MP1与FlowPolicy在仿真和真实世界锤子任务上的定性对比。MP1速度更快，且成功完成了真实任务，而FlowPolicy失败。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) <strong>首次将平均流范式引入机器人学习</strong>，提出了MP1框架，通过直接学习区间平均速度，实现了无需一致性约束或ODE求解器的真正一步（1-NFE）高质量轨迹生成。2) <strong>引入了轻量级分散损失</strong>，作为一种训练时正则器，有效提升了策略在特征空间的判别力，增强了少样本泛化能力，且不影响推理速度。3) <strong>在仿真和真实世界实验中全面验证</strong>，MP1在成功率和推理速度上均超越了现有的扩散和流匹配基线方法。</p>
+<p><strong>局限性</strong>：论文自身提到，平均流比率（r和t的选择）需要调整，极端比率（如1.0）会导致性能显著下降（见表4）。此外，方法依赖于3D点云输入，虽然性能更优，但获取和处理点云相比2D图像可能更复杂。</p>
+<p><strong>后续启示</strong>：MP1为机器人策略学习提供了一个高效且强大的新范式，证明了平均流在序列动作生成任务上的巨大潜力。其“一步生成”的特性使其非常适合于对实时性要求高的应用场景。分散损失的设计思路——在不引入推理开销的前提下提升表示质量——对于其他数据有限的强化学习或模仿学习任务也具有借鉴意义。未来的工作可以探索将平均流与更复杂的多模态条件（如语言指令）结合，或应用于更长期的序列预测任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中生成模型在扩散模型迭代采样慢与流式方法结构约束强之间的权衡问题，提出MP1方法。该方法结合3D点云输入与MeanFlow范式，通过“MeanFlow Identity”直接学习区间平均速度，无需额外一致性约束，实现单步网络评估生成动作轨迹；同时引入CFG增强可控性，并设计轻量级Dispersive Loss提升泛化能力。实验表明，MP1在Adroit和Meta-World基准上平均任务成功率比DP3和FlowPolicy分别提升10.2%和7.3%，平均推理时间仅6.8毫秒，比DP3快19倍、比FlowPolicy快近2倍。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2507.10543" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

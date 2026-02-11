@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VOTE: Vision-Language-Action Optimization with Trajectory Ensemble Voting - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>VOTE: Vision-Language-Action Optimization with Trajectory Ensemble Voting</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2507.05116" target="_blank" rel="noreferrer">2507.05116</a></span>
+        <span>作者: Yanzhi Wang Team</span>
+        <span>日期: 2025-07-07</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于大规模视觉-语言模型（VLM）构建的视觉-语言-动作（VLA）模型在机器人操控任务中展现出卓越性能。然而，现有VLA模型存在两大关键局限性：其一，推理时需生成大量动作token或进行耗时的扩散过程，导致高延迟和高训练成本；其二，对模型生成的动作序列利用不足，仅执行当前推理步骤的预测，丢弃了历史步骤中对同一时刻的预测，可能造成性能损失。本文针对这两个具体痛点，提出了一种轻量化的VLA训练框架和一个即插即用的推理优化策略。核心思路是：通过引入特殊token将整个动作块压缩为单一表示，大幅减少生成token数量以提升效率；同时，设计一种基于投票的轨迹集成策略，综合利用当前与历史预测来提升动作决策的鲁棒性和准确性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>VOTE方法包含一个高效的训练框架和一个用于推理的投票集成策略。</p>
+<p><img src="https://arxiv.org/html/2507.05116v4/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图1</strong>：VOTE整体流程。模型根据当前观测（图像和语言指令）并行生成后续N个动作，并通过集成投票策略确定当前要执行的精确动作。</p>
+</blockquote>
+<p><strong>整体框架</strong>：如<strong>图1</strong>所示，在训练阶段，模型学习根据当前图像观测和语言指令，通过一个特殊token <code>&lt;ACT&gt;</code> 来表征整个未来动作块。在推理阶段，模型同样输出该token，并由动作头解码出未来N步的连续动作。对于当前要执行的动作（时刻t），系统会收集当前及之前K次推理中对时刻t的预测，组成一个“委员会”，通过投票机制决定最终执行的动作。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>训练框架与特殊Token</strong>：在VLM的词表中引入一个特殊的<code>&lt;ACT&gt;</code> token。在训练时，将<code>&lt;ACT&gt;</code> token附加在语言指令序列末尾作为预测目标。模型只需生成这一个token，其最后一层的隐藏状态<code>h_&lt;ACT&gt;</code>被提取出来，并送入一个专门的动作头（Action Head）来预测连续的动作值<code>a_hat</code>。这避免了传统方法需要为动作的每个维度生成多个token的序列解码过程。</li>
+<li><strong>高效动作头</strong>：动作头采用瓶颈块（Bottleneck Block）结构的MLP，而非各向同性的设计。如公式(5)所示，每个块先对输入进行层归一化，然后通过上采样、SiLU激活、下采样和Dropout，最后与输入残差连接。这种设计能以更少的参数获得更好的性能。该动作头直接将隐藏状态映射为归一化的连续动作，省去了传统方法中耗时的动作分词器（action tokenizer）解码步骤。</li>
+<li><strong>训练目标</strong>：总损失<code>L_total</code>由两部分加权构成（公式(7)）：动作级的L1损失<code>L_action</code>（公式(6)），用于监督预测动作与真实动作的差异；以及token级的交叉熵损失<code>L_token</code>，用于确保模型能正确预测<code>&lt;ACT&gt;</code> token和指令token。论文通过实验确定最佳权重为动作损失权重0.99，token损失权重0.01。</li>
+<li><strong>投票集成策略</strong>：在推理时，为了决定时刻t执行的动作<code>a_t</code>，系统会考虑一个由当前预测<code>(a_t|o_t)</code>和之前K步历史预测<code>(a_t|o_{t-K})</code>， ..., <code>(a_t|o_{t-1})</code>组成的集合<code>H</code>。策略核心是计算当前预测与集合中每个候选动作的余弦相似度，并以阈值τ=0.5为界，将候选集划分为高相似度子集<code>M</code>和低相似度子集<code>N</code>（公式(9)-(10)）。最终执行的动作<code>a_hat_t</code>由得票数（即集合大小）更多的那个子集内所有动作的平均值决定（公式(8)）。该策略能动态过滤掉与主流不一致的异常预测，并给予包含最新观测的当前预测一个“默认票”，在多数历史预测反对当前可能错误的预测时，能转而采用更一致的历史预测。</li>
+</ol>
+<p><strong>创新点</strong>：</p>
+<ul>
+<li><strong>训练效率</strong>：用单一<code>&lt;ACT&gt;</code> token表示整个动作块，替代了传统VLA中<code>N*D</code>个动作token（N为块大小，D为动作维度），极大减少了生成token数量和序列解码步骤，降低了训练和推理成本。</li>
+<li><strong>推理鲁棒性</strong>：提出了新颖的投票式动作集成策略，动态地、有选择地融合历史预测信息，而非简单平均或仅依赖当前预测，提升了动作决策的稳定性和准确性。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在LIBERO和SimplerEnv两个模拟机器人操作基准上进行了评估。对比的基线方法包括OpenVLA、CogACT、SpatialVLA、π0等先进的VLA模型。训练使用AdamW优化器，并采用LoRA进行高效微调。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>SimplerEnv (WidowX机器人) 性能</strong>：如<strong>表1</strong>所示，VOTE在四个任务上的平均成功率达到<strong>58.3%<strong>，超越了CogACT (51.3%) 和 SpatialVLA (42.7%) 等SOTA方法。同时，在A6000 GPU上的单步推理延迟仅为</strong>78ms</strong>，相比OpenVLA (240ms) 实现了<strong>3.1倍</strong>的加速。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2507.05116v4/x2.png" alt="延迟分析"></p>
+<blockquote>
+<p><strong>图2</strong>：SpatialVLA、CogACT和OpenVLA的延迟分解。VLM解码（生成大量token）是主要开销，CogACT的扩散模块和SpatialVLA的额外视觉token也带来显著延迟。VOTE通过减少生成token数量直接针对此瓶颈。</p>
+</blockquote>
+<ol start="2">
+<li><strong>LIBERO 基准性能</strong>：如<strong>表2</strong>所示，VOTE在LIBERO的四个任务套件（Spatial, Object, Goal, Long）上取得了平均<strong>98.0%</strong> 的成功率，显著优于OpenVLA-OFT (95.3%) 和 π0 (94.2%) 等方法，展示了卓越的泛化能力。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2507.05116v4/x4.png" alt="LIBERO结果"></p>
+<blockquote>
+<p><strong>图4</strong>：LIBERO基准上的成功率对比。VOTE在所有任务套件上均达到最高或接近最高的成功率，尤其在要求长期规划的“Long”任务上优势明显（95.6% vs OpenVLA-OFT的90.7%）。</p>
+</blockquote>
+<ol start="3">
+<li><strong>消融实验与效率分析</strong>：<ul>
+<li><strong>动作头架构</strong>：<strong>表3</strong>对比了各向同性（Isotropic）和瓶颈（Bottleneck）动作头。在块大小（Chunk）为8时，瓶颈架构取得了最佳平均成功率（98.0% vs 96.9%）。</li>
+<li><strong>块大小影响</strong>：块大小从8增加到16时，两种架构的性能均略有下降，表明存在一个效率与性能的平衡点。</li>
+<li><strong>边缘设备部署</strong>：<strong>图5</strong>显示，在NVIDIA Jetson Orin边缘设备上，VOTE实现了<strong>46 Hz</strong>的高吞吐量，相比OpenVLA (1.2 Hz) 有<strong>39倍</strong>的加速，同时峰值VRAM占用降低超过50%，证明了其实际部署的可行性。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2507.05116v4/x5.png" alt="边缘设备性能"></p>
+<blockquote>
+<p><strong>图5</strong>：在边缘设备（NVIDIA Jetson Orin）上的性能对比。VOTE实现了极高的吞吐量（Hz）和大幅降低的延迟，同时显存占用显著减少，凸显了其部署优势。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种高效的VLA训练框架，通过引入特殊<code>&lt;ACT&gt;</code> token将动作预测压缩为单一token生成，显著降低了模型训练和推理的计算开销与延迟。</li>
+<li>提出了一种新颖的投票式轨迹集成策略，通过动态融合当前与历史动作预测，提升了动作执行的鲁棒性和任务成功率。</li>
+<li>实验表明，VOTE在多个基准上达到了最先进的性能，同时在边缘设备上实现了数量级级别的推理加速，为VLA模型的实用化部署提供了有效方案。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，动作头的设计（如瓶颈块）对最终性能有影响，需要仔细设计。此外，投票集成策略中的相似度阈值τ等参数是经验设定的。</p>
+<p><strong>启示</strong>：这项工作表明，通过重新设计动作表示和输出方式（从序列token到紧凑表示），可以大幅提升VLA模型的效率而不牺牲性能。同时，在推理阶段巧妙利用模型生成的历史信息（时间维度上的集成）是一种低成本提升策略稳定性的有效途径。这为后续开发更高效、更鲁棒的具身智能模型提供了新的思路，即同时优化“动作生成效率”和“动作利用策略”。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对当前视觉-语言-动作（VLA）模型存在的两大问题：生成大量令牌导致高推理延迟与训练成本、以及动作利用不足导致性能损失，提出了VOTE框架。该框架通过微调VLA模型生成更少动作令牌以提高并行性，并引入基于投票的轨迹集成策略，结合当前与历史动作预测以优化推理。实验表明，VOTE相比最先进VLA模型实现了更高成功率，推理速度比OpenVLA快39倍，在边缘平台达到46 Hz吞吐量，展现了卓越的实际可部署性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2507.05116" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

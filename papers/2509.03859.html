@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning Multi-Stage Pick-and-Place with a Legged Mobile Manipulator - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Learning Multi-Stage Pick-and-Place with a Legged Mobile Manipulator</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.03859" target="_blank" rel="noreferrer">2509.03859</a></span>
+        <span>作者: Wei Xu Team</span>
+        <span>日期: 2025-09-05</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于四足机器人的移动操作研究主要分为两类。一类专注于训练替代手工设计的全身控制器的低层运动策略，其在高层次任务学习中的应用潜力和挑战尚不明确。另一类则训练面向特定任务的操作策略，但通常局限于短视距、阶段数少的任务（例如移动到视野内的物体并拾取），或通过添加全局摄像头、假设目标始终可见等方式简化任务，限制了其在仅使用机载传感器且不预设目标可见性的通用场景下的适用性。现有方法难以处理真实场景中常见的、包含多个必须顺序达成的里程碑的长视距任务。</p>
+<p>本文针对长视距移动操作任务的学习挑战，提出了一个名为SLIM的系统。其核心思路是：在模拟器中完全训练一个分层策略，通过教师-学生框架和渐进策略扩展技术解决长视距学习难题，并利用一系列sim-to-real技术实现零样本真实世界部署，最终在仅使用机载传感器的多阶段拾放任务上达到近80%的成功率。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架采用分层结构，分为高层视觉运动策略和低层运动控制策略。低层策略负责四足运动，其训练完成后固定不变。高层策略负责基于视觉和语言指令进行任务决策，生成运动命令和机械臂控制信号。为高效训练高层策略，采用了教师-学生框架。</p>
+<p><img src="https://arxiv.org/html/2509.03859v3/figures/expert_nn_structure.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：分层框架与视觉运动策略流程。左侧：整体框架。高层策略接收语言指令和传感器输入，生成机械臂/夹爪控制信号和运动命令。运动命令传递给低层策略控制腿部关节。右侧：训练流程分为三个阶段：1. 低层运动策略RL训练；2. 高层教师策略（使用特权信息）RL训练；3. 高层学生策略（使用视觉等真实观测）通过行为蒸馏和RL进行训练。</p>
+</blockquote>
+<p><strong>核心模块一：教师策略（长视距任务学习）</strong><br>教师策略使用特权物体状态信息（如位置、朝向）学习解决完整任务，其核心挑战是应对长视距学习中的能力丧失/灾难性遗忘以及持续探索问题。为此，本文提出了任务分解与渐进策略扩展。</p>
+<ol>
+<li><strong>任务分解</strong>：将长视距任务 $\mathcal{T}$ 分解为 $K$ 个短视距子任务 ${\tau^{k}}_{k=1}^{K}$。以拾放任务为例，可分解为 {搜索，移动到，抓取，持物搜索，持物移动到，移动夹爪到，放入}。分解允许模块化设计奖励（如为“持物搜索”添加“手臂收回”奖励以保持良好观测视角），并便于集成行为先验（如操作时静止、搜索时旋转）。</li>
+<li><strong>渐进策略扩展</strong>：将子任务索引 $k$ 作为特权观测的一部分。教师网络 $\Pi$ 由一组结构相同的子网络 ${\pi^{k}}_{k=1}^{K}$ 组成，由子任务ID选通。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.03859v3/figures/progressive_pex_vs_standard.png" alt="教师网络结构"></p>
+<blockquote>
+<p><strong>图4</strong>：教师策略网络结构。左侧：单个教师策略子网络 $\pi^{k}$ 的结构。右侧：完整的教师网络 $\Pi$，根据子任务ID $k$ 激活对应的子网络 $\pi^{k}$。</p>
+</blockquote>
+<p>训练开始时，仅激活负责第一个子任务的网络 $\pi^{1}$。每当遇到新的子任务，就在活动策略集合中添加一个新的策略网络。这种渐进扩展方式为每个新阶段保证了完整的探索能力，并将已学会的技能封装在专用网络中，缓解了灾难性遗忘和能力丧失问题。教师策略使用多任务SAC变体进行训练。</p>
+<p><strong>核心模块二：学生策略（蒸馏引导的RL）</strong><br>学生策略是最终部署的策略，其输入为堆叠的以自我为中心的RGB图像、本体感知状态和语言指令，不依赖任何特权信息。训练时采用混合经验回放策略（以一定概率从教师或学生策略采样整条轨迹），并将SAC中的熵奖励替换为固定权重的蒸馏损失。该蒸馏损失鼓励学生模仿教师动作分布的模态，同时保持一定的探索性。</p>
+<p><strong>Sim-to-Real Gap 缩减技术</strong></p>
+<ol>
+<li><strong>动力学差距</strong>：采用PID机械臂控制、机械臂控制扰动（对关节目标添加随机噪声）、机械臂安装扰动（随机扰动安装位置和偏航角）以及物体位置扰动。</li>
+<li><strong>视觉差距</strong>：在感知模块与策略间使用视觉信息瓶颈（分割图和深度图）；颜色建模与随机化（在HSV空间基于真实样本进行随机化）；视觉增强，包括纹理、背景物体随机化以及图像像素和空间随机化。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.03859v3/figures/scene_tracking.png" alt="训练场景示例"></p>
+<blockquote>
+<p><strong>图6</strong>：带有随机化物体的训练场景示例。左：第三人称视角；右：鸟瞰视角。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：使用Unitree Go1四足机器人，顶部搭载WidowX-250S机械臂，手腕安装Intel RealSense D435相机。在模拟器中训练所有策略，并在真实世界零样本部署。<br><strong>基准任务</strong>：自定义的多阶段移动拾放任务。机器人需根据语言指令（如“将{颜色1}立方体放入{颜色2}篮子”），在仅使用手腕相机的情况下，顺序完成搜索目标立方体、移动到、抓取、持物搜索目标篮子、持物移动到、放入等多个阶段。场景分为“标准”布局（物体置于角落）和“杂乱”布局（物体聚集，分布外）。<br><strong>对比基线</strong>：包括“无手臂收回奖励”、“无扰动”、“无视觉增强”、“仅蒸馏”以及“人类遥操作”。<br><strong>评估指标</strong>：累积子任务成功率和任务完成时间（限时90秒）。</p>
+<p><img src="https://arxiv.org/html/2509.03859v3/figures/scene_topdown.png" alt="实验结果表"></p>
+<blockquote>
+<p><strong>表I</strong>：真实世界任务成功率和每回合时间（均值±标准差）。展示了各基线方法及SLIM在完整任务及各子任务上的累积成功率。SLIM在完整任务上达到78.3%的成功率，显著优于其他基线，且任务完成时间最短（43.8秒）。</p>
+</blockquote>
+<p><strong>关键结果</strong>：</p>
+<ol>
+<li>SLIM方法在完整任务上取得了 <strong>78.3% ± 5.8%</strong> 的成功率，平均每回合耗时 <strong>43.8 ± 6.0秒</strong>，性能全面优于所有消融基线。</li>
+<li>消融实验表明每个组件都至关重要：<ul>
+<li>“无手臂收回奖励”导致抓取后阶段（持物搜索、放入）性能急剧下降，完整任务成功率仅5%。</li>
+<li>“无扰动”导致放入成功率低（43.3%），说明sim-to-real扰动对精细操作的重要性。</li>
+<li>“无视觉增强”和“仅蒸馏”分别使完整任务成功率降至56.6%和50.0%，证明了视觉增强和RL损失的必要性。</li>
+</ul>
+</li>
+<li>与人类遥操作（75.0%成功率，65.5秒）相比，SLIM在成功率上略有优势，且速度更快。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.03859v3/figures/scene_topdown.png" alt="多场景部署"></p>
+<blockquote>
+<p><strong>图7</strong>：在多种室内外场景的部署结果。展示了SLIM策略在不同地形、背景和干扰物下的泛化能力。</p>
+</blockquote>
+<p><strong>泛化实验</strong>：在包括室内大厅、办公室、实验室及室外草坪等多种场景的“标准”和“杂乱”布局中进行了额外40次真实世界测试，验证了策略的良好泛化性能。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了SLIM，一个完整的、完全在模拟中训练并能零样本部署到真实世界的系统，用于解决四足移动机械臂的长视距多阶段操作任务，实现了近80%的真实世界成功率。</li>
+<li>针对长视距学习挑战，提出了结合任务分解的渐进策略扩展方法，有效解决了持续探索和灾难性遗忘问题。</li>
+<li>系统性地识别并应用了一系列关键的动力学与视觉sim-to-real迁移技术，确保了从模拟到真实世界的有效转移和跨场景泛化。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，为保持任务复杂度可控，使用了彩色立方体和篮子作为操作对象。这虽然便于建立基准，但与真实世界中形状、材质多样的物体相比仍有差距。</p>
+<p><strong>启示</strong>：本研究证明了通过精心设计的学习框架和sim-to-real技术，完全在模拟中训练解决复杂长视距移动操作任务的可行性。渐进策略扩展为解决更复杂的多阶段、多技能组合任务提供了新思路。未来的工作可探索更复杂的物体几何与物理特性、更开放的任务指令以及动态环境中的操作。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对腿式移动机械手在执行长序列、多技能任务时面临的挑战，提出了一套完整的解决方案。核心是SLIM系统，其关键技术包括：完全在模拟中训练的视觉运动策略、用于长任务序列学习的渐进式策略扩展，以及高效的模拟到现实迁移。该系统成功实现了包含搜寻、接近、抓取、运输和放置的多阶段拾放任务，在真实世界的广泛测试中取得了接近80%的成功率，并展现出良好的场景泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.03859" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

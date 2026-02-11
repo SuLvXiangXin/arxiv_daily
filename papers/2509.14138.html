@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SeqVLA: Sequential Task Execution for Long-Horizon Manipulation with Completion-Aware Vision-Language-Action Model - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>SeqVLA: Sequential Task Execution for Long-Horizon Manipulation with Completion-Aware Vision-Language-Action Model</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.14138" target="_blank" rel="noreferrer">2509.14138</a></span>
+        <span>作者: Yiming Feng Team</span>
+        <span>日期: 2025-09-17</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在复杂的机器人操作任务中，执行长视野任务需要精确的时间顺序。现有的视觉-语言-动作模型，如 π0，在连续低级控制方面表现出色，但缺乏判断子任务何时完成的内部信号。当这些模型被简单地串联用于长视野顺序目标时，它们会变得脆弱：可能过早切换、冗余停留，或将早期阶段的错误传播到下游，导致失败或执行顺序错误。经典的长视野控制方法通常通过层次化、规划或外部分离的终止判别器来施加结构，但终止信号通常与动作生成分离，仍然依赖于外部控制器或手动指定的中间目标。因此，一个关键挑战是如何赋予VLA生成模型一个紧密耦合的、学习到的信号，使其能够检测每个子任务何时完成，从而在没有外部控制的情况下自主触发下一阶段并自我调整依赖性子任务的链接。本文针对这一痛点，提出了SeqVLA，一个基于π0框架构建的、带有完成感知的VLA模型。其核心思路是：在π0架构上增加一个轻量级的完成检测头，使模型不仅能生成操作动作，还能从多模态上下文中推断子任务完成状态，从而实现自主的阶段转换。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>SeqVLA的整体框架是在π0模型基础上扩展一个并行的完成检测头。模型输入与π0相同，包括来自三个摄像头的多视角视觉观测、当前机器人关节状态以及语言提示。模型联合产生两个输出：用于当前子任务的连续机器人控制动作，以及指示子任务是否已完成的二元分类分数。完成信号随后触发序列中下一个子任务的转换，从而实现结构化的长视野执行。</p>
+<p><img src="https://arxiv.org/html/2509.14138v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：SeqVLA的架构。输入与π0相同。完成检测头以来自动作专家的特征层作为输入，生成任务完成概率。</p>
+</blockquote>
+<p>核心模块是<strong>完成检测头</strong>，它是一个二元分类器，将动作专家生成的特征表示转换为一个概率值 p。具体公式为 p = σ(W·F + b)，其中 W 和 b 是可学习参数，σ 是sigmoid激活函数，F ∈ ℝ¹⁰²⁴ 是动作专家生成的特征层。完成检测的损失使用二元交叉熵损失。总损失函数为 L_total = L_action + λ · L_completion，其中 L_action 是π0原有的动作预测损失，λ 设置为0.1，用于平衡完成损失的贡献。这种特征共享的架构保证了推理时的计算效率，同时利用了强大预训练骨干模型提取的信息。</p>
+<p>与现有方法相比，SeqVLA的创新点在于将子任务完成检测紧密集成到动作生成模型中，而非作为独立模块。它利用π0强大的预训练基础（SigLIP视觉编码器、Gemma-2B语言骨干和Gemma-300M动作专家），继承了鲁棒的低级控制和错误恢复能力，同时通过新增的机制获得了对子任务边界进行推理并强制执行正确排序的能力。</p>
+<p>在子任务执行过程中，SeqVLA在每一步推理中产生一个动作块和一个执行指示器 p ∈ [0,1]。p 接近1表示应继续当前子任务，接近0表示应终止并转换到下一个。当检测到子任务完成信号（p &lt; τ，τ=0.2）时，会触发一个转换过程：1) 立即停止执行机器人动作；2) 将机器人送回初始位姿以保证任务初始化的一致性；3) 通过切换任务提示开始下一个子任务。</p>
+<p><img src="https://arxiv.org/html/2509.14138v1/x4.png" alt="任务设置"></p>
+<blockquote>
+<p><strong>图4</strong>：任务设置。(a) 沙拉和糖果任务预期的长视野任务序列，显示所有子任务的顺序。(b),(c) 两个任务的实验设置可视化，其中绿框标记机械臂。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了一个14自由度的双手ALOHA机器人，配备了三个摄像头（中央顶部、左手腕、右手腕）。在两个不同的长视野任务上进行了评估：1) <strong>沙拉打包</strong>：包含7个不同的子任务（按顺序装入菠菜、凉拌卷心菜、肉丸、鸡肉、番茄、酱料杯，然后关闭容器）。2) <strong>糖果打包</strong>：包含4个不同的子任务，其中某些子任务（放置Kinder巧克力、放置Snickers棒）需要在一个序列中重复执行。</p>
+<p>对比的基线方法主要是原始的 π0 模型，该模型在完整的顺序演示上进行端到端的微调，以执行整个工作流程，没有特定的子任务监控机制。此外，本文还系统比较了SeqVLA的四种不同微调策略变体。</p>
+<p><img src="https://arxiv.org/html/2509.14138v1/x5.png" alt="微调策略"></p>
+<blockquote>
+<p><strong>图5</strong>：四种微调策略图示：(a) SeqVLA-J（联合微调，不冻结）、(b) SeqVLA-JF（联合微调，冻结主干）、(c) SeqVLA-S（顺序微调，不冻结）、(d) SeqVLA-SF（顺序微调，冻结主干）。</p>
+</blockquote>
+<p>关键实验结果如下：</p>
+<ol>
+<li><strong>微调策略比较</strong>：如图6所示，无论采用联合微调还是顺序微调，<strong>不冻结预训练主干网络</strong>的配置（SeqVLA-J和SeqVLA-S）在所有子任务中始终获得更高的成功率。这表明在微调期间允许主干网络适应对于将预训练表示转移到特定领域任务至关重要。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.14138v1/x6.png" alt="微调策略成功率对比"></p>
+<blockquote>
+<p><strong>图6</strong>：四种微调策略在沙拉和糖果两个长视野任务中所有子任务的平均成功率对比。结果显示不冻结主干的策略（SeqVLA-J和SeqVLA-S）表现更优。</p>
+</blockquote>
+<ol start="2">
+<li><strong>完成检测质量</strong>：在两种不冻结主干的策略中，<strong>联合微调（SeqVLA-J）</strong> 在完成检测方面表现更优。如图7所示，SeqVLA-J的预测更加果断和一致：在执行期间输出值更接近1，在子任务完成后则明显下降。而SeqVLA-S的输出分布更分散，方差更大。定量分析（表I）显示，SeqVLA-J在所有子任务上的分类输出熵值均低于SeqVLA-S，且其执行阶段和完成阶段输出分布的Kolmogorov–Smirnov统计值更高（所有p值&lt;0.001），表明联合微调使检测头能够利用与动作头共享的表征，从而产生更自信、统计上更可靠的子任务完成信号。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.14138v1/x7.png" alt="完成预测对比"></p>
+<blockquote>
+<p><strong>图7</strong>：顺序微调（SeqVLA-S）与联合微调（SeqVLA-J）策略的任务完成预测对比。左面板显示各子任务预测置信度的散点图，点越接近1表示继续执行的置信度越高。右面板显示不同置信度阈值下的成功率分布。联合微调模型（SeqVLA-J）获得了更高的置信度和成功率。</p>
+</blockquote>
+<ol start="3">
+<li><strong>长视野任务性能</strong>：最佳模型SeqVLA-J与基线π0在长视野任务上的对比如图10所示。尽管两者在某些子任务上因操作挑战而失败，但<strong>SeqVLA-J完全消除了顺序相关的失败</strong>。基线π0模型难以维持正确的任务序列，经常出现顺序错误或重复已完成的子任务（如图8记录所示），而SeqVLA-J则能正确管理任务序列（如图9记录所示）。在沙拉打包任务中，SeqVLA-J的总体成功率为71.4%，而π0为57.1%；在糖果打包任务中，SeqVLA-J为75.0%，π0为50.0%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.14138v1/x8.png" alt="基线π0执行记录"></p>
+<blockquote>
+<p><strong>图8</strong>：基线π0策略的任务执行记录。显示了在长序列执行中出现的顺序错误或重复问题。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.14138v1/x9.png" alt="SeqVLA-J执行记录"></p>
+<blockquote>
+<p><strong>图9</strong>：SeqVLA-J策略的任务执行记录。展示了正确的子任务顺序执行。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.14138v1/x10.png" alt="长视野任务成功率"></p>
+<blockquote>
+<p><strong>图10</strong>：在长视野任务上的成功率对比。SeqVLA-J在沙拉和糖果任务上的成功率均显著高于基线π0模型。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献有三个方面：1) <strong>集成完成检测头</strong>：将学习的任务完成检测头集成到π0模型中，使其能够从多模态上下文中推断子任务完成情况。2) <strong>探索有效微调策略</strong>：通过冻结π0的不同部分，确定了使模型可靠地按顺序生成正确子任务的最有效微调策略（联合微调且不冻结主干）。3) <strong>实证验证</strong>：在两个真实世界的顺序场景中评估了该框架，证明其相比强基线能带来显著更优的任务级性能，并消除了顺序相关的失败。</p>
+<p>论文自身提到的局限性在于，模型仍然可能因为真实的操作困难（如抓取失败）而失败，但不会因为任务排序错误而失败。这使执行行为更具可预测性。</p>
+<p>本研究对后续工作的启示在于，为VLA模型配备紧密耦合的完成感知能力是迈向可扩展顺序操作的关键一步。这种“完成感知”的范式可以集成到其他VLA架构中，以增强其在长视野、结构化任务中的鲁棒性和自主性。未来的研究可以探索更复杂的转换逻辑，或者将这种机制应用于更广泛的机器人任务领域。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对长视野机器人操作中，子任务完成检测错误易引发序列失败的核心问题，提出了SeqVLA模型。该模型在π0 VLA架构上增加轻量级完成检测头，形成双头设计以同步生成动作和自主触发子任务转换，并研究了联合/顺序微调、全微调/冻结骨干四种策略。实验在沙拉打包（七子任务）和糖果打包（四子任务）上表明，SeqVLA整体成功率显著优于基线π0，其中联合微调未冻结骨干策略的完成预测最可靠，能消除序列相关失败，实现鲁棒的长视野执行。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.14138" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

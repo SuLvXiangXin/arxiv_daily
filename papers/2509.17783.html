@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RoboSeek: You Need to Interact with Your Objects - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>RoboSeek: You Need to Interact with Your Objects</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.17783" target="_blank" rel="noreferrer">2509.17783</a></span>
+        <span>作者: Yatong Han Team</span>
+        <span>日期: 2025-09-23</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，大型语言模型和视觉语言模型在视觉理解和推理方面取得了显著进展，但它们通常在静态数据集上运行，缺乏将推理与具身交互结合起来的机制。从具身认知理论的角度看，这是一个根本性的局限。具身认知理论强调，智能体的认知过程（如任务理解和动作规划）并非独立于物理身体和环境，而是源于智能体身体、物体与周围环境之间的动态交互。对于长时程、灵巧的操作任务，这种通过与物体的实时交互来更新对物体功能（可供性）理解和动作策略的能力至关重要。</p>
+<p>现有的端到端视觉语言动作模型或结合了VLM规划器与独立运动求解器的方法，往往依赖于预先计算的任务解释和静态物体表示，忽略了通过实时交互更新可供性和动作策略的具身认知原则。本文针对现有方法在复杂物理世界中缺乏通过主动探索和交互进行持续学习的能力这一痛点，提出了一种交互驱动的具身动作执行新视角。核心思路是：受具身认知理论启发，提出一个动态的“注意力空间”来表示任务相关的物体可供性，并利用强化学习在该空间中训练执行器，再通过交互反馈（使用交叉熵方法）联合优化注意力空间和执行策略，最终通过一个硬件无关的real2sim2real管道实现从仿真到真实世界的鲁棒迁移。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RoboSeek的整体框架是一个闭环的real2sim2real管道，其核心是通过交互来优化基于关键点的视觉先验和低层动作执行。</p>
+<p><img src="https://arxiv.org/html/2509.17783v2/2.jpg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：RoboSeek方法总览。这是一个利用视觉先验、通过交互驱动方法执行稳定动作的闭环real2sim2real管道。流程包括：1）利用3D重建在仿真中复现真实环境；2）在仿真中，利用高层感知模型预测的初始关键点，通过强化学习训练具身执行器；3）使用交叉熵方法，根据任务奖励反馈迭代优化关键点分布（注意力空间）；4）将优化后的策略部署到真实机器人平台。</p>
+</blockquote>
+<p><strong>整体流程与问题定义</strong>：该方法将长时程操作任务定义为两阶段问题：1) 为每一步识别语义关键点；2) 以这些关键点为条件执行动作。它引入“注意力空间”的概念，即一个包含所有候选语义关键点的3D工作空间。目标是训练一个能在注意力空间中自由探索的具身执行器，并基于环境反馈优化注意力空间的分布，使其收敛到最优关键点。</p>
+<p><strong>核心模块一：基于RL的具身执行器</strong>。该模块使用高层感知模型（如Embodied-R1）给出的关键点初始预测。执行器的目标是以初始关键点为均值，能够移动到均匀分布内的任何区域。训练在IsaacLab仿真环境中使用近端策略优化算法进行。策略网络采用Transformer架构，其输入是机械臂当前关节角的正弦/余弦编码（避免角度周期性歧义）、历史动作以及从分布空间中随机采样的姿态的拼接。采样得到的关键点姿态作为第一个token，随后依次是各关节角度。一个六层、三个注意力头的Transformer用于学习关节与关键点之间的姿态差异。在Transformer输出的关键点token后，添加两个多层感知机动作头，分别输出PPO算法的Actor和Critic。Actor输出每个关节每步运动的相对角度。</p>
+<p>奖励函数经过精心设计，是多个项的加权和：</p>
+<ol>
+<li><strong>夹爪-关键点距离奖励</strong>：结合了欧氏距离项和两个不同尺度的tanh核，以提供粗粒度引导和细粒度精度塑造。</li>
+<li><strong>夹爪-关键点方向奖励</strong>：基于四元数的测地线距离。</li>
+<li><strong>关节动作奖励</strong>：惩罚过大的动作幅度、动作变化率和关节速度，以鼓励平滑控制。<br>为避免密集奖励导致策略陷入局部最优和早熟收敛，采用了课程学习策略，在训练过程中动态调整不同奖励项的权重。</li>
+</ol>
+<p><strong>核心模块二：基于CEM的注意力空间优化器</strong>。在训练好具身执行器后，使用交叉熵方法这一基于采样的优化算法来细化和优化注意力空间。</p>
+<p><img src="https://arxiv.org/html/2509.17783v2/image_.png" alt="CEM可视化"></p>
+<blockquote>
+<p><strong>图3</strong>：交叉熵方法可视化。CEM基于蒙特卡洛采样，在奖励函数的指导下迭代更新并收敛注意力空间的分布。</p>
+</blockquote>
+<p>具体而言，将注意力空间建模为高斯分布。在每次迭代中，从当前分布中采样多个候选关键点，针对每个候选点，使用训练好的执行器在任务特定奖励函数下执行多次轨迹，并计算平均回报。然后选择平均回报最高的前k个候选点（精英样本），用这些精英样本的均值和协方差更新高斯分布。此过程重复直至收敛（协方差范数低于阈值或达到最大迭代次数）。任务特定奖励函数（如开门任务中与门开启角度成正比）由大型语言模型根据提供的示例自动生成代码。</p>
+<p><strong>创新点与实现机制</strong>：与现有方法相比，RoboSeek的创新在于提出了一个<strong>闭环联合优化框架</strong>，将关键点表示（注意力空间）和低层控制策略通过交互反馈（CEM）进行共同优化。为实现从仿真到真实世界的迁移，采用了<strong>硬件无关的real2sim2real机制</strong>：首先使用3D重建方法将真实场景复现到仿真中；在RL训练阶段应用域随机化并向网络输入添加高斯噪声以提升鲁棒性；使用关节角的正余弦编码作为网络输入以减少仿真与现实差异；在奖励函数中加入对关节速度和动作幅度的惩罚以鼓励真实世界中的平滑安全轨迹。训练好的策略可直接部署到真实机器人上运行。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在Kinova Gen3和Agilex Piper机器人平台上进行，使用Intel RealSense相机进行视觉感知。高层感知模型使用Embodied-R1预测关键点，使用SLAT进行仿真中的3D重建。设计了八个专注于家庭场景的长时程复杂任务进行评估，包括烧烤、抽屉放置、烤箱放置、倒牛奶、舀麦片、倒食物等。每个任务在真实机器人上进行20次试验并报告成功率。</p>
+<p><strong>对比基线</strong>：对比了Rekep、IKER和Embodied-R1结合运动规划器的方法。由于环境限制，Rekep和IKER仅在仿真中评估。</p>
+<p><strong>关键实验结果</strong>：如表I所示，RoboSeek在多个真实机器人任务上取得了平均79%的成功率。图5的对比结果显示，在长时程任务上，RoboSeek显著优于所有基线方法（基线成功率低于50%）。例如，在“倒牛奶”任务中，基线方法或无法成功抓取杯子，或无法规划有效轨迹，而RoboSeek通过闭环校正行为提取任务相关关键点并执行有效低层动作，实现了稳定部署。</p>
+<p><img src="https://arxiv.org/html/2509.17783v2/3.jpg" alt="真实实验可视化"></p>
+<blockquote>
+<p><strong>图4</strong>：多个复杂真实世界实验的可视化。RoboSeek在多步骤任务中展示了高成功率和稳定控制，突显了其在真实物理环境中有效学习和操作的能力。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.17783v2/image.png" alt="成功率对比"></p>
+<blockquote>
+<p><strong>图5</strong>：RoboSeek与基线方法在不同任务上的成功率对比。RoboSeek在长时程任务上优势明显。</p>
+</blockquote>
+<p><strong>消融实验与分析</strong>：表II评估了sim2real迁移能力。尽管仿真中的成功率略高于真实世界，但差距很小。消融实验表明，<strong>不使用域随机化</strong>或<strong>不使用三角编码</strong>都会导致真实世界的性能大幅下降（例如，“烧烤”任务成功率从70%分别降至20%和30%），这验证了所提出的迁移机制（域随机化和三角编码）对于缩小sim2real差距至关重要。大多数失败源于对真实世界物理参数学习不准确，作者认为通过提高仿真物理保真度可以缓解。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个用于具身执行的<strong>注意力空间</strong>公式化方法，支持基于关键点的视觉先验学习及其通过任务驱动的闭环过程进行细化。</li>
+<li>开发了一个<strong>基于RL的具身执行器</strong>，并与CEM驱动的优化循环集成，实现了注意力空间和执行器控制策略的联合优化。</li>
+<li>设计了一个<strong>硬件无关的real2sim2real训练与迁移管道</strong>，在多个机器人平台和长时程操作任务上实现了鲁棒的sim-to-real性能，支持在真实世界部署前进行安全、可扩展的具身系统学习。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>与大型基础模型相比，本文使用的网络相对较小，限制了在复杂环境中的泛化能力。</li>
+<li>整体流程耗时且繁琐，无法实现快速的端到端响应。</li>
+<li>仿真环境无法完美捕捉复杂的物理交互，限制了完全解决通用操作任务的能力。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li>为将具身认知原则系统性地融入机器人学习提供了一个可操作的框架，强调了交互对于更新内部表示和策略的核心作用。</li>
+<li>验证了中等规模网络与精心设计的奖励、优化管道结合，在特定任务上可以取得优于纯规划或大型静态模型方法的性能。</li>
+<li>指出的局限性为未来方向提供了明确路径，例如探索与更大基础模型的结合、优化管道效率以降低延迟，以及开发更高保真度的物理仿真或更有效的现实世界在线学习技术。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>论文RoboSeek旨在解决长视野机器人操作任务中交互驱动学习的挑战，如序列决策、物理约束和感知不确定性。提出基于具身认知的RoboSeek框架，关键技术包括：通过3D重建在模拟中复制真实环境，利用强化学习和交叉熵方法训练策略优化视觉先验，并采用real2sim2real传输管道实现真实部署。在八个涉及序列交互、工具使用的任务上评估，平均成功率达到79%，显著优于基线（成功率低于50%），验证了方法的通用性和鲁棒性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.17783" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

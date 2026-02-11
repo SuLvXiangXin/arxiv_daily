@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning on the Fly: Rapid Policy Adaptation via Differentiable Simulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Learning on the Fly: Rapid Policy Adaptation via Differentiable Simulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.21065" target="_blank" rel="noreferrer">2508.21065</a></span>
+        <span>作者: Davide Scaramuzza Team</span>
+        <span>日期: 2025-08-28</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人学习领域，利用仿真训练控制策略已成为一种快速、安全且低成本的方法。然而，将仿真中习得的策略迁移到现实世界时，由于未建模的动力学和环境干扰，仿真与现实之间的差距（sim-to-real gap）会导致策略性能下降。目前的主流方法，如域随机化（Domain Randomization）和Real2Sim2Real流程，虽然能提升策略鲁棒性，但分别面临难以应对分布外（out-of-distribution）条件或需要昂贵离线重新训练的局限性。本文针对现有方法无法在部署后快速适应未知扰动的痛点，提出了一个新的视角：不再依赖部署前多样化的训练条件，而是专注于在现实世界中以在线方式快速适应已学习的策略。本文的核心思路是：通过集成在线残差动力学学习与基于可微分仿真的快速策略自适应，使策略能在数秒内“过拟合”到当前环境，从而实现对未知扰动的快速、高效适应。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文方法分为两个阶段：策略预训练和在线适应。预训练阶段使用一个低保真的解析动力学模型（不包含残差动力学）训练一个基础策略。在线适应阶段是核心，其整体框架由三个并行运行的组件构成：残差动力学学习、可微分仿真和策略适应。</p>
+<p><img src="https://arxiv.org/html/2508.21065v2/x3.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：提出的框架内部及三个交错组件间的信息流详细图示，包括残差动力学学习、可微分仿真和策略适应。这些组件在独立的ROS节点中跨多个线程并发运行。</p>
+</blockquote>
+<p><strong>整体流程</strong>：在真实世界部署中，策略持续输出控制指令，同时收集飞行轨迹存入滚动缓冲区。残差动力学网络利用缓冲区中的状态和动作数据持续更新。更新后的残差模型与解析模型结合，形成嵌入在可微分仿真中的混合动力学模型，用于策略的快速适应。这三个过程通过ROS在不同线程中并行执行，参数以序列化字节串高效交换。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>可微分混合动力学模型</strong>：系统状态演化由混合动力学模型 ( f_{\text{hybrid}} ) 描述，它由解析模型 ( f_{\text{a}} ) 和学习的残差模型 ( f_{\text{res}} ) 相加组合而成。解析模型是一个将四旋翼视为点质量的轻量级刚体动力学模型（公式1）。观测模型 ( h )、策略网络 ( \pi_{\phi} ) 和奖励函数 ( r ) 均被设计为确定、平滑且可微的，从而允许梯度在整个仿真中反向传播。</li>
+<li><strong>基于解析梯度的策略优化</strong>：策略学习的目标是最大化N步 rollout 内的累积奖励 ( \mathcal{R}(\phi) )（公式2）。利用可微分的动力学和奖励结构，可以通过时间反向传播（BPTT）获得目标函数的一阶解析策略梯度（公式3），并使用梯度上升更新策略参数 ( \phi )。</li>
+<li><strong>残差动力学学习</strong>：一个MLP网络 ( f_{\text{res}} ) 被训练来预测残差加速度 ( \bm{a}<em>{\text{res}} )，即真实系统测量的加速度与解析模型预测的理论加速度之差。损失函数 ( \mathcal{L}</em>{\text{res}} ) 包含均方误差（MSE）项和谱范数正则化项，后者有助于提升模型在训练分布之外的泛化能力。</li>
+<li><strong>交替优化方案</strong>：这是框架的关键创新之一。策略学习和残差模型学习被交错进行，确保每一批真实世界数据都能被有效地同时用于动力学细化和通过精细动力学仿真的控制改进。</li>
+<li><strong>关键设计选择</strong>：为了达到最大运行时效率，在反向传播计算策略梯度时，<strong>仅通过解析动力学模型进行回传，而不通过冻结的残差网络</strong>。这一设计借鉴了先前工作，能在不影响最终策略性能的前提下实现更快的运行速度。此外，作者探索了两种策略适应方式：更新所有网络参数的“完全适应”和仅更新添加的低秩模块的“低秩适应（LoRA）”。</li>
+</ol>
+<p><strong>与现有方法的创新点</strong>：</p>
+<ul>
+<li><strong>首次结合</strong>：首次展示了将可微分仿真器与实时残差学习耦合，在现实世界中实现快速、闭环策略自适应。</li>
+<li><strong>在线与高效</strong>：不同于需要大量离线数据收集和重新训练的Real2Sim2Real方法，本框架完全在线运行，适应过程仅需数秒。</li>
+<li><strong>梯度利用</strong>：与样本效率较低的经典RL方法（如PPO）相比，利用可微分仿真的一阶解析梯度实现了更快速、更样本高效的策略更新。</li>
+<li><strong>支持视觉输入</strong>：框架不仅支持基于全状态输入的控制，也支持直接从视觉特征（无需显式状态估计）进行端到端控制，这是经典控制方法难以实现的。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>平台</strong>：使用高保真四旋翼仿真器Agilicious（配备BEM空气动力学模型）以及真实的敏捷四旋翼平台进行评估。</li>
+<li><strong>任务</strong>：1) <strong>稳定悬停</strong>：分为接收全状态观测的状态控制，和仅接收历史视觉关键点像素坐标与动作的视觉控制。2) <strong>轨迹跟踪</strong>：跟踪圆形、8字形和五角星形三种参考轨迹（图4）。</li>
+<li><strong>扰动</strong>：在仿真中测试了无扰动、小扰动（[0.5, 0.5, 0.5] m/s²）和大扰动（[2, 2, 2] m/s²）三种条件，其中大扰动被设计为超出对比基线方法训练时域随机化范围的分布外条件。</li>
+<li><strong>对比基线</strong>：深度自适应跟踪控制（DATT）、自适应非线性模型预测控制（ℒ₁-MPC）以及未进行在线适应的预训练基础策略（Base DiffSim）。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2508.21065v2/x2.png" alt="轨迹图"></p>
+<blockquote>
+<p><strong>图2</strong>：使用本文方法进行真实世界轨迹跟踪适应的示例。策略在2次更新（10秒飞行）内快速学习，补偿了由预训练模型不匹配导致的大仿真-现实差距。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>悬停性能对比</strong>：如表I所示，在状态控制悬停任务中，本文方法在所有扰动条件下均表现出优越或可比性能。特别是在大扰动（分布外）条件下，本文方法将稳态误差降低至0.105 m，相比ℒ₁-MPC（0.552 m）降低了81%，相比DATT（0.231 m）降低了55%。</li>
+<li><strong>快速适应能力</strong>：如图5(a)所示，本文方法能在约30秒内（经过数次学习步骤）快速适应大扰动，将误差从初始的超过1.2米迅速降低并稳定在约0.1米。而基线方法由于策略固定，无法适应这种分布外扰动。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.21065v2/x5.png" alt="悬停误差对比"></p>
+<blockquote>
+<p><strong>图5</strong>：(a) 在大扰动下，本文方法（Ours）与基线方法的悬停位置误差随时间变化对比。本文方法通过在线适应迅速降低误差，而基线方法因策略固定无法适应。</p>
+</blockquote>
+<ol start="3">
+<li><strong>轨迹跟踪结果</strong>：在三种轨迹跟踪任务中，本文方法在适应后均取得了最低的平均跟踪误差。例如在8字形轨迹上，误差为0.062 m，显著低于DATT（0.153 m）和ℒ₁-MPC（0.116 m）。</li>
+<li><strong>视觉控制结果</strong>：在视觉特征悬停任务中，本文方法同样成功实现了在线适应。在附加质量（payload）变化和风扇造风扰动下，经过在线适应后，位置误差分别减少了59.2%和71.3%。</li>
+<li><strong>消融实验</strong>：<ul>
+<li><strong>残差动力学与策略适应</strong>：移除任一组件都会导致性能大幅下降，验证了二者结合的必要性。</li>
+<li><strong>梯度回传设计</strong>：实验证实，仅通过解析模型回传梯度（冻结残差网络）相比通过整个混合模型回传，能达到相似的策略性能，但计算速度显著更快。</li>
+<li><strong>LoRA vs. 完全适应</strong>：在大多数情况下，完全适应略优于LoRA，但LoRA提供了一种更参数高效的适应选择。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.21065v2/x6.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图6</strong>：消融研究。(a) 移除残差学习或策略适应都会导致性能下降。(b) 在梯度回传中冻结残差网络比回传通过整个混合模型更快，且性能相当。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个新颖的在线自适应学习框架，首次将可微分仿真与实时残差动力学学习相结合，实现了现实世界中数秒内完成的快速、闭环策略自适应。</li>
+<li>设计了一种交替优化方案，使策略学习和模型学习能够交错进行，高效利用在线收集的每一批数据同时提升模型保真度和控制性能。</li>
+<li>框架支持基于状态和基于视觉特征（无需显式状态估计）的输入，并通过仿真和真实世界实验验证了其在应对大范围未知扰动方面的有效性，性能超越经典和基于学习的控制器。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，框架目前依赖于GPU进行快速的可微分仿真和梯度计算，这可能会限制其在资源极度受限的边缘设备上的部署。</p>
+<p><strong>启示</strong>：这项工作展示了通过“在线快速过拟合”来应对仿真-现实差距和分布外扰动的可行性，减少了对可能无法涵盖真实世界复杂性的域随机化的依赖。它为机器人学习领域提供了一条新路径，即利用可微分仿真提供的精确梯度，实现比传统RL更高效的实时策略适应，未来可能应用于更多需要快速在线适应的动态机器人任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对模拟到现实迁移中的动力学差异问题，提出了一种基于可微分模拟的在线自适应学习框架。该方法通过残差动力学学习实时捕获未建模干扰（如载荷变化、风扰），并在可微分模拟中利用梯度反向传播快速更新策略，实现秒级在线适应。实验表明，在四旋翼抗干扰控制中，该方法相比ℒ₁-MPC和DATT分别降低悬停误差达81%和55%，且无需显式状态估计即可实现鲁棒的视觉控制。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.21065" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

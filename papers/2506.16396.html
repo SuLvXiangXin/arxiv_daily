@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>GoalLadder: Incremental Goal Discovery with Vision-Language Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>GoalLadder: Incremental Goal Discovery with Vision-Language Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.16396" target="_blank" rel="noreferrer">2506.16396</a></span>
+        <span>作者: Shimon Whiteson Team</span>
+        <span>日期: 2025-06-19</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，利用大型预训练语言模型（LLMs）从自然语言指令中提取奖励函数以指导强化学习（RL）是一个新兴方向。现有方法主要分为两类：1）<strong>基于嵌入的方法</strong>（如VLM-RM），使用视觉语言模型（VLM，如CLIP）将任务描述和视觉观察对齐到嵌入空间，以余弦相似度作为奖励。但其奖励函数噪声大，且需为每个观察计算嵌入，效率低下。2）<strong>基于偏好的方法</strong>（如RL-VLM-F），提示VLM比较智能体行为片段相对于语言描述的优劣，并利用收集的偏好数据训练奖励函数。其奖励噪声较小，但仍因VLM比较轨迹时出错而产生显著噪声，且需要大量VLM查询来训练泛化良好的奖励函数。</p>
+<p>本文针对上述两个关键痛点——<strong>对噪声VLM反馈的鲁棒性</strong>和<strong>使用VLM反馈的查询效率</strong>——提出了新视角。核心思路是：<strong>不直接学习奖励函数，而是利用VLM增量式地发现并排序能推进任务完成的环境状态（候选目标），并引导智能体向当前最优目标在学习的嵌入空间中靠近。</strong></p>
+<h2 id="方法详解">方法详解</h2>
+<p>GoalLadder的整体框架是一个循环过程，包含收集、发现、排序和训练四个阶段。输入是自然语言任务描述<code>l</code>和视觉观察<code>o_t</code>，输出是驱动智能体完成任务的策略。其核心是维护一个候选目标缓冲区<code>B_g = {g_1, g_2, ...}</code>，每个候选目标<code>g_i</code>包含状态图像<code>o_i</code>和一个基于ELO的效用评分<code>e_i</code>。</p>
+<p><img src="https://arxiv.org/html/2506.16396v2/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：GoalLadder方法整体框架。(1-2) 智能体使用当前策略收集轨迹，并均匀采样观察与当前最优候选目标比较。(3) 若新观察更优，则加入候选目标缓冲区。(4) 对缓冲区中的候选目标进行两两比较，并更新其ELO评分。(5-6) 周期性地将当前最高评分目标设为新的目标状态，奖励定义为当前观察与目标在嵌入空间中的负距离，并以此训练RL智能体。过程随后重复。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><p><strong>候选目标发现</strong>：为解决VLM查询能力有限的问题，此模块负责筛选有潜力的状态进入缓冲区。具体地，从最新轨迹中随机采样一个观察<code>o_j</code>，与当前评分最高的候选目标<code>g*</code>的图像<code>o*</code>一起，由VLM判断哪一个更接近语言描述的任务目标<code>l</code>。VLM输出<code>y ∈ {-1,0,1}</code>，仅当<code>y=1</code>（<code>o_j</code>更优）时，<code>o_j</code>作为新候选目标以初始评分加入缓冲区。这确保了缓冲区专注于高质量候选目标。</p>
+</li>
+<li><p><strong>候选目标排序</strong>：此模块旨在获得候选目标真实效用的稳健估计。从缓冲区中采样一对候选目标<code>(g_i, g_j)</code>，再次查询VLM进行比较。<strong>创新性地引入了基于ELO的评分系统</strong>来更新评分。给定当前评分<code>e_i</code>和<code>e_j</code>，预期得分<code>E_i = 1 / (1 + 10^{(e_j - e_i)/C})</code>。根据VLM比较结果<code>S_i ∈ {-1, 1, 0}</code>（输、赢、平），按公式<code>e_i ← e_i + T(S_i - E_i)</code>更新评分（<code>g_j</code>同理）。常数<code>C</code>控制评分差异敏感度，<code>T</code>控制更新速度。此系统能渐进地吸收噪声比较，自适应调整评分，最终收敛到一个与语言目标对齐的稳定目标层次结构。</p>
+</li>
+<li><p><strong>奖励函数定义</strong>：此模块将排序结果转化为RL信号。将当前最高评分目标<code>g*</code>的图像<code>o*</code>视为对真实目标的最佳估计。<strong>关键创新在于奖励定义在学习的嵌入空间中</strong>。使用变分自编码器（VAE）目标（公式1）训练一个视觉特征提取器（编码器<code>ψ</code>），将观察<code>o_t</code>映射为潜在向量<code>z_t</code>。该编码器在智能体收集的未标记观察数据上训练，学习捕获环境视觉特征。奖励定义为当前状态嵌入<code>z_t</code>与目标状态嵌入<code>z*</code>的负欧氏距离：<code>R(s_{t-1}, a_{t-1}) = -d(z_t, z*)</code>。因此，智能体被激励去最小化与当前最优目标的距离。随着训练进行，目标<code>g*</code>会周期性更新（每<code>L=5000</code>环境步），并重新标注经验回放缓冲区中的所有转移奖励。</p>
+</li>
+</ol>
+<p>与现有方法相比，GoalLadder的创新点具体体现在：1）<strong>增量式目标发现与排序</strong>，而非直接学习奖励或使用所有观察；2）<strong>ELO评分系统</strong>，提供对噪声VLM反馈的鲁棒性；3）<strong>在自监督学习的嵌入空间中定义距离奖励</strong>，使得奖励能泛化到未见过的状态，减少了对大量精确反馈的依赖。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在2个OpenAI Gym经典控制环境（CartPole, MountainCar）和5个Metaworld机器人操作环境（Drawer Close, Drawer Open, Sweep Into, Window Open, Button Press）中进行测试。使用Gemini 2.0 Flash作为VLM主干，SAC作为RL算法。未对环境进行任何特殊修改以帮助VLM。</p>
+<p><strong>对比基线</strong>：1) <strong>Oracle</strong>：使用环境真实奖励的强基线；2) <strong>VLM-RM</strong>：基于CLIP嵌入相似度的奖励；3) <strong>RoboCLIP</strong>：基于视频-语言模型S3D的文本版本；4) <strong>RL-VLM-F</strong>：使用VLM偏好标签训练奖励函数的方法（使用与GoalLadder相同的VLM和反馈频率）。</p>
+<p><strong>关键实验结果</strong>：<br><img src="https://arxiv.org/html/2506.16396v2/x4.png" alt="性能对比"></p>
+<blockquote>
+<p><strong>图4</strong>：GoalLadder与基线在各环境上的成功率对比。GoalLadder在所有任务上平均最终成功率约95%，而最佳竞争对手RL-VLM-F仅约45%。GoalLadder性能接近甚至在某些任务（如Drawer Open）上超过了使用真实奖励的Oracle智能体。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.16396v2/x2.png" alt="目标发现过程"></p>
+<blockquote>
+<p><strong>图2</strong>：训练过程中MountainCar和Metaworld任务的最优候选目标演变。尽管VLM反馈有噪声，最优目标始终能升至排名顶部，表明GoalLadder能有效发现接近真实任务目标的状态。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.16396v2/x3.png" alt="评分演变"></p>
+<blockquote>
+<p><strong>图3</strong>：Window Open任务中候选目标评分随时间变化。初期（约5万步前）无明显优胜者；一旦发现明确优胜目标（约5万步处），GoalLadder迅速将其识别为最优目标。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.16396v2/x5.png" alt="缓冲区可视化"></p>
+<blockquote>
+<p><strong>图5</strong>：Drawer Open任务中，训练不同阶段候选目标缓冲区的可视化。候选目标按ELO评分从左到右排列。可见缓冲区大致按任务完成进度排序，且随着训练进行，逐渐被更好的状态填充。</p>
+</blockquote>
+<p><strong>消融实验与效率分析</strong>：实验表明GoalLadder能有效发现最优目标。在查询效率方面，GoalLadder在所有Metaworld任务上平均仅需约4500次VLM查询即可学会任务。相比之下，使用真实偏好标签的偏好学习方法PEBBLE在相同任务上达到同等性能需要约15000个偏好标签。RL-VLM-F在使用与GoalLadder相同的反馈频率时难以学习复杂任务，而VLM-RM则几乎完全失败。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>GoalLadder框架</strong>，通过VLM增量式发现并排序候选目标状态，而非直接学习奖励函数。</li>
+<li>设计了<strong>基于ELO的评分系统</strong>，显著增强了对噪声VLM反馈的鲁棒性。</li>
+<li>提出了在<strong>自监督学习的视觉嵌入空间中定义距离奖励</strong>的方法，使奖励能泛化到未见状态，大幅降低了对大量精确VLM反馈的依赖，提升了查询效率。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>假设任务进度或成功可从单张图像中识别，限制了方法在目标动态变化环境中的应用（但可扩展至视频设置）。</li>
+<li>奖励依赖于视觉特征相似性，在某些场景下这可能只是底层状态相似性或任务进度的有限代理。</li>
+<li>使用VLM的成本限制了在更多环境上进行评估的可行性。</li>
+</ol>
+<p><strong>后续研究启示</strong>：</p>
+<ol>
+<li>将增量目标发现与排序的思想扩展至视频或多模态输入，以处理动态目标任务。</li>
+<li>探索更先进的视觉嵌入技术（如更具语义感知的表示）来改进距离度量。</li>
+<li>研究如何进一步降低对大型VLM的查询依赖，或开发更高效的反馈利用机制。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出GoalLadder方法，旨在解决从单一自然语言指令中为视觉环境下的强化学习智能体训练奖励函数的难题。该方法利用视觉语言模型，通过增量式目标发现机制，识别并排序任务进展状态；其关键技术包括基于ELO的评级系统以减少VLM反馈噪声，以及在无标注视觉数据上学习的嵌入空间中以最小化与最高排名目标的距离作为训练目标。实验表明，GoalLadder在经典控制与机器人操作环境中显著优于现有方法，平均最终成功率可达约95%，而最佳竞争对手仅为约45%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.16396" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

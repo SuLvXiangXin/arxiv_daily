@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RwoR: Generating Robot Demonstrations from Human Hand Collection for Policy Learning without Robot - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>RwoR: Generating Robot Demonstrations from Human Hand Collection for Policy Learning without Robot</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2507.03930" target="_blank" rel="noreferrer">2507.03930</a></span>
+        <span>作者: Hao Dong Team</span>
+        <span>日期: 2025-07-08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>模仿学习在机器人操作领域取得了显著进展，但其性能高度依赖于高质量演示数据的获取。当前主流的数据收集方法主要分为两类：一类是基于机器人的遥操作，需要物理机器人和熟练操作员，可扩展性差；另一类是直接采集人手演示，但面临人手演示与机器人部署时观测之间存在视觉域差距的关键挑战。现有解决视觉差距的方法（如AR渲染或基于规则的后处理）依赖于启发式策略，难以扩展且泛化能力有限。</p>
+<p>本文针对“如何在不使用机器人硬件的情况下，高效收集可用于策略学习的高质量机器人演示”这一痛点，提出了利用生成模型自动桥接视觉观测差距的新视角。核心思路是：通过手腕相机采集人手演示视频，训练一个“人手到夹爪”的生成模型，将人手演示自动转换为机器人夹爪演示，从而为策略学习提供高质量、对齐的机器人演示数据。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RwoR的整体流程分为三个阶段：人手演示采集、生成模型训练和策略模型训练。给定人手演示视频，系统首先提取对应的夹爪SE(3)位姿作为动作，同时利用训练好的生成模型将人手视频帧转换为机器人夹爪视频帧，最终使用生成的（图像，动作）配对数据训练机器人策略模型。</p>
+<p><img src="https://arxiv.org/html/2507.03930v2/x2.png" alt="整体流程"></p>
+<blockquote>
+<p><strong>图2</strong>：方法整体流程图。上方展示了从人手演示生成机器人演示并进行策略训练的完整流程。下方红圈和绿圈分别突出了原始配对数据中因视角和轨迹差异导致的观测未对齐问题。</p>
+</blockquote>
+<p><strong>核心模块一：配对数据采集与预处理</strong><br>为了训练生成模型，首先需要收集配对的（人手，机器人夹爪）演示数据。作者采用UMI手持夹爪方案来采集机器人夹爪演示，同时用佩戴在手腕的GoPro相机采集同一任务的人手演示。由于采集过程存在时间戳错位，作者使用时间循环一致性学习（TCC）模型在嵌入空间中对齐两段视频的帧。然而，对齐后同一时间戳的人手帧和夹爪帧在观测上仍存在不一致（如图2红绿圈所示），直接用于训练会干扰生成模型。为此，作者设计了一个数据预处理策略：首先根据夹爪与物体的相对位置自动将每一帧分类为“交互阶段”或“非交互阶段”；然后使用SAM2分割出人手帧的背景和夹爪帧的前景（夹爪及交互物体）；最后利用Inpaint Anything将夹爪帧的前景物体修补到人手帧的背景上，形成与人手演示背景一致、仅前景被替换的“真实”夹爪图像作为生成模型的监督信号。</p>
+<p><strong>核心模块二：人手到夹爪的生成模型</strong><br>生成模型采用基于扩散模型的InstructPix2Pix（IP2P）。模型以人手图像和描述任务的文本（如“将手变成夹爪。夹爪正拿着{物体名}”）为条件，学习生成对应的机器人夹爪图像。损失函数为标准扩散去噪损失，旨在预测添加到噪声潜在空间中的噪声。通过训练，模型学会了专注于前景区域的转换，可靠地将人手演示转换为机器人夹爪演示。</p>
+<p><strong>核心模块三：策略训练数据准备与学习</strong><br>对于动作提取，沿用UMI的流程：利用ORB-SLAM3和GoPro IMU数据重建场景并追踪相机6DoF位姿，通过固定的变换矩阵计算指尖（即夹爪）的6DoF位姿作为动作。夹爪开合状态根据人手与物体是否发生交互来判断。对于观测（图像），则使用训练好的生成模型将人手视频逐帧转换为夹爪视频。最终，策略模型（本文使用Diffusion Policy）以生成的夹爪图像序列、提取的6DoF末端执行器位姿和夹爪状态为输入，输出预测的动作。</p>
+<p>与现有方法相比，创新点主要体现在：1) 提出了一套系统的、可扩展的从人手视频生成机器人演示的流程；2) 设计了针对性的数据预处理策略（阶段分类、背景-前景分离与重组）来解决配对数据中的观测错位问题，为生成模型提供高质量的监督信号；3) 整个流程无需机器人硬件参与数据收集，降低了门槛。</p>
+<p><img src="https://arxiv.org/html/2507.03930v2/x3.png" alt="生成模型训练数据集"></p>
+<blockquote>
+<p><strong>图3</strong>：生成模型训练所用的自收集配对数据集可视化。包含了不同场景、动作和多种家居物品的交互。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在真实机器人部署评估中，使用Franka Research 3机器人和3D打印的UMI夹爪，在9个操作任务上进行测试。每个任务收集50个人手演示用于训练生成模型和策略，并在训练工作空间内进行15次试验以成功率作为评估指标。生成模型质量的评估则在包含200个配对演示、15000帧的自收集数据集上进行，使用PSNR和SSIM指标。</p>
+<p><strong>基线对比</strong>：主要与UMI（使用手持夹爪直接收集机器人演示）进行对比，将其视为性能上界。同时设置了一个替代基线（Alter.），该基线使用简单的基于规则的纹理映射方法（移除手部并粘贴夹爪纹理）来生成训练数据。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>真实机器人性能</strong>：如表I所示，使用RwoR生成数据训练的策略，在9个任务上的平均成功率与UMI上界非常接近（例如，Slide任务0.78 vs. 0.82， Pour Water任务0.93持平），显著优于规则纹理映射的替代基线。这表明生成的机器人演示质量足以支持训练出高性能策略。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2507.03930v2/x4.png" alt="真实世界执行可视化"></p>
+<blockquote>
+<p><strong>图4</strong>：从真实机器人视角看到的智能体执行过程关键帧可视化。展示了需要连续操作的“桌面重排”任务。</p>
+</blockquote>
+<ol start="2">
+<li><strong>生成图像质量与消融实验</strong>：生成模型在测试帧上达到了PSNR 33.80和SSIM 0.86（表II Row 3）。消融实验表明，若直接使用时间戳对齐但观测未处理的原始夹爪图像作为真值（Row 1），性能显著下降（PSNR下降2.33）；若不区分交互阶段，始终从夹爪图像保留夹爪、从人手图像保留物体和背景（Row 2），性能也有下降。这验证了所提数据预处理策略（解决观测错位和区分交互阶段）的有效性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2507.03930v2/x5.png" alt="生成模型性能可视化"></p>
+<blockquote>
+<p><strong>图5</strong>：生成模型的输入（人手图像）与输出（预测的UMI夹爪图像）可视化对比，展示了良好的转换效果。</p>
+</blockquote>
+<ol start="3">
+<li><strong>泛化能力研究</strong>：如表III和图6所示，生成模型展现出良好的泛化能力。对于生成模型训练集中未出现的<strong>动作类型</strong>（如“旋转积木”、“拆开积木”），用其生成数据训练的策略仍能取得高成功率（0.80, 0.83）。对于未出现的<strong>物体实例</strong>（如倒水任务中的“黄色杯子”），策略成功率（0.87）与见过实例（“白色杯子”）持平。这表明生成模型学习的是“手到夹爪”的前景转换，而非记忆特定动作或物体，因此具有良好的泛化性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2507.03930v2/x6.png" alt="生成模型泛化能力可视化"></p>
+<blockquote>
+<p><strong>图6</strong>：生成模型对未见过的动作类型（如旋转、拆开）和物体实例的泛化能力可视化。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 提出了RwoR系统，一种仅需人手演示即可为策略学习生成高质量机器人演示的高效数据收集框架；2) 设计了一套包含时间戳对齐和关键观测对齐策略的数据预处理流程，为训练可靠的“人手到夹爪”生成模型奠定了基础；3) 通过大量真实机器人实验验证了生成演示的有效性，并证明了该方法在动作类型和物体实例上的良好泛化能力。</p>
+<p><strong>局限性</strong>：论文提到生成模型的训练依赖于一个规模有限（200个配对演示）的自收集数据集。虽然展示了泛化性，但在更复杂、多样化的场景和物体上的表现仍需进一步探索。</p>
+<p><strong>后续启示</strong>：本研究展示了生成模型（特别是扩散模型）在桥接机器人学习不同视觉域之间的强大潜力。该方法大幅降低了收集机器人演示数据的硬件门槛和操作难度，为大规模、低成本获取机器人训练数据开辟了新途径。未来的工作可以探索如何进一步减少对配对数据的需求，或者将生成模型与其他形式的演示（如视频、语言描述）相结合。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决模仿学习中直接使用人类手部演示训练机器人策略时，存在的视觉观察差异问题。提出RwoR方法，通过手腕佩戴GoPro鱼眼摄像头采集人手演示，并训练一个**手-夹持器生成模型**，将人手演示自动转换为机器人夹持器演示。该方法采用专门的数据预处理策略确保时序与观察对齐，从而**无需真实机器人即可生成用于策略训练的高质量机器人演示**。实验表明，该方法生成的演示质量高，数据收集高效实用，能实现稳健的机器人操作性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2507.03930" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

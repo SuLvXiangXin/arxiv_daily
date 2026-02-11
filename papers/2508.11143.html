@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Actor-Critic for Continuous Action Chunks: A Reinforcement Learning Framework for Long-Horizon Robotic Manipulation with Sparse Reward - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Actor-Critic for Continuous Action Chunks: A Reinforcement Learning Framework for Long-Horizon Robotic Manipulation with Sparse Reward</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.11143" target="_blank" rel="noreferrer">2508.11143</a></span>
+        <span>作者: Yu-Gang Jiang Team</span>
+        <span>日期: 2025-08-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，强化学习（RL）算法在从在线经验中学习连续动作控制方面取得了显著进展，但这些方法主要擅长于关闭抽屉或门等短视野任务。对于包含多个子任务、需要精确操作的长视野机器人操作任务，现有RL方法则普遍表现不佳。完成此类任务需要执行一长串连贯的动作，极大地扩展了状态-动作探索空间，且稀疏奖励（仅在任务成功时提供正反馈）进一步加剧了学习挑战，导致自主探索效率低下。</p>
+<p>动作分块是机器人操作中一种有前景的范式，模仿学习（IL）方法（如ACT、Diffusion Policy）已成功利用此范式克隆复杂的连续动作序列。然而，IL方法的性能受限于专家演示，存在分布偏移问题，无法通过在线交互改进策略。将分块范式引入RL面临巨大挑战：随着块长度增加，探索空间复杂度呈指数增长，导致探索和价值估计困难，常引发Q值爆炸和训练不稳定。现有工作如CQN-AS通过离散化动作块库来解决，但牺牲了精度和灵活性；其他工作尝试通过复杂蒸馏流程生成连续动作块，但依赖大规模离线数据集且计算昂贵。因此，领域内存在一个关键空白：需要一个能直接、数据高效地利用连续域动作分块潜力的RL框架。</p>
+<p>本文针对长视野、稀疏奖励的机器人操作任务，提出了一种名为AC3（Actor-Critic for Continuous Chunks）的新RL框架。其核心思路是：在DDPG风格的框架基础上，直接学习生成连续动作块，并通过针对演员和评论家的稳定化机制（演员的不对称更新规则和评论家的块内n步回报与自监督内在奖励模块），实现数据高效且稳定的学习。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>AC3是一个离策略的演员-评论家框架，旨在学习一个能生成连续动作序列的策略。其整体流程遵循三个层次：1）构建基本的AC3智能体（演员输出连续动作块，评论家评估块的价值）；2）采用块内n步回报稳定评论家训练，同时限制演员仅使用成功轨迹的转移进行更新；3）引入自监督奖励塑形模块，以动作块为单位设置锚点，为评论家提供相对密集可靠的内在奖励。</p>
+<p><img src="https://arxiv.org/html/2508.11143v1/x2.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图2</strong>：AC3的整体框架。首先，使用专家数据通过自监督学习预训练一个目标网络，用于在后续在线交互中提供内在奖励。在线交互时，演员输出连续动作块，执行后将新经验存入回放缓冲区。训练时，评论家通过块内n步TD损失更新，而演员仅从成功轨迹缓冲区学习，以促进稳定的策略改进。</p>
+</blockquote>
+<p><strong>演员：连续动作分块策略</strong>。策略网络 $\pi_{\theta}$ 直接预测一个固定长度为 $C$ 的连续动作块 $\mathcal{A}_t \in \mathbb{R}^{C \times d_a}$。状态 $s_t$ 是机器人本体感知状态特征与当前RGB视觉特征的拼接。策略网络采用简单的MLP+GRU架构以捕获动作序列中的时序依赖并保证计算效率。</p>
+<p><strong>评论家：块内n步Q值估计</strong>。评论家 $Q_{\phi}(s_t, \mathcal{A}_t)$ 评估从状态 $s_t$ 开始执行整个块 $\mathcal{A}_t$ 后的期望回报。为避免直接评估整个块导致的噪声大和无法提供细粒度反馈的问题，AC3使用n步TD目标来更新评论家。目标值 $y_t$ 的计算如公式(2)所示，借鉴了TD3的思想，使用两个目标评论家并取其最小值以抑制高估偏差。评论家网络同样采用MLP+GRU架构。</p>
+<p><strong>训练与更新</strong>。从回放缓冲区 $\mathcal{B}$ 中采样转移 $\tau = (s_t, \mathcal{A}<em>t^{\text{exp}}, r</em>{t:t+n-1}, s_{t+n})$ 进行训练。</p>
+<ul>
+<li><strong>评论家更新</strong>：通过最小化当前Q值预测与目标值 $y_t$ 之间的MSE损失来更新参数 $\phi$，损失函数如公式(3)所示。</li>
+<li><strong>演员更新</strong>：演员的更新被严格限制在由成功轨迹定义的“可信区域”。首先构建一个成功轨迹缓冲区 $\mathcal{B}_{\text{succ}}$，其中过滤了来自 $\mathcal{B}$ 的成功转移。演员的损失是行为克隆（BC）损失和Q损失（最大化Q值）的加权组合，如公式(4)-(6)所示。这种<strong>不对称更新规则</strong>确保了策略优化仅在价值函数最可靠的区域进行，避免了因探索不确定状态而导致的策略退化。</li>
+</ul>
+<p><strong>自监督奖励塑形</strong>。为缓解稀疏奖励下评论家学习困难的问题，AC3引入了一个自监督奖励塑形模块。首先，在离线演示数据 $\mathcal{D}<em>{\text{demo}}$ 上，使用对比学习（三元组损失，公式7）预训练一个与状态编码器结构相同的目标网络 $G</em>{\omega}(\cdot)$，以学习成功轨迹的关键特征潜在空间。<br>在线策略学习期间，基于“锚点”引入半稠密奖励机制。锚点以固定时间间隔 $K$（例如 $K=C$）设置在探索轨迹上，仅当时间步 $t$ 是锚点时（即 $t \pmod{K} = 0$）才计算内在奖励。这自然与基于块的AC3策略对齐，为整个动作块提供内在奖励信号。内在奖励 $r_{\text{int}}(s_t)$ 的计算基于当前状态 $s_t$ 与所有演示状态的最小潜在距离 $d(s_t)$（公式8），具体规则如公式(9)所示：当 $t$ 是锚点且 $d(s_t)$ 小于预定义的边界阈值 $m$ 时，给予一个小的正奖励 $a$（实验中设为0.1），否则为0。</p>
+<p><strong>与现有方法相比的创新点</strong>：</p>
+<ol>
+<li><strong>直接学习连续动作块</strong>：不同于CQN-AS的离散化，AC3的演员直接输出高维连续动作序列，实现了更灵活和精确的控制。</li>
+<li><strong>双重稳定化机制</strong>：<ul>
+<li><strong>演员的不对称更新</strong>：仅从成功轨迹（包括专家演示和成功的在线回合）学习，将策略优化约束在可信区域。</li>
+<li><strong>评论家的增强更新</strong>：结合块内n步回报和自监督内在奖励（在锚点提供），有效引导稀疏奖励下的价值函数学习。</li>
+</ul>
+</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：在BiGym（15个双手移动操作任务）和RLBench（10个桌面操作任务）两个机器人操作基准上进行了评估，共25个任务。奖励均为稀疏奖励（成功为1，否则为0）。</li>
+<li><strong>实验平台</strong>：使用RTX 3090 GPU。</li>
+<li><strong>基线方法</strong>：对比了AC3、CQN-AS（分层离散Q学习）、DrQ-v2（单步确定性策略算法，并使用了辅助BC损失）以及Chunk-wise BC（仅使用离线数据的分块模仿学习）。</li>
+<li><strong>评估指标</strong>：报告了每个检查点25个回合的成功率。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>在BiGym和RLBench的大多数任务上，AC3均取得了最高的任务成功率。</p>
+<p><img src="https://arxiv.org/html/2508.11143v1/x3.png" alt="BiGym任务性能"></p>
+<blockquote>
+<p><strong>图3</strong>：AC3在BiGym的15个任务上，仅使用10个专家演示，在大多数任务中取得了最高的成功率，且相比BC基线能发现更好的策略，成功率曲线上升趋势更明显。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.11143v1/x4.png" alt="RLBench任务性能"></p>
+<blockquote>
+<p><strong>图4</strong>：在RLBench的10个任务上，AC3在大多数任务上仍优于BC基线，并以更简单的网络架构取得了与CQN-AS相似的表现。DrQ-v2在大多数任务上表现显著差于BC基线，凸显了在长视野稀疏奖励任务中基于分块预测的关键作用。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：<br><img src="https://arxiv.org/html/2508.11143v1/x5.png" alt="动作块长度影响"></p>
+<blockquote>
+<p><strong>图5</strong>：动作块长度 $C$ 对性能的影响。在动作空间维度高的任务（如<code>move plate</code>）中，较长的动作块（$C=16$）对于保证双手动作的连贯性和有效性至关重要，而 $C=4$ 的设置几乎使策略完全失效。对于较简单的任务（如<code>open oven</code>），不同块长的影响较小。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.11143v1/x8.png" alt="演员更新策略消融"></p>
+<blockquote>
+<p><strong>图8</strong>：演员更新策略的消融实验。在<code>move plate</code>任务上，比较了演员从所有转移（All Transitions）更新和仅从成功转移（Successful Only）更新的效果。结果显示，使用所有转移更新会导致模型性能下降，验证了不对称更新规则（仅从成功轨迹学习）对于稳定策略改进的必要性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.11143v1/x6.png" alt="内在奖励消融"></p>
+<blockquote>
+<p><strong>图6</strong>：自监督内在奖励设计的消融实验。在<code>move plate</code>任务上，移除此模块（Ours w/o intrinsic reward）会导致学习不稳定且最终性能下降，表明该模块有助于引导探索和稳定训练。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.11143v1/x7.png" alt="n步回报消融"></p>
+<blockquote>
+<p><strong>图7</strong>：块内n步回报的消融实验。在<code>move plate</code>任务上，使用1步回报（Ours w/ 1-step）相比使用4步回报（Ours）性能更差且不稳定，证明了块内n步回报对于稳定评论家学习的重要性。</p>
+</blockquote>
+<p><strong>各组件贡献总结</strong>：动作块长度（$C=16$）对复杂任务的连贯性至关重要；演员的不对称更新规则是保证稳定策略改进的关键；自监督内在奖励模块有效引导了稀疏奖励下的探索；块内n步回报显著稳定了评论家的学习过程。这些组件共同作用，使得AC3能够数据高效地学习复杂连续控制策略。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了AC3，一个用于学习连续动作块的新型演员-评论家框架，旨在利用少量专家演示高效解决长视野、稀疏奖励的操作任务。</li>
+<li>引入了两个关键的稳定化机制：演员的不对称更新规则（仅从成功轨迹学习）和评论家的结合块内n步回报与自监督内在奖励的更新方法。</li>
+<li>在BiGym和RLBench的25个任务上进行了广泛实验，证明AC3使用简单的模型架构即能取得优于现有方法的成功率，验证了其有效性和数据效率。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，与一些依赖大规模离线数据集的并发工作（如Q-Chunking）相比，AC3虽然更数据高效，但其计算开销和离线数据依赖的平衡可能仍是实际应用中的考虑因素。此外，自监督奖励模块的设计依赖于专家演示数据学习到的潜在空间。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li>AC3证明了直接学习连续动作块并结合针对性稳定机制的可行性，为长视野RL任务提供了一个简洁有效的框架范本。</li>
+<li>演员的不对称更新策略（聚焦成功经验）为解决稀疏奖励下策略梯度误导问题提供了新思路。</li>
+<li>将分块预测与内在奖励相结合以引导探索的方法，可以扩展到更复杂的多任务或元强化学习场景中。</li>
+<li>未来工作可以探索将更强大的生成模型（如扩散模型）集成到AC3的演员网络中，以进一步提升动作序列的生成质量和多样性，同时保持框架的稳定性和数据效率。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对长程、稀疏奖励的机器人操作任务中，强化学习难以稳定高效学习连续动作序列的问题，提出AC3框架。其核心是演员-评论家协同优化：演员采用非对称更新，仅从成功轨迹学习；评论家使用块内n步回报和自监督内在奖励进行稳定训练。在BiGym和RLBench的25个任务上，AC3仅需少量演示即取得优越成功率，验证了其有效性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.11143" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Physical Autoregressive Model for Robotic Manipulation without Action Pretraining - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Physical Autoregressive Model for Robotic Manipulation without Action Pretraining</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.09822" target="_blank" rel="noreferrer">2508.09822</a></span>
+        <span>作者: Guangrun Wang Team</span>
+        <span>日期: 2025-08-13</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作领域面临演示数据稀缺的挑战，这促使研究者尝试从其他模态的预训练大模型中迁移知识。当前主流方法之一是构建于大语言模型（LLMs）之上的视觉-语言-动作模型（VLAs），通过动作解码器将语言输出映射为机器人控制。然而，文本模态与动作模态之间存在内在鸿沟，常导致符号推理与物理控制之间的对齐不理想。一个更自然的解决方案是利用预训练的视频生成模型，特别是自回归视频生成模型，因为它们基于过去观察迭代预测未来帧的能力，隐式地基于物理世界的动力学，这与动作生成的目标天然契合。本文针对动作预训练数据稀缺这一具体痛点，提出利用视频生成模型中蕴含的世界知识来理解物理动力学，从而避免专门的动作预训练。其核心思路是将视频帧与机器人动作组合成“物理令牌”，在一个自回归框架内联合建模机器人及其环境的迭代演化。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的物理自回归模型（PAR）旨在以自回归方式联合预测未来的图像观测和动作块。其整体框架建立在预训练的自回归视频生成模型NOVA之上，通过引入动作建模模块，将视频预测的世界知识迁移到动作生成中。</p>
+<p><img src="https://arxiv.org/html/2508.09822v4/x2.png" alt="方法架构"></p>
+<blockquote>
+<p><strong>图2</strong>：物理自回归模型架构。从文本令牌开始，PAR利用因果Transformer自回归地预测物理令牌。关键设计是应用帧扩散和动作扩散网络，在连续空间中估计视觉和动作信号的条件分布。右侧展示了动作扩散网络的结构，其中预测的令牌作为条件向量通过交叉注意力注入。</p>
+</blockquote>
+<p><strong>整体流程</strong>：给定任务指令T，模型维护一个可变长度的历史上下文，包含图像观测序列 {O_0, ..., O_{N-1}} 和对应的动作块序列 {A_1, ..., A_{N-1}}。PAR的目标是自回归地预测下一个图像帧O_N及其关联的动作块A_N。每个动作块A_n包含L个连续的动作，以提高动作采样率和一致性。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>令牌化器（Tokenizer）</strong>：任务指令使用冻结的Phi模型和线性投影器嵌入为K_t个d维令牌。视频帧使用开源的3D VAE编码到潜在空间并投影为K_O个d维令牌。动作块通过一个轻量级MLP编码为K_A = L个d维令牌。所有令牌共享相同的物理嵌入空间。</li>
+<li><strong>物理自回归（Physical Autoregression）</strong>：将帧令牌O_n与对应的动作块令牌A_n在令牌维度上拼接，构成物理令牌P_n = [O_n; A_n]。对于初始观测帧O_0，将其与一个可学习的“动作开始”令牌[BOA]拼接。自回归过程基于所有先前的物理令牌序列，通过一个与NOVA架构相同的Transformer来预测下一个物理令牌的条件概率分布。</li>
+<li><strong>去令牌化器（De-Tokenizer）</strong>：为解决离散令牌化带来的分辨率误差累积问题，并增强生成能力，PAR采用基于扩散的连续去令牌化器。Transformer输出的上下文向量Z_n作为条件，分别通过扩散过程解码出帧令牌和动作令牌。对于动作令牌，使用一个轻量级的DiT网络（Action-DiT模块），条件向量Z_n通过交叉注意力注入。训练采用扩散损失（公式10），迫使去噪网络预测添加到干净令牌上的噪声。</li>
+<li><strong>因果掩码（Causal Mask）</strong>：设计了专门的因果注意力掩码（图3）。帧内部采用基于块的掩码，允许同一帧内的所有图像块相互关注。动作内部采用时间因果掩码，防止块内后面的动作关注前面的动作。<strong>关键创新</strong>是允许动作令牌单向关注帧令牌。由于帧令牌经Transformer处理后会被解码为未来帧，这种设计隐式地建模了逆运动学，使动作规划能够利用对未来视觉状态的预测来提高准确性。不同时间步之间则采用时间因果掩码保持时序因果性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.09822v4/x1.png" alt="物理自回归示意图"></p>
+<blockquote>
+<p><strong>图1</strong>：物理自回归过程示意图。自回归过程在一系列物理令牌（红色）上运行，每个令牌结合了视觉世界状态（橙色）和具身状态（黑色），逐步估计它们的联合演化。该过程与环境同步运行：每一步，预测的令牌被解码为图像和动作，与环境交互以更新其状态（蓝色），而得到的观测和本体感知被编码回上下文中。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.09822v4/x3.png" alt="因果注意力掩码"></p>
+<blockquote>
+<p><strong>图3</strong>：因果注意力掩码示意图。用3个块代表任务指令令牌，2个块代表帧令牌，2个块代表动作令牌。展示了动作令牌对帧令牌的单向关注以及内部的时间因果性。</p>
+</blockquote>
+<p><strong>训练与推理优化</strong>：训练时采用标准的并行化策略和教师强迫。推理时使用KV缓存机制以提高效率。模型总参数量约6.63亿，其中新引入的动作模块参数量仅约30M（见表1），实现了从视频预训练到动作生成的轻量级知识迁移。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：在ManiSkill Benchmark上进行评估，使用PushCube、PickCube和StackCube三个单任务场景。每个任务使用1K条演示数据进行微调。</li>
+<li><strong>实验平台</strong>：在单张NVIDIA A100-SXM-64GB GPU上完成微调。</li>
+<li><strong>评估指标</strong>：使用125次 rollout（5个随机种子 × 25个初始状态）的平均成功率。</li>
+<li><strong>对比基线</strong>：包括ACT、BC-T、DP、ICRT、RDT。所有方法均在相同数据上微调并测试。</li>
+</ul>
+<p><strong>关键定量结果</strong>：<br>表2总结了PAR与基线的成功率对比。PAR在无需任何动作预训练的情况下，平均成功率达到74%，仅次于进行了动作预训练的RDT（84%）。具体来看，PAR在PushCube任务上达到了100%的成功率，显著优于其他方法；在PickCube任务上达到73%，与SOTA的RDT（77%）接近；在StackCube任务上成绩为48%，虽落后于DP和RDT，但优于ICRT。</p>
+<table>
+<thead>
+<tr>
+<th align="left">Method</th>
+<th align="center">PushCube</th>
+<th align="center">PickCube</th>
+<th align="center">StackCube</th>
+<th align="center">Avg.</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">ACT [2023]</td>
+<td align="center">76%</td>
+<td align="center">20%</td>
+<td align="center">30%</td>
+<td align="center">42%</td>
+</tr>
+<tr>
+<td align="left">BC-T [2021]</td>
+<td align="center">98%</td>
+<td align="center">4%</td>
+<td align="center">14%</td>
+<td align="center">39%</td>
+</tr>
+<tr>
+<td align="left">DP [2023]</td>
+<td align="center">88%</td>
+<td align="center">40%</td>
+<td align="center"><strong>80%</strong></td>
+<td align="center">69%</td>
+</tr>
+<tr>
+<td align="left">ICRT [2025]</td>
+<td align="center">77%</td>
+<td align="center"><strong>78%</strong></td>
+<td align="center">30%</td>
+<td align="center">62%</td>
+</tr>
+<tr>
+<td align="left">RDT [2024]</td>
+<td align="center"><strong>100%</strong></td>
+<td align="center">77%</td>
+<td align="center">74%</td>
+<td align="center"><strong>84%</strong></td>
+</tr>
+<tr>
+<td align="left">PAR(Ours)</td>
+<td align="center"><strong>100%</strong></td>
+<td align="center">73%</td>
+<td align="center">48%</td>
+<td align="center">74%</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表2</strong>：在ManiSkill Benchmark上的成功率对比。最佳结果以粗体标出。PAR在无动作预训练的情况下，取得了与SOTA方法可比拟的性能。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>表3展示了消融研究结果。PAR-Full（完整模型）的性能远超两个变体：</p>
+<ol>
+<li><strong>PAR-NoAR</strong>：移除了自回归Transformer架构，仅保留MLP编码器和扩散解码器。这导致平均成功率暴跌至11.2%，证明了自回归架构对于联合推理机器人与环境、提供隐式逆运动学指导至关重要。</li>
+<li><strong>PAR-Discrete</strong>：将生成式的扩散去令牌化器替换为判别式的MLP投影器。这导致平均成功率下降至53.3%，特别是在复杂的StackCube任务上性能骤降，证明了连续生成式去令牌化对于捕获动作分布、减少量化误差的重要性。</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th align="left">Method</th>
+<th align="center">PushCube</th>
+<th align="center">PickCube</th>
+<th align="center">StackCube</th>
+<th align="center">Avg.</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">PAR-NoAR</td>
+<td align="center">29.6%</td>
+<td align="center">4.0%</td>
+<td align="center">0.0%</td>
+<td align="center">11.2%</td>
+</tr>
+<tr>
+<td align="left">PAR-Discrete</td>
+<td align="center">87.2%</td>
+<td align="center">65.6%</td>
+<td align="center">7.2%</td>
+<td align="center">53.3%</td>
+</tr>
+<tr>
+<td align="left">PAR-Full</td>
+<td align="center"><strong>100.0%</strong></td>
+<td align="center"><strong>72.8%</strong></td>
+<td align="center"><strong>48.0%</strong></td>
+<td align="center"><strong>73.6%</strong></td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表3</strong>：在ManiSkill Benchmark上的消融研究。最佳结果以粗体标出。完整模型显著优于各消融变体。</p>
+</blockquote>
+<p><strong>定性分析</strong>：<br>图4可视化了PAR预测的视频与实际执行视频的对比。结果显示，预测的视频帧与真实执行视频在视觉上高度相似，且生成的动作轨迹与预测的动态紧密对齐，直观验证了从视频预训练迁移世界知识的有效性。</p>
+<p><img src="https://arxiv.org/html/2508.09822v4/x4.png" alt="视频预测与实际执行对比"></p>
+<blockquote>
+<p><strong>图4</strong>：视频预测和实际任务执行。每行展示了三个不同任务上PAR预测的视频与对应执行视频的对比。预测视频与实际动作视频之间强烈的视觉相似性，凸显了本方法从视频预训练迁移知识的有效性。</p>
+</blockquote>
+<p>图5展示了注意力图，上层的令牌级注意力图显示了预测的动作如何关注先前的帧和动作令牌；下层的像素级注意力图显示了预测的动作关注于图像的不同空间区域，这为模型如何利用视觉信息进行动作规划提供了直观解释。</p>
+<p><img src="https://arxiv.org/html/2508.09822v4/x5.png" alt="注意力图"></p>
+<blockquote>
+<p><strong>图5</strong>：注意力图。上行展示了令牌级注意力图，表明预测的动作如何关注先前的帧和动作令牌。下行展示了像素级注意力图，表明预测的动作如何关注帧的不同空间区域。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>物理自回归建模</strong>：提出将视频帧与机器人动作组合成物理令牌，构建物理自回归模型（PAR），从视频生成模型中继承世界知识来捕获物理世界的迭代动力学，实现了无需动作预训练的机器人操作策略学习。</li>
+<li><strong>连续令牌表示</strong>：采用基于DiT和扩散损失的连续去令牌化器来建模帧和动作的分布，避免了离散化带来的分辨率误差累积，并促进了视觉与动作模态在连续空间中的深度交互。</li>
+<li><strong>高效训练与推理机制</strong>：设计了结合隐式逆运动学的因果掩码、并行训练和KV缓存机制，提升了模型的准确性、收敛速度和推理效率。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，在较为复杂的StackCube任务上，PAR的性能（48%）虽优于部分基线，但仍明显落后于进行了大规模动作预训练的RDT（74%）和DP（80%）。这表明，对于高度复杂的操作任务，仅从视频预训练迁移知识可能仍存在局限，或者当前模型架构/训练数据量有待进一步优化。</p>
+<p><strong>启示</strong>：本文为机器人操作研究提供了一个有前景的新方向，即通过利用大规模视频生成模型中已蕴含的丰富世界物理知识，来缓解动作数据稀缺的瓶颈。该方法展示了自回归联合建模视觉与动作的潜力，其轻量化的设计（仅增加约30M参数）也使得从视频模型到机器人任务的迁移更具可行性。后续研究可以探索在更复杂、长视野的任务中应用此框架，或进一步研究如何更高效地从多模态基础模型中提取和利用物理知识。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中缺乏大规模动作预训练数据的问题，提出物理自回归模型（PAR）。该方法的核心是利用视频预训练模型中的世界知识来理解物理动力学，无需单独的动作预训练。关键技术包括：设计结合帧与动作的物理令牌来联合建模环境演化；采用基于DiT的去令牌化器将二者作为连续令牌处理，以减少量化误差并促进相互增强；此外集成了带逆运动学的因果掩码、并行训练与KV缓存机制以提升效率与性能。在ManiSkill基准测试中，PAR在PushCube任务上取得100%的成功率，在其他任务上匹配了动作预训练基线的性能，并能准确预测视频未来帧及其紧密对齐的动作轨迹。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.09822" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>GenFlowRL: Shaping Rewards with Generative Object-Centric Flow in Visual Reinforcement Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>GenFlowRL: Shaping Rewards with Generative Object-Centric Flow in Visual Reinforcement Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.11049" target="_blank" rel="noreferrer">2508.11049</a></span>
+        <span>作者: Ruohan Gao Team</span>
+        <span>日期: 2025-08-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，利用视频生成模型进行机器人学习的主流方法是通过逆动力学从生成的未来帧中推导机器人动作。然而，这些方法严重依赖生成数据的质量，并且由于缺乏环境反馈，在处理精细操作时面临困难。另一方面，基于视频的强化学习虽然能提升策略鲁棒性，但仍受限于视频生成的不确定性以及为训练扩散模型收集大规模机器人数据集的挑战。本文针对视频生成模型在奖励塑造中存在的质量低下、数据依赖和开环策略问题，提出了一个新视角：利用从多样化跨具身数据集中训练生成的、以对象为中心的“流”来塑造奖励。本文核心思路是，通过一个混合奖励模型，将生成的对象中心流作为任务运动先验，为视觉运动强化学习策略提供密集的、低维的指导，从而学习泛化性强且鲁棒的策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>GenFlowRL框架旨在利用生成的对象中心流作为运动先验，通过强化学习学习闭环策略。整体流程分为三个阶段：1）任务条件化的对象中心流生成；2）基于流的混合奖励模型构建；3）流条件化的策略学习。</p>
+<p><img src="https://arxiv.org/html/2508.11049v1/x2.png" alt="方法架构"></p>
+<blockquote>
+<p><strong>图2</strong>：GenFlowRL框架的架构概述，包含流生成过程（左）、基于流的策略学习（中）和推理阶段（右）。</p>
+</blockquote>
+<p><strong>1. 对象中心流生成</strong>：首先，将离线轨迹视频数据集（如人类手部演示）通过目标检测和关键点跟踪，转换为对象中心流数据集（每个流是对象关键点在图像空间中的2D轨迹序列）。然后，对预训练的视频生成模型（AnimateDiff）进行两阶段微调，使其适应流生成任务：第一阶段固定编码器，仅微调解码器以适应流数据；第二阶段仅高效微调注入潜在运动模块的LoRA参数，以建模对象流的时序动态。最后，对生成的流进行运动/语义滤波等后处理，以减少噪声。</p>
+<p><strong>2. 基于流的奖励模型</strong>：这是方法的核心创新。原始生成的关键点流仍包含噪声，因此首先将其转换为更鲁棒的<strong>δ-flow</strong>表示。δ-flow在每一时间步<code>t</code>用三个统计量表征对象运动：关键点2D质心位置 <code>\bar{P}^t</code>、关键点帧间平均平移 <code>\delta_{tr}^t</code> 和关键点帧间平均旋转变换 <code>\delta_{rot}^t</code>（计算公式见论文公式1、2）。这种表示通过蒙特卡洛特性降低了不可靠关键点的负面影响。</p>
+<p>基于δ-flow，设计了<strong>混合奖励模型</strong>。奖励<code>R^t</code>由两部分组成：</p>
+<ul>
+<li><strong>密集的流匹配奖励</strong> <code>R_\delta^t</code>：旨在对齐机器人执行产生的观测δ-flow (<code>\mathcal{T}_R^t</code>) 与生成的δ-flow先验 (<code>\mathcal{T}_G^t</code>)。在假设两者服从方差相同的高斯分布下，该奖励简化为两者均值之间距离的负相关函数（公式4），经裁剪和归一化到[0,1]区间。</li>
+<li><strong>稀疏的状态感知奖励</strong>：基于环境交互提供任务特定信息，例如夹爪与物体的距离<code>d_grip</code>。</li>
+</ul>
+<p>最终的总奖励<code>R^t</code>是一个分段函数（公式5）：在接近物体阶段奖励与<code>d_grip</code>负相关；完成子目标获得固定奖励<code>α</code>；在子目标后，总奖励为<code>α + β * R_\delta^t</code>（实验中设<code>α=0.25, β=0.75</code>）；任务完成时奖励为1.0。这种设计平衡了先验知识引导和环境探索。</p>
+<p><strong>3. 策略设计</strong>：策略<code>π</code>的输入除了当前机器人状态<code>s_t</code>、当前观测关键点质心<code>\bar{P}^t</code>和观测δ-flow <code>\mathcal{T}_R^t</code>外，关键创新在于引入了<strong>生成的未来信息作为条件</strong>：未来k步生成的关键点质心<code>\bar{P}_G^{t+1:t+k}</code>和生成的δ-flow <code>\mathcal{T}_G^{t+1:t+k}</code>。此外，还加入了第一帧的3D关键点质心<code>\bar{P}_{3d}^1</code>以增强空间理解。策略输出6D位姿位移，通过逆运动学转换为关节指令。策略使用DrQv2算法进行训练，以最大化上述混合奖励。</p>
+<p>与现有方法相比，GenFlowRL的创新点在于：1) 提出了紧凑且抗噪的δ-flow表示，专门为RL奖励塑造优化；2) 设计了融合生成流先验（密集奖励）和环境反馈（稀疏奖励）的混合奖励模型；3) 策略以生成的未来δ-flow为条件，实现了训练与推理的一致性，并利用了跨具身数据。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在10个具有挑战性的机器人操作任务上进行评估，任务来自Im2Flow2Act基准（PickNPlace， Pouring， Opening， Folding， Pivoting）和MetaWorld基准（Assembly， Close Door， Coffee Push， Lever Pull， Stick Pull）。使用UR5e和Sawyar机器人进行数据收集和在线探索。对比了多种基线方法。</p>
+<p><strong>有效性对比（Q1）</strong>：在5个Im2Flow2Act任务上，与两种基于流的模仿学习方法对比。</p>
+<p><img src="https://arxiv.org/html/2508.11049v1/x3.png" alt="任务设置"></p>
+<blockquote>
+<p><strong>图3</strong>：10个评估任务的概述，包括任务提示、生成的流和机器人执行流。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="left">方法</th>
+<th align="left">演示条件执行成功率 (%)</th>
+<th align="left">语言条件执行成功率 (%)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">启发式策略</td>
+<td align="left">70, 50, 30, 0, 0</td>
+<td align="left">/</td>
+</tr>
+<tr>
+<td align="left">Im2Flow2Act</td>
+<td align="left">100, 95, 95, 90, 60</td>
+<td align="left">90, 85, 90, 35, 45</td>
+</tr>
+<tr>
+<td align="left"><strong>GenFlowRL (Ours)</strong></td>
+<td align="left"><strong>100, 100, 100, 95, 90</strong></td>
+<td align="left"><strong>95, 95, 95, 80, 85</strong></td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表2</strong>：在5个仿真任务上，不同方法在演示条件和语言条件两种设置下的成功率对比。GenFlowRL在所有任务上均表现最佳，尤其在语言条件下对复杂任务（如Folding, Pivoting）优势明显。</p>
+</blockquote>
+<p>表2显示，GenFlowRL在两种设置下均全面超越基线。在涉及可变形物体和接触丰富的复杂任务（如Folding, Pivoting）上，由于流生成存在噪声和歧义，模仿学习方法性能下降显著，而GenFlowRL通过δ-flow的噪声过滤能力和RL的环境交互保持了高鲁棒性。</p>
+<p><strong>δ-flow的有效性分析（Q2）</strong>：在5个MetaWorld任务上，与四种基于不同表示的RL基线对比。</p>
+<p><img src="https://arxiv.org/html/2508.11049v1/x4.png" alt="性能曲线"></p>
+<blockquote>
+<p><strong>图4</strong>：在MetaWorld任务上，GenFlowRL与其他基于视频的奖励模型方法的性能学习曲线对比。阴影区域代表三次随机种子的标准差。</p>
+</blockquote>
+<p>图4显示，与仅使用稀疏奖励（PSR）或新奇性探索奖励（RND）的方法相比，利用专家演示预训练模型进行奖励塑造的方法（VIPER, Diffusion Reward, GenFlowRL）性能更优。在简单任务上（如Door Close）各方法差距较小，但在复杂任务上（如Assembly），GenFlowRL凭借其低维、抗噪的δ-flow表示，取得了更优的训练效率和最终性能。</p>
+<p><strong>δ-flow的优势分析（Q3）与消融实验</strong>：论文通过分析（表1）指出，对象中心流在RL兼容性（低维、跨具身、支持奖励塑造）和几何复杂性（可变形、铰接物体）方面具有综合优势。消融实验（图5）表明，在策略输入中同时包含生成的未来δ-flow (<code>\mathcal{T}_G</code>)和初始3D关键点质心 (<code>\bar{P}_{3d}^1</code>) 对性能提升至关重要。</p>
+<p><img src="https://arxiv.org/html/2508.11049v1/x5.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图5</strong>：策略输入消融研究。移除生成的未来δ-flow (<code>w/o \mathcal{T}_G</code>) 或初始3D关键点 (<code>w/o \bar{P}_{3d}^1</code>) 都会导致性能下降，验证了它们各自的重要性。</p>
+</blockquote>
+<p><strong>真实世界跨具身验证</strong>：论文进行了真实机器人实验，使用人类手部演示视频生成流先验，来指导机器人臂完成任务。通过比较人类演示流和机器人执行流的匹配度，验证了所提奖励模型在跨具身转移中的有效性（相关结果见论文图6-15）。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 提出了GenFlowRL框架，通过新颖的基于对象中心流的奖励模型，将生成模型与RL结合，克服了现有视频RL范式的局限性。2) 系统分析了多种以操作为中心的表示，并提出了专为RL设计的紧凑、抗噪的δ-flow表示。3) 在10个具有挑战性的仿真和真实世界跨具身任务上进行了广泛评估，证明了方法的有效性、鲁棒性和泛化性。</p>
+<p><strong>局限性</strong>：论文提到，方法性能部分依赖于初始关键点检测的准确性。此外，虽然δ-flow能有效过滤噪声，但在处理极其精细、需要像素级精度的操作时可能仍存在限制。</p>
+<p><strong>后续启示</strong>：GenFlowRL展示了利用低维、语义丰富的中间表示（如对象中心流）作为桥梁，连接大规模跨具身数据与机器人强化学习的可行性。这为减少对高质量生成视频或大规模机器人数据集的依赖提供了新思路。未来工作可探索更强大的流生成模型，或将此框架扩展到更广泛的物体类别和任务领域。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉强化学习中视频生成模型依赖生成数据质量、缺乏环境反馈、难以进行精细操作，且需要大规模机器人数据的问题，提出GenFlowRL框架。该方法利用从多样跨体现数据训练得到的生成式物体中心流（物体关键点轨迹）来塑造奖励，通过混合奖励模型（结合在线轨迹与流先验的密集流匹配以及稀疏状态感知奖励）指导策略学习。在10个模拟操作任务和真实世界跨体现评估中，该方法能有效利用生成流提取的操作特征，在各种挑战性场景中 consistently achieving superior performance。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.11049" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

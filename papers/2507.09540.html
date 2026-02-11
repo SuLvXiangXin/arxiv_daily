@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning to Control Dynamical Agents via Spiking Neural Networks and Metropolis-Hastings Sampling - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Learning to Control Dynamical Agents via Spiking Neural Networks and Metropolis-Hastings Sampling</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2507.09540" target="_blank" rel="noreferrer">2507.09540</a></span>
+        <span>作者: Ali Al-Zawqari Team</span>
+        <span>日期: 2025-07-13</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人、自动驾驶等人工智能应用中，动态智能体的高效控制至关重要，强化学习是主流方法。以深度Q学习（DQL）和近端策略优化（PPO）为代表的深度强化学习方法虽性能出色，但存在计算密集、能耗高、严重依赖反向传播梯度计算等缺点，限制了其在超低能耗平台和专用神经形态硬件上的部署。</p>
+<p>脉冲神经网络（SNN）因其生物启发性和能效优势，成为传统深度神经网络（DNN）的有力替代。然而，脉冲事件的不可微分性使得基于梯度的训练方法（如反向传播）失效。现有的替代梯度方法在模拟神经形态系统上计算量大且鲁棒性不足，因此需要无梯度优化方法来适配硬件约束。</p>
+<p>本文针对SNN在强化学习任务中训练困难这一具体痛点，引入了贝叶斯推断技术——Metropolis-Hastings（MH）采样，提出了一种无需梯度的方法来训练用于动态智能体控制的SNN。其核心思路是：将SNN参数优化视为一个贝叶斯推断问题，利用MH采样迭代地提出参数更新，并根据参数对应策略所获累积奖励的比值，以概率方式接受或拒绝该更新，从而直接最大化奖励目标，绕过了反向传播。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的奖励驱动MH采样SNN训练框架如论文图1所示。整体流程是一个迭代过程：在第n次控制回合中，SNN以智能体当前状态为输入，推断控制指令并执行；环境返回该回合的累积奖励R_n；随后，奖励驱动的MH过程利用R_n来推断一个新的SNN参数张量提案W_n（包含所有权重和神经元参数）；算法根据MH准则决定是否用W_n更新网络参数，然后进入下一轮迭代。</p>
+<p><img src="https://arxiv.org/html/2507.09540v1/extracted/6618765/latest_gagraph.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：提出的奖励驱动Metropolis-Hastings SNN训练方法。SNN使用智能体当前状态作为输入数据来推断控制命令。在第n个控制回合中，环境返回累积奖励R_n。该奖励被输入到奖励驱动的MH过程中，以推断新的SNN参数提案W_n。随后用W_n更新SNN参数，算法进入第n+1次迭代。</p>
+</blockquote>
+<p>MH采样的核心思想是通过生成一系列样本来逼近参数的后验分布P(W|D)，而无需知道后验分布的确切形式。其过程概念如图2所示：从初始参数W1开始，从一个对称分布Q（如高斯分布）中采样一个基于当前参数W_{n-1}的提案W&#39;；计算提案W&#39;和旧参数W_{n-1}下数据的似然值；根据两者的似然比和先验概率计算接受比率p；最后以min(p,1)的概率接受新提案作为下一个样本。</p>
+<p><img src="https://arxiv.org/html/2507.09540v1/extracted/6618765/MHsampling.png" alt="MH采样示意图"></p>
+<blockquote>
+<p><strong>图2</strong>：Metropolis-Hastings算法的概念示意图。</p>
+</blockquote>
+<p>本文将MH采样应用于强化学习场景的关键创新在于对“似然”函数的定义。SNN学习的目标是最大化一个控制回合内的累积奖励R(W)。因此，作者将累积奖励R(W)直接定义为MH采样中所需的似然函数L（见公式6）。由于MH采样在计算接受比率p时（算法1第8行）使用的是似然比值，因此可以忽略精确似然函数的归一化项，从而允许这种替代。</p>
+<p>具体训练算法如Algorithm 1所示。其核心步骤包括：1）从提议分布Q中采样新参数提案W&#39;；2）分别使用提案W&#39;和旧参数W_{n-1}控制智能体运行一个完整回合，并计算各自的累积奖励R(W&#39;)和R(W_{n-1})，将其作为似然值；3）计算接受比率p = [R(W&#39;) * P(W&#39;)] / [R(W_{n-1}) * P(W_{n-1})]；4）以概率min(p, 1)接受新参数，否则保留旧参数；5）在整个过程中保留能获得最高奖励的参数W_best。</p>
+<p>实验使用的SNN架构为单层拓扑，如图4所示。网络包含输入权重矩阵W_in和侧向递归权重矩阵W_lateral。输入是智能体的状态向量（维度因环境而异），输出脉冲向量用于选择执行的动作。网络所有可学习参数，包括W_in、W_lateral、LIF神经元的膜电位衰减常数α_decay和阈值μ，均由上述MH训练过程共同优化。</p>
+<p><img src="https://arxiv.org/html/2507.09540v1/extracted/6618765/networktopo.png" alt="SNN架构"></p>
+<blockquote>
+<p><strong>图4</strong>：SNN架构。使用具有输入权重矩阵W_in和侧向递归权重矩阵W_lateral的单层SNN拓扑。输入是智能体的状态向量，输出用于选择智能体要执行的动作（每个输出神经元对应一个可能的动作）。</p>
+</blockquote>
+<p>与现有方法相比，本文的创新点具体体现在：1）首次将MH采样这一无梯度贝叶斯方法应用于SNN的强化学习策略训练；2）通过将累积奖励直接作为MH采样的似然函数，建立了强化学习目标与贝叶斯推断之间的直接联系；3）该方法能够实现“芯片内循环”训练，直接在神经形态硬件上优化SNN，并天然耐受硬件噪声和模拟电路缺陷。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>本文在OpenAI Gym套件中的两个经典连续控制基准环境上评估了所提方法：AcroBot（双摆）和CartPole（车杆），环境如图3所示。</p>
+<p><img src="https://arxiv.org/html/2507.09540v1/extracted/6618765/banderolenv.png" alt="实验环境"></p>
+<blockquote>
+<p><strong>图3</strong>：实验中用于控制动态智能体的环境。a) AcroBot, b) Cart-Pole。</p>
+</blockquote>
+<p>对比的基线方法是深度Q学习（DQL），使用基于ReLU激活函数的传统DNN。DQL训练使用Adam优化器、经验回放和ε-greedy策略。</p>
+<p>在AcroBot环境上的实验结果如图5和图6所示。本文的SNN-MH方法在经过约160个训练回合后，累积奖励达到约-100的稳定平台（奖励越接近0越好）。而DQL基线达到的稳定奖励仅为约-150。</p>
+<p><img src="https://arxiv.org/html/2507.09540v1/extracted/6618765/Figure_1_replace.png" alt="SNN-MH在AcroBot上的奖励曲线"></p>
+<blockquote>
+<p><strong>图5</strong>：在AcroBot环境中，沿MH采样回合的累积奖励演变。橙色线是对蓝色奖励曲线应用宽度为50的移动平均滤波器的结果。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2507.09540v1/extracted/6618765/dql_acrobot.png" alt="DQL在AcroBot上的奖励曲线"></p>
+<blockquote>
+<p><strong>图6</strong>：深度Q学习在AcroBot环境中的累积奖励演变。与SNN-MH设置相比，DQL设置实现的累积奖励显著更低（约-150 vs. 约-100）。</p>
+</blockquote>
+<p>在CartPole环境上的结果如图7和图8所示。SNN-MH方法使用图4所示的单层SNN，在约50个回合内即达到500的最大奖励平台（成功解决环境）。而DQL基线在使用类似单层或双层网络时均无法解决该环境（奖励远低于500）。只有当DNN隐藏层增加到3层（每层16个神经元）时，DQL才能达到500的奖励。</p>
+<p><img src="https://arxiv.org/html/2507.09540v1/extracted/6618765/cartPole1.png" alt="SNN-MH在CartPole上的奖励曲线"></p>
+<blockquote>
+<p><strong>图7</strong>：在Cart-Pole环境中，沿MH采样回合的累积奖励演变。橙色线是对蓝色奖励曲线应用宽度为50的移动平均滤波器的结果。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2507.09540v1/extracted/6618765/dql_cartpole3.png" alt="DQL在CartPole上的奖励曲线"></p>
+<blockquote>
+<p><strong>图8</strong>：深度Q学习在Cart-Pole环境中的累积奖励演变。与SNN-MH设置形成鲜明对比的是，在DQL情况下，使用1层甚至2层隐藏层网络不足以解决环境（即奖励达不到500）。需要3层隐藏层网络，DQL才能达到500的奖励。</p>
+</blockquote>
+<p>关键实验结果总结如下表（基于图文信息整理）：</p>
+<table>
+<thead>
+<tr>
+<th align="left">环境</th>
+<th align="left">方法</th>
+<th align="left">网络结构</th>
+<th align="left">达到的稳定奖励</th>
+<th align="left">是否解决环境</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">AcroBot</td>
+<td align="left">SNN-MH (本文)</td>
+<td align="left">单层SNN</td>
+<td align="left">~ -100</td>
+<td align="left">是（性能更优）</td>
+</tr>
+<tr>
+<td align="left">AcroBot</td>
+<td align="left">DQL (基线)</td>
+<td align="left">单层DNN</td>
+<td align="left">~ -150</td>
+<td align="left">是（性能较差）</td>
+</tr>
+<tr>
+<td align="left">CartPole</td>
+<td align="left">SNN-MH (本文)</td>
+<td align="left">单层SNN</td>
+<td align="left">500 (最大)</td>
+<td align="left">是</td>
+</tr>
+<tr>
+<td align="left">CartPole</td>
+<td align="left">DQL (基线)</td>
+<td align="left">1/2层DNN</td>
+<td align="left">&lt; 500</td>
+<td align="left">否</td>
+</tr>
+<tr>
+<td align="left">CartPole</td>
+<td align="left">DQL (基线)</td>
+<td align="left">3层DNN</td>
+<td align="left">500</td>
+<td align="left">是</td>
+</tr>
+</tbody></table>
+<p>实验表明，本文提出的SNN-MH方法在两个基准任务上均优于或匹配传统DQL的性能，且在CartPole任务上展现出更优的泛化能力——能用更简单的网络结构（单层）解决DQL需要更复杂网络（三层）才能解决的任务。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1）首次将Metropolis-Hastings采样这一无梯度贝叶斯方法应用于训练SNN，以解决强化学习中的动态智能体控制问题，为SNN的RL训练开辟了新途径。2）在AcroBot和CartPole标准基准上的实验证明，该奖励驱动的MH方法能有效优化SNN策略，其性能优于传统的深度Q学习基线。3）该方法展现出更好的泛化能力，在CartPole任务上，使用结构简单的单层SNN即达到了DQL需多层网络才能实现的性能，体现了方法的高效性。</p>
+<p>论文自身提及的局限性主要隐含在方法特性中：MH采样是一种迭代采样方法，每个训练回合都需要在环境中运行两次（分别评估新提案和旧参数）以计算奖励，这可能带来较高的采样复杂度和计算成本，尤其是在环境交互昂贵的场景中。</p>
+<p>本文工作对后续研究有多方面启示：首先，它验证了无梯度贝叶斯方法在SNN强化学习训练中的可行性，鼓励探索其他蒙特卡洛方法或进化策略。其次，该方法与神经形态硬件的兼容性优势明显，为未来实现低功耗、高鲁棒性的“芯片内循环”学习与控制提供了技术基础。最后，如何将该框架扩展到更复杂的任务、更大规模的SNN，以及如何进一步提升采样效率，是未来值得探索的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对脉冲神经网络在强化学习中因脉冲通信不可微分而难以训练的问题，提出首个基于Metropolis-Hastings采样的训练框架。该方法利用贝叶斯推断，通过迭代提议并依概率接受基于累积奖励的参数更新，绕过了反向传播，实现了在神经形态平台上的直接优化。在AcroBot和CartPole控制基准上的实验表明，该框架在最大化累积奖励的同时，能以更少的网络资源和训练周期，优于传统深度Q学习及先前的SNN强化学习方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2507.09540" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

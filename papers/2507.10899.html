@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Object-Centric Mobile Manipulation through SAM2-Guided Perception and Imitation Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Object-Centric Mobile Manipulation through SAM2-Guided Perception and Imitation Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2507.10899" target="_blank" rel="noreferrer">2507.10899</a></span>
+        <span>作者: Jun Morimoto Team</span>
+        <span>日期: 2025-07-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前基于模仿学习的移动操作框架通常将导航与操作解耦，即先导航至目标位置附近再执行操作。这种分离式方法在导航不精确时（尤其是接近角度存在偏差）会导致性能显著下降，即“方向性问题”。尽管端到端的视觉策略因其轻量和快速特性具有潜力，但其直接从原始RGB图像映射到动作的方式缺乏对物体和任务的显式理解，导致泛化能力差，难以适应机器人基座与物体相对位姿持续变化的移动操作场景。</p>
+<p>本文针对移动操作中因方向偏差导致的泛化能力弱这一痛点，提出了结合物体中心表示的新视角。核心思路是利用基础分割模型SAM2提取物体和机器人的像素级掩码，生成编码方向信息的向量，并以此动态调制一个多动作头网络，使策略能感知方向变化并生成适配的动作序列，从而实现从不同方向可靠执行同一任务。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架分为感知与策略生成两部分。首先，固定于场景上方的全局相机捕获RGB图像，输入SAM2模型。通过在第一帧指定目标物体（蓝色方块）和机器人前缘上的点，SAM2无需微调即可实时输出二者的像素级二进制掩码。对这些掩码应用空间Softmax，分别得到物体中心坐标和机器人中心坐标，进而计算出一个从机器人指向物体的向量，该向量编码了二者之间的相对位姿关系。此向量将用于指导后续的策略生成。</p>
+<p><img src="https://arxiv.org/html/2507.10899v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：方法整体框架。左侧为感知部分：RGB图像输入SAM2，分割出目标物体和机器人掩码，经空间Softmax后生成指向物体的向量。右侧为策略部分：该向量通过一个小MLP生成权重矩阵，用于融合多动作头网络输出的多个候选动作序列，最终生成控制机器人的真实动作序列。</p>
+</blockquote>
+<p>策略生成部分以动作分块变压器（Action Chunking Transformer, ACT）为基础模型。ACT是一个基于Transformer的条件变分自编码器（C-VAE），其解码器以潜在变量、关节位置和经DETR主干网络处理的RGB图像为输入，输出未来一段时间的动作序列（即动作块）。本文的主要创新是在此基础上引入了一个门控网络（Gating Network）。</p>
+<p><img src="https://arxiv.org/html/2507.10899v1/x2.png" alt="模型结构"></p>
+<blockquote>
+<p><strong>图2</strong>：模型结构。蓝色部分为原始ACT模型，橙色部分为本文新增的模块。C-VAE的隐藏层输出被送入一个多头部MLP，生成多组候选动作序列。同时，从SAM2感知部分得到的“机器人-物体”向量通过一个2层MLP生成一个权重矩阵。该权重矩阵与堆叠的多头动作序列相乘，进行加权融合，得到最终执行的动作序列。</p>
+</blockquote>
+<p>为解决SAM2实时版本推理速度较慢（约7 FPS）的问题，本文仅在每个任务 episode 的前10个时间步调用SAM2，后续时间步的向量值使用这10个时间步的平均值进行近似。这使得整个系统的控制频率能够达到30 FPS，满足流畅操作的需求。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：研究使用了一个定制的移动操作平台进行真实世界实验，该平台由配备机械臂的移动底座（麦克纳姆轮）构成。实验场景中，一个蓝色方块固定在圆心，一个黄色方块放置在180度方向。机器人被限制在一个半径为30厘米的圆环上移动，以此精确控制其相对于蓝色方块的距离和方向角度。</p>
+<p><strong>数据集与基线</strong>：通过遥操作收集了机器人从0度和45度两个方向执行“将黄色方块堆叠到蓝色方块上”任务的演示数据各30条，共60条。使用动作分块变压器（ACT）作为基线方法进行对比。</p>
+<p><strong>评估指标与场景</strong>：在训练后，分别在<strong>域内</strong>（0度和45度）和<strong>域外</strong>（未在训练中出现的22.5度）方向对策略进行评估，以成功率作为指标。</p>
+<p><strong>关键实验结果</strong>：<br><img src="https://arxiv.org/html/2507.10899v1/x6.png" alt="结果对比表"></p>
+<blockquote>
+<p><strong>图6/表1</strong>：成功率结果对比。本文方法在域内（0度和45度）均达到100%成功率，显著优于基线方法（70%和90%）。在域外的22.5度场景下，本文方法仍保持100%成功率，而基线方法骤降至20%，证明了其卓越的泛化能力。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2507.10899v1/x4.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图4</strong>：定性结果对比。(a)本文方法在0度（域内），(b)本文方法在22.5度（域外），(c)基线方法在22.5度（域外）。从左至右展示了任务开始后10秒内的运动序列。可见本文方法在两种情况下均成功完成堆叠，而基线方法在域外角度下失败。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2507.10899v1/x3.png" alt="实验平台"></p>
+<blockquote>
+<p><strong>图3</strong>：(a) 使用的移动操作机器人。(b) 实验平台示意图，展示了固定圆环、目标物体位置以及机器人从不同角度接近的场景。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：本文的核心创新是引入了基于SAM2的物体中心感知和门控网络。实验结果本身即是对完整方法有效性的验证。相较于仅使用原始RGB图像的ACT基线，本文方法通过注入物体-机器人相对位姿的显式向量信息，并利用门控网络实现对该信息的动态响应，是性能提升的关键。门控网络学会了根据不同的方向向量，加权组合不同动作头部的输出，从而实现了跨方向的策略泛化。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种用于移动操作的物体中心模仿学习方法，首次将SAM2强大的零样本分割能力与动作分块Transformer结合，显式地建模机器人-物体相对位姿以解决方向性问题。</li>
+<li>设计了一个门控网络架构，能够根据实时感知到的方向向量动态调制策略输出，使单一策略能够泛化到训练中未见过的机器人接近方向。</li>
+<li>在真实移动操作平台上验证了该方法在域内鲁棒性和域外泛化性上的显著提升，为解决移动操作中的“复合误差”问题提供了新思路。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li><strong>计算开销</strong>：集成SAM2模型增加了显著的推理延迟，可能限制控制回路的频率。</li>
+<li><strong>感知依赖</strong>：依赖于固定的全局（顶部）相机，限制了机器人的可操作工作空间。一旦移动底座在导航中超出该相机视野，整个感知管道将失效。</li>
+</ol>
+<p><strong>后续启示</strong>：</p>
+<ol>
+<li>展示了基础视觉模型（如SAM2）为机器人提供丰富、鲁棒的物体中心先验的巨大潜力，这种范式可扩展至更复杂的多物体、动态场景任务。</li>
+<li>门控或多专家调制机制是提高策略适应性的有效手段，未来可探索更精细的调制方式，例如在动作序列的不同阶段应用不同的调制策略。</li>
+<li>如何将此类依赖于全局相机的感知系统与机器人本体的移动性更紧密地结合（例如，使用移动机器人自身携带的相机实现类似功能），是迈向完全自主移动操作的关键一步。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对移动操作中导航与操作解耦导致的角度偏差问题，提出了一种基于SAM2引导感知与模仿学习的物体中心方法。该方法利用视觉基础模型SAM2分割目标物体和机器人前缘的像素级掩码，并通过门控网络将其嵌入动作分块变换器，使机器人能从不同方向一致理解同一任务。在自定义移动操作器上的拾放任务实验中，相比基准方法，该模型在从多角度演示中训练时展现了更优的泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2507.10899" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

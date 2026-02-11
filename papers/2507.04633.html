@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>PRISM: Pointcloud Reintegrated Inference via Segmentation and Cross-attention for Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>PRISM: Pointcloud Reintegrated Inference via Segmentation and Cross-attention for Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2507.04633" target="_blank" rel="noreferrer">2507.04633</a></span>
+        <span>作者: Chee-Meng Chew Team</span>
+        <span>日期: 2025-07-07</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人模仿学习的主流方法可分为基于2D图像和基于3D点云两类。基于2D图像的方法（如Behavior Cloning， ACT）在复杂场景中容易因视角变化和缺乏深度信息而失效。基于3D点云的方法（如ACT3D， DP3）虽然提供了更丰富的空间信息，但仍存在两大关键局限：一是输入信息不清晰，整体点云输入使得模型难以在杂乱场景中区分不同物体；二是缺乏有效的多模态融合，通常只是将点云特征与机器人关节状态特征简单拼接，未能充分考虑二者在表示和尺度上的差异，导致融合效果不佳。本文针对模仿学习在杂乱、多阶段任务中，模型难以自主聚焦于任务相关物体这一具体痛点，提出了通过点云分割与交叉注意力机制实现“任务相关注意力”的新视角。本文的核心思路是：首先通过无监督分割将原始点云分解为物体簇以提取局部几何特征，再利用交叉注意力机制动态地将这些视觉特征与机器人状态融合以突出相关目标，最后通过扩散模型生成平滑的机器人动作序列。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>PRISM是一个端到端的策略学习框架，其输入是包含历史观测的多模态序列 $\mathcal{O}^{t} = {{O}^{t-m}, ..., {O}^{t}}$，其中每个观测 $O^{t} = {P^{t}, S^{t}}$ 包含一个 $N \times 3$ 的原始3D点云 $P^{t}$ 和一个 $2 \times 7$ 的机器人双臂关节状态 $S^{t}$。输出是未来 $n$ 步的预测动作序列 $\mathcal{A}^{t} = {{A}^{t+1}, ..., {A}^{t+n}}$。框架无需预训练模型或外部数据集，直接从提供的任务演示中学习。</p>
+<p><img src="https://arxiv.org/html/2507.04633v1/extracted/6600824/pic/s1_introduction/pic_ab.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图1</strong>：PRISM架构总览。输入为单视角3D点云，首先通过DBSCAN分割成簇，每个簇由共享参数的改进版PointNet（BatchNorm替换为LayerNorm）提取局部特征。这些特征送入Transformer编码器通过自注意力捕获物体间关系。随后，特征与机器人本体感知状态通过交叉注意力结合，聚焦于任务相关物体并生成条件输入。最后，扩散模型在这些条件的引导下逐步去噪高斯噪声，生成平滑连续的动作序列。</p>
+</blockquote>
+<p>核心模块包括以下四个部分：</p>
+<ol>
+<li><strong>分割嵌入模块</strong>：此模块首先使用基于密度的DBSCAN算法对原始点云 $P^{t}$ 进行无监督聚类，将其分割成 $K$ 个物体中心簇 ${C_{k}^{t}}<em>{k=1}^{K}$。DBSCAN无需预先指定簇数量，且通过最大化稳定性准则（公式1）获得高质量聚类，无需人工标注。随后，每个点云簇 $C</em>{k}^{t}$ 通过一个共享参数的改进版PointNet网络 $\Phi_{\text{local}}$ 提取局部特征 $F_{ek}^{t} \in \mathbb{R}^{d_{e}}$（公式2）。该网络将批归一化层替换为层归一化层，并通过最大池化聚合点级特征，为每个物体簇生成一个统一的描述符。这种设计保留了物体的局部几何细节，并将不同物体的几何和位姿信息映射到不同的嵌入子空间。</li>
+<li><strong>Transformer编码器（关系特征重塑）</strong>：分割嵌入模块输出的物体级特征集合 $F_{e}^{t} = {F_{ek}^{t}}<em>{k=1}^{K}$ 缺乏物体间的上下文关系。为此，引入一个Transformer编码器 $T$，通过自注意力机制（公式3）建模物体间的相互依赖关系。这使得模型能够捕获物体间的空间和语义关联，理解任务阶段，从而动态地根据任务上下文调整对物体的注意力。编码器输出 $F</em>{p}^{t} \in \mathbb{R}^{K \times d_{p}}$，它编码了物体级几何和物体间关系，为下游动作生成提供了更全面的表征。</li>
+<li><strong>交叉注意力模块（多模态融合）</strong>：该模块是PRISM实现任务相关注意力的关键。它将处理后的机器人本体感知状态特征 $F_{s}^{t}$ 作为查询（Query），将Transformer编码器输出的视觉特征 $F_{p}^{t}$ 作为键（Key）和值（Value），通过交叉注意力计算（公式4）得到最终的融合条件特征 $F_{c}^{t}$。为了消除左右臂关节状态可能存在的对称性歧义，模型为每个臂的关节角特征嵌入了特定的位置编码 $E_{i}$（公式5），确保即使关节配置完全对称，左右臂的注意力权重 $\alpha_{k}^{i}$ 也能保持独立。这种设计使得每只手臂能够独立地查询点云特征，专注于与其任务相关的物体。</li>
+<li><strong>扩散模块（动作生成）</strong>：融合后的条件特征 $F_{c}^{t}$ 被输入到一个扩散模型中。该模型以去噪分数匹配的方式，在条件特征的引导下，逐步将高斯噪声去噪，生成平滑且连续的未来动作序列 $\mathcal{A}^{t}$。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2507.04633v1/extracted/6600824/pic/s3_method/method.png" alt="详细方法流程图"></p>
+<blockquote>
+<p><strong>图2</strong>：PRISM方法详细流程图。清晰展示了从原始点云和机器人状态输入开始，经过分割、局部特征提取、关系建模、交叉注意力融合，最终通过扩散模型生成动作序列的完整流程。</p>
+</blockquote>
+<p>与现有方法相比，PRISM的创新点具体体现在：1）<strong>无监督场景分解</strong>：采用DBSCAN进行在线点云分割，替代了依赖全局池化或需要大量标注数据的深度学习分割器，实现了轻量、高效且无需标注的任务相关物体聚焦。2）<strong>基于交叉注意力的多模态融合</strong>：使用交叉注意力机制动态融合视觉与本体感知特征，而非简单的特征拼接，使模型能根据机器人当前状态自主分配注意力到相关物体上。3）<strong>端到端训练</strong>：整个系统（包括分割后的特征提取、关系建模、融合与策略生成）可进行端到端训练，仅需任务演示数据。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在模拟环境中进行，使用了三个代表性的机器人操作任务进行评估：<strong>Pick and Place</strong>（从杂乱场景中拾取指定物体并放置到目标位置）、<strong>Stack</strong>（将积木堆叠起来）、<strong>Pour</strong>（将一个容器中的物体倒入另一个容器）。每个任务使用100条专家演示进行训练。</p>
+<p>对比的基线方法包括：2D方法 <strong>Diffusion Policy (DP)</strong> 和 **Action Chunking with Transformers (ACT)**；3D方法 <strong>DP3</strong> 和 <strong>ACT3D</strong>。</p>
+<p><img src="https://arxiv.org/html/2507.04633v1/extracted/6600824/pic/s4_experiment/setup.png" alt="实验设置"></p>
+<blockquote>
+<p><strong>图3</strong>：模拟实验环境设置示意图。展示了Pick and Place， Stack， Pour三个任务的具体场景。</p>
+</blockquote>
+<p>关键实验结果如下：在三个任务上，PRISM均取得了最高的平均成功率。具体而言，在Pick and Place任务中，PRISM成功率达到95.0%，显著高于DP3的80.0%和ACT3D的70.0%；在Stack任务中，PRISM成功率为83.3%，优于DP3的66.7%和ACT3D的53.3%；在Pour任务中，PRISM也以71.7%的成功率领先于DP3的65.0%和ACT3D的58.3%。实验表明，PRISM在复杂、多物体的场景中表现出更强的鲁棒性和更高的效率。</p>
+<p><img src="https://arxiv.org/html/2507.04633v1/extracted/6600824/pic/s4_experiment/liucheng.png" alt="任务流程图"></p>
+<blockquote>
+<p><strong>图4</strong>：多阶段任务（Pick and Place）的流程图解。说明了机器人需要依次完成“接近目标”、“抓取”、“移动”和“放置”等多个阶段，每个阶段需要关注不同的物体或场景区域。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2507.04633v1/extracted/6600824/pic/s4_experiment/Figure_3.png" alt="实验结果对比"></p>
+<blockquote>
+<p><strong>图5</strong>：PRISM与基线方法在三个任务上的成功率对比图。柱状图清晰显示，PRISM在所有任务上均取得了最佳性能。下方的消融实验结果表明，完整模型（Ours）性能最优，移除交叉注意力（w/o CA）或Transformer编码器（w/o TE）都会导致性能显著下降，验证了各核心组件的有效性。</p>
+</blockquote>
+<p>论文进行了消融实验以验证各核心组件的贡献：</p>
+<ul>
+<li>**完整模型 (Ours)**：在Pick and Place任务上达到95.0%的成功率。</li>
+<li>**移除交叉注意力 (w/o CA)**：将交叉注意力替换为简单的特征拼接，成功率下降至81.7%。这表明基于交叉注意力的融合机制对于聚焦任务相关物体至关重要。</li>
+<li>**移除Transformer编码器 (w/o TE)**：直接对分割后的物体特征进行交叉注意力融合，成功率进一步降至71.7%。这证明了建模物体间关系对于理解任务阶段、生成正确动作的重要性。<br>消融实验总结：交叉注意力模块和Transformer编码器分别贡献了约13.3%和10%的性能提升，两者共同作用使模型性能达到最优。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1）提出了一个结合无监督点云分割嵌入与交叉注意力机制的端到端模仿学习框架PRISM，使机器人能自主聚焦于任务相关物体。2）设计了一种基于交叉注意力的多模态融合方法，有效整合了分割后的视觉特征与机器人本体状态，解决了传统拼接融合的低效问题。3）在模拟的复杂操作任务上验证了PRISM的优越性，尤其在杂乱和多阶段场景中表现出更高的成功率和鲁棒性。</p>
+<p>论文自身提到的局限性包括：方法的性能在一定程度上依赖于点云的质量和DBSCAN参数（如 $\varepsilon$ 和 <code>minPts</code>）的设置，在点云非常稀疏或物体密度差异极大的极端情况下，分割效果可能受到影响。</p>
+<p>本工作对后续研究的启示在于：1）<strong>无监督感知与策略学习的紧耦合</strong>：展示了无需昂贵标注，通过几何驱动的无监督分割直接为策略学习提供结构化感知信息的可行性，为在更复杂现实场景中应用提供了路径。2）<strong>注意力机制在机器人多模态融合中的重要性</strong>：验证了交叉注意力在动态、选择性融合异质模态（视觉与本体感知）信息方面的有效性，此范式可扩展至融合其他传感器模态（如触觉、力觉）。3）<strong>处理多阶段任务的架构设计</strong>：通过分割与关系建模，使策略具备了基于场景上下文动态调整注意力的潜力，这对于需要长期规划和阶段切换的复杂任务是一个有前景的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出PRISM框架，旨在解决机器人模仿学习在杂乱环境中因固定视角或点云关键帧预测限制导致的鲁棒性问题。方法核心包含三个部分：分割嵌入单元对原始点云进行物体聚类与局部几何编码；交叉注意力组件融合视觉特征与机器人状态以聚焦相关目标；扩散模块将融合表征转换为平滑动作。实验表明，仅需每任务100条演示，PRISM在模拟复杂密集场景中即超越2D与3D基线策略，表现出更高的准确率、效率与鲁棒性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2507.04633" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

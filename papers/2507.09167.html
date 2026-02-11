@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>PRAG: Procedural Action Generator - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>PRAG: Procedural Action Generator</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2507.09167" target="_blank" rel="noreferrer">2507.09167</a></span>
+        <span>作者: Karla Stepanova Team</span>
+        <span>日期: 2025-07-12</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人强化学习（RL）的性能高度依赖于多样且丰富的训练任务数据。当前主流方法主要依赖于研究者手动设计任务，这一过程不仅劳动密集，而且受限于设计者的想象力，难以在复杂度和规模上扩展，导致任务库有限，限制了机器人对新场景的泛化能力。为解决训练数据稀缺这一核心痛点，一些工作如POET或ATR尝试通过生成新环境或随机化技能参数来增加多样性，但它们通常不改变任务动作序列本身。</p>
+<p>本文提出了“过程化任务生成”的新视角，旨在自动构建多步、接触式操作任务的动作序列本身，而非仅改变环境参数。其核心思路是：给定一组用户定义的原子动作、对象和空间谓词，通过一个结合符号（逻辑）验证与物理（仿真）验证的两阶段生成器，高效地产生大量逻辑一致且物理可行的长时程任务，为RL训练提供结构化的课程。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>PRAG系统的整体目标是将语义知识（动作、对象、谓词）转化为一系列可解决的任务课程。其核心pipeline是一个两阶段的验证过程：首先进行符号生成与验证以确保逻辑一致性，随后进行物理验证以确保在特定机器人环境中的可行性。</p>
+<p><img src="https://arxiv.org/html/2507.09167v1/extracted/6617047/images/pragbrain.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图1</strong>：PRAG系统总体方案。系统输入语义知识（动作、对象、谓词），通过“创造力”（符号）和“想象力”（物理）两阶段过程生成可行的任务课程，进而提升机器人能力。</p>
+</blockquote>
+<p><strong>1. 符号生成与验证</strong><br>此模块负责构建逻辑上可执行的动作序列。输入包括：</p>
+<ul>
+<li><strong>原子动作</strong>：每个动作（如<code>Approach</code>, <code>Grasp</code>）都通过前提条件（<code>C_init</code>）和后置条件（<code>C_post</code>）定义，它们是基于谓词的逻辑公式。动作执行要求其<code>C_init</code>为真，执行后世界状态根据<code>C_post</code>更新。</li>
+<li><strong>实体与谓词</strong>：对象（如<code>apple</code>）按类层次组织（如<code>GraspableObject</code>）。谓词描述对象间关系（如<code>OnTop(a,b)</code>, <code>Holding(g,o)</code>）。</li>
+<li><strong>采样权重</strong>：可对动作、动作对或实体施加权重，以在探索（生成多样任务）和利用（聚焦特定技能或对象）之间进行平衡控制。</li>
+</ul>
+<p>生成算法迭代地构建动作序列。在每一步，它采样一个动作，实例化所需对象（通过链接现有对象或从类层次中创建新对象），并验证其前提条件。如果有效，则将该动作加入序列，并将其后置条件应用于当前符号世界状态，然后继续下一步。此过程确保了每个生成的序列在逻辑和操作上都是一致的。该方法极大地修剪了搜索空间：对于包含8个原子动作的15步序列，总组合数超过3.5×10^13，但只有约1.9×10^8个是符号有效的。</p>
+<p><strong>2. 物理验证</strong><br>符号有效的任务在物理上可能不可行（例如，由于机器人可达性限制或物体碰撞）。因此，每个生成的任务都会被送入物理模拟器（本文使用修改版的myGym模拟器）进行验证。对于序列中的每个原子动作，模拟器尝试根据谓词描述生成初始状态和目标状态。它采用一种<strong>基于体积的生成方法</strong>，其中空间谓词（如<code>left of</code>）定义了物体的有效放置体积。模拟器的物理引擎会检查碰撞和可达性。只有当序列中每个子目标状态都是物理上可实现的，该任务才被认为是“可行的”并被纳入最终训练课程。</p>
+<p><img src="https://arxiv.org/html/2507.09167v1/extracted/6617047/images/validation_new.png" alt="任务生成与验证示例"></p>
+<blockquote>
+<p><strong>图2</strong>：生成的类似“拾取与放置”任务序列示例。顶行显示符号验证，其中每一步的初始状态（谓词）必须有效。底行显示模拟器中的物理验证，其中每个状态被生成并检查物理可行性。最终目标状态显示在最后一列。</p>
+</blockquote>
+<p><strong>创新点</strong>：与现有方法相比，PRAG的创新具体体现在：（1）<strong>任务序列本身的组合生成</strong>，而非仅改变环境或技能参数；（2）<strong>两阶段验证机制</strong>，先通过高效的符号推理过滤掉逻辑无效的组合，再对剩余候选进行耗时的物理仿真，整体效率更高；（3）<strong>通过采样权重提供对探索-利用平衡的自适应控制</strong>，允许用户引导生成过程。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验主要在<strong>myGym模拟器</strong>中进行，系统配置了8个原子动作，生成了不同长度的动作序列进行评估。</p>
+<p><strong>1. 物体生成与物理可行性</strong><br>研究将PRAG采用的基于体积的生成方法与文本到图像模型<strong>DALL-E 2</strong>进行了对比，后者被提示根据相同的谓词描述生成场景。结果表明，PRAG直接将谓词解释为几何约束的方法显著优于DALL-E 2，尤其是在涉及多个对象和复杂空间关系时。这凸显了对于此项任务，结构化的、几何感知的方法优于通用生成模型。在包含3到6个动作的10,000个生成序列的测试中，<strong>78.3%</strong> 的序列通过了完整的物理验证流程。</p>
+<p><strong>2. 对RL训练的优势</strong><br>论文从原理上分析了PRAG生成的任务对RL训练，特别是长时程问题训练的益处：</p>
+<ul>
+<li><strong>结构化课程</strong>：生成器提供了一系列子目标，每个都有定义的初始/目标状态和奖励。这使得能够进行课程学习，初期可使用密集奖励函数，随着智能体熟练度提高再逐渐转为稀疏奖励。</li>
+<li><strong>保证可解性</strong>：每个任务至少有一条已知的（符号有效的）解路径。这避免了智能体在不可能的任务上浪费资源，这是无限制随机场景生成的常见问题。</li>
+<li><strong>高效性</strong>：通过先进行符号验证，PRAG避免了对指数级数量的不可行任务变体运行规划器或模拟器的昂贵计算过程。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了一个两阶段验证的过程化任务生成框架（PRAG）</strong>，能够从少量基础组件（原子动作、对象、谓词）中，高效生成大量逻辑一致且物理可行的长时程操作任务序列。</li>
+<li><strong>实现了对任务组合空间的智能探索</strong>，通过符号验证大幅剪枝，并结合物理验证确保实用性，生成的输出可直接用于RL训练或构建为带有丰富注释（状态、奖励）的任务数据集。</li>
+<li><strong>为机器人自主生成学习挑战提供了模型</strong>，其结合“创造力”（符号组合）与“想象力”（物理仿真）的机制，模仿了人类认知发展中构建复杂技能的原理。</li>
+</ol>
+<p><strong>局限性</strong>：论文虽未明确列出，但隐含的局限性可能包括：1) 对预定义的原子动作集和对象类层次的依赖；2) 物理验证的准确性受限于所用模拟器的保真度；3) 生成的任务多样性受限于输入语义知识的范围。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>结构化生成方向</strong>：PRAG展示了将符号AI的逻辑推理与机器人的物理仿真相结合，进行结构化内容生成的潜力，这比完全随机或基于黑盒生成模型的方法更能保证质量与效率。</li>
+<li><strong>与规划器结合</strong>：生成的任务遵循PDDL规范，未来可探索与符号规划器的更深层次集成，用于自动求解或验证更复杂的任务逻辑。</li>
+<li><strong>扩展到真实世界</strong>：如何将模拟器中验证可行的任务安全、有效地迁移到真实机器人平台，是值得探索的下一个关键步骤。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出PRAG过程动作生成器，旨在解决机器人强化学习中多步骤接触操作任务数据稀缺的核心问题。该方法以用户定义的原子动作、对象和谓词为输入，通过符号验证（逻辑与操作一致性）和物理验证（环境可解性）双重约束，生成可解的任务序列。实验表明，PRAG能生成最多15步的序列，产生数百万个独特可解多步骤任务，显著扩充了训练数据集。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2507.09167" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

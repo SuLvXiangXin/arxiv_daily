@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Imagination at Inference: Synthesizing In-Hand Views for Robust Visuomotor Policy Inference - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Imagination at Inference: Synthesizing In-Hand Views for Robust Visuomotor Policy Inference</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.15717" target="_blank" rel="noreferrer">2509.15717</a></span>
+        <span>作者: Yoshihiko Nakamura Team</span>
+        <span>日期: 2025-09-19</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>视觉运动策略的性能受观察视角影响显著。目前主流方法是通过整合多个相机视角（尤其是结合外部“智能体视角”和手腕上的“手持视角”）来提升策略的鲁棒性和精确性，因为手持视角能提供近距离、任务相关的关键细节。然而，为机器人实际部署物理手持摄像头面临硬件限制、机械干涉、系统复杂性和成本等关键挑战。</p>
+<p>本文针对在推理阶段缺乏物理手持摄像头这一具体痛点，提出了一个新颖的视角：利用新视角合成技术，在策略推理时实时“想象”出手持视角的观察图像。其核心思路是，通过一个经过微调的、以相机相对位姿为条件的扩散模型，从已知的外部视角图像合成手持视角图像，从而在不增加任何硬件的情况下，为策略提供双视角输入，恢复因缺少真实手持摄像头而下降的性能。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文方法的整体目标是在策略部署（推理）阶段，当物理手持摄像头不可用时，通过合成的手持视角图像来增强策略的输入。整个流程分为训练和推理两个阶段。在训练阶段，需要收集包含外部视角图像、真实手持视角图像以及两者间已知相对位姿变换的数据集，用于微调新视角合成模型。在推理阶段，给定当前的外部视角图像和已知的相机相对位姿，合成模型生成对应的手持视角图像，随后将外部视角和合成的手持视角一并输入给预先训练好的视觉运动策略，以生成控制指令。</p>
+<p><img src="https://arxiv.org/html/2509.15717v1/image/method_overview.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：方法概述。我们的方法利用ZeroNVS，以外部智能体视角观察和相对相机位姿变换为条件，生成以自我为中心的手持视角。这些合成视图作为外部输入的补充，用于各种操作任务的策略部署。</p>
+</blockquote>
+<p>核心模块包括：1）基于位姿条件扩散的新视角合成模型；2）使用LoRA的参数高效微调策略；3）支持双视角输入的视觉运动策略架构。</p>
+<ol>
+<li><strong>新视角合成模型</strong>：采用基于ZeroNVS的潜在扩散模型。该模型以一张外部视角RGB图像和一个描述从外部视角到手持视角的6自由度相对位姿变换 T_AV→IH ∈ SE(3) 作为条件输入。模型首先将输入图像编码到潜在空间，同时通过一个浅层MLP嵌入位姿信息并空间广播为条件张量。在扩散过程的每个去噪步骤中，一个U-Net去噪器通过交叉注意力层联合处理潜在噪声和位姿条件，最终解码生成目标手持视角图像。该方法无需3D监督或多视图输入，适合机器人场景。</li>
+<li><strong>LoRA微调</strong>：为了将预训练的ZeroNVS模型适配到机器人操作领域，采用低秩自适应技术进行高效微调。具体而言，仅在U-Net去噪器的自注意力和交叉注意力模块中的查询、键、值和输出投影层注入可训练的低秩矩阵（秩为128，缩放因子256），冻结所有其他模型参数。使用包含成对RGB图像和相对相机位姿的机器人任务数据进行训练，优化目标为去噪损失（预测噪声与真实噪声的均方误差）。</li>
+<li><strong>策略集成</strong>：策略架构设计为支持双视角视觉输入，通常包含两个独立的图像编码器（如ResNet-18），分别处理外部视角和（真实或合成的）手持视角图像。编码后的特征与本体感知信号（如末端执行器位姿、夹爪状态）融合，再输入动作预测模块（如基于流匹配或扩散的解码器）。在训练时，策略接收真实的外部视角和手持视角图像；在测试（推理）时，用合成模型生成的手持视角图像替代缺失的真实手持视角输入。</li>
+</ol>
+<p>与现有方法相比，本文的核心创新点在于将新视角合成技术应用于<strong>在线、实时的策略推理过程</strong>，而非仅用于离线的数据增强或训练阶段。这使得机器人能够在部署时动态生成缺失的自我中心视角，直接补充实时感知信息，从而在不修改或重新训练策略本身的前提下提升其鲁棒性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在模拟和真实世界两种环境中进行。模拟实验使用了RoboMimic和MimicGen基准测试中的六个操作任务：Lift（抓取并抬起）、Can（操作小罐子）、Square（方形插孔任务）、Stack（堆叠积木）、Coffee（插入咖啡胶囊）和Mug Cleanup（清理杯子）。真实世界实验使用Unitree Z1机械臂进行草莓采摘任务。策略主要基于流匹配策略进行训练。对比的基线包括：仅使用智能体视角、使用智能体视角加真实手持视角（性能上界）、以及使用智能体视角加合成手持视角。</p>
+<p><img src="https://arxiv.org/html/2509.15717v1/image/sim_syn_img/icra_bar_chart.png" alt="定性对比"></p>
+<blockquote>
+<p><strong>图21</strong>：不同任务在不同观察输入下的成功率对比。AV+GT-IH（真实手持视角）通常提供最佳性能，AV+Syn-IH（合成手持视角）相比仅用AV（外部视角）有显著提升，尤其在复杂任务（如Square， Can， Mug Cleanup）上能大幅缩小与真实视角的差距。</p>
+</blockquote>
+<p>关键实验结果如下：在六个模拟任务中，使用合成手持视角（AV+Syn-IH）的策略成功率 consistently 高于仅使用外部视角（AV）的基线。对于涉及遮挡和精细空间推理的任务（如Square， Mug Cleanup， Can），性能提升尤为显著，合成视图弥补了大部分与真实手持视角（AV+GT-IH）之间的性能差距。例如，在复杂任务上，合成视角能将成功率从较低水平提升至接近真实视角的水平。而对于简单任务（如Lift），所有配置性能均接近饱和，说明合成视图的贡献具有任务依赖性。</p>
+<p><img src="https://arxiv.org/html/2509.15717v1/image/sim_syn_img/unitree_syn.png" alt="真实实验设置"></p>
+<blockquote>
+<p><strong>图22</strong>：真实世界草莓采摘实验的设置与视图示例。从左至右分别为：外部智能体视角、真实手持视角、以及由ZeroNVS合成的手持视角。</p>
+</blockquote>
+<p>在真实世界草莓采摘任务中（结果见表I），仅使用外部视角的策略成功率为3/10。当加入合成手持视角后，成功率提升至6/10。而使用真实手持视角的策略取得了8/10的成功率。这证实了合成视图在真实部署中也能有效提升策略的稳定性和鲁棒性，尽管尚未完全达到真实硬件提供的性能上限。</p>
+<p><img src="https://arxiv.org/html/2509.15717v1/image/sim_syn_img/finetune_effect_can.png" alt="微调效果对比1"></p>
+<blockquote>
+<p><strong>图23</strong>：Can任务上，LoRA微调ZeroNVS前后的合成效果对比。从左至右：真实手持视图、预训练ZeroNVS输出、微调后输出。微调后模型能恢复与任务相关的几何结构。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.15717v1/image/sim_syn_img/finetune_effect_coffee.png" alt="微调效果对比2"></p>
+<blockquote>
+<p><strong>图24</strong>：Coffee任务上，LoRA微调ZeroNVS前后的合成效果对比。布局同图23。微调显著改善了合成图像的质量，使其更清晰、几何一致，并保留了手持视角的关键信息。</p>
+</blockquote>
+<p>消融实验通过定性对比（图23，图24）展示了LoRA微调的重要性。未经微调的预训练ZeroNVS模型生成的图像模糊、扭曲，且经常丢失关键场景信息。而经过任务数据微调后的模型，能够合成出清晰、几何一致且接近真实手持视角的图像，特别是在接触区域和物体边界等对操作至关重要的部位。这证明了针对特定领域进行适配的必要性。</p>
+<p>论文也指出了方法的局限性：推理时的新视角合成会带来不可忽略的计算开销。在实验中，使用ZeroNVS合成单帧手持视图约需16.5秒（在NVIDIA RTX 4060 Ti上），这增加了闭环控制的延迟，可能影响实时响应能力。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）明确指出了手持视角对视觉运动策略的关键作用，并创新性地提出在推理时用合成视图替代物理摄像头这一概念性解决方案；2）采用参数高效的LoRA技术对预训练的扩散模型（ZeroNVS）进行微调，使其适配机器人操作领域，能够从外部视角和已知位姿合成高质量的手持视角图像；3）通过大量模拟和真实实验证明，将合成视图集成到实时策略推理中，能够显著提升策略成功率，且无需修改或重训策略本身。</p>
+<p>论文自身提到的局限性主要是合成图像的速度较慢，可能影响高频率闭环控制的实时性。这为后续研究指明了方向：需要进一步优化生成模型的速度，或探索更高效的合成架构，以平衡感知性能与系统实时性。此外，该方法展示了生成式模型（特别是扩散模型）在机器人实时感知与决策中的潜力，启发了未来研究如何更紧密地将“想象力”（生成能力）与“行动力”（控制能力）在具身智能体中结合。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中因硬件限制难以部署真实手部摄像头，导致视觉运动策略性能下降的问题，提出在推理时通过新颖视角合成技术“想象”生成手部视角图像。方法核心是采用基于LoRA微调的预训练扩散模型，以相对相机位姿为条件，从单张智能体视角图像合成手部视图。在仿真与真实草莓采摘任务上的实验表明，合成的手部视图显著增强了策略推理能力，有效恢复了因缺少真实手部摄像头而导致的性能损失。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.15717" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

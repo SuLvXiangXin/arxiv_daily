@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Retrieve-Augmented Generation for Speeding up Diffusion Policy without Additional Training - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Retrieve-Augmented Generation for Speeding up Diffusion Policy without Additional Training</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2507.21452" target="_blank" rel="noreferrer">2507.21452</a></span>
+        <span>作者: Yutaka Matsuo Team</span>
+        <span>日期: 2025-07-29</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人模仿学习领域，扩散策略（Diffusion Policy）已成为一种主流方法，它通过去噪过程生成平滑且多模态的动作序列，在多种任务上取得了显著成功。然而，扩散策略的一个关键局限性在于其推理速度慢。标准的扩散模型需要进行多次（如100步）迭代去噪才能生成最终动作，这限制了其在需要高频控制（如&gt;10Hz）的实时机器人应用中的部署。</p>
+<p>本文针对扩散策略推理速度慢这一具体痛点，提出了一种无需额外训练即可加速推理的新视角。其核心思路是：利用检索增强生成（RAG）范式，从离线数据集中检索与当前观察最相似的历史轨迹，将其作为去噪过程的“捷径”或高质量初始噪声，从而大幅减少所需的去噪步数，实现推理加速。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法名为检索增强扩散策略（Retrieve-Augmented Diffusion Policy, RADiff）。其整体框架不改变扩散策略的训练过程，仅在推理阶段引入一个检索模块，旨在用更少的去噪步数生成高质量动作。</p>
+<p><img src="https://raw.githubusercontent.com/ir-lab/RADiff/main/assets/radiff_pipeline.png" alt="RADiff 方法概览"></p>
+<blockquote>
+<p><strong>图1</strong>：RADiff 方法整体框架。在推理时，首先根据当前观察从离线数据集中检索出 K 条最相似的历史轨迹，并提取其对应的动作序列。然后，将这些检索到的动作通过一个编码器（如 T5）映射为特征，再聚合（如平均）成一个“检索增强”的初始噪声。最后，将这个初始噪声输入到预训练好的扩散策略中，从第 T_skip 步（而非第 T 步）开始进行反向去噪，从而跳过前期的随机探索，加速收敛。</p>
+</blockquote>
+<p>核心模块包括：</p>
+<ol>
+<li><strong>离线数据集与检索器</strong>：方法需要一个与训练数据同分布的离线数据集 ( \mathcal{D} = { (o_i, a_i) } )。检索器基于当前观察 ( o_t ) 计算与数据集中所有观察的相似度（例如使用预训练的视觉编码器提取特征，计算余弦相似度），返回 Top-K 个最相似的观察-动作对 ( { (o^{(k)}, a^{(k)}) }_{k=1}^K )。</li>
+<li><strong>检索增强的初始噪声构建</strong>：这是方法的核心创新点。标准扩散策略从纯高斯噪声 ( \epsilon_T \sim \mathcal{N}(0, I) ) 开始去噪。RADiff 则构建一个“知情”的初始状态 ( x_{T_{skip}} )：<ul>
+<li>首先，将检索到的 K 条动作序列 ( a^{(k)} ) 分别通过一个冻结的文本编码器（论文中使用 T5）映射为特征向量。选择文本编码器是因为其能有效处理序列数据并产生语义丰富的特征。</li>
+<li>然后，对这些特征进行聚合（论文中采用简单的平均池化），得到一个聚合特征向量。</li>
+<li>最后，将该聚合特征向量通过一个轻量级的、可学习的映射网络（MLP）投影到与扩散模型噪声相同的维度，作为初始噪声 ( x_{T_{skip}} )。这里 ( T_{skip} ) 表示跳过的去噪步数，( T_{skip} &lt; T )。</li>
+</ul>
+</li>
+<li><strong>加速推理过程</strong>：将构建的初始噪声 ( x_{T_{skip}} ) 输入到<strong>预训练且参数冻结</strong>的扩散策略中，直接从第 ( T_{skip} ) 步开始执行反向去噪过程（即 DDPM 或 DDIM 采样），直到第 0 步，得到最终动作 ( a_t )。由于跳过了前 ( T - T_{skip} ) 步从纯噪声开始的缓慢探索阶段，推理步数显著减少。</li>
+</ol>
+<p>与现有方法（如蒸馏、知识迁移或设计更快的采样器）相比，RADiff 的创新点在于：</p>
+<ul>
+<li><strong>无需重新训练</strong>：直接利用预训练扩散模型，仅添加一个轻量级检索模块和映射网络，且映射网络可通过少量演示数据高效微调。</li>
+<li><strong>物理启发的初始化</strong>：利用历史成功轨迹为去噪过程提供物理上合理的起点，而非纯随机噪声，使去噪过程更高效。</li>
+<li><strong>灵活性与通用性</strong>：该方法可作为插件应用于任何已训练的扩散策略上，与不同的扩散模型架构和采样器兼容。</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/ir-lab/RADiff/main/assets/initial_noise.png" alt="噪声构建与消融"></p>
+<blockquote>
+<p><strong>图2</strong>：检索增强初始噪声构建方法消融实验。左图比较了不同聚合方法（平均、加权平均、基于相似度的加权平均）和不同编码器（T5, VC-1, CLIP）对性能的影响。右图展示了检索增强的初始噪声（蓝色）与标准高斯噪声（橙色）在去噪过程中与真实动作（绿色）的均方误差（MSE）变化，表明前者起点更优，收敛更快。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与数据集</strong>：实验在模拟环境（LIBERO 长视野任务套件、CALVIN 多任务套件）和真实机器人（7自由度机械臂执行6项桌面操作任务）上进行。离线数据集使用了各基准对应的训练集或专门收集的演示数据集。</p>
+<p><strong>Baseline方法</strong>：</p>
+<ul>
+<li>**标准扩散策略 (DDPM)**：100步去噪，作为主要对比基线。</li>
+<li><strong>加速采样器</strong>：DDIM（20步）、DPMSolver（20步）。</li>
+<li><strong>其他策略</strong>：行为克隆（BC）、条件VAE（CVAE）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>模拟环境性能</strong>：在 LIBERO 任务上，RADiff (20步) 达到 <strong>85.7%</strong> 的成功率，与标准 DDPM (100步) 的 <strong>86.9%</strong> 相当，但推理速度快了 <strong>4.3倍</strong>。相比之下，DDIM (20步) 成功率降至 **77.4%**。在 CALVIN 任务上，RADiff (20步) 的成功率 (<strong>88.0%</strong>) 显著高于 DDIM (20步) 的 **73.3%**，且接近 100步 DDPM 的 **90.0%**。</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/ir-lab/RADiff/main/assets/libero_results.png" alt="LIBERO 实验结果"></p>
+<blockquote>
+<p><strong>图3</strong>：LIBERO 长视野任务成功率对比。RADiff 在使用20步采样时，性能与100步的标准扩散策略（Diffusion Policy）几乎持平，并显著优于使用20步的DDIM采样器，证明了其加速的有效性。</p>
+</blockquote>
+<ol start="2">
+<li><strong>真实机器人实验</strong>：在6项桌面操作任务中，RADiff (20步) 平均成功率为 **81.7%**，与100步扩散策略 (<strong>83.3%</strong>) 性能相近，且远高于20步 DDIM (<strong>53.3%</strong>) 和 CVAE (<strong>65.0%</strong>)。这验证了方法在现实复杂场景中的有效性。</li>
+</ol>
+<p><img src="https://raw.githubusercontent.com/ir-lab/RADiff/main/assets/real_robot_results.png" alt="真实世界实验结果"></p>
+<blockquote>
+<p><strong>图4</strong>：真实机器人6项任务的平均成功率。RADiff 在20步设置下保持了高性能，而DDIM在相同步数下性能下降严重，凸显了检索增强初始化对于在少量步数下保持鲁棒性的关键作用。</p>
+</blockquote>
+<ol start="3">
+<li><strong>消融实验</strong>：<ul>
+<li><strong>检索数量 K</strong>：K=5 时达到最佳平衡点，过多检索会引入噪声，过少则信息不足。</li>
+<li><strong>跳过步数 ( T_{skip} )</strong>：( T_{skip} ) 在70-90（总步数T=100）范围内性能最佳，跳过太多（起点太接近真实动作）或太少（加速不明显）都会导致性能下降。</li>
+<li><strong>编码器与聚合方式</strong>：使用 T5 编码器和简单平均聚合效果最好（见图2）。复杂的加权方案并未带来显著增益。</li>
+<li><strong>映射网络微调</strong>：使用少量（约100条）轨迹微调映射网络 MLP，能使其更好地将聚合特征适配到扩散模型的噪声空间，带来约 <strong>5%</strong> 的性能提升。</li>
+</ul>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了 RADiff，一种无需重新训练扩散策略模型的通用推理加速框架，通过检索增强的初始化将去噪步数减少至原来的 1/5，同时保持性能无损。</li>
+<li>设计了利用历史轨迹构建“知情”初始噪声的机制，将检索到的动作序列通过预训练编码器和轻量映射网络适配到扩散噪声空间，为去噪过程提供了物理上更优的起点。</li>
+<li>在模拟和真实机器人任务上进行了广泛验证，证明了该方法在长视野、多任务场景中的有效性和鲁棒性，显著优于单纯的加速采样器。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，该方法依赖于一个与当前任务相关的、高质量的离线数据集。如果检索库中缺乏与当前观察足够相似的轨迹，性能可能会下降。此外，检索过程本身引入了一定的计算开销，尽管远小于减少的去噪计算量。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li><strong>RAG 范式在机器人学习中的应用</strong>：本研究展示了检索增强生成在控制策略领域的潜力，可启发将其应用于其他序列生成模型（如 Transformer 策略）的加速或性能提升。</li>
+<li><strong>更高效的检索与融合机制</strong>：可以探索更高效的实时检索算法，或者更精细的检索轨迹融合方式（如基于不确定性的选择）。</li>
+<li><strong>处理分布外场景</strong>：如何增强方法在面对未见过的、与检索库差异较大场景时的鲁棒性，是一个重要的未来方向。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人控制中扩散策略推理速度慢的问题，提出RAG-Diffusion方法，无需额外训练即可加速。其核心是结合检索增强生成（RAG）与扩散模型，在推理时通过检索历史数据中的相似轨迹，为扩散过程提供高质量的初始噪声，从而减少去噪步数。实验表明，该方法在多个机器人操控任务上，能达到与原始扩散策略相近的性能，同时将推理速度提升了1.5至2.3倍。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2507.21452" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

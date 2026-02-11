@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>D2PPO: Diffusion Policy Policy Optimization with Dispersive Loss - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>D2PPO: Diffusion Policy Policy Optimization with Dispersive Loss</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.02644" target="_blank" rel="noreferrer">2508.02644</a></span>
+        <span>作者: Haitao Wang Team</span>
+        <span>日期: 2025-08-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>扩散策略通过迭代去噪机制建模高维连续动作空间中的多模态分布，已成为机器人操控领域有前景的方法。然而，现有扩散策略主要依赖重构损失来优化去噪精度，却忽视了中间特征表示的质量与多样性，导致<strong>扩散表示坍缩</strong>问题：语义相似的观测被映射为难以区分的特征，使得策略无法识别复杂操控任务中所需的细微但关键的变化，从而在复杂任务上成功率较低。本文针对这一具体痛点，从<strong>提升特征表示判别性</strong>的新视角出发，提出D²PPO方法。其核心思路是：通过引入一种无需正样本对的<strong>分散损失</strong>作为正则项，在预训练阶段强制网络学习对相似观测的判别性表示，再结合策略梯度进行微调，从而提升复杂操控任务的性能。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>D²PPO采用两阶段训练范式：1）使用分散损失增强的预训练；2）基于策略梯度的优化微调。整体框架如图2所示。</p>
+<p><img src="https://arxiv.org/html/2508.02644v1/x2.png" alt="D²PPO框架总览"></p>
+<blockquote>
+<p><strong>图2</strong>：D²PPO框架总览。完整的二阶段训练范式：左侧为预训练阶段，包含视觉Transformer特征提取和防止表示坍缩的分散损失正则化；右上角为动作扩散过程，展示了从高斯噪声到最终动作的迭代去噪；右下角为微调阶段，采用双层MDP公式进行环境交互的策略梯度优化。</p>
+</blockquote>
+<p><strong>第一阶段：基于分散损失的增强预训练</strong><br>该阶段目标是学习具有判别性的特征表示。方法使用Vision Transformer提取视觉特征，并在MLP去噪网络的选定中间层施加分散损失正则化。预训练目标函数为：<br>$\mathcal{L}<em>{\text{D}^{2}\text{PPO}}^{\text{pre-train}} = \mathcal{L}</em>{\text{diff}} + \lambda\mathcal{L}<em>{\text{disp}}$<br>其中，$\mathcal{L}</em>{\text{diff}}$ 是标准的扩散损失，确保准确去噪；$\mathcal{L}<em>{\text{disp}}$ 是分散损失，权重为 $\lambda$，用于鼓励特征多样性。分散损失在所有去噪步上取平均：$\mathcal{L}</em>{\text{disp}} = \frac{1}{K}\sum_{k=1}^{K}\mathcal{L}<em>{\text{disp}}^{\text{variant}}(\mathbf{H}</em>{k})$，其中 $\mathbf{H}_{k}$ 表示批次中所有样本在第 $k$ 步的特征表示集合。</p>
+<p>本文实现了三种分散损失变体，均通过移除传统对比学习中的正样本对齐项得到，专注于最大化批次内样本间的差异：</p>
+<ol>
+<li><strong>基于InfoNCE的L2距离分散损失</strong>：$\mathcal{L}<em>{\text{disp}}^{\text{InfoNCE-L2}} = \log\mathbb{E}</em>{i,j}\left[\exp\left(-\frac{||h_{i}-h_{j}||_{2}^{2}}{\tau}\right)\right]$，基于特征向量的欧氏距离鼓励分散。</li>
+<li><strong>基于InfoNCE的余弦距离分散损失</strong>：$\mathcal{L}<em>{\text{disp}}^{\text{InfoNCE-Cos}} = \log\mathbb{E}</em>{i,j}\left[\exp\left(-\frac{1-\frac{h_{i}^{T}h_{j}}{||h_{i}||<em>{2}\cdot||h</em>{j}||_{2}}}{\tau}\right)\right]$，基于特征方向（夹角）鼓励分散，具有尺度不变性。</li>
+<li><strong>基于Hinge损失的分散损失</strong>：$\mathcal{L}<em>{\text{disp}}^{\text{Hinge}} = \mathbb{E}</em>{i,j}\left[\max(0,\epsilon-\mathcal{D}(h_{i},h_{j}))^{2}\right]$，直接惩罚距离小于预设边际 $\epsilon$ 的样本对，明确控制最小分散距离。</li>
+</ol>
+<p><strong>第二阶段：分散损失增强的扩散策略优化</strong><br>此阶段在预训练得到的、具有判别性表示的策略基础上，使用强化学习（PPO）进行微调以最大化任务奖励。关键挑战在于扩散策略的动作概率涉及整个去噪链。通过推导，策略梯度可转化为对各个去噪步条件概率的对数梯度求和：$\nabla_{\theta}\log\pi_{\theta}(a_{t}^{0}|s_{t}) = \sum_{k=1}^{K}\nabla_{\theta}\log p_{\theta}(a_{t}^{k-1}|a_{t}^{k},s_{t})$。为加速训练，采用重要性采样来近似计算梯度，仅对部分去噪步进行采样和梯度更新。</p>
+<p><strong>与现有方法的创新点</strong></p>
+<ol>
+<li><strong>问题诊断</strong>：首次明确识别并形式化了扩散策略中的“表示坍缩”问题。</li>
+<li><strong>正则化方法</strong>：创新地将“无需正样本对”的分散损失引入扩散策略预训练，避免了传统对比学习对正负样本构建、额外预训练阶段或外部数据的依赖。</li>
+<li><strong>分层正则化分析</strong>：系统探索了在不同网络层（早期/晚期）施加分散损失对不同复杂度任务的影响，并提供了配置指导。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在 <strong>RoboMimic</strong> 基准数据集上进行评估，包含 Lift、Can、Square、Transport 四个机器人操控任务。使用 <strong>Franka Emika Panda</strong> 机器人进行真实世界实验验证。主要对比的基线方法是 <strong>DPPO</strong>。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>预训练性能提升</strong>：如图3所示，在四个任务上，D²PPO相比DPPO基线取得了平均 <strong>22.7%</strong> 的成功率提升。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.02644v1/x3.png" alt="预训练实验结果"></p>
+<blockquote>
+<p><strong>图3</strong>：D²PPO与基线DPPO在四个操控任务上的预训练成功率对比，误差线表示标准差。D²PPO在所有任务上均取得一致提升。</p>
+</blockquote>
+<ol start="2">
+<li><strong>微调后性能</strong>：经过PPO微调后，D²PPO相比DPPO取得了平均 <strong>26.1%</strong> 的成功率提升，达到了新的SOTA结果（图4）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.02644v1/x4.png" alt="微调后性能对比"></p>
+<blockquote>
+<p><strong>图4</strong>：微调后D²PPO与基线方法在RoboMimic任务上的性能对比。D²PPO在多个任务上达到或接近100%成功率，显著优于基线。</p>
+</blockquote>
+<ol start="3">
+<li><strong>分散损失变体与层位分析</strong>：如图5所示，不同变体在不同层位效果不同。<strong>简单任务（Lift）受益于早期层正则化，而复杂任务（Transport）则显著受益于晚期层正则化</strong>。InfoNCE-Cosine和Hinge损失在复杂任务上表现更好。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.02644v1/x5.png" alt="分散损失变体与层位分析"></p>
+<blockquote>
+<p><strong>图5</strong>：不同分散损失变体（InfoNCE-L2, InfoNCE-Cosine, Hinge）应用于不同网络层时，在简单任务和复杂任务上的成功率。展示了任务复杂度与最佳正则化层位之间的关系。</p>
+</blockquote>
+<ol start="4">
+<li><strong>特征表示可视化</strong>：如图6 t-SNE可视化所示，使用分散损失后，特征在隐空间中的分布更加分散，验证了其缓解表示坍缩的效果。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.02644v1/x6.png" alt="特征表示可视化"></p>
+<blockquote>
+<p><strong>图6</strong>：t-SNE可视化对比。左图（无分散损失）特征高度聚集；右图（有分散损失）特征分布更分散，判别性更强。</p>
+</blockquote>
+<ol start="5">
+<li><strong>真实机器人实验</strong>：在真实Panda机器人上执行“叠放方块”和“抓取搬运”任务（图7）。D²PPO取得了 <strong>93.3%</strong> 和 <strong>86.7%</strong> 的高成功率，显著优于基线的60.0%和53.3%，尤其在复杂任务中优势明显（图8）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.02644v1/x7.png" alt="真实机器人任务设置"></p>
+<blockquote>
+<p><strong>图7</strong>：真实机器人实验任务设置：“叠放方块”和“抓取搬运”。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.02644v1/x8.png" alt="真实机器人实验结果"></p>
+<blockquote>
+<p><strong>图8</strong>：真实机器人实验成功率对比。D²PPO在两个任务上均取得显著更高的成功率。</p>
+</blockquote>
+<ol start="6">
+<li><strong>消融实验</strong>：图9的消融实验表明，<strong>分散损失和两阶段训练策略都是有效的</strong>。仅使用分散损失预训练或仅使用PPO微调，效果均不如完整的D²PPO。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.02644v1/x9.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图9</strong>：消融实验。对比完整D²PPO、仅使用分散损失预训练（无微调）、以及直接在原始扩散策略上微调（无分散损失预训练）的性能，验证了各组件贡献。</p>
+</blockquote>
+<ol start="7">
+<li><strong>训练曲线稳定性</strong>：如图10所示，引入分散损失后，训练曲线（奖励和成功率）收敛更快、更稳定。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.02644v1/x10.png" alt="训练曲线对比"></p>
+<blockquote>
+<p><strong>图10</strong>：训练曲线对比。使用分散损失（右）比不使用（左）的奖励和成功率曲线收敛更快、更平滑、更稳定。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>诊断并形式化了扩散策略中存在的“表示坍缩”问题，指出这是其在复杂操控任务上表现不佳的根本原因之一。</li>
+<li>提出了D²PPO框架，创新性地将无需正样本对的分散损失作为正则项引入扩散策略预训练，有效提升了特征的判别性。</li>
+<li>通过系统的实验分析，发现了“简单任务受益于早期层正则化，复杂任务受益于晚期层正则化”的规律，并为不同复杂度任务提供了分散损失配置的指导。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，分散损失会引入额外的计算成本，且其效果可能对超参数（如损失权重 $\lambda$、温度 $\tau$、边际 $\epsilon$）的选择敏感。不同变体和层位的选择需要根据任务复杂度进行实验确定。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>表示质量的重要性</strong>：本工作强调了在追求生成质量（如去噪精度）的同时，提升决策模型中间表示判别性的同等重要性。</li>
+<li><strong>正则化策略的通用性</strong>：所采用的分散损失是一种通用正则化方法，其“无需正样本对”的特性使其易于集成到其他基于扩散或生成模型的决策框架中。</li>
+<li><strong>分层优化思路</strong>：关于不同网络层正则化对不同任务产生不同效果的发现在一定程度上揭示了模型处理不同复杂度信息的机理，为后续设计自适应或层次化的正则化方法提供了思路。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对扩散策略在机器人操作中存在的“扩散表示崩溃”问题，即相似观察映射为难以区分的特征，导致无法处理细微但关键的动作差异。提出D²PPO方法，引入**分散损失正则化**，通过将批次内所有隐藏表示视为负样本对，迫使网络学习更具判别性的特征表示。在RoboMimic基准测试中，该方法在预训练和微调阶段分别取得**平均22.7%和26.1%的性能提升**，并在复杂任务上达到新的SOTA水平。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.02644" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

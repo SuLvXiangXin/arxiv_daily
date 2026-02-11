@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FlowRAM: Grounding Flow Matching Policy with Region-Aware Mamba Framework for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>FlowRAM: Grounding Flow Matching Policy with Region-Aware Mamba Framework for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.16201" target="_blank" rel="noreferrer">2506.16201</a></span>
+        <span>作者: Wei Tang Team</span>
+        <span>日期: 2025-06-19</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人高精度操作任务中，智能体不仅需要理解环境的整体语义信息，还必须对任务相关区域有精细的几何理解。当前的主流策略学习方法可分为确定性策略和基于生成模型的策略。确定性策略直接预测动作，但在处理高维分布和复杂动作空间时存在困难。基于生成模型的策略，特别是扩散模型，擅长处理高维连续动作空间，通过迭代去噪过程生成多样化动作。然而，现有扩散模型方法面临两个根本挑战：第一，缺乏对任务相关区域的专门感知，限制了高精度任务的性能；第二，迭代去噪过程导致生成速度慢，难以满足快速机器人控制的需求。</p>
+<p>本文针对上述痛点，提出了一种新视角：利用条件流匹配的生成过程，以一种简单而有效的方式引入区域感知策略，从而同时提升机器人操作的精度和效率。本文的核心思路是：提出一个名为FlowRAM的框架，通过动态半径调度实现渐进式区域感知，并利用条件流匹配进行高效的关键帧位姿生成，同时采用状态空间模型进行高效的多模态信息融合。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>FlowRAM是一个基于Mamba的框架，旨在利用流匹配生成过程实现高效的机器人学习。其整体流程遵循基于关键帧的操作范式，从专家演示数据中学习预测末端执行器的6自由度关键帧位姿。</p>
+<p><img src="https://arxiv.org/html/2506.16201v1/x2.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图2</strong>：FlowRAM的整体框架。这是一个基于Mamba的框架，多模态Mamba处理多视角RGB图像、几何信息、指令和机器人本体感知。在流匹配中，噪声干扰的动作在观测的指导下被传输到目标动作。训练时，动态半径调度在随机离散时间步上调整感知半径，使模型能捕获不同大小的区域，并通过提取全面的语义和几何特征来适应多样化的操作任务。</p>
+</blockquote>
+<p><strong>核心模块1：动态半径调度</strong><br>这是实现区域感知的核心。动态半径调度器利用流匹配生成过程进行自适应的3D感知。它输出一系列区域感知掩码 ℳ_i = {(𝒑_i, r_i)}，其中 𝒑_i 是时间步 i 时被噪声干扰的位置（在推理过程中逐渐收敛到真实位置），r_i 是对应的区域半径。半径 r_i = f(i) 是一个单调递减函数。随着时间步 t 增加（从噪声向目标演进），半径 r 相应减小，遵循 r_min ≤ r_i &lt; r_i-1 &lt; … &lt; r_0 的关系。这使得模型能够从全局感知转变为聚焦于任务相关区域的几何细节。在实现中，采用线性半径控制策略：r_i = (1-i) · (r_0 - r_min) + r_min，但也可调整为余弦退火等更复杂的形式以适应不同任务需求。与在全局空间中使用最远点采样的传统方法不同，DRS实现了灵活的几何粒度，在任务相关区域以更高分辨率采样，从而保留精细的几何细节。</p>
+<p><strong>核心模块2：多模态令牌序列化</strong><br>FlowRAM处理点云和RGB图像作为输入。对于点云分支，首先应用DRS动态采样所需点云，然后使用一个基于Mamba的点云编码器生成几何特征 𝑭_geo。对于图像分支，使用带有特征金字塔网络的CLIP图像编码器处理多视角图像，提取全局语义特征 𝑭_rgb。此外，使用CLIP语言编码器将任务指令映射为文本特征 𝑭_text，并将噪声干扰的位姿映射为特征 𝑭_open。</p>
+<p><strong>核心模块3：状态空间融合模型</strong><br>引入状态空间模型作为多模态融合模块，促进噪声干扰位姿、语言、语义和几何令牌之间的有效交互。在特征融合前，使用轻量级MLP进行位置嵌入，为无序点云数据编码位置信息。随后，将所有令牌沿点维度进行拼接：𝑭_in = concat(𝑭_geo, 𝑭_rgb, 𝑭_text, 𝑭_open)。最后，设计一个多模态Mamba模型来处理 𝑭_in，利用Mamba强大的序列建模能力和线性计算复杂度来融合多模态信息，并回归出引导动作生成的向量场。</p>
+<p><strong>与现有方法的创新点</strong></p>
+<ol>
+<li><strong>感知与生成过程的动态耦合</strong>：创新性地将流匹配的生成过程（时间步）与区域感知的粒度（半径）动态关联，实现了从粗到细的渐进式感知，这是此前方法所不具备的。</li>
+<li><strong>高效生成与融合</strong>：采用条件流匹配替代扩散模型，通过回归确定性向量场直接生成动作，极大减少了推理所需的步数（仅需数步）。同时，采用计算复杂度为线性的Mamba模型进行多模态融合，提升了整体效率。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在机器人操作基准测试RLBench上进行了广泛评估，包括10个多任务实验和7个高精度任务实验。实验平台基于该基准测试。</p>
+<p><strong>对比方法</strong>：与多种先进的基线方法进行了比较，包括RVT、ManiGaussian、C2F-ARM、PerAct、Act3D、RVT-2以及扩散模型方法Diffusion Policy (DP)。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>整体性能</strong>：在RLBench的10个任务上，FlowRAM达到了93.5%的平均成功率，显著优于所有基线方法，比先前最佳方法（RVT-2）的84.5%高出9.0%。</li>
+<li><strong>高精度任务性能</strong>：在7个高精度任务（如插入USB、拧螺丝）上，FlowRAM表现尤为突出，平均成功率达到87.1%，比先前最佳方法（75.1%）高出12.0%。</li>
+<li><strong>推理效率</strong>：FlowRAM仅需4个时间步即可生成物理上合理的动作，相比需要数十甚至上百步的扩散模型方法，推理速度显著提升。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.16201v1/x3.png" alt="多任务与高精度任务结果"></p>
+<blockquote>
+<p><strong>图3</strong>：在RLBench 10个任务（左）和7个高精度任务（右）上的成功率对比。FlowRAM在两个设置下均取得了最优性能，尤其是在高精度任务上优势明显。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.16201v1/x4.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图4</strong>：消融实验结果。(a) 不同感知策略对比，显示动态半径调度（DRS）优于固定半径或全局感知。(b) 不同生成模型对比，显示条件流匹配（CFM）优于扩散模型（DM）和确定性策略（Det.）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.16201v1/x5.png" alt="推理步骤分析"></p>
+<blockquote>
+<p><strong>图5</strong>：推理步骤数对成功率的影响。FlowRAM仅需4步即可达到高性能，而扩散模型需要更多步数且性能更低。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.16201v1/x6.png" alt="真实世界部署"></p>
+<blockquote>
+<p><strong>图6</strong>：真实世界任务部署的定性结果。FlowRAM成功完成了打开微波炉、摆放杯子、插入USB和插拔插头等任务。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.16201v1/x7.png" alt="模块贡献分析"></p>
+<blockquote>
+<p><strong>图7</strong>：各模块贡献的消融研究。移除DRS或Mamba融合模块会导致性能显著下降，验证了它们的必要性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.16201v1/x8.png" alt="区域感知可视化"></p>
+<blockquote>
+<p><strong>图8</strong>：动态半径调度在“插入USB”任务中的可视化。感知区域（球体）随时间步（t=0到t=1）逐渐缩小并聚焦到USB端口附近，实现了从全局场景理解到局部几何细节捕捉的过渡。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：</p>
+<ul>
+<li><strong>动态半径调度</strong>：移除DRS（改为全局感知或固定半径）会导致性能大幅下降（约10-15%），证明了渐进式区域感知的重要性。</li>
+<li><strong>状态空间融合模型</strong>：将Mamba融合模块替换为Transformer会导致性能下降且计算量增加。</li>
+<li><strong>生成方法</strong>：将条件流匹配替换为扩散模型或确定性策略，性能均会变差，且扩散模型需要更多推理步骤。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种新颖的3D区域感知策略，通过动态半径调度，利用流匹配过程渐进式地聚焦于任务相关区域，实现了对高精度任务至关重要的精细特征捕获。</li>
+<li>引入了条件流匹配以实现快速、精确的关键帧位姿生成，并结合状态空间模型作为多模态融合模块，以较低计算成本获得了优越性能。</li>
+<li>在RLBench基准测试的多任务和高精度任务设置上进行了广泛评估，证明了方法的有效性，并实现了新的最先进性能。</li>
+</ol>
+<p><strong>局限性</strong>：论文中提到，动态半径调度函数 <code>f(i)</code> 可以针对不同的操作需求进行调整（例如采用余弦退火）。这隐含了对于不同任务，可能需要设计或调整合适的调度策略以获得最佳性能，这可能增加模型配置的复杂性。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>流匹配在机器人领域的潜力</strong>：本研究展示了条件流匹配在机器人策略学习中替代扩散模型的可行性，在保持甚至提升性能的同时显著提高了推理效率，为后续高效生成式机器人学习提供了新方向。</li>
+<li><strong>感知-动作的协同设计</strong>：FlowRAM成功地将感知的粒度与动作生成的进程动态耦合，这种“协同进化”的设计思路可以启发更多将感知模块与策略学习深度结合的工作，以应对更复杂的具身智能任务。</li>
+<li><strong>高效架构的应用</strong>：成功地将线性复杂度的Mamba模型应用于机器人多模态信息融合，证明了此类高效序列模型在实时机器人系统中的实用价值，鼓励在计算资源受限的场景下探索更多高效架构。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出FlowRAM框架，以解决高精度机器人操作任务中，现有基于扩散的策略学习方法推理效率低、未能充分利用生成模型进行3D信息探索的问题。核心方法包括：1）动态半径调度，实现从全局到局部的自适应感知；2）集成状态空间模型，以线性复杂度融合多模态信息；3）采用条件流匹配，通过回归确定性向量场学习动作姿态。在RLBench基准测试中，FlowRAM取得了最先进性能，高精度任务平均成功率提升12.0%，且能在少于4个时间步内生成物理合理的动作，显著加速推理。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.16201" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

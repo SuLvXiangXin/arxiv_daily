@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Fail2Progress: Learning from Real-World Robot Failures with Stein Variational Inference - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Fail2Progress: Learning from Real-World Robot Failures with Stein Variational Inference</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.01746" target="_blank" rel="noreferrer">2509.01746</a></span>
+        <span>作者: Tucker Hermans Team</span>
+        <span>日期: 2025-09-01</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在长程操作任务中，基于学习的技能效果模型在解决任务序列规划方面展现出潜力。目前的主流方法通常利用仿真来高效生成大规模、多样化的数据以训练这些模型。然而，当机器人在非结构化、不确定的真实环境中使用这些模型时，难免会遇到与训练数据分布显著不同的情况，从而导致失败。因此，让机器人具备从失败中推理、恢复并学习以减少未来失败的能力至关重要。</p>
+<p>现有方法存在关键局限性：直接从单个现实失败案例学习难以有效更新现代大参数模型；在真实环境中主动探索以生成更多失败场景则存在安全和效率风险。虽然Real-to-Sim方法允许安全高效地创建仿真环境，但当前方法强调高保真仿真，计算成本高昂且需要大量微调或环境扫描。因此，如何高效、安全地生成与失败案例相关的多样化数据以改进技能效果模型，是一个重要且开放的问题。</p>
+<p>本文针对“如何基于观察到的失败，高效生成针对性仿真数据集以改进模型”这一具体痛点，提出了利用低保真仿真环境进行高效数据生成的新视角。核心思路是：将失败案例推理形式化为一个变分推断问题，并利用Stein变分推断并行生成模拟失败场景的多样化仿真状态和机器人动作参数，从而创建用于微调技能效果模型的针对性数据集。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Fail2Progress的整体流程如下：当机器人在执行任务中检测到失败后，首先对失败进行分类。如果失败源于“不正确的符号预测”，则基于该失败案例，利用Stein变分推断并行生成多个仿真状态和动作参数粒子，这些粒子近似于符合失败观察的后验分布以及能最大化模型信息增益的动作分布。接着，利用这些粒子构建低保真仿真场景并执行动作，生成一个针对性的仿真数据集。最后，用此数据集微调技能效果模型，使其在未来遇到类似失败场景时表现更佳。</p>
+<p><img src="https://arxiv.org/html/2509.01746v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：失败案例推理概览。<strong>上图</strong>：基于因不正确符号预测导致的失败案例，我们的方法并行生成有针对性的、多样化的仿真数据以微调机器人的模型。<strong>下图</strong>：微调后的模型在具有挑战性的真实场景中成功执行多样化的长程操作任务。</p>
+</blockquote>
+<p><strong>核心模块与技术细节：</strong></p>
+<ol>
+<li><p><strong>失败检测与分类</strong>：机器人执行规划好的技能序列时，将每一步观察到的符号状态与模型预测的符号状态进行对比，若不匹配则标记为失败。失败事件被记录为 $F = (O^F, \mathcal{R}^F, \phi^F, \mathcal{R}^{F\prime})$。分类时，在仿真中重建基于 $O^F$ 的场景并执行失败技能 $\phi^F$，得到仿真预测的符号效果 $\mathcal{R}_k^{\prime\prime}$。若 $\mathcal{R}_k^{\prime\prime}$ 与真实世界预测 $\mathcal{R}_k^{\prime}$ 一致，则失败归类为“不正确的符号预测”；否则归类为“Sim2Real差距”。本文主要处理第一类失败。</p>
+</li>
+<li><p><strong>针对性数据集生成的公式化</strong>：目标是为失败的技能 $\phi^F$ 寻找一组仿真初始状态 $S^+$ 和动作参数 $A^+$，使得生成的微调数据集 $\mathcal{D}^+$ 能最大化模型关于失败目标关系 $\mathcal{R}^{F\prime}$ 的信息增益（近似为预测熵），同时约束生成的状态 $S^+$ 在经过点云变换 $\xi(s)O^F$ 后，其符号关系与失败前观察到的关系 $\mathcal{R}^F$ 一致（由模型 $\Gamma$ 评估）。</p>
+</li>
+<li><p><strong>基于Stein变分推断的数据集生成</strong>：采用两阶段近似求解上述约束优化问题。</p>
+<ul>
+<li><strong>生成状态样本</strong>：将寻找满足约束的状态集 $S^+$ 形式化为变分推断问题，目标后验为 $P(r^F | O^+=\xi(S)O^F)P(S)$。使用Stein变分梯度下降，用一组粒子 ${s_i^+}$ 来近似该后验分布，确保粒子对应的变换点云能匹配失败关系。</li>
+<li><strong>生成动作样本</strong>：在固定状态粒子 ${s_i^+}$ 后，将寻找最大化信息增益（即最小化负熵）的动作集 $A^+$ 形式化为广义贝叶斯推断问题。损失函数为负熵，先验 $P(A)$ 为均匀分布。同样使用SVI优化另一组粒子 ${(s_i^+, a_i^+)}$ 来近似此广义后验。</li>
+</ul>
+</li>
+<li><p><strong>Real-to-Sim物体生成</strong>：获得优化后的粒子 ${s_i^+, a_i^+}$ 后，基于失败观察 $O^F$ 的语义分割结果，为每个物体段拟合简化的几何形状（如立方体），其边界框和姿态由 $s_i^+$ 定义。使用预定义的物理参数在仿真中构建场景，并执行技能 $(\phi^F, a_i^+)$，从而生成最终的微调数据集 $\mathcal{D}^+$。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.01746v1/x2.png" alt="方法流程"></p>
+<blockquote>
+<p><strong>图2</strong>：Fail2Progress概览。我们的方法首先检测真实世界失败并将其分类为不正确的符号预测。基于此，Fail2Progress生成代表仿真状态和动作的粒子以近似后验分布。状态后验分布捕捉失败关系（如物体在盒子内），而动作后验分布则最大化技能效果模型的信息增益。利用这些粒子，创建多样化的仿真数据集以微调技能效果模型。微调后，模型成功从失败中恢复并完成清洁任务。</p>
+</blockquote>
+<p><strong>创新点</strong>：与现有方法相比，本文的创新具体体现在：1) 首次将长程操作任务的失败案例推理形式化为一个变分推断问题，从而能够系统化地生成多样化仿真数据来改进模型。2) 提出使用Stein变分推断来近似仿真状态和机器人技能参数上的多模态后验分布，实现了高效、并行的数据集生成，克服了高维空间采样和顺序优化的低效问题。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：使用IsaacGym仿真平台生成包含40,000条技能执行的预训练数据集。在三个先进的技能效果模型（分别来自文献[2, 3, 4]）上评估方法。评估任务包括移动多个物体、整理受限货架和桌面整理。检测到失败后，Fail2Progress生成一个包含20个多样化环境（通过消融研究确定）的针对性数据集用于微调。</p>
+<p><strong>对比基线</strong>：</p>
+<ol>
+<li><strong>Original</strong>：未经微调的原始技能效果模型。</li>
+<li><strong>Small</strong>：在预训练数据基础上增加少量（20个）随机数据后训练的模型。</li>
+<li><strong>Large</strong>：在预训练数据基础上增加大量（2000个）随机数据后训练的模型。</li>
+<li><strong>Gradient</strong>：使用与Fail2Progress相同的目标，但采用随机梯度下降顺序、独立地更新每个样本。</li>
+<li><strong>Sampling</strong>：基于采样的方法，迭代生成状态和动作直至满足目标。</li>
+<li><strong>Replanning</strong>：失败后，基于当前观察重新规划后续技能序列，但不更新模型。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.01746v1/x3.png" alt="主要结果"></p>
+<blockquote>
+<p><strong>图3</strong>：在三个技能效果模型（NSM， LSM， VIN）和三个任务上，Fail2Progress与各基线的平均任务成功率比较。Fail2Progress在所有模型和任务上均取得了最高或接近最高的成功率。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：如图3所示，Fail2Progress在三个模型和任务上 consistently  outperforms 其他基线。例如，在某个模型和任务上，原始模型成功率为40.8%，Small基线为45.8%，Large基线为62.5%，而Fail2Progress达到75.0%。这表明：1) <strong>仅增加数据（Small）不足以有效解决失败</strong>；2) <strong>即使增加大量随机数据（Large），其效果也不如针对性生成的数据（Fail2Progress）</strong>；3) <strong>仅重新规划（Replanning）无法处理所有失败场景</strong>，其成功率低于学习的方法。</p>
+<p><img src="https://arxiv.org/html/2509.01746v1/x4.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图4</strong>：Fail2Progress的消融研究。比较了完整方法、仅优化状态（Fix-A）、仅优化动作（Fix-S）以及使用均匀先验（Uniform）的变体。完整方法性能最佳，证明了联合优化状态和动作、以及使用学习到的先验的重要性。</p>
+</blockquote>
+<p><strong>消融实验</strong>：图4展示了Fail2Progress各组件的贡献。完整方法性能最好。固定动作仅优化状态（Fix-A）或固定状态仅优化动作（Fix-S）都会导致性能下降，表明联合优化是必要的。使用均匀先验（Uniform）代替学习到的先验也降低了性能。</p>
+<p><img src="https://arxiv.org/html/2509.01746v1/x5.png" alt="噪声鲁棒性"></p>
+<blockquote>
+<p><strong>图5</strong>：在输入点云中注入不同程度旋转噪声下的任务成功率。Fail2Progress在噪声下表现稳健，且其生成的数据集有助于提升模型对噪声的鲁棒性。</p>
+</blockquote>
+<p><strong>噪声鲁棒性（Q4）</strong>：如图5，当在输入点云中加入旋转噪声时，Fail2Progress微调后的模型相比原始模型保持了更高的成功率，表明该方法能提升模型对感知噪声的鲁棒性。</p>
+<p><img src="https://arxiv.org/html/2509.01746v1/x6.png" alt="SVI有效性"></p>
+<blockquote>
+<p><strong>图6</strong>：对比Fail2Progress（使用SVI）与Gradient和Sampling基线。Fail2Progress成功率更高，证明了SVI在高效近似多模态后验、生成高质量数据方面的优势。</p>
+</blockquote>
+<p><strong>SVI的有效性（Q5）</strong>：图6直接对比了使用SVI的Fail2Progress与Gradient和Sampling基线。Fail2Progress的成功率显著高于两者，证明了SVI框架相对于顺序梯度优化或传统采样方法的优越性。</p>
+<p><img src="https://arxiv.org/html/2509.01746v1/x7.png" alt="泛化能力"></p>
+<blockquote>
+<p><strong>图7</strong>：在未见过的物体数量（泛化）场景下的任务成功率。Fail2Progress微调后的模型展现出更好的泛化能力。</p>
+</blockquote>
+<p><strong>泛化能力（Q6）</strong>：图7显示，在训练和微调数据中均未出现过的物体数量场景下，经Fail2Progress微调后的模型比原始模型具有更高的成功率，表明其具备更好的泛化能力。</p>
+<p><img src="https://arxiv.org/html/2509.01746v1/x8.png" alt="Real2Sim精度"></p>
+<blockquote>
+<p><strong>图8</strong>：Real2Sim精度评估。我们的简化边界框方法在大多数情况下能准确分类失败类型（&gt;92%准确率），尽管在极端接触场景下（如“卡住”）精度会下降。</p>
+</blockquote>
+<p><strong>Real2Sim精度（Q7）</strong>：图8评估了简化边界框方法的可靠性。在大多数失败场景下，该方法能实现高于92%的失败分类准确率，但在涉及复杂接触（如物体“卡住”）的极端情况下，精度会下降至约70%。这表明当前简化方法在多数情况下足够有效，但也存在局限性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>明确提出了针对技能效果模型的两类失败分类（不正确的符号预测 vs. Sim2Real差距），并聚焦于从第一类失败中学习。</li>
+<li>首次将长程操作任务的失败案例推理形式化为一个变分推断问题，从而能够系统化地生成针对性仿真数据以改进模型。</li>
+<li>创新性地应用Stein变分推断来高效近似仿真状态和动作参数上的多模态后验分布，实现了并行、高效的数据集生成。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，其采用的简化Real-to-Sim方法（基于边界框拟合）在捕获复杂物体几何和物理特性方面存在不足，特别是在极端接触场景下，这可能影响失败分类的准确性和所生成微调数据的质量。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li>Fail2Progress的框架是模块化的，其核心的变分推断数据生成思路可以与更先进的Real-to-Sim技术结合，以生成更高保真度的仿真数据， potentially 进一步提升性能。</li>
+<li>本文主要处理“不正确的符号预测”类失败。如何将类似框架扩展至学习和补偿“Sim2Real差距”，是一个自然的未来方向。</li>
+<li>该方法展示了如何利用低保真但高效的仿真进行针对性学习，这为在机器人学习中平衡仿真效率与数据质量提供了新思路。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人技能模型在训练数据未覆盖的真实场景中易失败的问题，提出Fail2Progress方法。该方法基于Stein变分推断，通过并行生成多个模拟环境，高效产生与失败类似的数据样本，用于微调技能效应模型。实验在运输多物体、组织受限架子等挑战性任务中进行，结果表明该方法能有效从不同数量物体的失败中学习恢复，并优于多个基线方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.01746" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

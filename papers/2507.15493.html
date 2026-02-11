@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>GR-3 Technical Report - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>GR-3 Technical Report</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2507.15493" target="_blank" rel="noreferrer">2507.15493</a></span>
+        <span>作者: Yichu Yang Team</span>
+        <span>日期: 2025-07-22</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，构建能够遵循自然语言指令执行多样化任务的通用机器人策略是机器人研究的核心目标。基于预训练视觉语言模型（VLM）构建的视觉-语言-动作（VLA）模型是一条有前景的路径。然而，现有方法面临几个关键局限性：1）在遵循超出训练分布（OOD）的指令方面存在挑战，尤其是涉及未见物体类别或需要复杂推理的抽象概念时；2）通常需要大量机器人演示数据进行策略训练，难以高效适应新场景；3）在复杂的长时序和灵巧操作任务中，由于误差累积，确保策略的鲁棒性仍然困难。</p>
+<p>本文针对这些痛点，提出了GR-3，一个大规模VLA模型。其核心思路是通过一种多方面的训练方法，将网络规模的视觉语言数据、通过VR设备收集的人类轨迹数据以及机器人轨迹数据进行协同训练，从而赋予模型强大的指令遵循泛化能力、高效的小样本适应能力以及在长时序和灵巧任务中的鲁棒性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>GR-3是一个端到端的VLA模型，输入为自然语言指令 (l)、来自多个相机视角的环境观测 (\mathbf{o}_t) 以及机器人状态 (\mathbf{s}_t)，输出为一个长度为 (k) 的动作块 (\mathbf{a}<em>t = a</em>{t:t+k}) 来控制一个双臂移动机器人。</p>
+<p><img src="https://arxiv.org/html/2507.15493v2/extracted/6644241/images/model_arch.jpg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：GR-3模型架构。模型在机器人轨迹数据（左）和视觉语言数据（右）上进行协同训练，分别采用流匹配目标和下一令牌预测目标。</p>
+</blockquote>
+<p><strong>整体框架与核心模块</strong>：GR-3采用混合Transformer架构。其主干网络基于预训练的VLM（Qwen2.5-VL-3B-Instruct），用于处理多视角观测图像和语言指令。动作预测部分采用一个动作扩散变换器（DiT），基于流匹配技术生成动作块。具体而言，长度为 (k) 的动作块被表示为 (k) 个令牌，并与机器人状态令牌拼接，作为动作DiT的输入序列。流匹配的时间步通过自适应层归一化（AdaLN）注入。动作DiT使用因果注意力掩码来建模动作块内部的时间依赖性。为了提高推理速度，动作DiT的层数仅为VLM主干的一半，并且只利用VLM后半部分的键值（KV）缓存。整个模型包含40亿参数。</p>
+<p><strong>关键设计细节与创新点</strong>：</p>
+<ol>
+<li><strong>训练稳定性与指令遵循增强</strong>：在早期探索中，作者发现训练不稳定。受QK Norm启发，在DiT块内的注意力和前馈网络的线性层之后额外添加了RMSNorm，极大地提高了整个训练过程的稳定性，并显著提升了后续实验中的语言遵循能力。</li>
+<li><strong>任务状态辅助监督</strong>：为了解决模型可能利用多视角间的虚假相关性而非关注语言指令的问题，论文引入了“任务状态”作为额外的动作维度进行辅助监督。状态分为：进行中（0）、已终止（1）、无效（-1）。在训练时，会随机将语言指令替换为无效指令，并训练模型在不监督动作块其他维度的前提下预测“无效”状态。这一设计迫使动作DiT关注语言指令并评估任务状态，从而大幅提升了语言遵循能力。</li>
+<li><strong>多数据源协同训练</strong>：这是GR-3方法的核心创新。训练数据包括三类（如图4所示）：<ul>
+<li><strong>机器人轨迹数据</strong>：用于模仿学习。采用流匹配损失进行监督（公式2）。通过数据收集调度器（图4顶部）高效管理数据分布，最大化多样性。</li>
+<li><strong>视觉语言数据</strong>：用于协同训练。从多个来源精心策划了一个涵盖图像描述、视觉问答、图像 grounding 等任务的大规模数据集。仅使用下一令牌预测损失训练VLM主干。</li>
+<li><strong>人类轨迹数据</strong>：用于小样本泛化。使用PICO 4 VR设备高效收集（约450条/小时），包含自我中心视频和手部轨迹。在完成第一阶段训练后，将人类轨迹数据与其他两类数据一同进行协同训练。对于缺失的腕部视图，用空白图像填充，并仅使用手部轨迹进行训练。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2507.15493v2/extracted/6644241/images/data.jpg" alt="训练数据"></p>
+<blockquote>
+<p><strong>图4</strong>：GR-3使用的三类训练数据：机器人轨迹数据（上）、人类轨迹数据（中）、视觉语言数据（下）。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在真实世界中进行，使用了自研的ByteMini机器人（图5）。评估了三个挑战性任务：通用拾放、长时序餐桌清理和灵巧布料悬挂。主要对比的基线方法是当前最先进的VLA模型 (\pi_0)。</p>
+<p><img src="https://arxiv.org/html/2507.15493v2/extracted/6644241/images/bytemini_robot.jpg" alt="机器人硬件"></p>
+<blockquote>
+<p><strong>图5</strong>：ByteMini机器人。展示了机器人规格、多相机视角以及独特的腕部球形关节运动范围。</p>
+</blockquote>
+<p><strong>1. 通用拾放任务</strong>：此任务用于评估OOD泛化能力。收集了35k条机器人轨迹，涵盖101个物体。评估了四种设置：基本场景、未见环境、未见指令、未见物体。评估指标为指令遵循（IF）率和成功率。</p>
+<p><img src="https://arxiv.org/html/2507.15493v2/extracted/6644241/images/ppa_exp_setting.jpg" alt="拾放任务设置"></p>
+<blockquote>
+<p><strong>图6</strong>：通用拾放实验设置。(a)训练中见过的测试物体。(b)训练中未见的测试物体。(c)基础环境（见过）和其他四个未见环境。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2507.15493v2/extracted/6644241/images/ppa_exp_result.jpg" alt="拾放任务结果"></p>
+<blockquote>
+<p><strong>图7</strong>：通用拾放实验结果。(a)四种设置下的结果。GR-3在未见指令和未见物体设置上大幅超越基线。(b)使用人类轨迹进行小样本泛化的结果。</p>
+</blockquote>
+<p>关键结果（图7a）：</p>
+<ul>
+<li>在<strong>基本场景</strong>和<strong>未见环境</strong>下，GR-3与仅用机器人数据训练的变体（GR-3 w/o Co-Training）表现相当，且均优于 (\pi_0)，显示了基础性能和环境鲁棒性。</li>
+<li>在<strong>未见指令</strong>（涉及“左边”、“最大”、“海洋动物”等抽象概念）和<strong>未见物体</strong>（70%以上类别未在机器人数据中出现）设置下，GR-3展现出卓越的泛化能力。其成功率在未见指令上从 (\pi_0) 的 <strong>40%</strong> 提升至 **77.1%**，在未见物体上从 <strong>40%</strong> 提升至 <strong>57.8%<strong>。而GR-3 w/o Co-Training在这些设置下表现显著下降，甚至不如 (\pi_0)，这</strong>有力证明了视觉语言协同训练对零样本泛化能力的决定性贡献</strong>。</li>
+</ul>
+<p><strong>小样本泛化结果（图7b）</strong>：使用VR收集的人类轨迹对45个未见物体进行微调。仅用<strong>10条/物体</strong>的人类数据微调后，GR-3的成功率从零样本的57.8%进一步提升至**80%**，展示了高效、低成本适应新场景的能力。</p>
+<p><strong>2. 长时序餐桌清理任务</strong>：此任务要求机器人按顺序将多个物品放入不同容器，涉及长时序规划。</p>
+<p><img src="https://arxiv.org/html/2507.15493v2/extracted/6644241/images/table_exp.jpg" alt="餐桌清理结果"></p>
+<blockquote>
+<p><strong>图8</strong>：长时序餐桌清理任务结果。GR-3在平均任务进度和成功率上均显著优于基线 (\pi_0)。</p>
+</blockquote>
+<p>关键结果（图8）：GR-3取得了 <strong>91.7%</strong> 的平均任务进度和 <strong>66.7%</strong> 的成功率，显著优于 (\pi_0)（进度 **58.3%**，成功率 **16.7%**）。这证明了其在复杂长时序任务中的鲁棒性。</p>
+<p><strong>3. 灵巧布料悬挂任务</strong>：此任务要求用两个衣夹将布悬挂在绳子上，是典型的灵巧操作。</p>
+<p><img src="https://arxiv.org/html/2507.15493v2/extracted/6644241/images/cloth_exp_setting.jpg" alt="布料任务设置与结果"></p>
+<blockquote>
+<p><strong>图9</strong>：灵巧布料悬挂实验设置。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2507.15493v2/extracted/6644241/images/cloth_exp_result.jpg" alt="布料任务结果"></p>
+<blockquote>
+<p><strong>图10</strong>：灵巧布料悬挂实验结果。GR-3在任务进度和成功率上全面领先。</p>
+</blockquote>
+<p>关键结果（图10）：GR-3达到了 <strong>85.0%</strong> 的平均任务进度和 <strong>40.0%</strong> 的成功率，远超 (\pi_0)（进度 **45.0%**，成功率 **0%**），展示了其处理灵巧、非刚性物体操作的强大能力。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了GR-3模型及多数据源训练方法</strong>：通过协同训练网络规模视觉语言数据、机器人轨迹数据和人类VR轨迹数据，实现了对未见物体、环境和抽象指令的强泛化、高效小样本适应以及长时序/灵巧任务的鲁棒性能。</li>
+<li><strong>引入了关键模型设计</strong>：包括用于稳定训练和提升指令遵循的RMSNorm与“任务状态”辅助监督，以及高效的动作块预测架构。</li>
+<li><strong>推出了配套的机器人硬件与系统</strong>：介绍了高灵活、高可靠的ByteMini双臂移动机器人及其全身合规控制、遥操作和轨迹优化系统，为复杂任务的数据收集与策略部署提供了坚实基础。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提及的局限性包括：1) 模型训练需要大量的计算资源；2) 动作块的长度 (k) 是固定的，可能限制了对超长时序任务的适应性。</p>
+<p><strong>对后续研究的启示</strong>：GR-3的工作表明，利用丰富且廉价的非机器人数据（尤其是视觉语言数据和人类演示）是提升机器人策略泛化能力和降低适应成本的有效途径。未来研究可进一步探索如何更高效地整合异构数据源，以及如何设计能够动态适应不同任务复杂度的动作表示与预测机制。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>论文旨在解决通用机器人策略开发的核心挑战：泛化到新对象、环境和抽象指令、高效适应新设置，以及可靠执行长时程灵巧任务。GR-3是一个大规模视觉-语言-动作模型，关键技术包括与网络规模视觉-语言数据共同训练、基于VR人类轨迹数据的高效微调以及机器人轨迹数据模仿学习。实验表明，GR-3在广泛真实世界任务中超越了最先进的基线方法π0。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2507.15493" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Improving Robotic Manipulation: Techniques for Object Pose Estimation, Accommodating Positional Uncertainty, and Disassembly Tasks from Examples - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Improving Robotic Manipulation: Techniques for Object Pose Estimation, Accommodating Positional Uncertainty, and Disassembly Tasks from Examples</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.15865" target="_blank" rel="noreferrer">2506.15865</a></span>
+        <span>作者: Viral Rasik Galaiya Team</span>
+        <span>日期: 2025-06-18</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人操作领域，特别是在非结构化环境中，准确估计被抓取物体的姿态（尤其是朝向）是一个关键挑战。当前主流方法严重依赖视觉感知或视觉-触觉融合。然而，视觉方法在抓取阶段易受遮挡影响（例如夹爪遮挡物体），且固定视角的相机在许多应用（如假肢）中不可行。同时，依赖机器人运动学模型或粒子滤波的方法计算复杂，不适合算力有限的嵌入式设备（如假肢上的处理器）。因此，需要一种在抓取后阶段仅利用触觉数据、不依赖复杂运动学模型即可进行物体姿态估计的轻量级方法。</p>
+<p>本文针对上述痛点，提出了一种新视角：利用触觉传感器数据的时间序列特征来提升抓取后物体角度估计的精度。具体而言，本文假设考虑触觉数据的时间相关性（例如通过滑动窗口采样）可以改善对物体当前状态的估计。本文的核心思路是：使用滑动窗口对触觉传感器的时间序列数据进行采样，并利用包含长短期记忆（LSTM）层的深度学习模型，仅基于触觉输入来估计被抓取物体的偏航角，从而在放松对运动学模型要求的同时实现精确估计。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架的输入是来自安装在欠驱动夹爪上的触觉传感器的多模态时间序列数据，输出是对被抓取物体偏航角的估计。流程主要包括数据收集、预处理（对齐与标准化）、滑动窗口采样构建训练样本，以及使用LSTM神经网络进行回归预测。</p>
+<p>核心模块包括：</p>
+<ol>
+<li><strong>数据收集与传感器系统</strong>：使用一个具有两个独立控制手指的欠驱动夹爪。每个指段安装一个复合触觉传感器模块，该模块集成了一个气压计（用于测量深压力）和一个9自由度MARG传感器（用于测量三轴角速度、线性加速度和磁场）。地面真值角度通过俯视相机跟踪物体上的两个彩色标记获得。</li>
+<li><strong>数据预处理与对齐</strong>：由于相机、压力传感器和MARG传感器以不同频率异步采集数据，需要进行时间对齐。对齐策略以相机帧的时间戳为基准，为每个相机帧选择时间上最接近的压力和MARG读数。由于MARG传感器频率远高于压力传感器，进一步将MARG数据下采样至与压力数据频率匹配。最后，对所有传感器数据（除了角度）进行标准化处理。</li>
+<li><strong>滑动窗口采样</strong>：为了捕捉时间动态，为每个地面真值角度样本，不仅包含当前时刻对齐的传感器读数，还包含其之前连续多个时间步的传感器读数，形成一个“窗口”。窗口大小是一个关键的超参数。</li>
+<li><strong>角度估计模型</strong>：模型采用基于LSTM的神经网络架构，专门用于处理连续的时间序列数据。</li>
+</ol>
+<p><img src="https://example.com/model_arch.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：角度估计模型架构。包含两个LSTM层（512和256单元）和三个全连接层（128、64、32神经元），输入为滑动窗口采样的多传感器数据。</p>
+</blockquote>
+<p>模型的具体细节如下：</p>
+<ul>
+<li><strong>网络结构</strong>：如图1所示，模型包含两个LSTM层（分别有512和256个单元），每个LSTM层后接一个归一化层。随后是三个密集连接层（分别有128、64和32个神经元）。所有隐藏层使用ReLU激活函数，输出层为线性激活。</li>
+<li><strong>损失函数与优化</strong>：使用平均绝对误差（MAE）作为训练损失函数。优化超参数经过网格搜索确定，包括学习率（0.00025）、批次大小（128）和训练轮数（400）。采用4折交叉验证以确保性能一致性。</li>
+</ul>
+<p>与现有方法相比，本文的创新点具体体现在：</p>
+<ol>
+<li><strong>纯触觉感知</strong>：仅使用抓取后的触觉传感器数据，完全避免了对抓取阶段视觉信息的依赖，从而解决了视觉遮挡问题。</li>
+<li><strong>时间序列建模</strong>：明确利用触觉信号的时间特性，通过滑动窗口采样和LSTM网络来建模传感器读数随物体角度变化的动态过程，而非将每个数据点视为独立样本。</li>
+<li><strong>系统轻量化</strong>：在欠驱动夹爪上实现，降低了对精确运动学模型的依赖。所提出的神经网络模型相对较小，理论上可部署在算力有限的边缘设备上。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<ul>
+<li><p><strong>数据集/实验平台</strong>：实验使用了来自先前研究[PradodaFonseca2019]的数据集。该数据通过所述欠驱动夹爪抓取三个不同直径（57mm, 65mm, 80mm）的圆柱体并手动旋转收集。计算平台为Compute Canada。</p>
+</li>
+<li><p><strong>对比方法</strong>：本文主要进行的是<strong>消融实验</strong>，核心是比较不同滑动窗口大小对模型性能的影响，而非直接与其他算法对比。基线可视为窗口大小为1（即不考虑时间上下文）的情况。</p>
+</li>
+<li><p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>窗口大小的影响</strong>：窗口大小是核心变量。实验结果表明，模型性能随着窗口大小的增加而提升，但改进幅度逐渐减小并趋于饱和。</li>
+</ul>
+<p><img src="https://example.com/training.png" alt="训练损失"></p>
+<blockquote>
+<p><strong>图2</strong>：不同窗口大小下的训练和验证损失曲线。显示了模型在400轮训练中的收敛情况，并标出了平均最低验证误差出现的轮数。</p>
+</blockquote>
+<p><img src="https://example.com/test_metrics.png" alt="性能指标"></p>
+<blockquote>
+<p><strong>图3</strong>：不同窗口大小在测试集上的性能指标。(a)平均绝对误差(MAE)，(b)均方误差(MSE)，(c)决定系数(R²)，(d)解释方差得分(EXP)。所有指标均显示窗口大小为40时性能最佳。</p>
+</blockquote>
+<ul>
+<li><strong>最佳性能</strong>：当滑动窗口大小为40个样本时，模型取得最佳性能（见表4）：平均绝对误差（MAE）为0.0375 ± 0.0028弧度，均方误差（MSE）为0.0030 ± 0.0004，决定系数（R²）高达0.9074 ± 0.0153，解释方差得分（EXP）为0.9094 ± 0.0148。即使窗口小至10，也能获得0.0408弧度的MAE，表明时间上下文带来了显著增益。</li>
+<li><strong>定性预测结果</strong>：最佳模型能够较好地跟踪物体角度的变化轨迹。</li>
+</ul>
+<p><img src="https://example.com/prediction.png" alt="预测对比"></p>
+<blockquote>
+<p><strong>图4</strong>：最佳模型（窗口大小40）在测试集上预测角度与真实角度的对比。图中高亮了第900个测试点所对应的40个样本的输入窗口。预测在物体静止时（如样本1000、1250、2375附近）存在轻微偏差。</p>
+</blockquote>
+</li>
+<li><p><strong>消融实验总结</strong>：本研究的核心消融实验围绕<strong>窗口大小</strong>展开。结果表明，引入时间上下文（窗口&gt;1）能有效提升角度估计精度，且存在一个最优窗口大小（40），超过此值后性能提升不再明显，这为在计算资源与精度之间取得平衡提供了指导。</p>
+</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出并验证了一种仅利用触觉时间序列数据进行抓取后物体角度估计的方法，有效规避了视觉遮挡问题，降低了对环境结构化的要求。</li>
+<li>通过系统的实验，证明了滑动窗口采样策略和LSTM网络在建模触觉时序特征、提升角度估计精度方面的有效性，并确定了性能最佳的窗口大小。</li>
+<li>整个方法基于欠驱动夹爪和少量复合触觉传感器实现，减少了对精确运动学模型的依赖，展示了在资源受限场景（如假肢、移动机器人）中的应用潜力。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文明确指出，该方法的性能目前仅在<strong>均匀形状的物体（如圆柱体）</strong> 上得到验证，这类物体的视觉旋转本身就难以判断。此外，地面真值的获取仍需依赖初始的视觉参考（俯视相机）。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li>该方法为移动机器人、假肢等计算和感知能力受限的平台提供了轻量级、鲁棒的在线姿态估计思路。</li>
+<li>未来工作可以探索该方法在更多样化、非均匀形状物体上的泛化能力，以及如何进一步减少或消除对任何视觉初始参考的依赖。</li>
+<li>滑动窗口最优大小的发现，促使我们思考如何自适应地确定或调整时间上下文长度，以应对不同的操作任务或物体属性。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中抓取后物体姿态估计不准确的核心问题，由于视觉遮挡、计算错误和外部干扰导致初始视觉估计失效。提出采用触觉传感技术（如压力、力、惯性传感器）提取物体信息，以补充视觉数据并改善姿态估计。实验表明，该方法在微创手术、电缆操作等特定应用中显示出潜力，并能作为控制系统优化的有效补充。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.15865" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

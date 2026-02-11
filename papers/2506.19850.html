@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Unified Vision-Language-Action Model - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Unified Vision-Language-Action Model</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.19850" target="_blank" rel="noreferrer">2506.19850</a></span>
+        <span>作者: Zhaoxiang Zhang Team</span>
+        <span>日期: 2025-06-24</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型在机器人操作领域展现出巨大潜力。现有方法主要分为两类：一类是“纯动作预测”范式，如RT-2、OpenVLA，它们基于预训练的视觉语言模型直接生成动作，但通常缺乏空间理解和视觉预测能力；另一类是“视觉引导的动作预测”范式，如UniPi、GR系列，通过预测未来视觉信号再解码为动作，但往往需要分离的生成模型和动作预测模型，未能充分利用VLM的潜力。这些方法大多遵循语言中心范式，即先将视觉观测投影到语义空间，再基于此生成动作。这种“后融合”策略虽然有利于语义理解，但限制了跨模态表示的深度耦合，并阻碍了对感知-动作循环中时序与因果依赖关系的学习。</p>
+<p>本文针对现有VLA模型难以统一建模异构模态（视觉、语言、动作）以及无法有效利用视频中丰富时序动态信息的关键痛点，提出了一个全新的视角：将视觉、语言和动作全部统一为离散token，在一个共享的词汇表和自回归Transformer框架下进行联合序列建模。本文的核心思路是：通过统一的token化表示和自回归序列建模，将多模态学习与多任务学习整合到一个框架中，并利用世界模型后训练从大规模视频中捕获环境动态，从而显著提升策略学习效率，尤其是在长视野任务上。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>UniVLA的整体框架采用两阶段训练策略：首先，在预训练的视觉语言模型基础上，进行以世界模型为目标的后训练，从大规模机器人视频中学习视觉动态；然后，在特定下游任务上，将动作token插入到视觉-语言序列中进行微调，完成策略学习。其输入是包含语言指令、视觉观测和（微调阶段）动作的历史交错序列，输出是自回归预测的下一个token（可能是视觉、语言或动作token）。</p>
+<p><img src="https://arxiv.org/html/2506.19850v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：UniVLA框架总览。模型将所有模态信息统一为离散的交错序列，并使用自回归Transformer进行建模。图像通过向量量化编码器离散化，动作则通过离散余弦变换编码为频率域token。模型基于预训练的VLM，采用两阶段训练：后训练阶段使用世界模型目标在大规模无动作视频上学习；微调阶段将动作token交错插入序列中进行策略学习。</p>
+</blockquote>
+<p>核心模块包括统一的模态表示和统一的序列建模。在统一的多模态表示方面，语言、视觉和动作信号均被转化为来自同一共享词汇表的离散token序列。具体而言：</p>
+<ol>
+<li><strong>视觉Token化</strong>：采用与Emu3相同的设计，使用基于VQ的图像编码器，空间压缩因子为8。</li>
+<li><strong>动作Token化</strong>：遵循FAST方法，对连续动作序列应用离散余弦变换，将其编码为离散token。具体将动作序列的相对差分进行归一化后，使用词汇表大小为1024的FAST分词器处理。</li>
+<li><strong>特殊Token</strong>：使用<code>&lt;boi&gt;</code>, <code>&lt;eoi&gt;</code>, <code>&lt;boa&gt;</code>, <code>&lt;eoa&gt;</code>等特殊token来标识图像和动作token序列的边界。</li>
+</ol>
+<p>在统一的序列建模方面，模型根据马尔可夫决策过程，自然地将不同模态的token交错排列，以捕捉任务执行中的时序动态和因果结构。针对不同任务，通过调整序列组成和损失计算目标来实现：</p>
+<ul>
+<li><strong>世界模型（后训练）</strong>：序列格式为 <code>{语言指令, 初始视觉观测, 未来视觉观测1, ..., 未来视觉观测t}</code>。训练时，损失仅计算在视觉token上，目标是学习在给定指令和当前状态下预测未来视觉内容，即建模环境动态 <code>P(s_{t+1}|s_t, a_t)</code>，其中语言指令被视为一种广义的动作。</li>
+<li><strong>策略学习（微调）</strong>：序列格式为 <code>{语言指令, 视觉观测1, 动作1, 视觉观测2, 动作2, ..., 视觉观测t, 动作t}</code>。训练时，损失仅计算在动作token上，目标是学习基于历史和当前观测输出正确的动作。</li>
+</ul>
+<p>与现有方法相比，UniVLA的核心创新点在于：1）首次提出了一个真正统一的VLA模型架构，将所有模态表示为同质化的离散token，消除了传统方法中视觉编码器与动作解码器之间的鸿沟；2）通过统一的交错序列建模，自然地将世界模型学习与策略学习整合到同一框架中，使得模型能够从视频中有效学习时序和因果依赖，从而大幅提升下游策略学习的效率和性能。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在三个广泛使用的仿真基准上进行：CALVIN（长视野语言条件操作）、LIBERO（终身操作与泛化）和SimplerEnv-Bridge（真实到仿真的迁移）。对比的基线方法包括RT-1、Robo-Flamingo、GR-1、OpenVLA、π₀-FAST、CoT-VLA等主流VLA模型。</p>
+<p><strong>CALVIN基准</strong>：结果如表1所示。在最具挑战性的ABCD→D和ABC→D设置下，UniVLA在连续完成1到5个子任务的成功率以及平均任务长度上均取得了最佳性能。例如，在ABCD→D设置下，连续完成5个任务的概率达到0.851，平均任务长度为4.63，显著优于之前的SOTA方法RoboVLMs（0.826和4.49）。</p>
+<p><img src="https://arxiv.org/html/2506.19850v1/x3.png" alt="CALVIN结果表"></p>
+<blockquote>
+<p><strong>图3</strong>：CALVIN基准上的长视野操作评估结果（对应论文表1）。该表显示，UniVLA在两种评估设置（ABCD→D和ABC→D）下，无论是连续完成多个任务的成功率还是平均任务长度，均超越了所有对比方法，展示了其在多任务学习和长视野规划上的强大能力。</p>
+</blockquote>
+<p><strong>LIBERO基准</strong>：结果如表2所示。UniVLA在四个任务套件（SPATIAL, OBJECT, GOAL, LONG）上均达到最优，平均成功率高达95.5%，显著超过了之前的最佳方法π₀-FAST（85.5%）。尤其在长视野的LIBERO-LONG套件上，将成功率从69.0%大幅提升至94.0%。</p>
+<p><img src="https://arxiv.org/html/2506.19850v1/x4.png" alt="LIBERO结果表"></p>
+<blockquote>
+<p><strong>图4</strong>：LIBERO基准上不同方法的对比结果（对应论文表2）。该表突出显示了UniVLA在所有泛化类型任务上的全面领先，特别是在长视野复合任务（LONG）上的性能提升尤为显著。</p>
+</blockquote>
+<p><strong>SimplerEnv基准</strong>：在Bridge-WidowX设置下的结果如表3所示。UniVLA在“将勺子放在毛巾上”、“将胡萝卜放在盘子上”等四个操作任务上的整体成功率达到69.8%，较之前的最佳方法（Octo-Small, 29.5%）有巨大提升，证明了其从真实世界视频数据中学习并迁移到仿真环境的强大能力。</p>
+<p><img src="https://arxiv.org/html/2506.19850v1/x5.png" alt="SimplerEnv结果表"></p>
+<blockquote>
+<p><strong>图5</strong>：SimplerEnv-WidowX基准上各操作任务的评估结果（对应论文表3）。该图表明UniVLA在多项具体操作任务上成功率和抓取成功率均有大幅提高，整体性能远超现有模型。</p>
+</blockquote>
+<p><strong>消融实验与贡献分析</strong>：论文通过后训练策略的对比实验指出，采用世界模型目标进行后训练是提升下游策略学习性能最有效的方式。这验证了从视频中学习视觉动态对于提升动作策略的数据效率和训练效率，特别是在长视野和分布外任务上的有效性，是UniVLA成功的关键组件之一。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1）提出了首个统一的视觉-语言-动作模型UniVLA，通过将异构模态统一为离散token并进行自回归序列建模，为VLA研究提供了一个新颖的架构范式；2）所提出的统一序列建模框架支持从世界模型学习到策略学习等多种任务，并证明世界模型后训练能显著提升策略学习的效率和长视野任务性能；3）在多个权威仿真基准上取得了新的state-of-the-art性能，并展示了其在真实机器人操作和自动驾驶场景的潜在应用价值。</p>
+<p>论文自身提到的局限性包括模型规模较大（8.5B参数），以及世界模型后训练需要大量高质量的机器人视频数据。</p>
+<p>本文对后续研究的启示在于：1）统一token化与序列建模是连接多模态理解与具身决策的有效路径，值得进一步探索更高效、更通用的架构；2）利用互联网规模的多模态视频（尤其是无动作标注视频）进行世界模型预训练，可能是迈向通用具身智能的关键；3）如何将这种方法更轻量、高效地部署到实际机器人平台，是未来重要的应用方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有视觉-语言-动作（VLA）模型过度依赖视觉语言模型语义理解、忽视视觉观测中时序与因果结构的问题，提出统一模型UniVLA。其核心方法是将视觉、语言与动作统一表示为离散令牌，并在一个自回归框架中进行联合建模，同时在后训练中引入世界建模以捕捉视频中的因果动态。该模型在CALVIN、LIBERO等多个仿真基准测试中取得最先进性能，如在LIBERO上达到95.5%的平均成功率，显著超越此前最佳方法的85.5%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.19850" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

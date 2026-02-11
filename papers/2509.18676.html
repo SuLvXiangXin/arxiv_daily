@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>3D Flow Diffusion Policy: Visuomotor Policy Learning via Generating Flow in 3D Space - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>3D Flow Diffusion Policy: Visuomotor Policy Learning via Generating Flow in 3D Space</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.18676" target="_blank" rel="noreferrer">2509.18676</a></span>
+        <span>作者: Kyoobin Lee Team</span>
+        <span>日期: 2025-09-23</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>视觉模仿学习是机器人获取操作技能的主流范式。当前，端到端架构和扩散模型等方法通过将感知输入直接映射到控制动作，取得了显著进展。然而，这些方法通常将感知输入压缩为全局或物体中心特征，往往忽略了对于精确、接触丰富的操作至关重要的局部运动线索。虽然已有工作引入如物体位姿或未来帧预测等中间表示，但前者难以捕捉场景级动态，后者则计算开销巨大。</p>
+<p>本文针对现有方法在捕捉精细局部交互动态方面的局限性，提出了利用场景级三维流作为结构化中间表示的新视角。其核心思路是：首先预测从场景中采样的查询点的三维运动轨迹，然后将此预测出的交互感知流作为条件，在一个统一的扩散架构内生成机器人动作，从而将操作决策建立在局部动态之上。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>3D Flow Diffusion Policy (3D FDP) 的整体框架是一个两阶段条件扩散模型。输入为包含点云和机器人本体感知的观测历史，输出为未来的机器人动作序列。其核心创新在于引入了一个预测三维场景流的中间模块，该模块的输出用于条件化最终的动作生成器。</p>
+<p><img src="https://arxiv.org/html/2509.18676v1/figures/model.jpg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：3D Flow Diffusion Policy 概览。（左）策略以观测（点云、采样的查询点、本体感知）为输入，首先通过流生成器预测查询点轨迹，然后这些预测的流条件化动作策略以生成可执行的机器人动作。（右）流生成器和动作策略模块的详细架构。</p>
+</blockquote>
+<p><strong>整体流程</strong>：在每一时间步，策略接收观测历史 $\mathbf{O}<em>{t-T_h:t}$。首先，<strong>流预测器</strong> $g_\theta$ 预测未来 $T_f$ 步的查询点位移序列 $\hat{\mathbf{F}}</em>{t:t+T_f}$。然后，<strong>动作生成器</strong> $h_\theta$ 以观测历史和预测的流序列为条件，生成未来 $T_a$ 步的动作序列 $\hat{\mathbf{A}}_{t:t+T_a}$。因此，完整策略为 $f_\theta = h_\theta \circ g_\theta$。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>感知与查询点采样</strong>：场景由单视角RGB-D相机生成的点云表示，使用最远点采样确保空间覆盖。查询点 $M$ 个从初始观测的点云中采样，并在整个情节中跟踪，作为流预测的锚点。</li>
+<li><strong>3D场景流获取</strong>：为训练提供监督信号。在仿真中，利用真实网格位姿关联并重建查询点轨迹。在真实世界中，采用更可扩展的方法：将初始3D查询点投影到2D，使用 CoTracker 预测其2D轨迹，再结合每帧深度信息将其提升回3D，形成连续的3D流轨迹。</li>
+<li><strong>流条件化策略学习</strong>：<ul>
+<li><strong>流生成器</strong>：是一个条件去噪扩散模型。其去噪网络 $\epsilon_\theta^{\text{flow}}$ 以带噪声的流序列 $\mathbf{F}_k$ 和条件向量 $\hat{\mathbf{O}}_t^{\text{flow}}$ 为输入，预测噪声。条件向量由经过改进的 PointNet 编码器提取的全局场景特征和逐点局部特征融合而成。</li>
+<li><strong>动作生成器</strong>：同样是条件扩散模型。其关键创新在于条件向量 $\hat{\mathbf{O}}_t^{\text{act}}$ 不仅包含全局观测特征，还<strong>显式地融合了由流生成器预测出的流序列的嵌入</strong>。该流嵌入通过一维时序卷积和全局平均池化得到，代表了未来交互动态的概要信息。去噪网络 $\epsilon_\theta^{\text{act}}$ 据此生成最终动作。</li>
+</ul>
+</li>
+<li><strong>训练与实现</strong>：流预测损失 $\mathcal{L}_F$ 和动作预测损失 $\mathcal{L}_A$ 均采用 L1 损失，分别作用于各自扩散模型的去噪网络输出与真实序列。两个模块联合训练，但使用独立的优化器。PointNet编码器参数共享。采用DDIM调度器，100训练步长，10推理步长。</li>
+</ol>
+<p><strong>创新点</strong>：与现有方法（如图1所示）直接映射观测到动作，或将流仅作为辅助输入不同，3D FDP 的核心创新在于将<strong>场景级、查询点级别的3D流</strong>作为一个<strong>可学习的、核心的中间表示</strong>。该流被首先预测出来，然后在一个统一的框架内直接指导后续机器人动作的生成，实现了从“物体中心”到“场景中心”视角的转变。</p>
+<p><img src="https://arxiv.org/html/2509.18676v1/figures/concept.jpg" alt="方法对比"></p>
+<blockquote>
+<p><strong>图1</strong>：先前扩散策略方法与本文提出的3D FDP对比。先前方法从原始观测预测动作，而3D FDP首先预测3D流作为中间表示，然后基于观测和预测的流生成动作。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>仿真基准</strong>：MetaWorld 的50个任务，按难度分为简单（28）、中等（11）、困难（6）、极难（5）。</li>
+<li><strong>真实机器人平台</strong>：Franka Panda 机械臂，固定单目RGB-D相机（图3），评估8个接触丰富和非抓取操作任务。</li>
+<li><strong>对比基线</strong>：<ul>
+<li><strong>DP3</strong>：强大的端到端基线，无显式中间表示。</li>
+<li><strong>MBA</strong>：使用预测的9-DoF物体位姿作为中间表示的SOTA方法。</li>
+</ul>
+</li>
+<li><strong>评估指标</strong>：平均成功率。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2509.18676v1/figures/realsetting.jpg" alt="真实实验设置"></p>
+<blockquote>
+<p><strong>图3</strong>：真实世界实验设置。包括一个Franka Panda机械臂和一个固定的单RGB-D相机。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>MetaWorld性能</strong>：如表1所示，3D FDP 在所有难度级别上均取得了最优性能，尤其在中等和困难任务上提升显著（例如，中等任务：55.3% vs. DP3的51.1%和MBA的49.7%）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.18676v1/figures/x1.png" alt="MetaWorld结果表"></p>
+<blockquote>
+<p><strong>表1</strong>：MetaWorld结果。3D FDP在所有难度级别上均优于基线DP3和MBA。</p>
+</blockquote>
+<ol start="2">
+<li><strong>真实世界性能</strong>：如图5所示，在8个真实任务上，3D FDP 平均成功率达到 **56.9%**，相较 DP3 基线的 <strong>27.5%</strong> 提升了一倍以上。在需要接触推理和长时程交互的任务（如 Press, Hang, Shelve）上优势尤为明显。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.18676v1/figures/realworld_task.jpg" alt="真实任务与结果"></p>
+<blockquote>
+<p><strong>图5</strong>：（上）用于真实世界评估的示例任务。（下）各方法在所有任务上的成功率。3D FDP显著优于基线。</p>
+</blockquote>
+<ol start="3">
+<li><strong>学习效率</strong>：如图4所示，在多个代表性任务上，3D FDP 比 DP3 收敛更快且达到更高的峰值成功率，表明其具有更好的样本效率和性能上限。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.18676v1/figures/lc.jpg" alt="学习曲线"></p>
+<blockquote>
+<p><strong>图4</strong>：学习效率。3D FDP收敛更快且达到更高的峰值成功率。</p>
+</blockquote>
+<ol start="4">
+<li><strong>消融实验分析</strong>：<ul>
+<li><strong>查询点数量</strong>：如表2所示，在困难任务集上，增加查询点数量（从50到200）能持续提升成功率，表明更密集的流跟踪为动作生成提供了更丰富的指导。</li>
+<li><strong>查询点采样策略</strong>：如表3所示，从<strong>整个场景</strong>采样查询点比仅从被操作物体采样性能更好。例如在“Hammer”任务中，场景级采样能捕捉到环境（如钉子）的变化，这对衡量任务进度至关重要。</li>
+<li><strong>流可视化</strong>：图6展示了预测的3D流能准确捕捉复杂的交互动态，如工具使用导致的物体位移和线性推动引发的物体旋转。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.18676v1/figures/pred.jpg" alt="预测3D流可视化"></p>
+<blockquote>
+<p><strong>图6</strong>：预测3D流的可视化。（a）3D FDP预测的流捕捉了锤子向钉子的运动以及接触时钉子的位移。（b）模型正确预测了由机器人线性推动运动引起的物体旋转。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>引入了<strong>场景级3D流表示</strong>，以捕捉整个场景中交互感知的运动，为策略学习提供了精细的局部动态基础。</li>
+<li>开发了一个<strong>统一的基于扩散的架构</strong>，以端到端的方式联合学习3D流预测和动作生成。</li>
+<li>在仿真（50个MetaWorld任务）和真实世界（8个操作任务）实验中均展示了<strong>最先进的性能</strong>，特别是在接触丰富和中等至困难的任务上。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，在真实世界中获取3D流轨迹虽然采用了比运动捕捉更轻量的方法（CoTracker + 深度），但仍可能依赖于特定2D跟踪器的性能，且在极度遮挡情况下可能存在挑战。</p>
+<p><strong>启示</strong>：</p>
+<ul>
+<li><strong>3D流作为结构先验</strong>：证明了场景级3D流是学习可泛化视动策略的有效归纳偏置，能够提升策略在几何和动态变化下的鲁棒性。</li>
+<li><strong>中间表示的演进</strong>：从物体位姿到场景级流的转变，强调了在复杂操作中建模更广泛交互上下文的重要性，为后续研究提供了新方向。</li>
+<li><strong>仿真到真实的桥梁</strong>：论文中采用的轻量级真实流获取方法，为在缺乏精确真实运动数据的场景下应用类似思路提供了可行路径。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出3D Flow Diffusion Policy (3D FDP)，以解决机器人操作中视觉运动策略对细粒度局部运动线索建模不足的问题。该方法的核心是引入场景级3D流作为结构化中间表示，在统一的扩散架构中联合预测查询点的时空轨迹，并以此生成动作，从而将操作决策建立在局部动态之上。实验表明，3D FDP在MetaWorld基准的50项任务中达到最先进性能，尤其在中等与困难任务上表现突出；在八项真实机器人接触丰富与非抓取任务中，也持续优于现有基线。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.18676" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

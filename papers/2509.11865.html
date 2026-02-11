@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Tenma: Robust Cross-Embodiment Robot Manipulation with Diffusion Transformer - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Tenma: Robust Cross-Embodiment Robot Manipulation with Diffusion Transformer</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.11865" target="_blank" rel="noreferrer">2509.11865</a></span>
+        <span>作者: Luhui Hu Team</span>
+        <span>日期: 2025-09-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，基于Transformer和扩散模型的模仿学习策略在机器人操作领域取得了显著进展，其性能随数据和模型规模扩大而提升的趋势类似于大语言模型。然而，在轻量级、跨具身的学习场景中结合这些技术仍具挑战。现有方法在处理多模态机器人数据时存在两个关键局限性：一是<strong>多模态学习</strong>的困难，现有方法要么将丰富的多模态输入压缩为单一令牌，牺牲关键细节，要么对所有模态应用完全自注意力，计算成本高昂且易导致信息淹没；二是<strong>跨具身异构性</strong>，不同机器人平台的控制表示（关节角度、末端执行器位姿等）差异巨大，现有模型大多只能针对单一具身进行训练，或忽视不同模态数据的顺序和维度细节，而为每个具身分配独立投影器的方案则会带来线性增长的存储开销。本文旨在解决从异构、多模态的跨具身机器人数据中稳定、高效地学习鲁棒特征以生成动作这一痛点，提出了一种新的轻量级扩散Transformer架构Tenma。其核心思路是通过跨具身标准化器将不同状态/动作空间映射到共享潜在空间，利用联合状态-时间编码器进行时序对齐的观测学习，并采用优化的扩散动作解码器来提升训练稳定性和学习容量。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Tenma是一个基于ViT的扩散模型，采用编码器-解码器结构，旨在实现跨具身的机器人手臂控制。整体流程是：首先对多模态输入（多视角RGB、本体感知、语言指令）进行标准化和令牌化；然后通过联合状态-时间编码器融合观测特征与语言条件；最后，扩散解码器以编码后的观测序列和扩散时间步为条件，迭代地去噪以生成未来的动作序列。</p>
+<p><img src="https://arxiv.org/html/2509.11865v1/imgs/main.jpg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：Tenma架构总览。左侧展示了跨具身标准化器以及用于视觉、语言和本体感知的冻结多模态令牌化器。右上模块是联合状态-时间编码器，用于整合时序对齐的观测令牌与语言条件。右下模块展示了基于DiT的解码器，它迭代地去噪动作令牌。最后一块说明了预测的动作序列结构。</p>
+</blockquote>
+<p><strong>核心模块一：跨具身标准化与输入令牌化</strong><br>为统一不同机器人的异构状态表示，Tenma采用单一的<strong>跨具身标准化器</strong>：将每个机器人状态映射到一个固定长度的规范槽位表（如关节角度/速度、夹爪状态、末端执行器位姿），并用二进制掩码标识有效条目，然后对每个具身应用min-max缩放至[-1,1]区间。这产生了一个恒定大小、与具身无关的令牌，避免了为每个具身配备独立投影器带来的线性内存增长。如表I所示，各模态使用特定的令牌化器：RGB使用DINOv2-S保留完整图像块序列；语言使用T5-S；标准化后的本体感知数据与位置编码结合。所有令牌被投影到统一的384维嵌入空间。</p>
+<p><strong>核心模块二：联合状态-时间编码器</strong><br>该模块负责理解观测信息，其核心是<strong>联合状态-时间注意力</strong>机制（图3a），它将注意力在时间、状态和语言间进行分解以提高效率。</p>
+<ol>
+<li><strong>时序注意力</strong>：沿时间轴应用，带因果掩码以保持时序顺序，实现运动建模。</li>
+<li><strong>联合状态注意力</strong>：在每个时间步内，观测令牌进行联合自注意力。一个可学习的模态令牌被插入到不同模态（如RGB块）之间，以标记边界并处理可变长度。</li>
+<li><strong>与语言令牌的交叉注意力</strong>：将观测特征与任务提示进行双向条件化。<br>这种因子分解设计将全注意力的计算复杂度O((TS+L)²)降低为O(T²S + S²T + TSL)，其中T、S、L分别代表时间步数、每状态令牌数和语言令牌数，在L远小于TS时显著提升了推理效率。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.11865v1/imgs/encoder.jpg" alt="编码器-解码器细节"></p>
+<blockquote>
+<p><strong>图3</strong>：(a) 编码流程：跨具身观测被投影为令牌，进行时序对齐，并用模态令牌分隔以编码结构信息。(b) DiT块：带噪的动作令牌通过AdaLN（使用扩散时间步令牌）进行自适应归一化，并通过与编码观测特征的交叉注意力进行精炼。</p>
+</blockquote>
+<p><strong>核心模块三：扩散动作解码器</strong><br>动作生成采用基于DiT风格的Transformer进行去噪（图3b）。每个解码块通过两种方式进行条件化：(i) 通过交叉注意力与编码后的观测序列（在对应时间步上）结合，以保持时间一致性；(ii) 通过AdaLN-zero模块，利用扩散时间步嵌入进行平移和缩放调制。这种设计实现了多模态信息的稳定、结构保持式融合。解码器末端是一个两层MLP，将隐藏状态映射为关节指令。动作轨迹通过DDPM风格的采样迭代优化高斯噪声产生。</p>
+<p><strong>创新点总结</strong><br>与现有方法相比，Tenma的创新具体体现在：1) <strong>跨具身标准化器</strong>：统一异构机器人表示，避免了每个具身一个投影器的开销；2) <strong>联合状态-时间注意力</strong>：因子化注意力机制，在保持性能的同时大幅提升推理效率；3) <strong>利用强大的预训练骨干</strong>：采用DINOv2-S和T5-S进行特征提取，而非轻量级模型中常见的ResNet；4) <strong>多令牌条件化</strong>：扩散解码器以每个时间步的多个观测令牌为条件，而非像某些基线那样压缩为单一令牌，保留了更丰富的信息。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：研究在真实的、受厨房启发的双机械臂平台上进行评估，设计了四个长视距食物准备任务：Pour（倾倒）、PickCup（取杯）、PlacePan（放锅）和Stirring（搅拌）。评估使用**成功率(SR)**作为主要指标，并沿三个轴进行：1) <strong>分布内</strong>：标准评估；2) <strong>物体偏移</strong>：使用新物体实例；3) <strong>场景偏移</strong>：改变背景布局、光照和桌面配置。</p>
+<p><strong>对比基线</strong>：选择了三个参数量相近的扩散Transformer策略进行对比：DiT-Policy、Diffusion Policy和Octo。</p>
+<p><strong>关键实验结果</strong>：如表V所示，Tenma在分布内平均成功率达到**88.95%<strong>，显著超过基线方法中最好的18.12%（DiT-Policy）。在物体偏移和场景偏移条件下，Tenma的平均成功率分别保持在</strong>72.56%<strong>和</strong>81.13%**，同样远超基线。具体到任务，PickCup任务表现最为鲁棒，而需要精细手腕控制和长时接触的Pour和Stirring任务在分布偏移下性能下降相对明显，这与任务本身难度相符。</p>
+<p><img src="https://arxiv.org/html/2509.11865v1/imgs/avg_sr_barchart.jpg" alt="平均成功率对比"></p>
+<blockquote>
+<p><strong>图4</strong>：Tenma与基线模型在三个评估轴上的平均成功率（%）可视化。该图总结了表V中的定量结果，表明Tenma在所有情况下均一致优于所有基线，并在分布偏移下保持了高性能。</p>
+</blockquote>
+<p><strong>消融实验与组件分析</strong>：表IV和表VI对比了模型参数、推理频率和架构特征。Tenma参数量约110M，推理频率达到20.2 Hz，优于Diffusion Policy（13.9 Hz）和Octo（10.6 Hz），但低于采用更轻量编码器和单令牌条件化的DiT-Policy（31 Hz）。结果表明，Tenma在编码器（使用DINOv2-S而非ResNet）和解码器条件化（使用多观测令牌而非单一令牌）上的设计选择，使其在速度与精度之间取得了有利的权衡。尽管使用的演示数据量少于某些基线，且参数量适中，但Tenma取得了更高的成功率，表明其架构设计和数据策略的有效性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 提出了<strong>Tenma</strong>，一个在复杂双机械臂任务上超越现有先进模型的轻量级Transformer模型。2) 引入了一系列新的机器人学习技术，包括用于灵活低延迟观测学习的<strong>联合状态-时间注意力</strong>、用于具身统一的<strong>数据标准化技术</strong>，以及用于稳定动作采样的<strong>混合条件化扩散解码器架构</strong>。3) 对先进模型在一系列多样化挑战上进行了详细评估，提供了超越单纯成功率的深入分析。</p>
+<p><strong>局限性</strong>：论文自身提到的局限性包括：1) 数据规模相对适中，未使用超大规模基础模型；2) 评估任务集中于桌面食物准备领域，泛化到更广泛场景的能力有待验证。</p>
+<p><strong>启示</strong>：本研究表明，在机器人模仿学习中，<strong>注重学习质量</strong>（通过更强的编码器、跨具身归一化和多令牌条件化）可以与扩大数据规模和模型规模形成互补。精心设计的多模态表示架构和有针对性的数据筛选，能够高效地利用跨具身数据的多样性，为构建可扩展、鲁棒且适应性强的机器人策略提供了一条实用路径。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文旨在解决在轻量级、跨机器人硬件（跨具身）学习场景下，结合扩散模型与Transformer处理异构多模态机器人数据时面临的稳定性与性能挑战。提出的Tenma模型集成了三项关键技术：跨具身归一化器（映射不同状态/动作至共享隐空间）、联合状态-时间编码器（实现时间对齐的观测学习并加速推理）以及优化的扩散动作解码器。实验表明，在匹配计算量下，Tenma在分布内任务上取得88.95%的平均成功率，远超基线模型的18.12%，并在物体与场景变化下保持了强劲的泛化性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.11865" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>CodeDiffuser: Attention-Enhanced Diffusion Policy via VLM-Generated Code for Instruction Ambiguity - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>CodeDiffuser: Attention-Enhanced Diffusion Policy via VLM-Generated Code for Instruction Ambiguity</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.16652" target="_blank" rel="noreferrer">2506.16652</a></span>
+        <span>作者: Yunzhu Li Team</span>
+        <span>日期: 2025-06-19</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作任务的自然语言指令通常存在模糊性和不确定性。例如，指令“将一个杯子挂到杯树上”可能在存在多个杯子和多个树枝时，对应多种有效的动作选择。当前主流的语言条件模仿学习方法通常采用端到端模型，联合处理高层语义理解和低层动作生成。这种缺乏模块化和可解释性的设计，在面对指令模糊性时，往往导致次优的性能。实验发现，现有的扩散策略在涉及语言模糊性的挑战性任务上，即使使用大量数据，成功率也远低于实际可用水平。</p>
+<p>本文针对指令模糊性这一具体痛点，提出了一个新颖的视角：利用视觉语言模型生成的代码作为可解释、可执行的中间表示，来桥接语义理解和动作执行。核心思路是，通过VLM将模糊指令解析为任务特定的代码，该代码调用感知API生成3D注意力图以突出任务相关区域，从而消解歧义，并为下游的视觉运动策略提供结构化的、低维度的状态表示。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>CodeDiffuser的整体框架包含三个主要组件：代码生成、3D注意力图计算和低层策略。首先，VLM接收视觉观察和语言描述，利用上下文示例生成任务特定的代码。其次，生成的代码调用基于视觉基础模型构建的感知API，计算并输出一个3D注意力图。最后，该注意力图与3D点云一起输入到低层扩散策略中，生成完成任务的连续动作轨迹。</p>
+<p><img src="https://arxiv.org/html/2506.16652v1/x3.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：CodeDiffuser方法总览。包含三个主要组件：(a) 利用VLM的语义推理和代码生成能力，理解可能模糊的人类指令和环境观察，生成任务特定代码。(b) 生成的代码与基于VFM构建的感知API交互，计算突出任务相关区域的3D注意力图。(c) 注意力图被输入到低层策略中，生成动作以完成涉及多物体交互、接触密集操作和语言模糊性的任务。</p>
+</blockquote>
+<p><strong>核心模块1：代码生成</strong><br>系统利用VLM（如GPT-4o）的少样本泛化和常识推理能力，将自然语言指令转化为可执行代码。在推理时，向VLM提供几个用于构建3D注意力图的上下文示例代码片段以及当前任务描述，VLM即生成相应的代码。该代码以RGB观测为输入，目标是输出一个3D注意力图。代码生成过程可以嵌套调用VLM以进行更高级的语义推理。例如，对于指令“将蓝色杯子挂在左边的树枝上”，生成的代码会先检测所有杯子实例，然后通过再次调用VLM从检测到的杯子中选出“蓝色杯子”实例；对树枝的选择则更多地依赖于“左边”这类空间关系。</p>
+<p><strong>核心模块2：3D注意力图生成的API</strong><br>为了给VLM提供一个连接指令语义与3D观测的接口，论文设计了一组简单有效的API函数，包括 <code>detect</code>、<code>sel_name</code> 和 <code>sel_pos</code>。</p>
+<ul>
+<li><code>detect</code>：输入多视角RGBD观测和物体类别名称，输出属于该类别的物体实例列表。其实现基于DINOv2提取2D语义特征，并融合到3D点云中。通过比较3D点特征与预先标注的参考物体特征，计算相似度，并使用DBSCAN聚类得到不同实例。</li>
+<li><code>sel_pos</code>：从<code>detect</code>得到的物体列表中，根据“远离”、“靠近”、“左边”等空间关系选择目标实例。该函数内部会调用VLM生成代码来计算距离或比较坐标。</li>
+<li><code>sel_name</code>：与<code>sel_pos</code>类似，但用于处理需要语义理解的指令，如“Bob的杯子”或“蓝色杯子”。该函数将带实例边界框的观测图像输入VLM进行选择。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2506.16652v1/x4.png" alt="sel_name输入示例"></p>
+<blockquote>
+<p><strong>图4</strong>：<code>sel_name</code>函数的图像输入示例。将分割后的3D实例投影到2D图像上，拼接并叠加实例标签。此图展示了书籍收纳任务的输入图像。</p>
+</blockquote>
+<p>选定目标实例后，系统将实例投影到2D图像，利用Segment Anything模型获取2D分割掩码，再将多视角的2D分割融合回3D空间，最终生成一个3D注意力图 <code>ℐ ∈ ℝ^M</code>（M为点数），其中每个元素指示对应点是否属于任务相关实例。该注意力图与3D点云 <code>𝒫</code> 拼接，构成下游策略的状态表示 <code>z = (𝒫, ℐ)</code>。由于生成的代码会从所有有效检测实例中选择一个，因此计算出的3D注意力图有助于解决语言模糊性。</p>
+<p><strong>核心模块3：视觉运动策略学习</strong><br>策略采用去噪扩散概率模型，其核心是训练一个噪声预测网络 <code>ϵ_θ</code>。与原始扩散策略不同，本方法的条件输入是状态表示 <code>z</code>（即带注意力图的点云），而不是原始RGB观测。训练时，对真实动作 <code>a^0</code> 添加噪声得到 <code>a^k</code>，并采样去噪步数 <code>k</code>，网络的目标是预测所添加的噪声，损失函数为预测噪声与真实噪声之间的均方误差。推理时，从随机动作开始，经过K次迭代去噪得到最终动作。网络采用带残差连接的PointNet++来处理点云输入。</p>
+<p><strong>创新点总结</strong></p>
+<ol>
+<li><strong>中间表示的创新</strong>：引入VLM生成的代码作为可解释、可执行的中间层，将语义理解模块与动作生成模块解耦。</li>
+<li><strong>感知接口的创新</strong>：设计了一套连接VLM代码与3D感知的API（<code>detect</code>, <code>sel_name</code>, <code>sel_pos</code>），使得代码能够灵活地操作3D场景信息。</li>
+<li><strong>策略条件输入的创新</strong>：用低维度的3D注意力图替代高维的视觉特征或关键点作为扩散策略的条件，降低了策略学习的复杂度，并直接注入了任务相关的空间先验。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验主要在模拟环境（使用SAPIEN模拟器）和真实世界中进行。评估任务包括“打包电池”、“挂杯子”和“收纳书籍”，这些任务涉及语言模糊性、接触式操作和多物体交互。使用的基线方法包括ACT、扩散策略的RGB版本和点云版本。</p>
+<p><strong>关键实验1：现有方法对模糊性的脆弱性分析</strong></p>
+<p><img src="https://arxiv.org/html/2506.16652v1/x5.png" alt="现有方法分析"></p>
+<blockquote>
+<p><strong>图5</strong>：现有模仿学习算法的分析。(a) 在打包电池任务中，随着可选的电池数（行）和空槽数（列）增加（即模糊性增加），三种SOTA方法的成功率显著下降。(b) 失败主要发生在模糊性最高的任务阶段。(c) 增加演示数据量（最多至1000条）并不能有效解决模糊性问题，成功率提升存在瓶颈。</p>
+</blockquote>
+<p>图5(a)显示，在无模糊的简单任务（1电池1空槽）中，基线方法成功率很高（ACT: 100%， DP-PCD: 100%）。但当选择增多时（如4电池1空槽），成功率急剧下降（ACT: 20%， DP-PCD: 10%）。图5(c)表明，即使将演示数据从100条增加到1000条，在模糊任务上的成功率提升也非常有限（例如挂杯子任务，100条数据成功率约20%，1000条数据仅提升至约30%），证明单纯增加数据无法根本解决指令模糊性带来的挑战。</p>
+<p><strong>关键实验2：3D注意力图的有效性评估</strong></p>
+<p><img src="https://arxiv.org/html/2506.16652v1/x6.png" alt="注意力图评估"></p>
+<blockquote>
+<p><strong>图6</strong>：3D注意力图评估。左：在“打包电池”任务中，对比了使用真实（Ground Truth）注意力图和使用VLM生成代码计算的注意力图（Ours）对下游策略性能的影响。两者均显著优于无注意力图的基线（w/o Attn），且本文方法接近真实注意力图的性能。右：在“挂杯子”任务中，本文方法（CodeGen）生成的注意力图引导策略的成功率远高于无注意力图的基线。</p>
+</blockquote>
+<p>图6左显示，在打包电池任务中，使用真实注意力图的策略成功率达93.3%，使用本文VLM生成代码所得注意力图的策略成功率达86.7%，而完全不使用注意力图的基线策略成功率仅为13.3%。这证明3D注意力图是解决模糊性的有效表示，且本文的代码生成方法能够产生高质量的注意力图。</p>
+<p><strong>关键实验3：整体系统性能</strong></p>
+<p><img src="https://arxiv.org/html/2506.16652v1/x7.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图7</strong>：消融实验。对比了完整系统（Full）、不使用注意力图（w/o Attn）、以及使用不同方式生成注意力图（Human-defined, VLM w/o Code）的性能。完整系统在各项任务上均取得最高或接近最高的成功率。</p>
+</blockquote>
+<p>图7的消融实验表明，完整的CodeDiffuser系统在打包电池、挂杯子和收纳书籍三个任务上均达到最高成功率（分别为86.7%, 83.3%, 90%）。移除注意力图（w/o Attn）或使用非代码方式的VLM直接生成（VLM w/o Code）均会导致性能显著下降，这验证了代码作为中间表示以及注意力图作为桥梁的必要性。</p>
+<p><img src="https://arxiv.org/html/2506.16652v1/x8.png" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>图8</strong>：真实世界实验结果。展示了CodeDiffuser在真实机器人上执行涉及语言模糊性和复杂操作的任务的成功案例。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.16652v1/x9.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图9</strong>：定性结果。展示了在“挂杯子”任务中，针对不同模糊指令（如“挂一个杯子”、“挂红色杯子”、“挂左边的杯子”），系统生成的3D注意力图能准确聚焦于不同的目标实例，从而引导策略执行不同的动作。</p>
+</blockquote>
+<p>图8和图9通过真实机器人实验和可视化，定性证明了CodeDiffuser在处理各种模糊指令和完成接触式复杂操作方面的有效性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>系统地评估并揭示了当前最先进的模仿学习框架在处理语言模糊性场景时的关键局限：性能随模糊性增加而急剧下降，且仅增加数据无法解决。</li>
+<li>提出了CodeDiffuser，一个利用VLM生成代码作为可解释中间表示的新型机器人操作框架。该框架通过代码调用感知API生成3D注意力图，有效桥接了高层语义推理与低层轨迹预测。</li>
+<li>在模拟和真实任务中进行了广泛评估，证明了该方法在处理语言模糊性、接触式6-DoF操作及多物体交互方面的有效性。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，代码生成依赖VLM，可能存在幻觉或错误；感知API（如<code>detect</code>）需要为任务中的参考物体进行轻量级的特征标注。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>模块化设计</strong>：将复杂的机器人推理-执行管道分解为可解释、可独立优化的模块（如语义理解、中间表示生成、技能学习），是提升系统鲁棒性和适应性的有效途径。</li>
+<li><strong>代码作为接口</strong>：利用大模型的代码生成能力，为机器人系统提供了一种灵活、可组合的高层规划接口，能够更自然地整合常识推理和感知能力。</li>
+<li><strong>注意力作为引导</strong>：低维度的空间注意力图是一种高效的任务表示，能够显著简化下游策略的学习，这一思路可扩展到其他需要处理多模态、多选择问题的机器人学习场景。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中自然语言指令的模糊性问题，提出CodeDiffuser框架。核心方法是利用视觉语言模型（VLM）将抽象指令解析并生成可执行代码，作为可解释的中间表示；该代码与感知模块交互，生成融合空间与语义信息的3D注意力图，以明确任务相关区域，从而消解指令歧义。实验表明，现有扩散策略在涉及语言模糊性的任务上成功率极低，而本方法在语言模糊性、接触式操作及多物体交互等挑战性任务中表现优异。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.16652" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

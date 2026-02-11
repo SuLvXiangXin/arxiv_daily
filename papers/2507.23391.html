@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Policy Learning from Large Vision-Language Model Feedback without Reward Modeling - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Policy Learning from Large Vision-Language Model Feedback without Reward Modeling</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2507.23391" target="_blank" rel="noreferrer">2507.23391</a></span>
+        <span>作者: Chang D. Yoo Team</span>
+        <span>日期: 2025-07-31</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>离线强化学习（RL）为利用预先收集的次优数据集训练智能体提供了强大框架，避免了昂贵且可能危险的在线交互。然而，现有离线RL算法通常需要带有奖励标签的数据，而人工设计奖励函数本身成本高昂、劳动密集且需要大量领域知识。利用大型视觉语言模型（VLM）生成指导信号是一个有前景的方向。现有方法主要分为两类：一是使用VLM（如CLIP）计算视觉观察与任务描述在嵌入空间中的相似度作为奖励，但这种基于相似度的奖励信号对于机器人操作等细粒度任务通常过于粗糙；二是利用VLM生成结构化奖励函数代码或作为教师提供偏好反馈来训练奖励模型，再用于RL优化。后者虽然性能有竞争力，但引入了级联预测误差（从奖励模型传播到评论家和执行器）、放大了VLM幻觉问题的影响，并且增加了额外的计算开销和超参数调优负担。</p>
+<p>本文针对上述痛点，提出了一种无需奖励建模的新视角：直接利用VLM生成的偏好标签来训练策略，绕过了显式学习奖励模型的步骤。本文的核心思路是：给定一个无标签的数据集和语言任务描述，查询VLM为采样的轨迹段对生成偏好标签，然后采用监督对比偏好学习目标直接从这些偏好数据中优化策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>PLARE（基于视觉语言模型偏好且无需奖励估计的学习）的整体框架分为两个阶段：偏好生成和策略训练。输入包括一个无奖励标签的数据集D、段长度L、查询数量N以及任务目标的文本描述l。输出是训练好的策略π_θ。</p>
+<p><img src="https://arxiv.org/html/2507.23391v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：PLARE概述。给定一个无标签、无奖励的数据集，PLARE采样两个轨迹段，并基于语言任务描述查询VLM教师以获取偏好标签。值得注意的是，查询VLM时仅使用每个段的视觉观察。选定的段及其分配的偏好标签随后被存储在偏好数据集中。最后，使用对比学习目标从该数据集学习策略。</p>
+</blockquote>
+<p><strong>核心模块1：VLM偏好反馈生成</strong>。该模块负责构建偏好数据集D_pref。具体流程如算法1所示：从数据集D中随机采样长度为L的轨迹段对(σ1, σ2)；然后查询VLM（本文使用Gemini），根据任务描述l判断哪个序列（段）能更好地执行任务，并返回三元偏好标签y（y=0表示σ1优于σ2，y=1表示相反，y=0.5表示同等偏好）。查询时，向VLM提供每个段的三帧代表性图像（首帧、中间帧、尾帧）以及包含任务描述和比较指令的特定提示词（见图2底部）。这种三帧设计是在查询时间与行为表征粒度之间的一个有效权衡。生成的段对及其标签被存入D_pref。</p>
+<p><strong>核心模块2：基于对比偏好学习的策略训练</strong>。该模块使用收集到的偏好数据集D_pref，通过监督学习直接优化策略。PLARE采用了对比偏好学习（CPL）目标。给定偏好数据，策略π_θ通过最小化以下损失进行优化：<br>ℒ(θ) = -𝔼_D_pref[(1-y) h(π_θ, σ1, σ2) + y h(π_θ, σ2, σ1)]<br>其中，h(π_θ, σ1, σ2) 函数的具体形式基于两个段中状态-动作对的策略对数概率的折扣加权和，并通过softmax函数进行比较（详见论文公式2）。超参数α和λ用于控制缩放。训练是完全监督式的，无需RL优化。为了处理VLM可能产生的噪声标签，作者在策略训练中调整了dropout率，将其作为一种有效的正则化器。实验中发现，排除同等偏好（y=0.5）的样本通常能带来更好的性能。</p>
+<p><strong>创新点</strong>：与现有VLM基于偏好训练奖励模型的方法（如RL-VLM-F）相比，PLARE的核心创新在于<strong>绕过了奖励建模步骤</strong>，直接将VLM的偏好反馈用于策略优化。这消除了因学习不完美奖励模型而导致的误差传播，减少了对复杂RL算法调参的依赖，并降低了总体计算开销。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：在模拟环境中使用MetaWorld机器人操作任务（Drawer Open, Sweep Into, Plate Slide, Door Open）进行评估，数据集来自离线PbRL基准，包含约2500条成功率50%的轨迹。在真实世界中使用7自由度Sawyer机器人执行Pickup Banana和Drawer Open任务，通过遥操作收集了约100条成功率60%的轨迹。</li>
+<li><strong>实验平台</strong>：模拟环境为MetaWorld，真实机器人平台为Rethink Sawyer。</li>
+<li><strong>对比基线方法</strong>：<ul>
+<li><strong>IQL-CLIP</strong> 和 <strong>IQL-RoboCLIP</strong>：使用CLIP或RoboCLIP的相似度作为奖励，结合IQL算法。</li>
+<li><strong>RL-VLM-F</strong>：使用VLM生成偏好训练奖励模型，再进行RL优化。</li>
+<li><strong>BC</strong>：行为克隆，作为性能下界。</li>
+<li>**CPL (Oracle)**：使用真实奖励函数生成的偏好（而非VLM）进行CPL训练，作为性能上界。</li>
+</ul>
+</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>在MetaWorld的四个任务上，PLARE取得了最佳或接近最佳的平均性能。</p>
+<p><img src="https://arxiv.org/html/2507.23391v1/mw_images/mw_drawer-open-image-v2.png" alt="MetaWorld任务示例"></p>
+<blockquote>
+<p><strong>图4</strong>：MetaWorld任务“Drawer Open”的示意图。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2507.23391v1/mw_images/mw_sweep-into-image-v2.png" alt="MetaWorld任务示例"></p>
+<blockquote>
+<p><strong>图5</strong>：MetaWorld任务“Sweep Into”的示意图。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2507.23391v1/mw_images/mw_plate-slide-image-v2.png" alt="MetaWorld任务示例"></p>
+<blockquote>
+<p><strong>图6</strong>：MetaWorld任务“Plate Slide”的示意图。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2507.23391v1/mw_images/mw_door-open-image-v2.png" alt="MetaWorld任务示例"></p>
+<blockquote>
+<p><strong>图7</strong>：MetaWorld任务“Door Open”的示意图。</p>
+</blockquote>
+<p>根据论文表I的数据，PLARE在四个任务上的平均成功率达到**70.00%**，显著超过了IQL-CLIP（59.50%）、IQL-RoboCLIP（50.00%）和RL-VLM-F（61.68%）。具体到任务，PLARE在Drawer Open（84.9% vs 67.4%）和Plate Slide（58.7% vs 49.0%）上相比最强的基线RL-VLM-F有显著提升。</p>
+<p><strong>真实世界实验结果</strong>：<br><img src="https://arxiv.org/html/2507.23391v1/figures/realrobot_results.png" alt="真实机器人结果"></p>
+<blockquote>
+<p><strong>图8</strong>：真实机器人任务的成功率曲线。左图显示PLARE在“Pickup Banana”任务上最终性能优于BC和RL-VLM-F。右图显示在“Drawer Open”任务上，PLARE与RL-VLM-F性能相当，且均优于BC。这表明PLARE能够从次优数据集中学习有效的策略，并适用于真实世界。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：<br>论文通过消融实验验证了关键设计选择：</p>
+<ol>
+<li><strong>查询数量（N）</strong>：增加VLM查询数量（从1k到10k）可以持续提升策略性能，表明收集更多偏好反馈是有益的。</li>
+<li><strong>Dropout正则化</strong>：在策略网络中使用dropout可以显著改善从可能含有噪声的VLM偏好中学习的效果，尤其是在训练初期稳定了学习过程。</li>
+<li><strong>同等偏好样本</strong>：在训练中排除标签y=0.5（同等偏好）的样本，相比包含它们能获得更好的性能。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>PLARE框架</strong>，首次实现了仅依靠语言任务描述和智能体视觉观察，直接利用VLM的偏好反馈进行策略学习，完全绕过了奖励函数设计和奖励模型学习。</li>
+<li>在模拟的MetaWorld操作任务上验证了PLARE的有效性，其性能<strong>优于或媲美</strong>现有的基于VLM的奖励生成方法。</li>
+<li>成功将PLARE应用于<strong>真实世界机器人操作任务</strong>，证明了其在实际应用中的可行性和潜力。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文自身提到的局限性包括：1) VLM生成的反馈可能存在<strong>幻觉</strong>，尽管通过dropout正则化得到部分缓解；2) 向VLM查询大量偏好标签会产生<strong>计算成本</strong>，尽管这替代了更昂贵的奖励模型训练和RL迭代。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>直接偏好学习</strong>的范式显示出巨大潜力，未来可以探索更高效的偏好查询策略、更鲁棒的噪声偏好学习算法，以及如何将这种方法扩展到更复杂的领域。</li>
+<li>工作凸显了利用<strong>大型多模态模型（如VLM）</strong> 作为“任务理解器”和“偏好评判员”的价值，为减少机器人学习中对人工奖励工程和大量专家演示的依赖开辟了新途径。后续研究可以进一步挖掘VLM/LLM在提供不同形式监督信号（如技能描述、子目标建议）方面的能力。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出PLARE方法，旨在解决离线强化学习中依赖人工设计奖励函数的瓶颈问题。该方法利用大型视觉-语言模型，直接根据语言任务描述对视觉轨迹片段生成偏好标签，并通过监督对比偏好学习目标训练策略，无需构建显式奖励模型。在MetaWorld机器人操作任务上的实验表明，PLARE性能达到或超越了现有基于VLM的奖励生成方法，并在真实物理机器人任务中验证了其有效性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2507.23391" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

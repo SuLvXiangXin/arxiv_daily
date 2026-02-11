@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RLRC: Reinforcement Learning-based Recovery for Compressed Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>RLRC: Reinforcement Learning-based Recovery for Compressed Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.17639" target="_blank" rel="noreferrer">2506.17639</a></span>
+        <span>作者: Xiao Li Team</span>
+        <span>日期: 2025-06-21</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型因其强大的泛化能力成为通用机器人研究的热点。然而，这些模型通常参数量巨大，导致计算和内存需求高，推理速度慢，难以部署在资源受限的机器人平台上。现有提升效率的方法包括替换轻量级骨干网络、采用小型VLM、以及应用量化、剪枝、知识蒸馏等传统模型压缩技术，或改进视觉令牌处理。但这些方法在加速和内存效率方面仍有不足，且未能充分考虑VLA用于机器人控制的内在特性。</p>
+<p>本文针对压缩后的VLA模型性能严重下降这一具体痛点，提出了一种分阶段恢复性能的新视角。核心思路是：首先对VLA中的大语言模型组件进行高比例结构化剪枝以压缩模型；然后结合监督微调和强化学习来恢复甚至提升任务性能；最后应用量化进一步优化部署效率。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RLRC是一个三阶段的压缩与恢复流程，旨在显著减小模型尺寸和内存占用，同时通过性能恢复阶段保持任务成功率。</p>
+<p><img src="https://arxiv.org/html/2506.17639v1/extracted/6559747/figures/SparseVLA.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图5</strong>：RLRC方法整体框架。包含三个阶段：(1) 对VLA进行结构化剪枝；(2) 通过SFT和RL进行性能恢复；(3) 应用4比特量化。下方的三条彩色曲线分别展示了在此过程中成功率、推理速度和内存消耗的变化。</p>
+</blockquote>
+<p><strong>第一阶段：VLA的结构化剪枝</strong><br>VLA的大部分参数集中在其LLM组件中。RLRC采用结构化剪枝（而非非结构化剪枝），因其能产生硬件友好的规则稀疏模式，带来实质性的加速。具体采用现成的LLM-Pruner框架，在块级别（block-wise）应用剪枝，并使用泰勒重要性准则。为了保持模型稳定性和表征能力，保留第一个和最后一个解码器层，仅对中间层进行剪枝。基于前期实验观察，采用了激进的90%全局剪枝率，旨在大幅减少模型尺寸。</p>
+<p><img src="https://arxiv.org/html/2506.17639v1/extracted/6559747/figures/vlaprune.png" alt="剪枝前后结构对比"></p>
+<blockquote>
+<p><strong>图6</strong>：VLA中注意力层和MLP层在剪枝前后的结构示意图。剪枝后，自注意力子模块和前馈子模块中线性层的中间维度显著减小，但每层解码器的输入和输出维度保持不变，保持了结构兼容性。</p>
+</blockquote>
+<p><strong>第二阶段：基于SFT和RL的性能恢复</strong><br>高比例结构化剪枝会导致模型性能显著下降。RLRC首先在特定任务数据上对剪枝后的模型进行监督微调，使其适应缩减后的架构。然而，实验发现仅靠SFT不足以完全恢复性能，尤其是在后续施加激进的4比特量化后。因此，引入强化学习作为补充优化策略。RL能通过与环境交互、优化长期奖励来动态调整参数，有效恢复被剪枝和量化削弱的决策能力。</p>
+<p>采用近端策略优化算法进行RL微调。借鉴相关设计，将剪枝后的VLA作为行动者（actor），并让行动者和评论者（critic）共享完整的Transformer骨干网络。具体而言，从最终Transformer块的第一个动作令牌位置提取隐藏表示 <code>h0</code>，并将其输入一个轻量级MLP，回归出一个标量值作为评论者对状态价值的估计。</p>
+<p><strong>第三阶段：4比特量化</strong><br>在性能恢复之后，可选地对模型进行4比特量化，以进一步减少内存占用，使其更适合在资源受限的设备上部署。论文指出，量化带来的加速收益会随着模型稀疏度的增加而减弱，甚至可能因反量化开销而变慢，因此需要权衡。</p>
+<p><strong>创新点</strong>：与现有方法相比，RLRC的创新性主要体现在将强化学习引入压缩模型的性能恢复流程。通过SFT与RL的结合，能够有效恢复甚至超越原始模型在高比例剪枝和量化后的任务执行能力，而传统方法通常只使用SFT或无法应对如此激进的压缩。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：所有实验基于OpenVLA模型。在机器人操作任务上使用LIBERO基准（包含LIBERO Spatial和LIBERO Long两个子集）进行评估。硬件性能在单张NVIDIA RTX 5880 Ada GPU上测试。对比的基线方法包括：原始密集模型、8比特/4比特量化、非结构化剪枝（Magnitude, Wanda）和结构化剪枝（LLM-Pruner, FLAP）。</p>
+<p><img src="https://arxiv.org/html/2506.17639v1/extracted/6559747/figures/sparsevla_prune.png" alt="不同稀疏度下剪枝方法的影响"></p>
+<blockquote>
+<p><strong>图2</strong>：LLM-Pruner和FLAP在不同稀疏度下对OpenVLA性能的影响。结构化剪枝导致任务成功率显著下降，但SFT能在一系列稀疏度下恢复性能，即使在90%参数被移除后，经微调的模型也能恢复大部分原始性能。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.17639v1/extracted/6559747/figures/speed.png" alt="稀疏度与量化对吞吐量的影响"></p>
+<blockquote>
+<p><strong>图4</strong>：稀疏度和4比特量化对OpenVLA推理吞吐量的影响。当稀疏度较低时，量化能显著加速；但随着稀疏度增加，模型变小，量化带来的收益被反量化开销抵消，全精度版本的吞吐量可能超过量化版本。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>压缩效果</strong>：RLRC（90%剪枝 + SFT + RL + 4bit量化）将内存占用压缩至原始的约1/8（从14.858 GB降至1.665 GB），推理吞吐量提升至原始的约2.3倍（从5.9 samples/s提升至13.6 samples/s）。</li>
+<li><strong>性能保持</strong>：在LIBERO Spatial任务上，压缩后模型的成功率为70.4%，与原始密集模型的84.7%相比下降约10%，但远高于单纯剪枝未恢复的模型（23.4%）。在更复杂的ManiSkill2基准测试中，RLRC在16个已知任务上达到86.9%的成功率，超过了原始密集模型的84.4%；在9个未知任务上也取得了有竞争力的结果。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.17639v1/extracted/6559747/figures/sft_rl_comparison.png" alt="SFT与RL恢复效果对比"></p>
+<blockquote>
+<p><strong>图8</strong>：在ManiSkill2基准上，SFT与RL对性能恢复的贡献对比。RL微调显著提升了模型在已知和未知任务上的成功率，尤其是在结合SFT之后，效果最佳。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.17639v1/extracted/6559747/figures/model_performance_comparison.png" alt="与基线方法的性能对比"></p>
+<blockquote>
+<p><strong>图9</strong>：RLRC与各种基线方法在ManiSkill2已知任务上的性能对比。RLRC在取得最高压缩比和吞吐量的同时，保持了最高的任务成功率。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>论文通过实验验证了各组件贡献。如表II和图8所示，单独的SFT可以部分恢复性能，但结合RL后能实现更优的恢复效果，甚至在某些任务上超越原始模型。这表明RL在弥补因压缩损失的表征能力和决策精度方面具有关键作用。</p>
+<p><img src="https://arxiv.org/html/2506.17639v1/extracted/6559747/figures/ppo_training_comparison_ft_vs_scratch.png" alt="PPO训练曲线对比"></p>
+<blockquote>
+<p><strong>图10</strong>：从零开始训练与从SFT模型开始进行PPO训练的成功率曲线对比。从SFT模型开始训练收敛更快且最终性能更高，证明了分阶段（先SFT后RL）训练策略的有效性。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>系统探索了通用模型压缩技术（量化、剪枝）在VLA模型上的适用性与有效性，提供了关于其权衡的经验性见解。</li>
+<li>提出了RLRC这一新颖的三阶段压缩框架，创新性地将强化学习与监督微调结合，用于恢复高比例压缩后VLA模型的性能。</li>
+<li>通过大量实验证明，RLRC能在实现高达8倍内存缩减和2.3倍吞吐量提升的同时，保持甚至超越原始模型的任务成功率，具备实际部署价值。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文自身提到的局限性包括：强化学习训练过程可能不稳定且计算成本较高；量化带来的加速收益在模型高度稀疏时会因反量化开销而减弱，成为速度瓶颈。</p>
+<p><strong>后续研究启示</strong>：</p>
+<ol>
+<li>强化学习可以作为提升压缩模型性能的有效工具，特别是在需要复杂决策和长期交互的机器人任务中。</li>
+<li>结构化剪枝与量化相结合是实现VLA模型高效部署的可行路径，但需要精细设计恢复策略来弥补性能损失。</li>
+<li>未来的工作可以探索更高效的RL算法、设计硬件感知的压缩策略以更好地协同优化稀疏性与量化收益，或将此框架扩展到更多类型的VLA架构上。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型参数规模大、推理延迟高、难以在资源受限机器人平台部署的问题，提出RLRC方法。该方法采用三阶段恢复流程：先进行结构化剪枝，再基于监督微调与强化学习进行性能恢复，最后实施量化。实验表明，RLRC能将内存占用降低至1/8，推理吞吐量提升2.3倍，同时保持甚至超过原模型的任务成功率，显著优于现有压缩基线。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.17639" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

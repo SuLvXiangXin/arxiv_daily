@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Plan Verification for LLM-Based Embodied Task Completion Agents - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Plan Verification for LLM-Based Embodied Task Completion Agents</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.02761" target="_blank" rel="noreferrer">2509.02761</a></span>
+        <span>作者: Gokhan Tur Team</span>
+        <span>日期: 2025-09-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，大型语言模型已被广泛用于体现代理的任务规划，能够将高级目标分解为可执行的子目标。然而，LLM生成的计划往往并不完美，可能包含逻辑错误。此外，用于训练体现代理的数据集（如TEACh）本身也包含大量由人类演示产生的次优行为，例如拾取无关物品、执行冗余导航或遗漏必要步骤。这些噪声不仅导致计划冗长低效，还会在模仿学习或强化学习中引入有问题的学习信号。</p>
+<p>本文针对体现代理任务计划（无论是LLM生成还是人类演示）中存在的噪声问题，提出了一个事后验证与清理的新视角。核心思路是设计一个由两个LLM代理（法官和规划师）组成的迭代验证框架，通过自然语言批判与修订的循环，自动识别并修正计划中的错误动作，从而生成更精简、更高质量的训练数据或可执行计划。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的框架是一个完全基于语言、模型无关的迭代验证循环，旨在不依赖任何环境模拟器或手工规则的情况下净化动作序列。</p>
+<p><img src="https://arxiv.org/html/2509.02761v4/fig1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：规划代理与法官LLM交互的流程示意图。给定一个目标（Goal）和初始计划（Initial Plan），法官LLM（Judge LLM）逐步分析计划，生成包含错误类型和解释的批评（Critiques）。规划代理（Planning Agent）根据这些批评修订计划（Revised Plan）。此过程迭代进行，直至法官不再提出新的批评或达到迭代上限。</p>
+</blockquote>
+<p><strong>整体流程</strong>：输入是自然语言描述的目标 <code>g</code> 和初始动作序列（计划）<code>π</code>。在每一轮迭代 <code>k</code> 中，法官LLM分析当前计划 <code>π^(k)</code>，输出一组批评 <code>𝒞^(k)</code>。规划师LLM根据这些批评应用修改，生成修订后的计划 <code>π^(k+1)</code>。循环持续进行，直到批评集为空或达到预设的最大迭代轮数（算法中设为5轮）。输出是经过净化的最终计划 <code>π*</code>。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>法官LLM</strong>：其核心功能是实现一个批评函数 <code>J: (g, π) ↦ 𝒞</code>。它将目标和计划映射为一组结构化批评。每条批评是一个三元组 <code>(i, type, reason)</code>，其中 <code>i</code> 是动作索引，<code>type</code> 是错误类型（<code>REMOVE</code> 或 <code>MISSING</code>），<code>reason</code> 是自然语言解释。论文将错误归纳为三类：<strong>冗余动作</strong>（不必要的重复）、<strong>矛盾动作</strong>（与之前动作或目标冲突，按<code>REMOVE</code>处理）和<strong>缺失动作</strong>。法官仅通过零样本提示（见附录A.1）运作，提示中要求其逐行分析每个动作的目的和相关性，并以对话式语言给出解释，仅在必要时使用 <code>#REMOVE</code> 和 <code>#MISSING</code> 标签。</li>
+<li><strong>规划师LLM</strong>：其功能是实现修订函数 <code>P: (π, 𝒞) ↦ π‘</code>。它接收当前计划和法官的批评，并确定性地应用修改：删除被标记为 <code>REMOVE</code> 的动作，并尝试插入被标记为 <code>MISSING</code> 的必要步骤。规划师也通过特定的自然语言提示（见附录A.2）引导，要求其保持原始格式，只进行必要的更改。</li>
+</ol>
+<p><strong>创新点</strong>：与现有工作相比，本方法的创新主要体现在三个方面：首先，它专注于对已有计划（尤其是含噪声的人类演示）进行<strong>事后验证与清理</strong>，而非改进初始计划生成。其次，它采用了<strong>完全基于自然语言提示</strong>的验证方式，无需形式化方法（如线性时序逻辑LTL）或手工规则，实现了广泛的泛化能力。最后，它设计了一个<strong>模块化、可迭代的双代理架构</strong>，法官和规划师可以独立替换，便于评估不同LLM在批判和修订角色上的表现，并支持透明的精度-召回率分析。</p>
+<p><img src="https://arxiv.org/html/2509.02761v4/fig2.png" alt="工作流示例"></p>
+<blockquote>
+<p><strong>图2</strong>：TEACh数据集中的工作流示例。展示了从对话历史中提取高级目标，进而生成初始动作序列，并最终通过本文框架进行验证和修订的完整过程。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：研究在TEACh体现代理数据集的一个子集上进行评估，该子集包含100个片段，涵盖15个高级家庭任务，共计1,408个人类生成的动作。实验为这些动作建立了手动标注的真实错误标签（<code>REMOVE</code>/<code>MISSING</code>）作为基准。</p>
+<p><strong>对比方法</strong>：评估了四个先进的LLM作为法官：GPT o4-mini, DeepSeek-R1, Gemini 2.5, LLaMA 4 Scout。同时，也设置了一个<strong>规则基线</strong>（Rule-based）作为对比。在迭代实验中，还探索了不同LLM分别担任法官和规划师的所有组合。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><p><strong>单次（零样本）验证性能</strong>：如表1所示，基于规则的基线方法表现不佳（召回率22%，精确率71%）。而所有LLM法官的表现都显著优于基线。其中，GPT o4-mini获得了最高的召回率（80%）和良好的精确率（93%）；DeepSeek-R1表现出极端保守的特性，实现了100%的精确率，但召回率较低（68%）；Gemini 2.5和LLaMA 4 Scout取得了中等水平的召回率（74%）和精确率（90%，85%）。</p>
+</li>
+<li><p><strong>迭代批判-修订性能</strong>：如表2所示，迭代 refinement 使召回率平均提升了5-10%，而精确率保持稳定或略有提升。例如，GPT o4-mini作为法官时，召回率从80%提升至88-90%。Gemini 2.5在多种组合下取得了最高的F1分数（最高93.9），表现出最均衡的性能。法官-规划师组合的交互效应显示，模型在担任法官和规划师为同一模型时（表格对角线）通常表现更优，但跨模型组合有时也能带来收益（如GPT o4-mini法官配DeepSeek-R1规划师获得90%召回率）。</p>
+</li>
+<li><p><strong>收敛效率</strong>：<br><img src="https://arxiv.org/html/2509.02761v4/convergence-plot.png" alt="收敛曲线"></p>
+<blockquote>
+<p><strong>图3</strong>：动作序列随迭代次数的累积收敛百分比。绝大多数序列（96.5%）在3轮迭代内收敛，其中62%在第一轮后即无需修改。</p>
+</blockquote>
+</li>
+</ol>
+<p>如图3所示，迭代循环收敛迅速。62%的序列在第一轮迭代后即达到稳定（无需进一步修改），累计89%在第二轮后收敛，96.5%在第三轮后收敛。这表明大部分错误易于识别和修正，仅少数复杂情况需要多轮推理。</p>
+<p><strong>消融分析与定性发现</strong>：论文通过定性分析揭示了不同LLM的行为模式及其典型错误。DeepSeek-R1是<strong>高精确率、低召回率</strong>的保守型法官；GPT o4-mini是<strong>高召回率、中等精确率</strong>的激进型法官；Gemini 2.5是<strong>均衡型</strong>法官，在所有组合中F1分数最高。法官能成功修正“过早切换电器”、“拾取无关物品”、“序列不完整”等错误。主要的<strong>召回失败</strong>（漏检）发生在具有长程依赖的上下文冗余场景（如过早拾取物品）。主要的<strong>精确率失败</strong>（误报）则发生在多步骤准备或对象重复使用的合理模式中，法官可能误判其为冗余。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1. 提出了一个通用的、基于语言的双LLM迭代计划验证框架，用于清理体现代理中的噪声轨迹。2. 证明了简单的自然语言提示足以引导LLM法官有效识别和解释次优动作，无需形式化方法。3. 在TEACh数据集上对多个LLM法官进行了全面的实证评估与分析，揭示了其在精度、召回率及行为模式上的差异与权衡。</p>
+<p><strong>局限性</strong>：论文自身指出了几点局限：1. 评估仅限于TEACh数据集的一个子集，在更广泛、复杂的任务和环境中的泛化能力未经验证。2. 依赖手动标注作为评估基准，可能存在主观性。3. 法官LLM的零样本性能受模型固有偏见、知识截止日期和幻觉的影响。4. 方法目前仅依赖语言线索，缺乏更强的环境 grounding（如视觉或物理模拟）。5. 在大规模应用时，生成LLM响应的计算开销需要考虑。</p>
+<p><strong>后续启示</strong>：这项工作为利用LLM进行高质量体现代理数据清洗提供了可扩展的路径。未来研究方向包括：将框架扩展到视觉 grounded 场景；研究法官提示的对抗鲁棒性；探索混合法官集成或置信度校准提示以平衡精度-召回率；在更大规模的多智能体数据集（如PARTNR）上测试可扩展性；以及如何显式地利用框架识别出的人类错误恢复模式来训练更具韧性的智能体。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对基于大语言模型（LLM）的具身任务完成代理，其生成的任务计划与人类演示常包含冗余动作、逻辑错误等噪声的问题，提出了一种迭代验证框架。该框架利用一个“评判”LLM对动作序列进行批判，再由一个“规划”LLM应用修订，通过自然语言提示迭代优化轨迹，能广泛处理无关动作、矛盾等错误类型。在TEACh数据集上的实验表明，该方法在四种先进LLM上实现了高达90%的召回率和100%的精确度，96.5%的序列在最多三次迭代内收敛，有效提升了动作序列的时空效率与组织性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.02761" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

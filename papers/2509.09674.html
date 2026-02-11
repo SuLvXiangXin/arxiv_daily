@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SimpleVLA-RL: Scaling VLA Training via Reinforcement Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>SimpleVLA-RL: Scaling VLA Training via Reinforcement Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.09674" target="_blank" rel="noreferrer">2509.09674</a></span>
+        <span>作者: Ning Ding Team</span>
+        <span>日期: 2025-09-11</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前视觉-语言-动作模型的主流方法是两阶段训练策略：首先在大规模多模态数据上进行预训练，然后使用大量高质量的人类操作机器人轨迹进行监督微调。然而，该方法面临两个关键挑战：(i) 扩展SFT所需的大规模人类操作轨迹数据稀缺且成本高昂；(ii) 在涉及分布偏移的组合性、长视野或真实世界任务上，模型的泛化能力有限。近期大型推理模型的突破表明，强化学习可以显著增强逐步推理能力。这引发了一个自然的问题：RL是否也能类似地提升VLA模型的长视野、逐步动作规划能力？本文针对VLA模型SFT的数据稀缺和泛化瓶颈，提出利用基于规则的、结果驱动的在线强化学习来增强其逐步动作生成能力。核心思路是借鉴DeepSeek-R1在LLM上的成功经验，构建一个专为VLA模型设计的高效在线RL框架，仅使用简单的任务成功/失败作为奖励信号，以数据高效的方式提升模型的规划性能和泛化能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>SimpleVLA-RL是一个为VLA模型设计的高效在线强化学习框架。其整体流程如下：对于每个输入任务，通过随机采样生成多条轨迹；环境根据任务完成情况为每条轨迹分配二元结果奖励；利用这些奖励和相应的动作令牌概率，计算GRPO损失来更新策略模型。</p>
+<p><img src="https://arxiv.org/html/2509.09674v1/x2.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图2</strong>：SimpleVLA-RL框架概述。框架基于veRL构建，针对VLA模型实现了交互式轨迹采样、并行环境渲染和优化的损失计算。流程包括：1）并行初始化多个环境；2）VLA策略根据当前状态（视觉、语言、本体感知）通过温度采样生成多样化动作；3）环境执行动作并更新状态；4）根据任务完成情况分配轨迹级二元奖励；5）使用修改后的GRPO目标计算策略梯度并更新模型。</p>
+</blockquote>
+<p>核心模块与技术细节如下：</p>
+<ol>
+<li><strong>交互式VLA轨迹采样</strong>：与LLM仅需自回归生成文本不同，VLA的轨迹生成需要与环境的闭环交互。本文采用基于动作令牌的VLA模型，因其能自然地提供动作分布以支持随机采样和策略梯度计算。在采样时，策略基于当前状态（视觉观察、本体感知、语言指令）输出动作令牌的概率分布，并通过温度采样生成动作。这些动作在环境中执行后，状态动态更新，模型再基于新状态生成下一组动作，如此循环直至任务结束或达到最大步数。为实现高效采样，框架实现了并行多环境渲染。</li>
+<li><strong>结果奖励建模</strong>：采用极其简单的二元奖励函数。若VLA模型成功完成任务，则整条轨迹获得奖励1；否则奖励为0。该轨迹级奖励被均匀传播给轨迹中的每个动作令牌。这种仅基于结果的奖励设计简单、可扩展、跨环境通用，避免了复杂的过程奖励设计及其可能带来的可迁移性问题。</li>
+<li><strong>探索增强策略</strong>：为提高RL训练效率，引入了三项关键修改：<ul>
+<li><strong>动态采样</strong>：在轨迹采样阶段，排除所有轨迹全部成功或全部失败的批次，只保留包含混合结果（既有成功也有失败）的批次进行训练。这确保了组间相对优势估计非零，从而产生有效的梯度流。</li>
+<li><strong>更高的裁剪范围</strong>：将GRPO目标中重要性采样比的裁剪上限从1.2提高到1.28。这放松了对低概率令牌概率增长的限制，有利于探索。</li>
+<li><strong>更高的采样温度</strong>：在轨迹采样阶段，将温度参数从1.0提高到1.6，以鼓励模型生成更多样化的动作序列。</li>
+</ul>
+</li>
+<li><strong>训练目标</strong>：采用修改后的Group Relative Policy优化目标，并移除了KL散度正则项。优化目标如公式(11)所示，其中优势通过组内奖励的均值和标准差进行归一化计算。动态采样的约束条件被整合到目标中，以确保训练稳定性。</li>
+</ol>
+<p>与现有方法相比，创新点主要体现在：1) 将LLM上成功的基于规则的在线RL范式系统性地适配到需要环境交互的VLA领域；2) 针对VLA RL训练中探索不足的问题，提出并验证了三种有效的探索增强策略；3) 构建了一个支持并行环境交互、高效采样和训练的一体化框架。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在仿真基准LIBERO、RoboTwin1.0和RoboTwin2.0上评估，并在RoboTwin2.0任务上进行了真实世界实验。主干模型为修改后的OpenVLA-OFT（采用单视角图像、语言指令和本体感知作为输入，使用基于令牌的动作生成）。对比的基线包括UniVLA、RDT-1B、π₀、Nora、OpenVLA、Octo等先进的VLA模型。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>LIBERO</strong>：如表2所示，应用SimpleVLA-RL后，OpenVLA-OFT的平均成功率从91.0%提升至99.1%，在Spatial、Object、Goal、Long四个子集上均达到SOTA。特别地，在LIBERO-Long上，仅使用每个任务单次演示进行RL训练，成功率从SFT后的17.1%大幅提升至91.7%。</li>
+<li><strong>RoboTwin1.0</strong>：如表3所示，SimpleVLA-RL将OpenVLA-OFT的平均成功率从39.8%提升至70.4%，超过所有基线。</li>
+<li><strong>RoboTwin2.0</strong>：如表4所示，在按规划视野分类的12个任务上，SimpleVLA-RL均显著优于基础SFT模型和主流基线π₀。例如，在短视野任务上平均提升43.6%，在中视野任务上提升25.4%，在长及超长视野任务上提升22.4%。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2509.09674v1/x4.png" alt="探索增强策略有效性"></p>
+<blockquote>
+<p><strong>图4</strong>：三种探索增强策略（动态采样、更高的裁剪范围、更高的采样温度）在训练过程中的有效性验证。每个子图展示了引入对应策略后，模型在测试任务上成功率随训练步数的提升曲线，证明了这些策略对稳定和高效训练的重要性。</p>
+</blockquote>
+<p><strong>消融实验与定性分析</strong>：论文通过大量定性结果图展示了RL训练带来的性能提升和发现的“pushcut”现象（策略发现了监督数据中未见过的新动作模式）。</p>
+<p><img src="https://arxiv.org/html/2509.09674v1/x5.png" alt="LIBERO任务定性结果"></p>
+<blockquote>
+<p><strong>图5</strong>：在LIBERO-Spatial任务“将蓝色马克杯放入右下角微波炉”上的定性对比。SFT策略失败，而RL策略成功规划并执行了长视野动作序列。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.09674v1/x6.png" alt="RoboTwin2.0任务定性结果1"></p>
+<blockquote>
+<p><strong>图6</strong>：在RoboTwin2.0任务“叠放两个碗”上的轨迹对比。RL策略展现出更高效、更鲁棒的动作序列。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.09674v1/x7.png" alt="RoboTwin2.0任务定性结果2"></p>
+<blockquote>
+<p><strong>图7</strong>：在RoboTwin2.0任务“放置空杯子”上，RL策略克服了初始位置偏移，成功完成任务。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.09674v1/x8.png" alt="真实世界迁移结果"></p>
+<blockquote>
+<p><strong>图8</strong>：仿真训练的RL策略成功迁移到真实世界机器人，在“放置空杯子”任务上表现鲁棒。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.09674v1/x9.png" alt="“pushcut”现象示例1"></p>
+<blockquote>
+<p><strong>图9</strong>：在“移动罐子到锅中”任务中，RL策略发现了“下压-滑动”这一SFT数据中未见过的新动作模式（pushcut），从而更可靠地完成任务。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.09674v1/x10.png" alt="“pushcut”现象示例2"></p>
+<blockquote>
+<p><strong>图10</strong>：在“放置电话支架”任务中，RL策略学会了在夹取后“轻敲”桌面以调整支架方向的新技能。</p>
+</blockquote>
+<p>（图11至图16展示了更多任务上的定性对比和“pushcut”现象，均印证了RL在提升成功率和发现新策略方面的优势。）</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了SimpleVLA-RL，一个专为VLA模型设计的高效、端到端在线RL框架，实现了稳定的、样本高效的训练，并优化了并行渲染和分布式训练/推理。</li>
+<li>在多个主流仿真基准上取得了SOTA性能，并显著提升了模型在空间、物体和任务上的泛化能力，同时证明了仿真训练的策略能有效迁移到真实世界。</li>
+<li>揭示了VLA模型在RL训练中出现的“pushcut”现象，即策略能够自主发现超出监督数据模式的新颖、有效的动作策略。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，当前框架主要适用于基于动作令牌的VLA模型。对于扩散模型或确定性回归模型，需要调整以适应RL训练。此外，虽然展示了良好的仿真到现实迁移能力，但复杂的真实世界动态仍然是挑战。</p>
+<p><strong>后续研究启示</strong>：本研究证明了基于简单结果奖励的RL是扩展VLA训练、突破数据瓶颈的有效途径。未来工作可以探索：1) 将框架适配到更多类型的VLA模型架构；2) 结合更精细的奖励设计或课程学习来处理更复杂的任务；3) 进一步研究“pushcut”现象的理论基础及其对提升模型泛化和创造力的意义。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出SimpleVLA-RL，旨在解决视觉-语言-动作模型面临的两大核心挑战：1）用于监督微调的大规模机器人轨迹数据稀缺且成本高昂；2）模型对存在分布偏移任务的泛化能力有限。该方法构建了一个高效的强化学习框架，基于veRL引入了VLA专用的轨迹采样、可扩展并行化、多环境渲染与优化损失计算等关键技术。实验表明，该框架在LIBERO基准上达到SOTA性能，在RoboTwin 1.0&2.0上超越基线模型，并显著减少了数据依赖，提升了泛化能力。研究还发现了一种名为“pushcut”的新动作模式涌现现象。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.09674" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

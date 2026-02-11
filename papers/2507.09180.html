@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning and Transferring Better with Depth Information in Visual Reinforcement Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Learning and Transferring Better with Depth Information in Visual Reinforcement Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2507.09180" target="_blank" rel="noreferrer">2507.09180</a></span>
+        <span>作者: Jingdong Zhao Team</span>
+        <span>日期: 2025-07-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>视觉强化学习（Visual RL）在解决接触丰富的任务方面展现出优势，但高维视觉流的编码导致样本效率低下，且高昂的训练成本阻碍了在真实机器人上的直接训练。因此，研究者常采用模拟到现实（sim2real）迁移策略。当前主流方法主要依赖RGB图像和域随机化（Domain Randomization）来弥合模拟与现实的差距，但迁移性能的提升有限。深度信息对场景外观变化具有鲁棒性，且本身携带3D空间细节，但其在视觉RL中的潜力尚未被充分挖掘。现有方法通常将深度作为RGB的额外通道进行简单的早期融合（Early Fusion），未能通过合理的视觉编码器充分发挥其优势。</p>
+<p>本文针对现有视觉骨干网络难以有效融合多模态信息以提升泛化和sim2real迁移性能这一痛点，提出了新的视角：利用视觉Transformer（ViT）的自注意力机制对RGB和深度信息进行深度融合，而非简单的通道拼接。本文的核心思路是：1）设计一个基于ViT的轻量级骨干网络来深度融合RGB-D信息；2）设计一种基于掩码与非掩码token的对比无监督学习方案以加速RL过程的样本效率；3）采用基于课程学习的域随机化策略，实现训练策略向现实世界的零样本（zero-shot）迁移。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文方法的核心是一个用于融合RGB与深度信息的多模态视觉编码器，并集成到DrQ-v2强化学习框架中。整体流程如下：RGB和深度观测首先分别通过独立的CNN主干（stem）进行初步处理，提取卷积特征；然后将两种模态的卷积特征拼接，并添加位置嵌入和模态嵌入；拼接后的特征序列被送入一个可扩展的视觉Transformer（ViT）进行编码；最后，通过对编码后的token进行平均池化得到紧凑的视觉表征，供策略网络（actor）和价值网络（critic）使用。</p>
+<p><img src="https://arxiv.org/html/2507.09180v3/1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：方法整体框架。RGB和深度图像分别由两个CNN主干处理，卷积特征拼接后输入ViT编码器。平均池化操作从非掩码token中提取视觉嵌入用于策略头。同时，使用掩码和非掩码token进行对比训练。训练好的视觉和策略网络被冻结并直接迁移到现实世界，无需微调。</p>
+</blockquote>
+<p><strong>核心模块一：多模态视觉编码器</strong>。该模块由两个CNN主干和一个ViT编码器构成。RGB图像和深度图像分别通过对应的CNN主干（g_conv^rgb 和 g_conv^d）处理，得到卷积特征h_t^rgb和h_t^d。随后，为特征添加二维正弦-余弦位置嵌入和一维模态嵌入。不同模态的嵌入向量被拼接后送入ViT编码器（g_v）。视觉表征z_t通过平均池化ViT输出的编码token获得，无需额外的MLP头。这种设计允许ViT利用自注意力机制在特征层面深度融合两种模态的信息。</p>
+<p><strong>核心模块二：对比学习方案</strong>。受对比无监督学习（CURL）和掩码自编码器（MAE）启发，本文设计了一种对比学习方案以提升编码器的泛化能力和样本效率。具体而言，对卷积特征（而非原始图像）进行随机掩码，掩码特征h_t^mask和非掩码特征h_t分别通过ViT编码，得到正样本键k+和查询q。负样本k-则来自不同时间步的编码。对比损失函数如公式6所示，旨在最大化查询q与正样本键k+之间的互信息。该损失仅在特定频率下更新视觉编码器，且策略网络使用的视觉表征始终来自非掩码观测。</p>
+<p><strong>核心模块三：强化学习主干与数据增强</strong>。方法集成于DrQ-v2框架（基于DDPG）。为提升泛化，使用SVEA的数据增强策略：策略更新仅使用弱增强（随机平移）的观测流，而价值函数更新则同时使用弱增强和强增强（随机叠加域外图像）的观测流。价值目标仅由未增强的观测计算得出，如公式8和9所示。</p>
+<p><strong>核心模块四：基于课程学习的域随机化</strong>。为平稳地缩小sim2real差距，提出了一种灵活的课程学习域随机化策略。其启动时机并非固定的训练帧数，而是根据评估成功率动态决定，防止过早或过晚启动导致训练发散或计算浪费。启动后，域随机化参数的范围随训练回合数呈指数级扩大（公式10），从而实现渐进式的难度提升。</p>
+<p><strong>创新点</strong>：与现有方法（如早期融合EF、晚期融合LF）相比，本文的创新点具体体现在：1) <strong>深度融合</strong>：利用ViT的自注意力机制在特征层面对RGB和深度进行深度融合，而非简单的通道拼接或特征拼接；2) <strong>新颖的对比学习</strong>：将特征掩码与对比学习结合，从掩码和非掩码部分学习一致表征；3) <strong>灵活的域随机化课程</strong>：基于评估成功率动态触发和调整域随机化强度。</p>
+<p><img src="https://arxiv.org/html/2507.09180v3/diff_attn.png" alt="注意力可视化"></p>
+<blockquote>
+<p><strong>图5</strong>：RGB（左）、深度（中）和RGB-D（右）在本文视觉骨干网络下的注意力可视化。展示了两种模态的互补特性，RGB关注外观和纹理，深度关注几何形状和空间距离，融合后的注意力能更全面地覆盖任务相关区域。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在MuJoCo仿真环境中开发了三个机器人操作任务作为基准（如图3所示）：装配（Assembly）、抓取提升（Lift）、抓取放置（PickAndPlace）。视觉观测包含3帧RGB图像和1帧深度图像，分辨率均为128×128。视觉骨干网络采用4层ViT（8个头）和两个4层CNN主干。</p>
+<p><strong>对比基线</strong>：</p>
+<ol>
+<li><strong>早期融合</strong>：将深度作为RGB的额外通道，输入CNN编码器。</li>
+<li><strong>晚期融合</strong>：使用双CNN主干分别处理RGB和深度，将编码后的特征扁平化后拼接，再输入策略头。</li>
+</ol>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>训练性能与样本效率</strong>：在未启用域随机化的标准仿真环境中训练，本文方法在所有三个任务上都展现出更好的样本效率和最终性能，尤其在PickAndPlace任务上优势明显（图4）。</li>
+<li><strong>泛化至未见场景</strong>：在具有挑战性的、视觉外观变化的未见场景（图3底部）中进行测试。如表I所示，本文方法在三个任务上的成功率均显著高于EF和LF基线方法（例如装配任务：82.8% vs. 61.8% vs. 77.4%）。</li>
+<li><strong>注意力分析</strong>：通过Grad-CAM可视化（表II）发现，本文的视觉骨干网络能够产生更广泛、更集中于智能体和物体相关区域的注意力图，这解释了其更好的泛化性能。图5进一步展示了RGB和深度模态的注意力互补性。</li>
+<li><strong>消融实验</strong>：在Lift任务上进行消融研究（表III）。移除对比学习（CURL）导致成功率下降约15%（从39.8%降至24.6%），证明了CURL对提升泛化能力的关键作用。此外，实验也评估了添加非对称解码器进行图像重建的影响（图6），发现其在不使用CURL时对泛化有一定改善，但效果不及CURL。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2507.09180v3/sim_results.png" alt="训练曲线对比"></p>
+<blockquote>
+<p><strong>图4</strong>：不同融合方法在三个任务上的训练曲线。实线和阴影区域分别表示5个随机种子的均值和置信区间。本文方法（Ours）在样本效率和最终性能上均优于早期融合（EF）和晚期融合（LF）基线。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2507.09180v3/decoder.png" alt="解码器重建效果"></p>
+<blockquote>
+<p><strong>图6</strong>：在掩码率为50%时，使用非对称解码器重建RGB和深度图像的效果。解码器能够重建主要物体，并忽略任务无关的背景。</p>
+</blockquote>
+<p><strong>Sim2Real零样本迁移</strong>：在仿真中训练至800K帧后，将策略直接部署到真实的KUKA机械臂上（实验设置见图7），在标准场景和具有视觉干扰物、未知背景、昏暗光照的挑战性场景中各进行15次测试。如表IV所示，本文方法在三个任务上均实现了成功的零样本迁移（例如，Lift任务在标准场景成功14/15次，挑战场景成功13/15次）。图8展示了在挑战性场景下的执行过程，验证了方法对现实世界外观差异的鲁棒性。</p>
+<p><img src="https://arxiv.org/html/2507.09180v3/experiment_setup.png" alt="实验设置"></p>
+<blockquote>
+<p><strong>图7</strong>：用于装配、抓取提升和抓取放置任务的真实世界实验平台设置。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2507.09180v3/experiment_process.png" alt="零样本迁移过程"></p>
+<blockquote>
+<p><strong>图8</strong>：在标准（左）和挑战性（右）真实世界场景中，使用本文训练好的策略进行零样本迁移的执行过程示例。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个基于视觉Transformer和CNN的轻量级多模态视觉骨干网络，能够深度融合RGB和深度信息，有效提取以智能体和物体为中心的表征。</li>
+<li>设计了一种新颖的对比无监督学习方案，利用对卷积特征的随机掩码来构建正负样本，显著提升了视觉编码器的泛化能力和RL样本效率。</li>
+<li>结合基于课程学习的域随机化和改进的数据增强策略，实现了从仿真到现实世界的零样本策略迁移，并在真实机器人操作任务上得到验证。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，视觉Transformer的计算开销相对于纯CNN编码器可能更大。此外，方法主要针对静态场景下的机器人操作任务进行验证。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li>探索更高效的多模态融合架构，在保持性能的同时降低计算成本。</li>
+<li>将本文的深度融合与对比学习框架扩展到更复杂、动态或非结构化的环境中。</li>
+<li>研究如何将深度信息与其他模态（如力觉、触觉）进行类似的有效融合。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉强化学习中样本效率低、泛化能力差及仿真到现实（sim2real）转移困难的核心问题，提出利用深度信息增强鲁棒性和空间感知。关键技术包括基于视觉Transformer的多模态融合骨干网络，先通过独立CNN stems分别处理RGB和深度模态，再经可扩展Transformer融合特征；并设计对比无监督学习方案，使用掩码与未掩码令牌提升训练效率。实验表明，该方法能更聚焦任务相关区域，在未见场景中表现出更好的泛化能力，且通过零样本转移成功验证了真实世界操作任务的可行性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2507.09180" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>GeoVLA: Empowering 3D Representations in Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>GeoVLA: Empowering 3D Representations in Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.09071" target="_blank" rel="noreferrer">2508.09071</a></span>
+        <span>作者: Jiale Cao Team</span>
+        <span>日期: 2025-08-13</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型通过将预训练的视觉-语言模型适配到机器人控制任务中，展现出了遵循语言指令和执行动作的潜力。然而，主流VLA模型主要依赖2D RGB图像作为视觉输入，忽略了物理世界中丰富的3D几何信息，这限制了模型的空间感知能力和对不同视角、尺度及高度变化的适应性。现有的一些尝试将3D信息（如深度图、点云或空间位置编码）整合进VLM，但这往往会破坏视觉编码器与大语言模型之间预训练的对齐关系，需要大规模具身指令微调数据来弥补。另一种思路是将3D信息直接注入动作专家，但通常采用两阶段训练或冻结部分网络，阻碍了对新引入点云模态的充分适应。因此，如何以端到端的方式优雅地集成3D信息，同时保持VLM的通用知识，是当前的一个关键挑战。</p>
+<p>本文针对VLA模型缺乏3D空间感知能力这一痛点，提出了一种新颖的并行架构框架GeoVLA。其核心思路是：在保留预训练VLM处理视觉与语言信息的同时，通过一个独立的点云编码器提取几何特征，并设计一个空间感知的动作专家来融合这两种模态的特征，从而生成精确的动作序列。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>GeoVLA是一个端到端的VLA框架，其整体流程如图2所示。输入包括RGB图像V、深度图D（可转换为点云P）和语言指令L。输出是长度为T的动作序列a_{1:T}，每个动作包含相对位移、旋转和夹爪开合指令。</p>
+<p><img src="https://arxiv.org/html/2508.09071v2/x2.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：GeoVLA整体框架。RGB图像与语言指令由VLM处理，生成视觉-语言特征ℱ_{VL}；深度图被重投影为点云并由点嵌入网络编码为几何特征ℱ_P。两种模态的特征在3D增强动作专家中结合，逐步生成机器人动作。</p>
+</blockquote>
+<p>框架包含三个核心模块：</p>
+<ol>
+<li><strong>视觉-语言模型</strong>：采用预训练的VLM（如Prismatic-7B），处理图像和指令，提取融合的视觉-语言特征ℱ_{VL}。该分支的参数在训练中被冻结，以保留其通用知识。</li>
+<li><strong>点嵌入网络</strong>：这是一个定制的点云编码器，用于从点云中提取精细的3D几何特征ℱ_P。其设计如图3所示，采用双路径架构：<ul>
+<li><strong>几何特征路径</strong>：使用具有大卷积核的轻量级CNN将点云编码为补丁级几何令牌，再通过Transformer块聚合全局信息。</li>
+<li><strong>位置编码路径</strong>：将原始点云下采样，并利用旋转位置编码为几何令牌提供3D空间位置引导。<br>网络以机器人末端执行器为坐标系原点。PEN从最后一个Transformer层中选择与原点（即末端执行器）对应的<strong>锚点令牌</strong>作为最终的几何特征ℱ_P输出。这种设计能聚焦于操作相关区域，并显式建模末端执行器与周围物体间的空间关系。</li>
+</ul>
+</li>
+<li><strong>3D增强动作专家</strong>：这是一个基于扩散Transformer的动作生成头，负责将拼接后的特征[ℱ_{VL}, ℱ_P]作为条件，生成动作序列。其关键创新在于在FFN中引入了<strong>混合专家</strong>架构。由于VLM分支是预训练的而点云分支是随机初始化的，直接使用动态路由机制会导致模型偏向VLM分支。为此，GeoVLA采用了<strong>静态路由策略</strong>：在训练时，每个迭代随机丢弃一种模态（仅用视觉-语言、仅用语言-几何、或全模态），3DAE中每个专家的激活由输入模态的存在性和相关性确定性地控制。这确保了两种模态的优势被有效利用，同时保持了扩散Transformer强大的生成能力。</li>
+</ol>
+<p>与现有方法相比，GeoVLA的创新点在于：1）<strong>并行双分支设计</strong>，在不干扰预训练VLM对齐的前提下独立处理3D信息；2）<strong>定制化的点嵌入网络</strong>，通过锚点令牌机制提取任务相关的局部几何特征；3）<strong>采用静态路由MoE的3D增强动作专家</strong>，实现了视觉与几何模态更平衡、更有效的融合。</p>
+<p><img src="https://arxiv.org/html/2508.09071v2/x3.png" alt="点嵌入网络细节"></p>
+<blockquote>
+<p><strong>图3</strong>：点嵌入网络架构。(a) PEN的双路径设计：几何特征路径（上）和位置编码路径（下）。(b) 仅将更新后的锚点令牌ℱ_P（蓝色）与视觉特征一起送入动作专家。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：评估在仿真（LIBERO和ManiSkill2基准）和真实世界中进行。仿真实验使用8张NVIDIA A100 GPU，采用FSDP策略训练约20,000步。动作块长度T=16。评估指标为成功率。</p>
+<p><strong>对比方法</strong>：包括Octo、OpenVLA、SpatialVLA、π₀、CogACT、OpenVLA-OFT、Dita等先进的VLA模型。</p>
+<p><strong>关键仿真结果</strong>：</p>
+<ol>
+<li><strong>LIBERO基准</strong>：如表1所示，GeoVLA在所有任务套件上均取得最佳性能，平均成功率达到97.7%，优于CogACT (93.2%) 和 OpenVLA-OFT (95.3%)。在最具挑战性的LIBERO-Long和LIBERO-90任务上，分别取得了96.6%和97.7%的成功率。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.09071v2/x4.png" alt="LIBERO结果表"></p>
+<blockquote>
+<p><strong>图4</strong>：表1，LIBERO基准上的定量结果。GeoVLA在各项任务上均达到最优。</p>
+</blockquote>
+<ol start="2">
+<li><strong>ManiSkill2基准</strong>：如表2所示，GeoVLA以77%的平均成功率领先，超过CogACT (69%) 和 Dita (66%)。在物体多样性高、需要精确6D姿态估计的挑战性任务（如PickClutterYCB）上，GeoVLA的优势尤为明显（成功率45% vs Dita的36%），这得益于其点云输入提供的精确空间感知。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.09071v2/x6.png" alt="ManiSkill2结果表"></p>
+<blockquote>
+<p><strong>图6</strong>：表2，ManiSkill2基准上的定量结果。GeoVLA在复杂任务上表现突出。</p>
+</blockquote>
+<p><strong>消融实验</strong>：在LIBERO上进行的消融研究（表3）验证了各组件贡献：</p>
+<ul>
+<li><strong>PEN编码器</strong>：优于MLP和PointNet编码器，证明了其捕获几何结构能力的优越性。</li>
+<li><strong>锚点令牌选择</strong>：直接使用末端执行器令牌作为锚点（End Effector）策略优于最大池化或平均池化。</li>
+<li><strong>位置编码</strong>：使用RoPE比1D可学习位置编码效果更好。</li>
+<li><strong>3DAE中的MoE设计</strong>：使用MoE的动作头优于非MoE设计。其中，针对模态不平衡问题设计的<strong>静态路由</strong>策略略优于动态路由。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2508.09071v2/x7.png" alt="消融研究表"></p>
+<blockquote>
+<p><strong>图7</strong>：表3，在LIBERO上的消融实验结果，分析了PEN编码器类型、锚点选择、位置编码和MoE路由策略的影响。</p>
+</blockquote>
+<p><strong>真实世界实验</strong>：</p>
+<ul>
+<li><strong>任务与设置</strong>：在WidowX-250s机器人上评估了8个任务，包括基本操作和需要3D感知的任务（如挂杯子、盖套娃）。还测试了模型对篮子高度、相机视角、物体尺寸和放置平面高度变化的鲁棒性。</li>
+<li><strong>主要结果</strong>：如表4所示，GeoVLA在8个任务上的平均成功率为86.3%，显著优于π₀ (57.5%) 和 CogACT (76.3%)。在需要空间感知的任务上（如Hang Cup, Put Basketball）优势明显。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2508.09071v2/x11.png" alt="真实世界结果表"></p>
+<blockquote>
+<p><strong>图11</strong>：表4，真实世界任务上的成功率对比。GeoVLA整体表现最佳。</p>
+</blockquote>
+<ul>
+<li><strong>鲁棒性验证</strong>：图1(b)及补充材料中的图示表明，GeoVLA在面对高度变化（如不同高度的篮子）、尺度变化（不同大小的套娃）和视角变化时，表现出了更强的适应性和鲁棒性。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2508.09071v2/x8.png" alt="真实世界机器人设置"></p>
+<blockquote>
+<p><strong>图8</strong>：真实世界实验的机器人平台设置。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.09071v2/x9.png" alt="真实世界任务示例"></p>
+<blockquote>
+<p><strong>图9</strong>：真实世界评估的8个任务示例。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.09071v2/x10.png" alt="高度适应性示例"></p>
+<blockquote>
+<p><strong>图10</strong>：GeoVLA在“放篮球”任务中对不同篮子高度的适应性示例。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.09071v2/x12.png" alt="视角不变性示例"></p>
+<blockquote>
+<p><strong>图12</strong>：GeoVLA在“堆叠积木”任务中对不同相机视角的鲁棒性示例。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.09071v2/x13.png" alt="尺度感知示例"></p>
+<blockquote>
+<p><strong>图13</strong>：GeoVLA在“盖套娃”任务中对不同尺寸套娃的尺度感知能力示例。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.09071v2/x14.png" alt="对放置平面变化的鲁棒性"></p>
+<blockquote>
+<p><strong>图14</strong>：GeoVLA在“捡胡萝卜”任务中，面对有无海绵垫（改变放置高度）情况下的鲁棒性示例。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.09071v2/x5.png" alt="LIBERO任务可视化"></p>
+<blockquote>
+<p><strong>图5</strong>：LIBERO基准中不同任务套件的可视化示例。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.09071v2/x15.png" alt="ManiSkill2任务可视化"></p>
+<blockquote>
+<p><strong>图15</strong>：ManiSkill2基准中评估任务的示例，包括PickCube, PickSingleYCB等。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了<strong>GeoVLA框架</strong>，通过并行分支设计将点云模态与预训练VLM有效结合，增强了VLA模型的空间理解和几何感知能力；2）设计了<strong>点嵌入网络</strong>和<strong>采用静态路由MoE的3D增强动作专家</strong>，实现了对3D几何信息的有效提取与多模态融合；3）在仿真和真实世界实验中验证了方法的<strong>先进性能与鲁棒性</strong>，尤其在需要高度适应、尺度感知和视角不变性的场景下优势显著。</p>
+<p>论文自身提到的局限性并不明显，但从方法描述中可推断，其点云处理及MoE设计可能引入一定的计算开销。同时，方法依赖于从深度图到点云的准确转换，并假设末端执行器坐标系已知。</p>
+<p>本研究对后续工作的启示在于：为在VLA模型中集成3D感知提供了一条有效且易于实现的路径——即通过独立的编码器处理3D信息，并在动作生成层进行深度融合。这种“冻结VLM，增强动作头”的范式平衡了知识保留与模态扩展。未来的工作可以探索更高效的点云表示、更灵活的多模态融合机制，以及将此类3D增强模型应用于更广泛的具身智能任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出GeoVLA，解决现有视觉-语言-动作模型依赖2D视觉输入、缺乏3D几何信息，导致空间感知与适应性受限的问题。方法上，通过点嵌入网络从深度图提取3D几何嵌入，并与视觉-语言嵌入拼接，由3D增强动作专家生成动作序列。实验表明，GeoVLA在LIBERO和ManiSkill2仿真基准达到SOTA，在真实任务中展现出对高度、尺度和视角变化的强鲁棒性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.09071" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

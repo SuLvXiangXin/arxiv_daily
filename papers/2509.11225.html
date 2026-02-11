@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MEMBOT: Memory-Based Robot in Intermittent POMDP - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>MEMBOT: Memory-Based Robot in Intermittent POMDP</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.11225" target="_blank" rel="noreferrer">2509.11225</a></span>
+        <span>作者: Eyan Noronha Team</span>
+        <span>日期: 2025-09-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在真实世界部署的机器人系统常常在部分且间歇性的可观测条件下运行，传感器输入可能因故障或环境限制而噪声大、被遮挡或完全不可用。传统的强化学习方法假设完全状态可观测，难以应对这些挑战。尽管部分可观测马尔可夫决策过程为处理不确定性提供了原则性框架，但经典求解器难以扩展到高维连续领域。现代深度强化学习转向使用LSTM、状态空间模型或Transformer等可微分序列模型来近似信念状态，它们通过编码原始观察序列中的时间上下文来提升部分可观测下的鲁棒性。然而，现有方法大多假设传感器流持续可用，而许多实际部署会遭遇间歇性传感器故障（即整个观察模态在一段时间内完全丢失）。处理这种丢失需要信念表示能够在缺乏即时感官输入时依然持续保持信息性，这超出了通用循环网络的能力。</p>
+<p>本文针对机器人控制中间歇性部分可观测这一具体痛点，提出了一个解耦信念推断与策略学习的新视角。其核心思路是：通过一个两阶段的训练流程，先离线预训练一个任务无关的、鲁棒的潜在信念编码器，再在线微调任务特定的策略，从而构建一个能够显式建模信念、在观察丢失时仍能维持有效状态表示的模块化记忆架构。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>MEMBOT的整体架构是一个模块化的、基于记忆的系统，采用离线和在线两阶段训练方法。其核心目标是在观察间歇性丢失的情况下，通过维持一个时间性的潜在信念状态来指导策略决策。</p>
+<p><img src="https://arxiv.org/html/2509.11225v1/figs/SystemArchitectureDiagram.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：MEMBOT系统架构。展示了包含共享潜在信念编码器和任务特定策略头的两阶段离线-在线训练方法。左侧为离线预训练阶段，使用专家演示数据通过行为克隆和重构损失联合训练信念编码器；右侧为在线微调阶段，使用SAC算法在特定任务上微调策略，并允许信念编码器进行联合优化。</p>
+</blockquote>
+<p>整体流程如下：在每一步，可用的（可能为零的）观察 <code>o~_t</code> 首先被<strong>观察编码器</strong> <code>f_ϕ</code> 映射为潜在表示 <code>e_t</code>。该编码器根据输入模态设计（低维状态用MLP，图像用CNN+MLP）。<code>e_t</code> 与上一步的隐藏状态 <code>h_(t-1)</code> 一同输入<strong>记忆观察器</strong> <code>g_ψ</code>，该模块输出当前步的信念状态 <code>b_t</code> 和更新后的隐藏状态 <code>h_t</code>。信念状态 <code>b_t</code> 最终被<strong>任务特定策略</strong> <code>π_θ</code> 用于生成动作 <code>a_t</code>。完整的信念编码器定义为 <code>F_(ϕ,ψ)(h_(t-1), o~_t) = g_ψ(f_ϕ(o~_t), h_(t-1))</code>。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>记忆观察器</strong>：这是处理间歇可观测性的关键。论文实现了两种模型：一种是LSTM及其变体；另一种是更轻量级的简单线性状态空间模型。SSM使用一个带有非线性激活的固定学习变换来传播时间信息：<code>h_t = tanh(W_h h_(t-1) + W_o o_t + b)</code>，其中 <code>h_t</code> 是隐藏状态，随后被投影为信念向量供策略和价值网络使用。</li>
+<li><strong>两阶段训练</strong>：<ul>
+<li><strong>阶段一：离线信念编码器预训练</strong>：使用跨多个任务的专家演示数据，通过结合行为克隆损失和重构损失来预训练共享的信念编码器。行为克隆损失 <code>L_BC</code> 使策略模仿专家动作；重构损失 <code>L_recon</code> 训练一个解码器从信念状态 <code>b_t</code> 重构原始观察 <code>o_t</code>，确保信念状态捕获了足够的环境信息。联合损失为 <code>L_pretrain = L_BC + λ * L_recon</code>。预训练阶段会通过随机掩码观察来模拟间歇性可观测性。</li>
+<li><strong>阶段二：在线任务特定微调</strong>：使用软演员-评论家算法在特定任务上微调整个系统。创新之处在于允许策略和信念编码器<strong>联合优化</strong>。评论家更新采用集成学习以稳定训练；演员更新在最大化期望回报的同时加入熵正则化以鼓励探索；通过将信念编码器的参数包含在演员更新的梯度计算中，使信念表示能够适应特定任务的需求，同时保留预训练获得的时间推理能力。</li>
+</ul>
+</li>
+</ol>
+<p><strong>与现有方法的创新点</strong>：</p>
+<ol>
+<li><strong>解耦的信念-策略架构</strong>：显式地将信念状态估计与策略学习分离，使用共享的记忆编码器，增强了模块化和跨任务的可迁移性。</li>
+<li><strong>专为间歇丢失设计的两阶段训练</strong>：通过离线预训练引入重构损失，迫使模型学习即使在输入缺失时也能保持信息量的信念表示；在线微调时的联合优化使信念表示能针对任务进行适配。</li>
+<li><strong>探索轻量级记忆模型</strong>：除了常用的LSTM，还评估了更简单的状态空间模型在应对观察丢失时的有效性。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：研究在10个机器人操作基准任务上评估MEMBOT，其中5个来自MetaWorld，5个来自Robomimic。任务涵盖开抽屉、按手柄、推盘子、拾放物体等多种操作。观察空间为39维低维状态（包含本体感知和物体状态）。通过随机将观察向量置零来模拟间歇性观察丢失，并变化观察可用概率 <code>p_obs</code>（从0.5到1.0）。</p>
+<p><strong>对比基线</strong>：主要对比了<strong>记忆less基线</strong>，包括直接处理原始观察的MLP策略，以及先经过MLP编码器再输入策略的变体。此外，论文还进行了广泛的消融研究，对比MEMBOT的不同变体。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>总体性能与鲁棒性</strong>：如图2所示，在观察可用性降低时，MEMBOT（特别是SSM版本）性能下降远小于记忆less基线。在50%观察可用性下，MEMBOT能保持峰值性能的65-80%，而基线模型性能则降至10-30%。</li>
+<li><strong>不同任务的表现</strong>：在“Drawer-Close”任务中，即使观察概率很低，MEMBOT（LSTM）的成功率仍能保持在60%以上，显著高于基线（约37%）。在“Handle-Press”和“Plate-Slide”任务中，随着观察概率降低，MEMBOT（SSM）的性能优势更为明显。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.11225v1/figs/perfvsobs.png" alt="性能对比图"></p>
+<blockquote>
+<p><strong>图2</strong>：MEMBOT与记忆less基线在不同观察概率下的性能对比。上图展示了绝对成功率（柱状）和回合奖励（线状），下图展示了相对于完全可观测的性能下降百分比。结果表明，MEMBOT（尤其是SSM版本）在观察频繁丢失时性能下降更缓慢，鲁棒性显著更强。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>（基于文中表格数据）：</p>
+<ol>
+<li><strong>记忆模型类型</strong>：MEMBOT-SSM在大多数观察概率下，尤其在较低概率时，性能显著优于MEMBOT-LSTM。这表明为间歇POMDP设计的简单线性SSM可能比通用LSTM更有效。</li>
+<li><strong>重构损失的作用</strong>：对比“MEMBOT-LSTM (Full)”和“MEMBOT-LSTM (No Recon)”，移除重构损失会导致在所有观察概率下的性能一致轻微下降，验证了重构损失对学习信息性信念表示的重要性。</li>
+<li><strong>记忆与无记忆</strong>：所有MEMBOT变体在不同程度的观察丢失下均稳定优于纯记忆less基线，证明了显式记忆模块的必要性。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>MEMBOT</strong>，一个用于间歇性部分可观测机器人控制的模块化、记忆型架构。其核心是解耦的信念-策略设计和两阶段训练流程。</li>
+<li>证明了<strong>显式信念建模</strong>结合<strong>重构损失</strong>的离线预训练，能显著提升策略在传感器间歇丢失下的鲁棒性，性能下降远低于无记忆或朴素循环基线。</li>
+<li>实验表明，为处理间歇丢失而设计的<strong>简单状态空间模型</strong>可以取得比标准LSTM更优的性能，为轻量级记忆模型的应用提供了新证据。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，MEMBOT的离线预训练需要专家演示数据；在线微调阶段的联合优化可能增加计算成本；对于更复杂的视觉输入或更长的任务时间尺度，其扩展性有待进一步验证。</p>
+<p><strong>研究启示</strong>：</p>
+<ol>
+<li>在真实世界机器人学习中，<strong>显式处理传感器故障模式</strong>（如间歇丢失）至关重要，通用序列模型可能不足，需要针对性的架构设计。</li>
+<li><strong>解耦信念学习与策略学习</strong>是一种提升模块化、可迁移性和数据效率的有效途径。</li>
+<li><strong>轻量级记忆模型</strong>（如SSM）在特定问题设置下可能比复杂模型更有效，值得在机器人学习领域进一步探索。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人因传感器故障或遮挡导致观测间歇性缺失的核心问题，提出MEMBOT架构。其关键技术是采用两阶段训练：先通过多任务预训练学习一个由状态空间模型（SSM）和LSTM构成的鲁棒信念编码器，再通过行为克隆微调任务策略。该编码器能整合历史观测与动作，在观测丢失时维持有效的潜在状态表示。实验在10个机器人操作任务上验证，MEMBOT在观测可用性仅为50%时，性能仍能达到峰值水平的80%，显著优于无记忆及简单循环基线。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.11225" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

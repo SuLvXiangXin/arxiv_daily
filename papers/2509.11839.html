@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>TrajBooster: Boosting Humanoid Whole-Body Manipulation via Trajectory-Centric Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>TrajBooster: Boosting Humanoid Whole-Body Manipulation via Trajectory-Centric Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.11839" target="_blank" rel="noreferrer">2509.11839</a></span>
+        <span>作者: Donglin Wang Team</span>
+        <span>日期: 2025-09-17</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型在机器人操纵领域展现出跨形态泛化的潜力，但在高质量演示数据稀缺时，难以快速适应新机器人的动作空间，这对于需要动态平衡的双足人形机器人尤为突出。现有VLA研究主要集中于复杂环境中的移动或桌面级操纵，未能充分利用人形机器人的下肢运动能力，限制了其操作空间。实现双足人形机器人的大范围全身操纵需要大规模演示数据，但通过遥操作收集此类数据成本高昂、规模有限且多样性不足，成为主要瓶颈。</p>
+<p>本文针对双足人形机器人缺乏大规模全身操纵数据这一具体痛点，提出了利用形态无关的末端执行器轨迹作为接口的新视角。核心思路是：从数据丰富的轮式人形机器人中提取末端轨迹，通过模拟重定向技术将其转化为目标双足人形机器人可行的全身动作，从而利用跨形态数据显著减少对目标域昂贵数据的依赖，并增强VLA对动作空间的理解和零样本技能迁移能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>TrajBooster的整体框架是一个从真实到模拟再到真实的跨形态流水线，其核心是利用末端执行器轨迹桥接不同形态机器人的动作空间。</p>
+<p><img src="https://arxiv.org/html/2509.11839v2/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：TrajBooster框架总览。利用现有机器人操纵数据集，通过重定向模型将不同机器人的末端执行器轨迹重定向到目标人形机器人。随后使用此重定向数据对一个预训练的VLA进行后预训练，最后仅用极少量真实世界数据进行后训练。</p>
+</blockquote>
+<p>该框架包含三个核心步骤：</p>
+<ol>
+<li><strong>真实轨迹提取</strong>：从源机器人（轮式人形Agibot）的Agibot-World Beta数据集中提取双臂末端执行器的6D位姿轨迹。由于源机器人与目标机器人（双足人形Unitree G1）的工作空间存在差异，需对轨迹进行映射：对齐x轴（使用G1数据的z-score归一化），按臂长比例缩放y轴（缩放因子β=0.6667），并将z轴裁剪到安全范围[0.15, 1.25]米。</li>
+<li><strong>模拟重定向</strong>：在Isaac Gym模拟器中，训练一个重定向模型，使Unitree G1能够跟踪上述映射后的末端轨迹，生成可行的全身动作。这是方法的核心创新模块。</li>
+<li><strong>微调与部署</strong>：利用重定向数据构建异构三元组〈源视觉，源语言，目标动作〉，对预训练的VLA进行后预训练。随后，仅收集10分钟的真实目标域遥操作数据〈目标视觉，目标语言，目标动作〉对模型进行最终的后训练，并部署到真实的Unitree G1上。</li>
+</ol>
+<p><strong>核心模块：复合分层重定向模型</strong><br>为实现大范围全身操纵，论文设计了一个分层模型，将控制解耦为上、下半身。</p>
+<p><img src="https://arxiv.org/html/2509.11839v2/x3.png" alt="重定向模型架构"></p>
+<blockquote>
+<p><strong>图3</strong>：重定向模型架构。对于具有双末端轨迹目标的全身人形操纵，我们将控制解耦为上、下半身系统。手臂关节由Arm Policy生成。对于下半身控制，分层模型采用：(1) 基于目标手腕位姿输出基座速度命令和躯干高度的Manager Policy；(2) 执行这些命令以控制腿部关节的Worker Policy。</p>
+</blockquote>
+<ul>
+<li><strong>Arm Policy</strong>：采用基于Pinocchio的闭环逆运动学，根据相对于机器人基座的手腕目标位姿计算手臂关节目标角度。</li>
+<li><strong>Worker Policy</strong>：一个基于强化学习训练的目标条件策略，接收基座速度命令和躯干高度，输出12自由度下半身的目标关节位置。</li>
+<li><strong>Manager Policy</strong>：一个神经网络策略，输入是手腕相对于基座的位姿，输出是下半身的控制命令。</li>
+</ul>
+<p>整个分层模型以前者作为输入，整合Manager、Worker和Arm Policy，输出Unitree G1全身关节指令。</p>
+<p><strong>核心训练算法：启发式增强的协调在线DAgger</strong><br>Manager Policy的训练是关键，采用了一种高效的“启发式增强协调在线DAgger”算法。首先在MuJoCo中回放已有的上半身动作数据集，生成种子轨迹，并通过PCHIP插值进行高度增强。然后，在Isaac Gym的并行环境中进行在线学习。</p>
+<ul>
+<li><strong>启发式目标生成</strong>：利用模拟中的特权信息（如当前目标轨迹对应的躯干高度、基座位移），自动生成地面真实的高度和速度命令作为监督信号。</li>
+<li><strong>协调的DAgger</strong>：不同于标准DAgger每轮聚合数据，该方法每M=10轮迭代才将新演示数据加入聚合数据集，并在优化在线损失的同时优化聚合数据集上的损失，平衡了数据效率和计算效率，缓解了持续学习中的灾难性遗忘问题。</li>
+</ul>
+<p><strong>后预训练</strong><br>使用重定向生成的动作数据，与源数据集的视觉和语言指令构成三元组，对预训练的GR00T N1.5 VLA模型进行后预训练。训练目标与后训练相同，采用流匹配损失，使模型学会根据视觉语言观察和机器人状态，去噪并生成包含手臂、手部以及下半身控制命令的动作块。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>数据集</strong>：源数据来自Agibot-World Beta数据集（轮式人形）。处理后得到176个任务、1960条轨迹（约35小时模拟交互）用于后预训练。目标域数据为在真实Unitree G1上收集的4个不同高度任务、28条轨迹（约10分钟）用于后训练。</li>
+<li><strong>基准方法</strong>：<ul>
+<li>重定向模型：对比了PPO、标准DAgger、在线学习、标准在线DAgger等方法。</li>
+<li>VLA微调：对比了仅用真实数据后训练3K步和10K步的模型。</li>
+</ul>
+</li>
+<li><strong>评估平台</strong>：模拟实验在Isaac Gym中进行；真实实验部署于Unitree G1机器人。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><p><strong>重定向模型性能</strong>：在模拟中评估手腕轨迹跟踪的位置和旋转平均绝对误差。</p>
+<p><img src="https://arxiv.org/html/2509.11839v2/x5.png" alt="重定向模拟演示"></p>
+<blockquote>
+<p><strong>图5</strong>：真实到模拟的演示。上图：给定目标6D手腕位姿（深色轨迹），我们的重定向模型生成全身运动跟踪（浅色轨迹）。下图：Isaac Gym中的重定向Agibot-World操纵数据，展示了真实世界第一人称视图、模拟第一人称视图和模拟第三人称视图。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="left">方法</th>
+<th align="left">全身跟踪 E_p↓</th>
+<th align="left">E_r↓</th>
+<th align="left">静态跟踪 E_p↓</th>
+<th align="left">E_r↓</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">PPO</td>
+<td align="left">14.326</td>
+<td align="left">11.853</td>
+<td align="left">7.964</td>
+<td align="left">9.160</td>
+</tr>
+<tr>
+<td align="left">标准DAgger</td>
+<td align="left">4.596</td>
+<td align="left">9.225</td>
+<td align="left">2.008</td>
+<td align="left">5.310</td>
+</tr>
+<tr>
+<td align="left">M=1 无DAgger</td>
+<td align="left">3.764</td>
+<td align="left">8.085</td>
+<td align="left">2.073</td>
+<td align="left">5.365</td>
+</tr>
+<tr>
+<td align="left">M=1 有DAgger</td>
+<td align="left">3.358</td>
+<td align="left">7.165</td>
+<td align="left">2.025</td>
+<td align="left">5.327</td>
+</tr>
+<tr>
+<td align="left"><strong>M=10 有DAgger</strong></td>
+<td align="left"><strong>2.851</strong></td>
+<td align="left"><strong>6.231</strong></td>
+<td align="left"><strong>1.893</strong></td>
+<td align="left"><strong>5.331</strong></td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表I</strong>：全身跟踪性能对比。位置误差和旋转误差越低越好。本文的协调在线DAgger取得了最佳跟踪性能。</p>
+</blockquote>
+<p>结果表明，本文提出的协调在线DAgger在位置和旋转跟踪误差上均优于其他基线，且存储效率和学习效率更高。</p>
+</li>
+<li><p><strong>VLA加速适应与性能提升</strong>：在四个真实世界遥操作任务上评估。</p>
+<p><img src="https://arxiv.org/html/2509.11839v2/x6.png" alt="任务概览"></p>
+<blockquote>
+<p><strong>图6</strong>：四个遥操作任务概览。实验包含不同高度的拾放操作，需要连续调整高度。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="left">任务</th>
+<th align="left">高度(cm)</th>
+<th align="left">遥操作成功率</th>
+<th align="left"><strong>有PPT(3K步)</strong></th>
+<th align="left">无PPT(3K步)</th>
+<th align="left">无PPT(10K步)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">Pick Mickey Mouse</td>
+<td align="left">39</td>
+<td align="left">5/7 (71%)</td>
+<td align="left"><strong>100%</strong></td>
+<td align="left">0%</td>
+<td align="left">80%</td>
+</tr>
+<tr>
+<td align="left">Store Toys</td>
+<td align="left">55</td>
+<td align="left">10/13 (77%)</td>
+<td align="left"><strong>70%</strong></td>
+<td align="left">0%</td>
+<td align="left">30%</td>
+</tr>
+<tr>
+<td align="left">Clean the Table</td>
+<td align="left">55</td>
+<td align="left">6/11 (55%)</td>
+<td align="left"><strong>70%</strong></td>
+<td align="left">0%</td>
+<td align="left">70%</td>
+</tr>
+<tr>
+<td align="left">Pick Orange &amp; Place</td>
+<td align="left">76</td>
+<td align="left">7/11 (64%)</td>
+<td align="left"><strong>60%</strong></td>
+<td align="left">0%</td>
+<td align="left">30%</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表II</strong>：四个遥操作任务的成功率。结果显示，经过后预训练的模型仅用3K步后训练，其成功率即达到或超过了未使用PPT但用10K步训练的模型。未使用PPT的3K步模型则完全无法学习任务。</p>
+</blockquote>
+<p>结果表明，后预训练能极大加速VLA在真实机器人上的适应。仅用3K步微调的后预训练模型，其性能优于用10K步真实数据训练的基线模型。</p>
+</li>
+<li><p><strong>轨迹泛化能力</strong>：将任务目标物体放置在训练未见的位置进行测试。</p>
+<table>
+<thead>
+<tr>
+<th align="left">模型</th>
+<th align="left">成功率↑</th>
+<th align="left">DTW距离↑</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">有PPT (3K步)</td>
+<td align="left"><strong>80%</strong></td>
+<td align="left">0.278</td>
+</tr>
+<tr>
+<td align="left">无PPT (10K步)</td>
+<td align="left">0%</td>
+<td align="left">0.220</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表III</strong>：PPT对未见物体放置的影响。后预训练模型在泛化场景下仍保持高成功率。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.11839v2/x7.png" alt="轨迹泛化定性分析"></p>
+<blockquote>
+<p><strong>图7</strong>：轨迹泛化的定性分析。左图：米奇老鼠放置位置与遥操作数据一致。中、右图：物体更靠近人形机器人右手。轨迹分析显示，未使用PPT的VLA模仿遥操作动作从上接近，而使用PPT的VLA则适应性地从下方抓取。</p>
+</blockquote>
+<p>结合表III和图7可见，后预训练显著增强了模型对动作空间的理解和轨迹泛化能力，使其能根据物体新位置调整抓取策略，而未使用PPT的模型则过拟合于训练轨迹。</p>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：</p>
+<ol>
+<li><strong>首次实现了基于重定向数据的双足人形全身操纵</strong>：提出并验证了利用大规模轮式人形数据通过轨迹重定向来增强双足人形VLA的可行性。</li>
+<li><strong>提出了高效的跨形态框架TrajBooster</strong>：创新性地以末端执行器轨迹为形态无关接口，结合复合分层重定向模型与协调在线DAgger算法，构建了从真实到模拟再到真实的完整流水线。</li>
+<li><strong>实现了数据高效的高性能部署</strong>：仅需10分钟的目标域遥操作数据，即可使VLA在真实双足人形机器人上完成跨高度的复杂全身操纵任务，并展现出优异的鲁棒性、泛化性和零样本技能迁移潜力。</li>
+</ol>
+<p><strong>论文提到的局限性</strong>：方法依赖于模拟器进行重定向，且生成启发式目标命令需要特权信息（如精确的躯干高度与基座位移），这在真实部署中不可直接获取。此外，实验在特定的硬件平台进行。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li><strong>轨迹中心学习</strong>：证明了以末端轨迹作为跨形态迁移的中间表示是一种有效且通用的范式，可推广至其他形态的机器人之间。</li>
+<li><strong>模拟与数据的协同</strong>：展示了如何利用模拟器高效“消化”和转换现有机器人数据集，为解决机器人学习的数据稀缺问题提供了新思路。</li>
+<li><strong>分层与解耦控制</strong>：针对人形机器人全身控制的复杂性，分层、解耦的设计策略结合高效的在线学习算法，是实现精细且稳定控制的有效途径。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出TrajBooster框架，旨在解决双足人形机器人在高质量演示数据稀缺时，视觉-语言-动作模型难以快速适应其动作空间的问题。其核心方法是：以末端执行器轨迹为形态无关接口，从轮式人形机器人数据中提取6D双臂轨迹，通过仿真重定向至目标双足机器人，并利用启发式增强的协调在线DAgger训练全身控制器，将低维轨迹转化为可行的高维全身动作，进而构建异质数据三元组对VLA模型进行后预训练。实验表明，仅需在目标机器人上收集10分钟遥操作数据，即可使策略完成下蹲、跨高度操作等超越桌面的复杂家务任务，显著提升了鲁棒性、泛化能力及零样本技能迁移性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.11839" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

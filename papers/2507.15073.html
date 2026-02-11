@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Reinforcement Learning for Flow-Matching Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Reinforcement Learning for Flow-Matching Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2507.15073" target="_blank" rel="noreferrer">2507.15073</a></span>
+        <span>作者: Somayeh Sojoudi Team</span>
+        <span>日期: 2025-07-20</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，构建通用机器人智能体的一种主流范式是视觉-语言-动作模型，其通常使用扩散或流匹配模型作为动作专家，根据传感器观测和文本指令生成固定时长的动作片段。这类模型通过模仿学习在大规模人类演示数据集上进行训练。然而，其性能受限于演示数据的质量：人类演示者存在不一致性，导致模仿策略出现不必要的变异；同时，即使是最好的演示轨迹也往往是次优的，尤其是在任务完成速度方面。这构成了两大关键局限性：一是<strong>变异次优性</strong>，即策略未能学习到演示数据中已有的最优行为；二是<strong>支持次优性</strong>，即最优行为可能完全不在演示数据的分布内。</p>
+<p>本文针对上述痛点，旨在通过强化学习提升流匹配策略的性能，使其超越原始演示策略。一个关键应用是最短时间控制，但现有基于扩散/流匹配的规划器只能生成固定时长的动作片段，导致轨迹效率低下。因此，本文提出了一个新的视角：将规划时域作为流匹配动作片段的一部分，从而实现可变时域的规划，并为流匹配策略引入在线强化学习框架。</p>
+<p>本文的核心思路是：在模仿学习预训练的基础上，通过强化学习优化策略的期望奖励，提出了两种方法——简单的奖励加权流匹配方案，以及结合了学习型奖励代理、样本效率更高的组相对策略优化方法。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体训练流程分为两个阶段：首先使用标准的模仿学习流匹配损失在演示数据集上进行预训练；随后，使用强化学习方法进行奖励引导的后训练，以最大化期望奖励。策略的输入是增强观测（包含原始观测和外部指令），输出是动作块。</p>
+<p>核心模块包括：1）<strong>可变时域规划机制</strong>；2）<strong>奖励加权流匹配</strong>；3）<strong>组相对策略优化</strong>。</p>
+<p><strong>可变时域规划</strong>：为了允许生成不同时长的轨迹，对训练数据进行预处理。对于原始动作块 <code>A ∈ R^(da×Hi)</code>，先通过线性插值将其调整到固定维度 <code>H&#39;</code>，得到 <code>A&#39;</code>。然后，将原始时域 <code>Hi</code> 作为一个新的通道（数值为 <code>Hi</code> 的常数向量）与 <code>A&#39;</code> 拼接，形成增强动作块 <code>Â ∈ R^(da+1 × H&#39;)</code>。使用该增强动作块作为训练目标。在生成时，模型输出增强动作块，从其新增通道中解码出目标时域 <code>H</code>，然后丢弃该通道并将剩余部分插值回时域 <code>H</code>，从而得到可变时长的动作序列。</p>
+<p><img src="https://arxiv.org/html/2507.15073v1/extracted/6638344/plots/main.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：方法整体框架。左侧展示了可变时域规划的数据处理流程：将不同时长的演示动作块插值并拼接时域信息，训练一个输出增强动作块的流匹配模型，生成时再解码出时域并插值回原始控制频率。右侧对比了ILFM、RWFM和GRPO三种训练范式。ILFM仅模仿演示数据；RWFM根据奖励对演示数据重新加权并增加探索噪声；GRPO则使用一个奖励代理模型对策略生成的轨迹进行组内相对比较来优化。</p>
+</blockquote>
+<p><strong>奖励加权流匹配</strong>：这是一种离线优先的算法。其核心思想是像模仿学习一样进行流匹配回归，但根据生成轨迹的奖励对演示数据点进行重新加权。损失函数为加权形式的流匹配损失，权重与轨迹奖励的指数成正比。然而，仅靠重新加权无法解决支持次优性（即最优动作不在演示分布内）。因此，RWFM引入了一个<strong>动作探索器</strong>：在从策略采样动作时，向流匹配的初始噪声添加一个各向同性的高斯探索噪声，以鼓励探索演示支持集之外的动作。探索噪声的幅度是一个关键的超参数。</p>
+<p><strong>组相对策略优化</strong>：这是一种完全在线的算法，旨在提高样本效率。GRPO免去了价值函数模型，通过对一个批次（组）内所有轨迹的奖励进行归一化（减去均值，除以标准差）来构造优化目标。其损失函数包含两项：一是流匹配损失，用于保持策略与高奖励轨迹的相似性；二是策略熵正则项，用于鼓励探索。为了进一步稳定训练并利用离线数据，本文为GRPO引入了一个<strong>学习型奖励代理</strong>：使用一个神经网络来拟合真实环境奖励，该网络在离线演示数据和在线收集的高奖励数据上进行训练。在GRPO更新时，使用该奖励代理的预测值来代替真实奖励进行计算。</p>
+<p>与现有方法相比，本文的创新点具体体现在：1）提出了一个简单有效的可变时域流匹配规划实现方案，仅通过数据预处理和通道拼接即可完成；2）在RWFM中明确引入了动作探索机制，以同时应对变异次优性和支持次优性；3）将GRPO与学习型奖励代理相结合，应用于流匹配策略的在线优化，提升了样本效率。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在一个模拟的独轮车动力学任务套件中进行，任务包括点对点导航、动态避障和八字形跟踪。奖励函数结合了任务完成度、时间最小化和控制量最小化等目标。</p>
+<p>对比的基线方法包括：1）<strong>ILFM</strong>：仅使用模仿学习训练的流匹配策略；2）<strong>RWFM</strong>：奖励加权流匹配；3）<strong>GRPO</strong>：组相对策略优化（带奖励代理）。</p>
+<p>关键实验结果：在点对点导航任务中，GRPO方法相比基础的ILFM方法，平均降低了约85%的成本（成本综合了时间、控制力和距离目标误差）；在动态避障任务中，GRPO的成本降低了约50%。总体而言，GRPO方法的表现显著优于RWFM和ILFM。</p>
+<p><img src="https://arxiv.org/html/2507.15073v1/extracted/6638344/plots/velocity_optimize.png" alt="奖励优化结果"></p>
+<blockquote>
+<p><strong>图2</strong>：点对点导航任务的成本结果。GRPO方法（绿色）最终性能最佳，成本显著低于ILFM（蓝色）和RWFM（橙色）。这展示了GRPO在优化综合奖励（含时间成本）方面的有效性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2507.15073v1/extracted/6638344/plots/time_optimize.png" alt="时间优化结果"></p>
+<blockquote>
+<p><strong>图3</strong>：专门针对时间成本优化的结果。GRPO方法（绿色）生成轨迹的耗时最短，证明了其在实现最短时间控制方面的能力。RWFM（橙色）也有所改进，但不如GRPO。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2507.15073v1/extracted/6638344/plots/rwfm_alpha_sweep.png" alt="RWFM参数消融"></p>
+<blockquote>
+<p><strong>图4</strong>：RWFM中奖励加权温度参数α的消融实验。α控制着奖励分布的锐利程度。结果表明，适中的α值（如1.0）能取得最佳性能，α过大或过小都会导致性能下降，验证了选择性模仿高奖励演示的重要性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2507.15073v1/extracted/6638344/plots/rwfm_explore_amplitude_sweep.png" alt="RWFM探索幅度消融"></p>
+<blockquote>
+<p><strong>图5</strong>：RWFM中动作探索器噪声幅度的消融实验。探索幅度为0时（即无探索），性能与ILFM相当。适度的探索（幅度为0.3）能带来显著提升，但过大的探索噪声会破坏学习。这证实了探索对于解决支持次优性是必要的。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2507.15073v1/extracted/6638344/plots/grpo_explore_amplitude_sweep.png" alt="GRPO探索幅度消融"></p>
+<blockquote>
+<p><strong>图6</strong>：GRPO中熵正则项系数（间接控制探索幅度）的消融实验。适度的熵正则（系数为0.01）能取得良好且稳定的性能。系数为0时（无探索）性能尚可但非最优，系数过大则会导致训练不稳定，说明GRPO本身需要但又不依赖于强探索。</p>
+</blockquote>
+<p>消融实验总结：对于RWFM，奖励加权参数α和探索噪声幅度都是关键组件，前者解决了变异次优性，后者解决了支持次优性。对于GRPO，熵正则项（鼓励探索）是必要的，但方法对超参数相对稳健；学习型奖励代理的引入提升了训练的稳定性和样本效率。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1）形式化了流匹配策略的强化学习问题，明确了从演示中学习时需要克服的变异次优性和支持次优性；2）提出了一种将动作块时域融入流匹配问题的简单方法，实现了生成时的自适应时域控制；3）引入了RWFM和GRPO两种强化学习框架，特别是GRPO方法结合奖励代理，显著提升了策略性能并超越了演示者水平。</p>
+<p>论文自身提到的局限性在于：所有实验均在模拟环境中进行，尚未在真实机器人系统上验证；实验中使用的奖励函数是手动设计的，而非来自VLM评估模型。</p>
+<p>本文对后续研究的启示在于：为基于流匹配或扩散模型的通用机器人策略的在线优化提供了一个可行的框架。未来的工作可以探索将方法扩展到真实世界机器人任务、集成学习型奖励函数（如基于VLM的评估），以及研究更高效的动作探索策略。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对流匹配策略依赖次优演示数据导致性能受限的核心问题，提出通过强化学习提升策略性能。关键技术包括奖励加权流匹配（RWFM）和群体相对策略优化（GRPO）两种方法，并引入可变规划时域的流匹配方案以优化最小时间控制。在模拟单车动力学任务上的实验表明，两种方法均显著超越演示者性能，其中GRPO方法相比朴素模仿学习流匹配（ILFM）成本降低50%至85%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2507.15073" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

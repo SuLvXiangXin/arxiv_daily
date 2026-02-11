@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Self-Improving Embodied Foundation Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Self-Improving Embodied Foundation Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.15155" target="_blank" rel="noreferrer">2509.15155</a></span>
+        <span>作者: Igor Mordatch Team</span>
+        <span>日期: 2025-09-18</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，在机器人领域，利用网络规模数据预训练的基础模型（Embodied Foundation Models, EFMs）已被证明可以通过行为克隆（即监督学习）微调为低层控制策略，并继承了基础模型的泛化与鲁棒性。然而，现有的EFMs训练范式几乎完全局限于行为克隆。相比之下，大语言模型（LLMs）在下游任务的后训练中通常采用两阶段流程：1) 监督微调，2) 强化学习微调。RL微调已被证明能显著且快速地提升LLM的性能，超越了仅使用SFT的效果。尽管在真实世界机器人中研究基础模型的RL微调存在独特的算法和工程挑战，但LLM领域展现出的样本效率和性能增益强烈激励着对此的探索。本文旨在解决这些挑战，核心思路是：受LLM后训练过程的启发，提出一个两阶段框架，首先通过行为克隆和“步骤到目标”预测进行监督微调，然后利用预测的步骤数来自动生成奖励函数和成功检测器，使机器人能够在最少人工监督下自主练习并改进策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的后训练框架包含两个阶段：1) 监督微调，2) 自改进（在线RL）。</p>
+<p><strong>第一阶段：监督微调</strong><br>给定模仿学习数据集𝒟，其中可采样元组$(o_t, a_t, g_{t‘})$，分别表示时间步$t$的观测、动作，以及同一轨迹中未来时间步$t’$（$t \leq t‘$）的目标。从预训练的基础模型初始化EFM，并使用两个目标进行监督微调：</p>
+<ol>
+<li><strong>行为克隆损失</strong> $\mathcal{L}<em>{\text{BC}}$：最大化在给定观测$o_t$和目标$g</em>{t’}$条件下，数据集中动作$a_t$的对数似然。</li>
+<li><strong>步骤到目标预测损失</strong> $\mathcal{L}_{\text{steps-to-go}}$：教会EFM在给定当前观测和目标时，预测距离完成目标所需的剩余时间步数（即$t’ - t$）。此目标对启用第二阶段至关重要。</li>
+</ol>
+<p><strong>第二阶段：自改进</strong><br>此阶段的目标是利用在线RL在下游任务上微调EFM以快速提升策略性能。关键创新在于从第一阶段训练好的模型中自动推导出奖励函数和成功检测器，无需人工设计或真实奖励信号。</p>
+<ul>
+<li><strong>奖励函数</strong>：令$d(o, g) := \mathbb{E}<em>{p^{\texttt{EFM}}</em>{\text{steps-to-go}}}[\text{steps-to-go} | o, g]$表示模型预测的、在观测$o$下达成目标$g$所需的期望步骤数。奖励函数定义为：$r(o_t, a_t, o_{t+1}, g) := d(o_t, g) - d(o_{t+1}, g)$。直观上，该奖励反映了执行动作$a_t$后，机器人距离目标$g$是更近了（正奖励）还是更远了（负奖励）。</li>
+<li><strong>成功检测器</strong>：在没有真实成功检测器的设置中（如真实世界实验），使用模型推导的成功指示器：$\text{success}(o, g) := \mathbb{1}[d(o, g) \leq s]$，其中$s$是一个很小的步数阈值。</li>
+<li><strong>自改进流程</strong>：算法1概述了该流程。使用一个冻结的Stage 1检查点来计算奖励和成功检测，策略则从另一个Stage 1检查点初始化。循环执行：1）用当前策略收集轨迹，当成功检测器触发、达到最大回合长度或人工终止时结束回合；2）使用公式计算每个时间步的蒙特卡洛回报$R_t$并存入经验回放池；3）使用REINFORCE损失（$-c \cdot R_t \cdot \log p^{\texttt{EFM}}_{\text{action}}(a_t | o_t, g)$）进行$N$次策略更新，然后清空回放池，开始下一轮迭代。作者选择了无需价值函数、无需数据重用的on-policy方法（REINFORCE）以提升训练稳定性。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2509.15155v1/final_arxiv_method_figure.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：提出的两阶段微调方法概述。<strong>阶段1（监督微调）</strong>：从预训练的多模态基础模型开始，使用机器人模仿学习数据集，通过a)行为克隆和b)步骤到目标预测目标来微调EFMs。<strong>阶段2（自改进）</strong>：自我预测的奖励和成功检测使机器人队伍能够在最少人工监督下自主练习下游任务。利用这些自我预测的信号，在线强化学习能快速改进策略并实现对新分布外任务的获取。</p>
+</blockquote>
+<p>与现有方法相比，创新点具体体现在：1) <strong>数据驱动的奖励设计</strong>：从预训练模型本身衍生出奖励，避免了复杂且不可扩展的人工奖励工程，并继承了基础模型的鲁棒性和泛化性。2) <strong>两阶段协同</strong>：将模仿学习与基于模型预测的在线RL相结合，旨在获得超越模仿数据性能的样本高效策略提升。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：研究在两个机器人平台上进行：LanguageTable（仿真与真实世界）和Aloha双臂操作平台（仿真）。使用了PaLI-3B视觉语言模型作为基础预训练模型。基线方法主要是Stage 1训练出的行为克隆策略，其等价于RT-2策略。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>自改进的有效性、鲁棒性与高效性</strong>：在仿真LanguageTable上，无论使用原始数据集的10%、20%还是80%进行Stage 1训练，Stage 2自改进都带来了显著的成功率提升（最低1.5倍性能提升），且仅需收集极少量的额外回合（少于2%的Block2Block任务回合）。例如，在10%数据上，仅增加1%的自改进回合，所得策略性能便显著超过了在20%和80%数据上训练的BC策略。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.15155v1/stage_2_delta.png" alt="Stage 2结果汇总"></p>
+<blockquote>
+<p><strong>图8</strong>：Stage 2自改进结果汇总。橙色：Stage 1行为克隆策略（等价于RT-2基线）。蓝色：经过Stage 2在线自改进后的策略。在仿真和真实LanguageTable以及Aloha领域的实验表明，提出的两阶段后训练方法以比纯监督学习高得多的样本效率实现了更高的成功率。</p>
+</blockquote>
+<ol start="2">
+<li><p><strong>真实世界验证</strong>：在真实世界LanguageTable上，使用20%和80%模仿数据训练后，自改进阶段仅增加约3%的Block2Block回合，便将策略成功率从约62-63%提升至约87-88%。这意味着，总经验量（20%模仿数据+3%自改进回合）获得的策略，远超仅用80%模仿数据训练的BC策略。同时，自改进阶段实现了“一人监控多机”的高效人机协作模式。</p>
+</li>
+<li><p><strong>预训练的关键作用</strong>：消融实验比较了使用预训练PaLI模型与从零开始训练的Uni-PaLI模型。结果显示，在相同模仿数据量下，预训练模型在Stage 1和Stage 2均表现更好。更重要的是，<strong>只有预训练模型才能通过自改进稳定地提升性能</strong>；而从零训练的模型在自改进阶段性能会崩溃或无法提升。这突显了网络规模预训练对于自改进的样本效率和鲁棒性不可或缺。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.15155v1/ablation_unipali.png" alt="预训练消融实验"></p>
+<blockquote>
+<p><strong>图11</strong>：预训练消融实验。对比从预训练PaLI初始化（蓝色）和从零训练Uni-PaLI（红色）的模型。左图：Stage 1后的成功率。右图：Stage 2自改进期间的成功率演变。预训练模型在Stage 1表现更好，且是Stage 2性能持续提升的必要条件。</p>
+</blockquote>
+<ol start="4">
+<li><strong>超越模仿数据的行为泛化</strong>：论文设计了两个新颖任务来测试泛化能力：<ul>
+<li><strong>Real2Sim LanguageTable</strong>：在仿真中训练，但使用真实世界图像进行Stage 2自改进。目标是让策略适应真实图像的视觉域。</li>
+<li><strong>BananaTable</strong>：一个分布外任务，要求机器人用香蕉形状的推杆（训练数据中未出现）推动积木。<br>实验表明，本文的方法能够使策略通过自改进快速适应新视觉域，并学会操控全新的物体（香蕉推杆）来完成未见过的任务，实现了远超Stage 1模仿数据范围的行为泛化。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.15155v1/real2sim_plot.png" alt="泛化能力展示"></p>
+<blockquote>
+<p><strong>图12</strong>：Real2Sim LanguageTable实验结果。策略在仿真数据上训练，然后在真实世界图像上进行自改进。自改进使策略成功适应了真实的视觉域。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.15155v1/bananatable_figure_smaller_arxiv.png" alt="BananaTable任务"></p>
+<blockquote>
+<p><strong>图13</strong>：BananaTable任务展示。左：模仿数据集中使用的标准T型推杆。右：自改进阶段引入的、未见过的香蕉形推杆。策略通过自改进学会了使用这个新工具。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种用于具身基础模型的两阶段后训练框架，将监督微调（结合行为克隆与步骤预测）与基于模型预测奖励的在线自改进（强化学习）相结合。</li>
+<li>设计了一种完全数据驱动的奖励函数和成功检测器生成方法，无需人工奖励工程或真实奖励信号，并利用了基础模型的泛化能力。</li>
+<li>通过大量实验证明，该框架不仅能以远超纯监督学习的样本效率提升策略性能，还能使机器人通过自主练习获得超越模仿数据集范围的、新颖的技能（行为泛化）。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，当前的自改进阶段采用了简单的on-policy RL算法（REINFORCE）且未进行数据重用。探索更复杂的RL算法（包括off-policy方法）以及风险感知或分布性RL的奖励定义是未来的工作方向。</p>
+<p><strong>对后续研究的启示</strong>：这项工作揭示了将网络规模预训练与在线自改进相结合，对于实现机器人自主技能习得的变革性潜力。它激励研究者将大模型成功的后训练范式更系统地引入机器人领域，并探索如何设计更高效、更鲁棒的基于模型预测的自主学习机制。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人基础模型在低级控制中主要依赖行为克隆、缺乏高效后训练的问题，提出一种两阶段后训练框架。第一阶段为监督微调，结合行为克隆与步数预测目标；第二阶段为自我改进，利用步数预测构建奖励函数与成功检测器，使机器人能自主练习任务。实验表明，该方法比单纯扩大模仿数据更样本高效，能显著提升任务成功率，并能使机器人自主习得远超训练数据范围的新技能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.15155" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

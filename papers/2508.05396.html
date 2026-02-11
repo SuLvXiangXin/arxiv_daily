@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Real-Time Iteration Scheme for Diffusion Policy - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Real-Time Iteration Scheme for Diffusion Policy</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.05396" target="_blank" rel="noreferrer">2508.05396</a></span>
+        <span>作者: Danica Kragic Team</span>
+        <span>日期: 2025-08-07</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>扩散策略在机器人操作任务中展现了卓越的性能，但其主要瓶颈在于缓慢的推理过程。标准扩散模型从高斯噪声开始，需要经过数百步迭代去噪才能生成动作，导致高延迟。同时，为了保持动作一致性，策略必须预测并执行一个完整的动作块后，才能进行下一次预测，这限制了其在需要高频控制或短周期任务中的应用。现有加速方法主要分为两类：一是蒸馏技术，将迭代去噪过程压缩为一步的一致性模型，但存在训练成本高、可能降低策略质量和多样性的问题；二是重新设计策略结构，但这通常需要对预训练的大型模型进行完整的重新训练，成本高昂。</p>
+<p>本文针对扩散策略推理速度慢、难以直接应用于预训练模型的问题，提出了一个新视角：借鉴最优控制中的实时迭代方案，利用物理系统的时空一致性，将上一个时间步的预测结果作为当前推理的初始猜测，从而大幅减少所需的去噪步数。本文的核心思路是：首次预测使用完整去噪步骤，后续预测则使用前一次预测结果作为初始猜测，并用显著减少的去噪步骤进行精炼，实现无需重新训练或蒸馏的实时推理加速。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架遵循一个迭代执行的流程。在每个时间步，策略接收当前观测，并输出一个长度为T的动作块。第一个动作块（t=0时）的生成与标准扩散策略完全一致：从高斯噪声开始，进行完整步数的去噪迭代。从第二个时间步（t&gt;0）开始，方法进入实时迭代阶段：将上一个时间步预测的动作块作为初始猜测，具体操作是移除已执行的首个动作，并将最后一个动作重复一次以补全长度，然后对此初始猜测仅进行K步（K远小于完整步数）的去噪迭代，得到当前的动作块。之后执行当前动作块的首个动作，循环往复。</p>
+<p><img src="https://arxiv.org/html/2508.05396v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：Real-Time Iteration Scheme for Diffusion Policy (RTI-DP) 示意图。在每个时间步，预测的动作序列作为后续推理的初始猜测，并通过截断的去噪步骤进行更新。该序列通过移除已执行的动作并在末尾追加新预测的动作来更新，从而实现高效、连续的策略适应。</p>
+</blockquote>
+<p>核心模块与技术细节如下：</p>
+<ol>
+<li><strong>初始完整去噪</strong>：仅在第一步执行，使用标准DDPM采样过程，确保获得一个高质量的动作序列起点。</li>
+<li><strong>实时迭代精炼</strong>：这是方法的核心。对于后续步骤，算法将上一时刻预测的动作序列 <code>A_{t-1} = [a_{t-1}, a_t, ..., a_{t+T-2}]</code> 经过移位和复制，得到初始猜测 <code>G = [a_t, ..., a_{t+T-2}, a_{t+T-2}]</code>。然后以此<code>G</code>为起点，仅进行<code>K</code>步去噪（使用公式(2)），得到当前动作块<code>A_t</code>。这极大地减少了计算量。</li>
+<li><strong>离散动作处理</strong>：对于包含离散动作（如抓取指令）的任务，直接使用连续值初始猜测可能导致预测损坏。论文提出了两种缩放策略：对于预训练策略，在推理时将离散维度的初始猜测值除以一个缩放因子（如10）；对于可重新训练的任务，则在数据集层面预处理时对离散动作进行缩放。</li>
+<li><strong>理论分析（局部收缩性）</strong>：论文从理论上论证了该方法的有效性。基于物理系统的时空一致性假设，相邻时间步的预测动作应接近。定理1证明，如果去噪函数是Lipschitz连续的，且噪声调度设计良好，则从接近真实中间噪声样本 <code>A_{K&#39;}</code> 的初始猜测 <code>Ã_{K&#39;}</code> 开始反向扩散，最终恢复的干净样本 <code>Ã_0</code> 与真实 <code>A_0</code> 之间的误差，将以一个小于1的常数 <code>C(K&#39;)</code> 的倍数被约束。这意味着初始化误差会收缩而非放大，保证了使用较少去噪步数仍能稳定收敛到高质量动作。</li>
+</ol>
+<p>与现有方法相比，本文的创新点具体体现在：1) <strong>无需重新训练或蒸馏</strong>：可直接应用于已有的预训练扩散策略模型，保护了原始投资。2) <strong>利用时空一致性进行“热启动”</strong>：将最优控制中的实时迭代思想创造性地引入扩散模型推理，用前一时刻的解初始化当前优化问题。3) <strong>针对性地处理离散动作</strong>：提出了简单的缩放方法，使方法能兼容混合连续-离散动作空间。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了多个机器人操作基准数据集进行评估：<strong>Robomimic</strong>（包含Can、Lift、Square、Tool Hang、Transport任务）、<strong>Push-T</strong>（基于状态关键点和图像）以及<strong>Multimodal Block Pushing</strong>。实验平台为仿真环境。</p>
+<p>对比的基线方法包括：标准<strong>Diffusion Policy</strong>、<strong>Streaming Diffusion Policy</strong>以及<strong>Consistency Policy</strong>。</p>
+<p>关键实验结果总结如下：在绝大多数任务中，RTI-DP在保持与完整去噪DP相当甚至更优性能的同时，大幅降低了预测时间。例如，在状态-based的Push-T任务中，RTI-DP-scale取得了1.00/0.93（最大/平均）的分数，预测时间仅需100ms，而DP的分数为0.92/0.91，预测时间长达816ms。在图像-based的Push-T任务中，RTI-DP-scale以100ms的预测时间取得了1.00/0.93的最佳分数，而DP需要1008ms取得0.92/0.89的分数。对于包含离散动作的Tool Hang任务，RTI-DP-clip（用于预训练模型）和RTI-DP-scale（用于可重训练模型）都取得了与DP可比的结果，同时推理速度快6倍以上。</p>
+<p><img src="https://arxiv.org/html/2508.05396v1/x2.png" alt="实验任务图示"></p>
+<blockquote>
+<p><strong>图2</strong>：仿真实验任务示意图。从左至右分别为：Blockpush PushT, Can, Lift, Square, Tool Hang 和 Transport。</p>
+</blockquote>
+<p><strong>表I（状态-based仿真结果）</strong> 显示，RTI-DP-clip和RTI-DP-scale在几乎所有任务上都实现了预测时间的数量级降低（从DP的<del>800ms降至25-145ms），同时性能分数与DP相当或更优。例如在Can任务上，两者均达到1.00/1.00的满分，时间分别为116ms和36ms。<br><strong>表II（图像-based仿真结果）</strong> 显示，RTI-DP-scale在Push-T和Can任务上取得了最佳性能（1.00/0.93和1.00/1.00），且速度快于DP。Consistency Policy虽然最快（</del>16ms），但在多个任务（如Push-T、Tool Hang）上性能显著下降。<br><strong>表III（Blockpush结果）</strong> 显示，在具有多模态挑战的Blockpush任务上，RTI-DP以仅25ms的预测时间，取得了0.54/0.45和0.24/0.19的最佳性能，显著优于DP和SDP。</p>
+<p>消融实验主要体现在对离散动作的不同处理策略（clip vs scale）的对比上，结果表明，根据模型是否可重新训练选择合适的缩放策略，对于保持处理离散动作时的性能至关重要。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1) 提出了RTI-DP，一种无需重新训练或蒸馏即可显著加速扩散策略推理的实时迭代方案。2) 为该方法提供了局部收缩性的理论分析，为初始化步骤的选择提供了理论依据。3) 通过广泛的仿真实验验证了该方法在多种机器人操作任务上的有效性和高效性，在保持性能的同时实现了数量级的速度提升。</p>
+<p>论文自身提到的局限性包括：当前初始去噪步数<code>K&#39;</code>的选择依赖于经验，虽然理论分析为自动化选择提供了基础，但尚未实现；方法在极端非平稳或模式切换非常频繁的场景下的表现可能需要进一步验证。</p>
+<p>本文对后续研究的启示在于：为加速生成模型推理开辟了一条“系统层面”优化而非“模型层面”改动的路径，强调利用问题本身的结构特性（如时空一致性）。这种思想可推广至其他基于迭代优化的序列决策模型。未来的工作可以探索基于理论的自动化步长选择机制，或将此方案与模型蒸馏等其它加速技术结合，以追求极限性能。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对扩散策略在机器人操作中因迭代去噪过程导致的推理时间长、难以满足实时性要求的问题，提出实时迭代方案（RTI-DP）。该方法受最优控制中的实时迭代启发，利用先前时间步的解作为后续迭代的初始猜测以加速扩散推理，并引入缩放方法处理离散动作。实验表明，该方案无需蒸馏或重新设计策略，即能大幅降低推理时间，同时保持与全步去噪扩散策略相当的整体性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.05396" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

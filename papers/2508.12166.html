@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Belief-Conditioned One-Step Diffusion: Real-Time Trajectory Planning with Just-Enough Sensing - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Belief-Conditioned One-Step Diffusion: Real-Time Trajectory Planning with Just-Enough Sensing</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.12166" target="_blank" rel="noreferrer">2508.12166</a></span>
+        <span>作者: Melkior Ornik Team</span>
+        <span>日期: 2025-08-16</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在部分可观测环境中导航的机器人通常配备多种传感器以确保定位可靠性，但持续开启所有传感器既浪费能源又不可行。现有方法主要分为两类：一是基于经典信念空间的规划器，通过解析模型传播位姿信念协方差并启发性地切换传感器，这种方法计算开销大且脆弱；二是数据驱动方法（包括扩散模型），它们从演示中学习多模态轨迹，但前提假设是拥有准确、持续开启的状态估计。因此，一个关键的开放性问题在于：对于给定任务和已知环境，在每个位置必须开启的最小子传感器集是什么，以将状态不确定性维持在刚好足够完成任务的水平？本文的核心思路是：当一个扩散规划器被显式地条件化在位姿信念栅格和传感器掩码上时，其去噪轨迹的分布可以提供一种校准的、可微的定位误差代理。基于此，本文提出了首个能在单次前向传播中同时返回短时域轨迹、逐路径点方差和定位误差代理的规划器，从而无需外部协方差推演。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的 Belief-Conditioned One-Step Diffusion (B-COD) 框架旨在实现实时轨迹规划与“刚好足够”的传感调度。整体流程分为三个核心模块：信念表示、一步扩散规划和在线传感器调度。</p>
+<p><img src="https://arxiv.org/html/2508.12166v2/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：B-COD 方法整体框架。左侧：信念模块将粒子云和局部地图压缩为编码了概率质量、朝向和协方差的信念栅格。中部：一步扩散网络接收该栅格、目标掩码和当前传感器标志，返回一个短时域轨迹和一个校准的 CVaR 风险标量。右侧：SAC（软演员-评论家）使用该标量实时切换传感器，仅在需要时消耗能量。</p>
+</blockquote>
+<p><strong>1. 信念栅格表示</strong><br>为了将连续、可能多模态的位姿后验信念输入神经网络，本文将其投影为一个五通道的固定尺寸图像 $B_t \in [0,1]^{H \times W \times 5}$。每个网格单元存储五个经过归一化的摘要统计量：(i) 信念质量（概率），(ii) 偏航角的正弦值，(iii) 偏航角的余弦值，(iv) 位置协方差矩阵行列式的对数值（表示平面扩散），(v) 朝向分布的圆方差（表示朝向不确定性）。这种表示是平移等变的、朝向感知的，且足够紧凑以直接输入下游卷积网络。</p>
+<p><img src="https://arxiv.org/html/2508.12166v2/uf.png" alt="信念栅格示例"></p>
+<blockquote>
+<p><strong>图2</strong>：实验中使用的信念栅格示例。通道被投影为单张HSV图像：亮度=概率质量，色调=朝向，饱和度降低=位置扩散较高的区域。青色表示最可能的位姿；灰色表示增长的 $3\sigma$ 不确定性，黑色表示零信念。</p>
+</blockquote>
+<p><strong>2. 信念条件化一步扩散 (B-COD)</strong><br>B-COD 学习条件分布 $p_{\theta}(\tau | B, M, g, a)$，其中 $\tau$ 是机器人本体坐标系下的增量位姿序列。网络为每个路径点参数化一个对角高斯分布，其均值是期望位移，对数方差 $\hat{\sigma}<em>k$ 量化从训练数据继承的偶然不确定性。因此，单次前向传播可同时得到轨迹样本 $\tau$ 和方差向量 $\hat{\sigma}</em>{1:H}$。</p>
+<ul>
+<li><strong>训练流程</strong>：采用教师-学生蒸馏框架。<ul>
+<li><strong>扩散教师</strong>：使用 DDPM 范式，采用余弦前向过程。损失函数（公式2）结合了噪声重建项和对角高斯负对数似然项，后者强制预测的方差与演示数据在该路径点的经验散布相匹配，从而得到<strong>校准的</strong>偶然不确定性估计。</li>
+<li><strong>一致性模型学生</strong>：通过一致性蒸馏将教师的多步去噪链压缩为单步网络 $g_{\psi}$。学生网络的损失（公式3）旨在匹配教师生成的参考轨迹的均值分布和方差分布，确保在压缩后不确定性代理仍然有效。</li>
+</ul>
+</li>
+<li><strong>不确定性代理</strong>：将整个方差向量浓缩为一个聚焦于尾部分布的统计量——条件风险价值 (CVaR-95)：$u^{\text{CVaR}} = \frac{1}{0.05 H} \sum_{k \in \text{top } 5%} \sqrt{e^{\hat{\sigma}_k}}$。该标量直接来自规划器的方差头，无需额外采样或协方差推演，与候选轨迹在同一前向传播中产生。</li>
+</ul>
+<p><strong>3. 基于风险预算的在线传感器调度</strong><br>在每个决策时刻，B-COD 提供轨迹和 $u^{\text{CVaR}}$。传感器调度问题被建模为一个约束马尔可夫决策过程 (CMDP)。状态 $s_t$ 包括信念栅格 $B_t$、风险预测标量 $u^{\text{CVaR}}_t$、到目标的距离以及上一时刻的传感器掩码。即时奖励是负的功耗 $r_t = -c^{\top}a_t$。约束条件是风险违规指示器 $g_t = \mathbf{1}[u^{\text{CVaR}}<em>t &gt; \eta</em>{\max}]$，要求长期平均违规率低于 $\epsilon$。本文使用约束型软演员-评论家 (SAC) 来学习调度策略，其输入是 B-COD 编码的信念特征与数值特征的拼接，输出是各传感器开启的松弛伯努利概率。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在一个真实湖泊环境中使用无人水面艇 (ASV) 进行实时测试。平台配备多波束LiDAR、日夜摄像头、RTK-GPS、MEMS IMU和EXO2水质探头。评估指标包括目标到达率、碰撞率、CVaR违规率、平均启用传感器数、相对于“全开”基线的能耗百分比以及运行时延。</p>
+<p><strong>基线方法</strong>：对比了多种方法，包括：始终开启所有传感器 (Always-ON)、基于规则的贪婪启发式 (Greedy-OFF)、基于信息增益的贪婪法 (InfoGain-Greedy)、随机开启固定数量传感器 (Random-1/2)、使用B-COD方差均值作为代理 ($\sigma$-Mean)、通过蒙特卡洛采样估计风险 (Sample-Spread)、不使用信念栅格的扩散模型 (No-Belief Raster)、纯强化学习端到端学习 (Pure-RL) 以及基于解析模型的在线POMDP求解器 (DESPOT-Lite)。</p>
+<p><img src="https://arxiv.org/html/2508.12166v2/x3.png" alt="性能对比表"></p>
+<blockquote>
+<p><strong>图3</strong>：性能对比表。B-COD+SAC 在50圈测试中达到了97.9%的目标到达率（接近Always-ON的100%），同时能耗仅为Always-ON基线的42.3%，碰撞率仅为0.9%。这表明其能以近乎一半的能耗实现近乎完美的任务完成度。</p>
+</blockquote>
+<p><strong>关键发现1：性能与能效</strong><br>B-COD+SAC 在保持高任务成功率（97.9%）的同时，将传感能耗降低了超过一半（42.3%）。启发式调度方法（如Greedy-OFF）虽节能但成功率低（47.3%）；基于信息增益的方法（InfoGain-Greedy）成功率较高但风险违规率高8倍。纯RL方法 (Pure-RL) 因高维动作空间导致探索困难，性能较差（成功率54.8%，碰撞率22.1%）。DESPOT-Lite 虽规划准确，但运行时延过高（565.3 ms），无法满足实时性要求。</p>
+<p><img src="https://arxiv.org/html/2508.12166v2/x4.png" alt="可靠性图"></p>
+<blockquote>
+<p><strong>图4</strong>：可靠性图。将预测的定位误差（x轴）与实证的平面误差（y轴）分20个区间进行对比。B-COD 的预测误差与实证误差紧密对齐（平均误差6%），证明其方差输出是一个校准的、上下文感知的定位误差预测器。</p>
+</blockquote>
+<p><strong>关键发现2：不确定性代理的校准性</strong><br>可靠性图显示，B-COD 预测的定位误差与实证误差高度一致，平均误差仅为6%，证明其方差输出是校准的。消融实验表明，使用简单的方差均值 ($\sigma$-Mean) 或通过采样估计风险 (Sample-Spread) 都会导致性能下降（目标到达率分别降至79.6%和94.3%），验证了CVaR-95这个尾部分布统计量作为风险代理的有效性。</p>
+<p><img src="https://arxiv.org/html/2508.12166v2/x5.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图5</strong>：消融实验分析。从左至右分别展示了不同组件对目标到达率、碰撞率和平均启用传感器数的影响。移除信念条件化 (w/o Belief)、使用均值代理 (w/o CVaR) 或使用多步扩散 (w/o Distill) 都会导致性能下降，证明了信念编码、CVaR风险标量以及一步蒸馏各自的重要性。</p>
+</blockquote>
+<p><strong>关键发现3：各组件贡献</strong><br>消融实验验证了各核心组件的必要性：移除了信念条件化的模型性能大幅下降；使用方差均值而非CVaR作为代理会降低风险约束效果；使用多步扩散教师而非一步学生则无法满足实时性要求。这证明了信念表示、CVaR风险代理和一步蒸馏对于实现实时、节能、安全的导航缺一不可。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了 **Belief-Conditioned One-Step Diffusion (B-COD)**，这是首个能在单次、毫秒级前向传播中同时生成短时域轨迹和校准定位误差代理的规划器，无需外部协方差推演。</li>
+<li>实现了<strong>规划与传感的实时耦合</strong>，通过一个轻量级强化学习策略利用上述不确定性代理在线调度传感器，在严格风险预算下最小化能耗，实现了“刚好足够”的感知。</li>
+<li>在<strong>真实海洋机器人平台</strong>上进行了实时部署验证，证明了该方法在保持与“全开”基线相当任务性能的同时，能显著降低传感能耗。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，B-COD 框架依赖于离线训练数据（仿真与真实数据混合），其性能受训练数据分布和质量影响。此外，当前方法主要针对静态地图环境，对高度动态障碍物的处理能力有限。</p>
+<p><strong>启示</strong>：本文的工作为在资源受限的机器人上实现可靠且节能的自主导航提供了新范式。其核心思想——利用生成模型的内在不确定性作为感知需求的信号——可扩展至其他需要权衡信息获取与资源消耗的领域，例如通信调度、计算卸载等。开源的代码和首个带有信念标注的多模态海事数据集也将推动该领域进一步研究。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人在部分可观测环境中为节能而需动态选择最小传感器子集（just-enough sensing）的实时轨迹规划问题，提出Belief-Conditioned One-Step Diffusion (B-COD)方法。该方法将扩散规划器显式地以姿态信念栅格和传感器掩码为条件，利用其去噪轨迹的分布作为定位误差的可微分代理指标，从而在单次10毫秒前向传播中同时输出短视界轨迹、不确定性估计及定位误差代理。在无人水面车辆的真实海洋实验中，该方法在保持与全传感器基线相当的目标到达性能的同时，有效降低了传感能耗。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.12166" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

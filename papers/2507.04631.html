@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning Robust Stereo Matching in the Wild with Selective Mixture-of-Experts - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Learning Robust Stereo Matching in the Wild with Selective Mixture-of-Experts</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2507.04631" target="_blank" rel="noreferrer">2507.04631</a></span>
+        <span>作者: Junjie Hu Team</span>
+        <span>日期: 2025-07-07</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>近年来，基于学习的立体匹配网络取得了显著进展。然而，由于不同数据集之间存在域偏移和视差分布不平衡的问题，这些方法往往缺乏鲁棒性，难以实现令人印象深刻的跨域性能。利用视觉基础模型（VFMs）可以直观地增强模型的鲁棒性，但如何以高性价比的方式将此类模型集成到立体匹配任务中，以充分发挥其鲁棒性，仍然是一个关键挑战。现有方法存在两个主要局限：第一，直接将VFMs用于立体匹配的零样本性能有限，因为它们难以生成密集跨视图特征匹配所需的判别性特征；第二，现有的微调方法（如低秩适应LoRA或小型解码器）倾向于对所有输入使用统一的低秩子空间或固定的CNN解码器，无法灵活应对真实世界中不同复杂度的立体场景，导致泛化能力欠佳。</p>
+<p>本文针对上述痛点，提出了一种新颖的框架SMoEStereo。其核心思路是通过定制的、场景特定的低秩适应（LoRA）和混合专家（MoE）模块融合，来适配VFMs用于立体匹配，并引入一个轻量级决策网络来选择性激活MoE模块，以平衡效率与精度。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>SMoEStereo的整体框架以RAFT-Stereo为骨干网络，将其特征提取器替换为视觉基础模型（VFMs），而其余结构保持不变。网络首先使用改造后的VFM从立体图像对中提取特征，然后构建相关体积金字塔，并通过多级GRU网络递归更新视差场。</p>
+<p><img src="https://arxiv.org/html/2507.04631v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：SMoEStereo框架总览。(a) 整体模型结构，基于RAFT-Stereo，用VFM替换特征提取器；(b) 改造后的Transformer块，集成了MoE LoRA层、MoE Adapter层和决策网络；(c) MoE Adapter层细节；(d) MoE LoRA层细节；(e) 单个Adapter专家细节；(f) 单个LoRA专家细节；(g) 决策网络细节。</p>
+</blockquote>
+<p>核心创新在于对VFM中每个ViT块的改造，引入了两种选择性混合专家（Selective MoE）层和一个决策网络：</p>
+<ol>
+<li><strong>MoE LoRA层</strong>：该层包含M个LoRA专家，每个专家对应一个特定的矩阵秩r_i。传统的LoRA使用固定秩，而MoE LoRA层通过一个路由器网络R_L(·)为每个输入动态选择Top-k（默认k=1）个最优专家。其前向传播公式为：x_out = W_q,k,v * x_in + Σ_{i=1}^M R_L(x_in) · E_L^i(x_in)。其中，预训练权重W_q,k,v被冻结，每个LoRA专家E_L^i(x_in) = ΔW x_in = W_i^{up} W_i^{down} x_in，由两个可训练的小矩阵构成。这种设计使得模型能够根据场景复杂度，自适应地选择不同表达能力的低秩子空间进行特征细化。</li>
+<li><strong>MoE Adapter层</strong>：为了解决冻结的VFMs缺乏对局部视觉结构建模的归纳偏置问题，该层引入了N个具有不同卷积核大小k的CNN适配器专家。同样通过一个路由器网络R_A(·)动态选择最优专家。其输出为：x_out = W_mlp * x_in + Σ_{j=1}^N R_A(x_in) · E_A^j(x_in)。每个CNN适配器专家由降维卷积、指定核大小的卷积以及升维卷积构成。这种设计将局部几何先验注入到Token中，与MoE LoRA层的长程建模能力形成互补。</li>
+<li><strong>决策网络</strong>：为了减少在所有ViT块中集成MoE带来的冗余和计算开销，在每个MoE层前插入了一个轻量级决策网络。该网络以类别Token为输入，通过MLP产生概率向量，并利用Gumbel Softmax技巧生成软化的二进制掩码（0表示跳过该MoE层，1表示激活）。决策网络与MoE模块联合优化，通过一个衡量计算成本的“使用损失”来鼓励减少冗余同时保持精度的策略。超参数γ ∈ (0,1]可用于按比例缩放被激活MoE模块的计算负载，从而灵活适应不同的资源约束。</li>
+</ol>
+<p><strong>创新点总结</strong>：与现有方法相比，SMoEStereo的创新具体体现在：1) 使用异构专家（不同秩的LoRA、不同核的CNN）而非同质专家来处理多样化的真实场景；2) 将MoE作为一种参数高效的调优机制用于立体匹配任务，而非预训练；3) 新颖地引入决策网络来选择性激活最合适的MoE模块，显著提升效率。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在多个标准立体匹配基准上进行评估，包括KITTI 2012、KITTI 2015、Middlebury、ETH3D和DrivingStereo。对比的基线方法涵盖了当前先进的模型，如CFNet、RAFT-Stereo、UCFNet、CREStereo++、LoS、Selective-IGEV、MochaStereo以及基于不同VFM的Former系列方法（如Former-PSMNet、Former-CFNet、Former-RAFT）。</p>
+<p><strong>跨域泛化性能</strong>：如表1所示（对应论文中Table 1），SMoEStereo在使用不同VFM（DINOv2, SAM, DAM, DAMV2）作为基础时，在KITTI、Middlebury、ETH3D等真实数据集上均取得了最优或次优的泛化性能。例如，在ETH3D数据集（Bad 1.0指标）上，SMoEStereo (SAM)将错误率降至2.07%，显著优于Former-RAFT (DAM)的3.3%和其他传统方法。</p>
+<p><strong>联合泛化性能</strong>：论文还评估了使用同一个训练好的模型在ETH3D、KITTI和Middlebury基准上的联合泛化能力，SMoEStereo同样达到了最先进的水平，证明了其强大的统一表征能力。</p>
+<p><img src="https://arxiv.org/html/2507.04631v1/x2.png" alt="定性结果对比"></p>
+<blockquote>
+<p><strong>图2</strong>：在DrivingStereo数据集上的定性结果对比。SMoEStereo（最后一行）在挑战区域（如遮挡边界、弱纹理区域）产生的视差图更清晰、噪声更少，与真实视差（第二行）最为接近。</p>
+</blockquote>
+<p><strong>消融实验</strong>：消融实验系统地验证了各个组件的贡献。</p>
+<p><img src="https://arxiv.org/html/2507.04631v1/x3.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图3</strong>：消融实验分析。(a) 不同组件对性能的影响：完整的SMoEStereo（所有模块）性能最佳；移除决策网络（W/O DN）导致计算量(FLOPs)增加但性能略降；仅使用MoE LoRA或MoE Adapter性能均不及二者结合；使用固定秩/核的专家（W/O MoE）性能最差。(b) 决策网络超参数γ对计算效率与精度权衡的影响：随着γ减小（激活更少模块），FLOPs下降，性能（D1错误率）略有上升，展示了灵活调节的能力。</p>
+</blockquote>
+<p><strong>决策网络分析</strong>：实验表明，决策网络能够有效识别简单和复杂样本，并为它们分配不同的计算路径。对于简单样本，更多的MoE模块被跳过，从而节省计算；对于复杂样本，则激活更多的模块以保持精度。</p>
+<p><img src="https://arxiv.org/html/2507.04631v1/x4.png" alt="决策网络分析"></p>
+<blockquote>
+<p><strong>图4</strong>：决策网络行为可视化。左图展示了不同层中MoE模块的激活率，表明网络学会了在不同深度选择性使用模块。右图展示了对于简单和复杂输入，被激活的MoE模块数量分布不同，验证了其自适应能力。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1) 提出了SMoEStereo，一个高效而强大的框架，能够以最小成本利用预训练的视觉基础模型实现鲁棒的立体匹配；2) 设计了异构的MoE模块（秩自适应的MoE LoRA和核尺寸自适应的MoE Adapter），实现了针对场景特性的自适应特征优化；3) 引入了一个轻量级决策网络，动态选择关键MoE模块，在保持精度的同时显著提升了模型效率。</p>
+<p>论文提到的局限性包括：方法的性能提升在一定程度上依赖于在更大规模、更多样化数据上的训练；决策网络虽然轻量，但在部署时可能引入额外的延迟。</p>
+<p>这项工作对后续研究的启示在于：为高效适配大规模基础模型到特定视觉任务（尤其是几何感知任务）提供了新范式，即通过动态、选择性的模块化设计来平衡通用性与专用性、性能与效率。未来可探索更高效的决策机制，或将此框架扩展到其他密集匹配或几何理解任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对立体匹配模型在真实场景中缺乏鲁棒性、跨域泛化性能差的问题，提出SMoEStereo框架。其核心是结合视觉基础模型(VFMs)，通过定制化的MoE-LoRA（动态选择专家并自适应秩）与MoE-Adapter（自适应卷积核以增强几何特征）模块，实现场景自适应的特征融合。为平衡效率，引入轻量决策网络选择性激活模块。实验表明，该方法在多个基准上无需针对数据集微调，即实现了最先进的跨域与联合泛化性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2507.04631" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
