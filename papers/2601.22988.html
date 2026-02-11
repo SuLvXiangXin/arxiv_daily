@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning Geometrically-Grounded 3D Visual Representations for View-Generalizable Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Learning Geometrically-Grounded 3D Visual Representations for View-Generalizable Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2601.22988" target="_blank" rel="noreferrer">2601.22988</a></span>
+        <span>作者: Guang Chen Team</span>
+        <span>日期: 2026-01-30</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人视觉运动策略需要具备强大的空间场景理解和跨不同相机视角的泛化能力。现有主流方法主要分为两类：一类是使用2D视觉编码器将图像压缩为潜在向量，但这类特征缺乏显式的3D结构感知，在空间复杂的操作任务中效果有限；另一类是借助多视角输入学习3D感知表示，但这在推理时需要多视角观测，在单视角受限的实际场景中不实用。近期一些工作尝试通过引入神经辐射场或高斯溅射等辅助重建目标来实现单视角3D感知，但其场景建模仍然粗糙，难以恢复对精确操作至关重要的细粒度几何结构，且编码器容易过拟合到训练视角，在未见过的相机配置下泛化能力下降。</p>
+<p>本文针对上述三个关键痛点：推理时依赖多视角观测、场景建模不完整（缺乏整体和细粒度几何结构）、以及缺乏有效的策略训练策略来保留和利用习得的3D知识，提出了GEM3D框架。其核心思路是通过单视角3D预训练范式，利用点云重建和多视角监督下的前馈高斯溅射来学习整体几何表示，并在策略学习阶段通过多步蒸馏来保留预训练的几何理解，将其有效迁移到操作技能中。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>GEM3D是一个统一的表示-策略学习框架，包含两个关键组件：GEM3D预训练和GEM3D策略。前者通过辅助场景重建任务学习整体的3D表示，后者将预训练的3D视觉表示蒸馏到视觉运动策略中，以实现视角泛化的操作。</p>
+<p><img src="https://arxiv.org/html/2601.22988v1/x2.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：GEM3D整体框架概览。左侧为GEM3D预训练，通过点云重建和高斯溅射渲染学习几何基础3D表示；右侧为GEM3D策略，通过多步蒸馏将预训练表示的知识迁移到视觉运动策略中。</p>
+</blockquote>
+<p><strong>GEM3D预训练</strong>：该阶段旨在从单视角RGB-D观测中学习表达性的3D场景嵌入，具体流程如图3所示。</p>
+<p><img src="https://arxiv.org/html/2601.22988v1/x3.png" alt="预训练流程"></p>
+<blockquote>
+<p><strong>图3</strong>：GEM3D预训练流程。(a) 将单视角RGB-D观测编码为体素特征，(b) 通过从粗到细的Snowflake过程逐步重建场景几何，(c) 通过基于高斯溅射的新视角渲染学习细粒度纹理细节。</p>
+</blockquote>
+<ol>
+<li><p><strong>3D特征提取</strong>：输入为单视角RGB-D观测 $o^{t}={\mathcal{I}^{t},\mathcal{D}^{t},\mathcal{K}^{t}}$。深度图 $\mathcal{D}^{t}$ 根据相机参数 $\mathcal{K}^{t}$ 反投影，经过裁剪和最远点采样得到点云 $\mathcal{P}$。RGB图像 $\mathcal{I}^{t}$ 通过预训练的DINOv2模型编码为逐像素2D特征 $\mathcal{F}_{\text{2D}}$，并将其投影到点云 $\mathcal{P}$ 上以丰富视觉语义。最后，将语义增强的点云体素化为占据和特征体积，并通过一个3D U-Net融合，生成密集体素特征 $\mathcal{F}\in\mathbb{R}^{D^{3}\times 128}$。</p>
+</li>
+<li><p><strong>从粗到细的点云重建</strong>：为了实现对体素特征 $\mathcal{F}$ 的整体几何理解，该模块首先生成稀疏种子点，然后逐步将其细化为密集点云。</p>
+<ul>
+<li><strong>种子点生成</strong>：初始化一个可学习的体素查询集 $\mathcal{Q}\in\mathbb{R}^{d^{3}\times 128}$（$d \ll D$）。首先通过平均池化下采样 $\mathcal{F}$ 得到低分辨率特征 $\mathcal{F}<em>{\text{down}}$，执行 $\mathcal{Q}$ 与 $\mathcal{F}</em>{\text{down}}$ 之间的交叉注意力，获得捕捉粗略空间关系的提议查询 $\mathcal{Q}<em>{p}$。然后，在 $\mathcal{Q}</em>{p}$ 和 $\mathcal{F}$ 之间应用3D可变形交叉注意力模块，以聚合局部几何细节，最终通过一个浅层MLP解码生成种子点坐标 $\hat{\mathcal{P}}_{0}$。</li>
+<li><strong>点云恢复</strong>：从种子点 $\hat{\mathcal{P}}<em>{0}$ 开始，遵循SnowflakeNet，使用雪花点反卷积块进行渐进式细化。在每个阶段 $i$，父点 $\hat{\mathcal{P}}</em>{i}$ 通过三线性插值查询体素特征 $\mathcal{F}$ 获得点特征 $\mathcal{F}<em>{i}$。SPD块以 $\hat{\mathcal{P}}</em>{i}$、$\mathcal{F}<em>{i}$ 和当前上下文特征 $\mathcal{F}^{\text{c}}</em>{i}$ 为输入，对每个父点上采样 $r$ 倍，预测 $r$ 个位移向量 $\Delta\mathcal{P}<em>{i}$，从而生成细化的子点 $\hat{\mathcal{P}}</em>{i+1}$。重建损失使用倒角距离 $L_2$，通过融合多视角真实点云得到完整点集 $\mathcal{P}_{\text{full}}$ 进行监督。</li>
+</ul>
+</li>
+<li><p><strong>前馈3D高斯溅射</strong>：为了捕捉细粒度的外观和纹理，该模块基于重建的点云预测高斯图元并进行新视角渲染。具体地，使用细化后的点 $\hat{\mathcal{P}}_{3}$ 作为高斯中心，并通过三线性插值从体素特征 $\mathcal{F}$ 中采样特征，进而预测每个高斯的不透明度、颜色、旋转和缩放。渲染损失结合了L1损失、SSIM损失和感知LPIPS损失。</p>
+</li>
+</ol>
+<p><strong>GEM3D策略</strong>：为了将预训练获得的几何理解有效迁移到下游操作任务，并避免直接微调导致的过拟合和知识遗忘，GEM3D提出了一种基于多步蒸馏的视觉运动策略。</p>
+<ul>
+<li><strong>策略架构</strong>：策略网络包含一个视觉编码器和一个多层感知机动作头。视觉编码器将单视角RGB图像映射到一个潜在向量。</li>
+<li><strong>多步蒸馏</strong>：核心创新在于通过软对齐策略编码器的潜在特征与预训练表示，来指导策略训练。具体包括：<ol>
+<li><strong>特征蒸馏</strong>：最小化策略视觉编码器输出的特征与从预训练体素特征 $\mathcal{F}$ 中采样得到的点特征之间的均方误差。</li>
+<li><strong>渲染蒸馏</strong>：使用策略视觉编码器的特征来渲染图像，并与使用预训练体素特征渲染的图像进行对齐（使用L1、SSIM和LPIPS损失）。</li>
+<li><strong>动态感知设计</strong>：除了当前观测，策略还将之前时间步的动作作为输入，使视觉编码器能够隐含地感知动态，增强感知-动作一致性。</li>
+</ol>
+</li>
+</ul>
+<p>与现有方法相比，GEM3D的创新点在于：1) 提出了一个结合整体几何重建（点云）和细粒度外观建模（高斯溅射）的单视角3D预训练范式；2) 设计了多步蒸馏策略，软性地将预训练的3D知识迁移到策略中，而非直接微调，更好地保留了几何理解并提升了视角泛化能力。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在RLBench模拟器的12个操作任务上进行评估，任务涉及抓取、放置、推、堆叠等。对比的基线方法包括：基于2D表示的R3M和VC-1，基于3D体素表示的Perceiver-Actor，以及当前最先进的单视角3D方法ManiGaussian。</p>
+<p><img src="https://arxiv.org/html/2601.22988v1/x4.png" alt="主要结果"></p>
+<blockquote>
+<p><strong>图4</strong>：在12个RLBench任务上的平均成功率。GEM3D以77.4%的平均成功率显著优于所有基线方法，比之前的SOTA方法ManiGaussian（64.7%）高出12.7个百分点。</p>
+</blockquote>
+<p>关键定量结果如下：</p>
+<ul>
+<li>GEM3D在12个任务上的平均成功率达到**77.4%<strong>，比之前的SOTA方法ManiGaussian（64.7%）高出</strong>12.7%**。</li>
+<li>在视角泛化测试中，在中等视角偏移下，GEM3D的成功率下降**22.0%<strong>，而ManiGaussian下降</strong>41.6%<strong>；在大视角偏移下，GEM3D下降</strong>29.7%<strong>，而ManiGaussian下降</strong>51.5%**，表明GEM3D具有更强的零样本视角泛化能力。</li>
+<li>将GEM3D的蒸馏策略与ManiGaussian的预训练主干结合，在12个任务上带来了平均<strong>5.8%</strong> 的性能提升，证明了该蒸馏策略的可扩展性。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2601.22988v1/x5.png" alt="视角泛化"></p>
+<blockquote>
+<p><strong>图5</strong>：在6个代表性任务上，面对中等和大视角偏移时的零样本泛化性能。GEM3D（蓝色）的性能下降幅度远小于ManiGaussian（橙色），显示出优异的视角鲁棒性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.22988v1/x6.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图6</strong>：消融研究结果。(a) 移除点云重建（-PCR）或高斯溅射（-GS）都会导致性能下降，尤其是视角泛化能力。(b) 在策略训练中，特征蒸馏（FD）和渲染蒸馏（RD）都对最终性能有重要贡献。</p>
+</blockquote>
+<p>消融实验验证了各组件的重要性：</p>
+<ol>
+<li><strong>预训练任务</strong>：移除点云重建（-PCR）导致平均成功率下降4.6%，移除高斯溅射（-GS）导致下降5.1%。两者共同作用才能学习到全面（整体几何+细粒度外观）的3D表示。</li>
+<li><strong>蒸馏策略</strong>：在策略训练中，移除特征蒸馏（-FD）导致性能下降3.5%，移除渲染蒸馏（-RD）导致下降6.2%。多步蒸馏能最有效地将几何知识迁移到策略中。</li>
+<li><strong>动态感知</strong>：移除动作历史输入（-History）会导致性能小幅下降。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2601.22988v1/x7.png" alt="定性对比"></p>
+<blockquote>
+<p><strong>图7</strong>：新视角渲染和点云重建的定性比较。GEM3D能生成更清晰、细节更丰富的新视图，并重建出更完整、更精确的点云几何结构。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2601.22988v1/x8.png" alt="策略可视化"></p>
+<blockquote>
+<p><strong>图8</strong>：在“推方块”任务中，不同视角下GEM3D与基线方法策略动作的可视化。GEM3D在不同视角下能产生一致且准确的动作方向，而基线方法（如ManiGaussian）的动作方向会因视角变化而出现较大偏差。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) 提出了GEM3D，一个统一的几何基础3D表示学习与策略蒸馏框架，用于视角泛化的机器人操作；2) 设计了一种单视角3D预训练范式，通过从粗到细的点云重建和前馈高斯溅射，学习整体且细粒度的场景表示；3) 引入了一种多步蒸馏策略，能够有效保留预训练获得的3D几何知识，并将其迁移到视觉运动策略中，显著提升了策略的视角泛化能力。</p>
+<p>论文提到的局限性在于，当前方法主要在模拟环境中进行验证，未来需要在真实机器人系统上进一步测试其泛化能力和对感知噪声的鲁棒性。</p>
+<p>对后续研究的启示：1) 将几何重建与操作技能学习解耦并通过蒸馏进行迁移的思路，可以扩展到其他需要强空间理解的机器人任务中；2) 多步蒸馏策略作为一种有效的表示迁移方法，有望与更多不同类型的预训练3D表示主干结合；3) 如何将这种需要多视角监督的预训练范式扩展到更易获取的大规模无标注数据上，是一个值得探索的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中视觉策略对相机视角泛化能力不足的问题，提出GEM3D框架。该方法通过单视图三维预训练，结合点云重建和前馈高斯溅射技术学习整体几何表征，并在策略学习中采用多步蒸馏以保持几何知识。实验在12个RLBench任务中平均成功率超越先前最佳方法12.7%，并在六个代表性任务中展现出强大的零样本视角泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2601.22988" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

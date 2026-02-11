@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>OAT: Ordered Action Tokenization - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>OAT: Ordered Action Tokenization</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.04215" target="_blank" rel="noreferrer">2602.04215</a></span>
+        <span>作者: Yilun Du Team</span>
+        <span>日期: 2026-02-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>自回归序列模型已成为现代机器人学习的强大基础。然而，将连续机器人动作应用于自回归建模需要一个有效的动作分词方案。现有方法主要分为两类：一是基于分析的离散化方法，如按维度分箱，其产生的令牌序列过长，导致训练和推理效率低下；二是学习的潜在分词器，其产生的潜在空间缺乏结构，与下一个令牌预测的因果顺序不匹配。本文指出，有效的动作分词器必须同时满足三个关键属性：高压缩率、完全可解码性和因果顺序性。现有方法在这三者之间存在固有的权衡，无法同时满足。本文提出了有序动作分词，这是一种学习的分词器，旨在同时满足这三个属性，其核心思路是通过引入寄存器令牌、有限标量量化和顺序诱导训练机制，将连续动作块离散化为一个有序的令牌序列，从而自然地对齐自回归生成并支持基于前缀的解码。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>OAT的目标是学习一个满足压缩、完全可解码和因果顺序三个属性的动作分词器。其整体流程是：将一个连续动作块通过编码器映射为一个有序的离散令牌序列，然后解码器可以将任何令牌前缀（即使是部分序列）映射回一个有效的连续动作块。</p>
+<p><img src="https://arxiv.org/html/2602.04215v1/x1.png" alt="OAT概述"></p>
+<blockquote>
+<p><strong>图6</strong>：OAT概述。左侧：OAT使用带有寄存器令牌的Transformer编码器、FSQ和嵌套dropout，将连续动作块映射为一个有序的离散令牌序列。右侧：在OAT策略推理期间，令牌被自回归生成，并且可以从任何前缀进行解码。随着生成更多令牌，解码出的动作块被逐步细化。</p>
+</blockquote>
+<p>OAT的核心模块包括：</p>
+<ol>
+<li><strong>带寄存器令牌的Transformer编码器</strong>：编码器接收一个形状为 <code>H_a × D_a</code> 的动作块。为了聚合时间信息并产生固定长度的潜在表示，编码器在输入序列前附加了 <code>H_l</code> 个可学习的寄存器令牌。编码后，这些寄存器令牌的嵌入被提取出来，形成形状为 <code>H_l × D_e</code> 的潜在序列 <code>z</code>，其中 <code>H_l</code> 是目标令牌序列长度，<code>D_e</code> 是嵌入维度。</li>
+<li><strong>有限标量量化</strong>：为了获得离散的令牌，OAT对每个寄存器令牌的嵌入 <code>z_i</code> 应用有限标量量化。FSQ将每个 <code>z_i</code> 投影到一个由 <code>L</code> 个整数值组成的向量，每个维度的值域为 <code>{0, 1, ..., b-1}</code>，从而产生一个基数为 <code>b^L</code> 的离散词汇表。这确保了每个可能的令牌序列都对应一个有效的量化向量，从而保证了完全可解码性。</li>
+<li><strong>顺序诱导训练</strong>：为了在令牌序列中强制建立从左到右的因果顺序，OAT采用了<strong>嵌套dropout</strong>。在训练时，对于每个训练样本，随机选择一个整数 <code>k ∈ {1, ..., H_l}</code>，然后丢弃第 <code>k</code> 个之后的所有寄存器令牌嵌入（即 <code>z_{k+1:H_l}</code>）。解码器则被训练仅根据前 <code>k</code> 个量化后的令牌来重建原始动作块。这迫使模型将最重要的信息编码到前面的令牌中，从而在潜在空间中建立层次结构。</li>
+<li><strong>解码器</strong>：解码器是一个多层感知机，它将量化后的令牌序列（或前缀）映射回重建的动作块 <code>â_{1:H_a}</code>。训练目标是最小化重建动作与原始动作之间的均方误差。</li>
+</ol>
+<p>与现有方法相比，OAT的创新点在于首次通过系统化的设计（寄存器令牌聚合信息、FSQ保证完全解码、嵌套dropout诱导顺序）同时满足了动作分词的三个核心需求。其产生的有序令牌空间自然地支持<strong>基于前缀的解码</strong>：在推理时，自回归策略每生成一个令牌，就可以立即解码得到一个可执行的动作块，随着生成更多令牌，动作保真度逐步提高，实现了计算成本与动作质量之间的灵活权衡。</p>
+<p><img src="https://arxiv.org/html/2602.04215v1/figures/iiwa_rollout_ghosted/1tok.png" alt="从粗到细的动作块重建"><br><img src="https://arxiv.org/html/2602.04215v1/figures/iiwa_rollout_ghosted/2tok.png" alt="从粗到细的动作块重建"><br><img src="https://arxiv.org/html/2602.04215v1/figures/iiwa_rollout_ghosted/4tok.png" alt="从粗到细的动作块重建"><br><img src="https://arxiv.org/html/2602.04215v1/figures/iiwa_rollout_ghosted/8tok.png" alt="从粗到细的动作块重建"><br><img src="https://arxiv.org/html/2602.04215v1/figures/iiwa_rollout_ghosted/gt.png" alt="从粗到细的动作块重建"></p>
+<blockquote>
+<p><strong>图2</strong>：从粗到细的动作块重建。使用不同数量解码令牌（K=1,2,4,8）重建动作块的可视化。早期令牌捕捉运动的粗略全局结构，而额外的令牌逐步细化细节，使轨迹越来越接近真实值。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在四个模拟基准测试和真实世界设置中超过20个任务上进行：</p>
+<ul>
+<li><strong>模拟基准</strong>：LIBERO（长视野任务组合）、Robomimic（复杂操作）、MetaWorld（多任务模拟）、RoboCasa（大规模家庭任务）。</li>
+<li><strong>真实世界</strong>：使用7自由度机械臂进行拾放和堆叠任务。</li>
+<li><strong>实验平台</strong>：使用基于Transformer的自回归策略架构，将OAT作为其动作分词器进行训练和评估。</li>
+</ul>
+<p>对比的基线方法包括：</p>
+<ol>
+<li><strong>分箱</strong>：标准的按维度均匀分箱。</li>
+<li><strong>FAST</strong>：基于离散余弦变换和字节对编码的频率域分词方法。</li>
+<li><strong>VQ</strong>：基于向量量化的学习分词器。</li>
+<li><strong>扩散基线</strong>：扩散策略作为非自回归的生成策略基线。</li>
+</ol>
+<p>关键实验结果如下：</p>
+<ol>
+<li><strong>整体性能</strong>：在LIBERO、Robomimic、MetaWorld和RoboCasa四个基准测试的20个任务上，配备OAT的自回归策略在平均成功率上显著优于所有其他分词方案（分箱、FAST、VQ）以及扩散基线。例如，在LIBERO上，OAT比次优方法（分箱）绝对性能提升超过8%。</li>
+<li><strong>前缀解码的有效性</strong>：实验验证了基于前缀解码的灵活性。在真实世界机械臂任务中，仅使用1个令牌解码（即最短前缀）就能成功完成简单的拾取任务（成功率85%），而使用全部8个令牌则能将堆叠等复杂任务的成功率从40%提高到100%。这证明了OAT在推理时可以在计算成本和任务性能之间进行权衡。</li>
+<li><strong>顺序性的重要性</strong>：消融实验表明，移除嵌套dropout（即“无序OAT”）会导致性能显著下降，在多个任务上平均成功率下降约10-15%。这证实了因果顺序性是实现稳定和可扩展自回归学习的关键因素。</li>
+<li><strong>与扩散模型的比较</strong>：OAT策略在大多数任务上匹配或超过了扩散策略的性能，同时提供了扩散模型所不具备的灵活推理能力（如提前终止、可变长度生成）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.04215v1/x2.png" alt="LIBERO基准结果"></p>
+<blockquote>
+<p><strong>图11</strong>：在LIBERO基准测试上的结果。OAT在所有五个任务序列上的平均成功率最高，超过了其他分词方法和扩散基线。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.04215v1/x3.png" alt="Robomimic基准结果"></p>
+<blockquote>
+<p><strong>图12</strong>：在Robomimic基准测试上的结果。OAT在多个复杂操作任务上表现最佳。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.04215v1/x4.png" alt="消融研究"></p>
+<blockquote>
+<p><strong>图13</strong>：消融研究。比较完整OAT与移除嵌套dropout（无序）的版本。有序性（因果顺序）对性能有显著贡献。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.04215v1/x5.png" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>图14</strong>：真实世界机器人任务结果。展示了使用不同数量解码令牌（前缀长度）时的任务成功率。前缀解码实现了计算与性能的权衡。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：</p>
+<ol>
+<li>形式化并提出了适用于自回归机器人策略的动作分词器应满足的三个关键属性：高压缩率、完全可解码性和因果顺序性。</li>
+<li>提出了有序动作分词器，它通过集成寄存器令牌、有限标量量化和嵌套dropout，首次同时满足了上述三个属性，并实现了基于前缀的解码。</li>
+<li>在广泛的模拟和真实世界任务中实证表明，OAT能够实现更优的性能，并且其引入的顺序性是稳定自回归学习的关键。</li>
+</ol>
+<p>论文提到的局限性包括：OAT目前专注于离线模仿学习设置，其在在线交互或强化学习设置中的有效性尚未探索；此外，FSQ词汇表大小和令牌序列长度等超参数需要根据任务进行调整。</p>
+<p>对后续研究的启示：OAT为自回归机器人学习提供了一个强大且灵活的动作表示基础。其基于前缀解码的特性尤其适用于需要实时调整或计算资源受限的机器人应用。未来的工作可以探索将OAT与更高级的规划算法结合，或者将其扩展到多模态输入和分层策略框架中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对自回归策略在机器人学习中应用时，连续动作的离散化（即动作标记化）问题，提出了一种名为有序动作标记化（OAT）的新方法。该方法旨在满足高压缩率、完全可解码性和因果有序标记空间三个核心需求。OAT利用带寄存器的Transformer、有限标量量化和有序诱导训练机制，将动作块离散化为有序的标记序列。实验表明，在超过20个涵盖仿真和真实世界的任务中，采用OAT的自回归策略在性能上超越了先前的标记化方案和基于扩散的基线方法，同时在推理时提供了显著更高的灵活性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.04215" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

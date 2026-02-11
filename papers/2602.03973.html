@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VLS: Steering Pretrained Robot Policies via Vision-Language Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>VLS: Steering Pretrained Robot Policies via Vision-Language Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.03973" target="_blank" rel="noreferrer">2602.03973</a></span>
+        <span>作者: Ranjay Krishna Team</span>
+        <span>日期: 2026-02-03</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人模仿学习领域的主流方法是基于大规模专家数据训练生成式策略，特别是扩散模型或流匹配模型，它们在训练分布内表现出色。然而，这些预训练策略在面对分布外（OOD）的观察-语言输入时非常脆弱，例如任务执行位置靠近障碍物、支撑面偏移或存在轻微杂物时。这些失败并非因为缺失运动技能，而是因为模仿学习在训练-测试分布偏移下的局限性：动作生成与训练时特定的空间配置和任务规范紧密耦合。通过重新训练或微调来解决这些问题成本高昂且概念上不匹配，因为所需的行为已经存在，只是无法在测试时有选择地适配。</p>
+<p>本文针对预训练策略无法在测试时适应新的空间和语义约束这一具体痛点，提出了一个无需训练、在推理时进行适配的新视角。其核心思路是：将适配视为一个推理时的控制问题，利用视觉语言模型（VLM）合成可微分的奖励函数，在不修改策略参数的情况下，引导预训练扩散或流匹配策略的采样过程，使其生成的动作轨迹满足测试时的空间和任务要求。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>VLS 是一个无需训练的框架，用于在推理时适配冻结的预训练生成式机器人策略。其核心思想是将 OOD 适配视为一个推理时的控制问题，通过引导策略的采样过程来调整动作分布，而不是修改策略参数。</p>
+<p><img src="https://arxiv.org/html/2602.03973v1/figure/Figure21.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：VLS 整体框架。给定一个 OOD 观察-语言对，VLS 利用视觉语言模型（VLM）将其分解为阶段性的子任务，并为每个阶段合成一个可微分的奖励函数。在基础策略（扩散或流匹配模型）的采样（去噪）过程中，VLS 注入基于奖励梯度的引导，使生成的动作轨迹满足 OOD 条件。基础策略的参数保持冻结。</p>
+</blockquote>
+<p>整体流程如下：给定一个 OOD 的观察-语言输入对 <code>(o, l)_OOD</code>，VLS 首先利用 VLM 进行场景理解和任务分解。VLM 将复杂的 OOD 指令和场景解析为一系列阶段性子任务（例如，“将杯子放在桌子边缘”可能分解为“接近杯子”、“抓取杯子”、“移动到边缘”、“放置”）。对于每个阶段，VLM 会合成一个与该阶段空间和语义目标相对应的、可微分的奖励函数 <code>R_i(a, o)</code>。这些奖励函数能够对动作提议 <code>a</code> 相对于当前观察 <code>o</code> 的合意性进行评分。</p>
+<p>核心创新在于将 VLM 合成的奖励梯度注入到基础生成式策略的采样过程中。对于扩散模型，其去噪更新步骤（公式2）被修改为包含一个引导项。具体而言，在去噪过程的每一步 <code>k</code>，除了基础策略预测的噪声 <code>ϵ</code>，VLS 还计算当前动作提议 <code>a^k</code> 相对于奖励函数 <code>R</code> 的梯度 <code>g = ∇_{a^k} R(a^k, o)</code>。这个梯度指明了如何微调动作提议以增加奖励。然后，去噪更新方向被调整为原始去噪方向与奖励梯度的加权和：<code>a^{k-1} = ... + ω * g</code>，其中 <code>ω</code> 是引导权重。对于流匹配模型（公式3），过程类似，速度场 <code>v</code> 的更新会加入奖励梯度项。通过在整个去噪迭代过程中持续施加这种梯度引导，最终采样出的干净动作轨迹 <code>a^0</code> 将倾向于满足 VLM 根据 OOD 条件所定义的奖励函数，从而实现适配。</p>
+<p>与现有方法相比，VLS 的创新点具体体现在：1) <strong>无需训练</strong>：完全在推理时操作，不更新基础策略参数，保留了其鲁棒性。2) <strong>密集、可微分的引导</strong>：利用 VLM 合成轨迹级别的奖励函数，提供连续的梯度信号进行精细控制，优于基于离散选择/拒绝或稀疏反馈的方法（如 ITPS, FOREWARN）。3) <strong>解耦技能与约束</strong>：基础策略作为可重用的运动技能先验，而 VLM 负责解释 OOD 约束并指导技能的执行方式，概念上更清晰。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在仿真和真实世界两个平台上进行。仿真实验使用了 CALVIN 和 LIBERO-PRO 这两个广泛使用的操作测试套件，它们专门用于评估策略在分布外观测-语言输入下的推理时适配能力。</p>
+<p><img src="https://arxiv.org/html/2602.03973v1/figure/CALVINresult.png" alt="CALVIN实验结果"></p>
+<blockquote>
+<p><strong>图2</strong>：在 CALVIN 数据集上的长视野任务成功率对比。VLS 显著优于基线方法 ITPS 和 DynaGuide，取得了最高 31% 的绝对提升。</p>
+</blockquote>
+<p>在 CALVIN 上，VLS 与先前的推理时引导方法进行了对比，包括 ITPS（基于人类交互信号）和 DynaGuide（基于动力学模型引导）。关键实验结果显示，VLS 在长视野任务上取得了最高 31% 的绝对成功率提升， consistently outperforms 其他方法。</p>
+<p><img src="https://arxiv.org/html/2602.03973v1/figure/pi05results.png" alt="LIBERO-PRO实验结果"></p>
+<blockquote>
+<p><strong>图4</strong>：在 LIBERO-PRO 数据集上，VLS 对多种冻结的视觉语言动作（VLA）策略（如 OpenVLA, π0, π0.5变体）的提升效果。在空间（物体布局）和语义（任务规范）扰动下，VLS 带来了最高 13% 的成功率增益。</p>
+</blockquote>
+<p>在 LIBERO-PRO 上，VLS 被应用于提升多种冻结的视觉语言动作策略的性能，包括 OpenVLA、π0 以及 π0.5 的变体。实验评估了在空间扰动（物体布局变化）和语义扰动（任务规范变化）下的表现。结果表明，VLS 为这些基础策略带来了最高 13% 的成功率提升。</p>
+<p><img src="https://arxiv.org/html/2602.03973v1/x1.png" alt="真实世界实验"></p>
+<blockquote>
+<p><strong>图3</strong>：真实世界在 Franka 机器人上的部署示例。VLS 使机器人能够在未见过的物体外观、位置变化和目标替换下，稳定执行多阶段、语言指定的任务。</p>
+</blockquote>
+<p>真实世界实验在 Franka 机器人上进行，验证了 VLS 在实际部署中的有效性。实验表明，VLS 能够使机器人在面对未见过的物体外观、位置变化和目标替换时，稳定地执行由语言指定的多阶段任务。</p>
+<p>论文进行了消融实验，分析了不同组件的重要性。关键发现包括：1) <strong>使用 VLM 进行阶段分解和奖励合成是有效的</strong>，相比于使用固定的、预定义的奖励，能更好地适应多样化的 OOD 指令。2) <strong>在去噪过程中注入密集的奖励梯度是必要的</strong>，仅使用 VLM 进行最终轨迹筛选（类似 FOREWARN）的效果较差，因为样本效率低且无法进行细粒度控制。3) <strong>引导权重 ω 需要仔细调整</strong>，以在遵循基础策略先验和满足 OOD 约束之间取得平衡。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) 提出了 VLS，一个首个将 VLM 与生成式策略的推理时梯度引导相结合，以解决机器人操作中 OOD 适配问题的无需训练框架。2) 方法上，利用 VLM 将 OOD 指令分解并合成为可微分的、阶段性的奖励函数，为扩散/流匹配采样过程提供密集的轨迹级引导。3) 在 CALVIN 和 LIBERO-PRO 基准测试以及真实机器人实验中进行了广泛验证，证明了其相对于现有推理时引导方法的显著性能提升和实际有效性。</p>
+<p>论文自身提到的局限性包括：VLS 的性能依赖于所使用的 VLM 的视觉理解和推理能力；合成奖励函数的质量会直接影响引导效果；此外，方法在计算上引入了额外的开销，因为需要在每个去噪步骤中计算奖励梯度，尽管基础策略参数保持冻结。</p>
+<p>对后续研究的启示：VLS 展示了一种有前景的方向，即利用大型基础模型（如 VLMs）的语义和几何理解能力，为低层策略提供高级、可解释的引导信号，从而实现零样本的适应。未来的工作可以探索更高效或更精确的奖励合成方法，将引导扩展到更长期的规划层次，或者研究如何使引导过程本身更加鲁棒，以应对 VLM 可能产生的错误理解。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对预训练扩散或流匹配机器人策略在遇到障碍物、支撑面偏移或轻微杂乱等分布外场景时性能下降的问题，提出了一种无需训练的推理时适应框架VLS。该方法将适应视为推理时的控制问题，利用视觉语言模型合成轨迹可微的奖励函数，在不修改策略参数的情况下引导去噪过程，使生成的动作轨迹满足测试时的空间与任务要求。实验表明，VLS在CALVIN和LIBERO-PRO基准上分别实现了31%和13%的性能提升，并在真实机器人上验证了其对于测试时空间与语义变化的鲁棒适应能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.03973" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

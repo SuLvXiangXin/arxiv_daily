@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Didactic to Constructive: Turning Expert Solutions into Learnable Reasoning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Didactic to Constructive: Turning Expert Solutions into Learnable Reasoning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.02405" target="_blank" rel="noreferrer">2602.02405</a></span>
+        <span>作者: Alan Ritter Team</span>
+        <span>日期: 2026-02-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>提升大语言模型（LLMs）推理能力的现有主流方法主要依赖于强化学习与可验证奖励（RLVR），即模型通过采样生成解决方案，并根据最终答案的正确性获得奖励。然而，对于当前前沿模型也难以解决的复杂问题，模型无法采样出正确答案，导致无法获得有效的训练信号。另一种思路是利用高质量的人类专家解决方案进行模仿学习，但直接模仿这些数据会失败，因为专家解决方案本质上是分布外（OOD）的：它们通常是说教式的，为了人类读者的可读性而省略了模型推理所需的细粒度中间步骤，并且缺乏模型在RLVR后可能习得的显式搜索动态（如回溯和自我纠正）。这导致标准的行为克隆迫使模型绕过其内部推理过程，造成性能崩溃。本文针对从少量、昂贵、分布外的人类专家解决方案中高效学习通用推理能力这一痛点，提出了分布对齐模仿学习（DAIL）。其核心思路是通过两步法弥合分布差距：首先将专家解决方案转化为模型分布内的详细推理轨迹，然后应用对比学习目标来聚焦于学习专家的洞察和方法，而非表面的捷径。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>DAIL是一个两阶段的离线学习方法，旨在利用小规模高质量专家解决方案数据集 $\mathcal{D}={(x_i, s_i)}$ 提升学生模型 $M_\theta$ 的推理能力。</p>
+<p><img src="https://arxiv.org/html/2602.02405v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：DAIL方法整体框架。左侧展示了如何通过混合策略解码将专家解决方案（包含说教式捷径，如红色部分省略的证明）转化为分布内的详细推理轨迹（绿色部分补充了详细推理）。右侧展示了使用对比学习目标来避免学习转化后轨迹中的合理化捷径（橙色部分为强行合理化）。</p>
+</blockquote>
+<p><strong>第一阶段：生成分布内可学习的推理轨迹</strong><br>目标是为每个专家解决方案 $s$ 生成一个对学生模型 $M_\theta(\cdot|x)$ 而言分布内的版本 $r$，构建合成数据集 $\mathcal{D}<em>{\text{syn}}={(x_i, r_i)}$。关键组件是“特权学生”模型 $M</em>{\text{PS}}(\cdot)=M_{\theta_{\text{ref}}}(\cdot|x, s)$，其中 $\theta_{\text{ref}}$ 是学生模型优化前的冻结初始权重。</p>
+<ul>
+<li><strong>直接采样</strong>：对于非推理指令模型（如Qwen2.5-Instruct），可以直接从特权学生采样 $r_i \sim M_{\text{PS}}(\cdot|r_{&lt;i})$，并通过精心设计的提示词让其填补专家方案中的推理空白。</li>
+<li><strong>混合策略解码</strong>：对于推理模型（如Qwen3 (think)），直接采样生成的轨迹可能不自然地引用专家方案且缺乏自我纠正。因此提出混合策略解码：生成第 $i$ 个token时，首先从学生模型采样 $t \sim M_\theta(\cdot|x, r_{&lt;i})$，然后验证其是否满足 $M_{\text{PS}}(t|r_{&lt;i}) \geq \tau$（$\tau$ 为超参数）。若验证成功，则 $r_i := t$；否则，从特权学生采样 $r_i \sim M_{\text{PS}}(\cdot|r_{&lt;i})$。此方法旨在保留学生自然的推理流程和真实特征，同时利用特权学生将生成锚定在专家解决方案上。</li>
+</ul>
+<p><strong>第二阶段：从基于专家的轨迹中学习</strong><br>获得 $\mathcal{D}_{\text{syn}}$ 后，目标是优化学生模型。直接使用负对数似然（NLL）损失进行行为克隆会迫使模型模仿轨迹中可能存在的“合理化捷径”（即模型为了强行匹配专家方案中的已知中间结果而做出的有缺陷的逻辑跳跃）。</p>
+<ul>
+<li><strong>对比学习目标</strong>：为了惩罚对捷径的模仿，引入一个“负参考”模型 $M_{\text{NR}}(\cdot)=M_{\theta_{\text{ref}}}(\cdot|x, \tilde{s})$，其中 $\tilde{s}$ 是通过正则表达式从专家方案 $s$ 中删除中间推理、仅保留关键数值/符号结果（路径点）得到的部分解决方案。条件化于这些路径点会使模型倾向于跳过逐步逻辑推导。</li>
+<li><strong>损失函数</strong>：最终的优化目标是以下对比损失：<br>$\mathcal{L}(\theta)=\mathbb{E}<em>{(x,r)\sim\mathcal{D</em>{\text{syn}}}}\Bigg[\sum_{t=1}^{|r|}\Big(D_{\text{KL}}\big(M_{\theta}(\cdot|x,r_{&lt;t})\parallel M_{\text{PS}}(\cdot|r_{&lt;t})\big) -\gamma D_{\text{KL}}\big(M_{\theta}(\cdot|x,r_{&lt;t})\parallel M_{\text{NR}}(\cdot|r_{&lt;t})\big)\Big)\Bigg]$<br>其中 $D_{\text{KL}}$ 是令牌级KL散度，$\gamma$ 是超参数。该目标鼓励学生模型的输出分布接近特权学生（包含完整信息），同时远离负参考模型（代表捷径行为）。</li>
+</ul>
+<p><strong>创新点</strong>：1) 通过特权学生和混合策略解码，将OOD的专家方案转化为模型分布内的详细推理轨迹，解决了“说教式捷径”问题。2) 设计了基于负参考模型的对比损失，专门用于抑制对“合理化捷径”的学习，提升了模型的泛化推理能力。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>模型</strong>：Qwen2.5-Instruct（非推理模型）和 Qwen3 (think)（推理模型）。</li>
+<li><strong>数据集</strong>：<ul>
+<li>对于Qwen2.5-Instruct：使用一个竞赛数学问题数据集，其中模型即使重复采样也无法解决（pass@k=0）。</li>
+<li>对于Qwen3 (think)：使用一个新收集的由国际数学奥林匹克教练编写的奥林匹克证明数据集（已公开）。</li>
+</ul>
+</li>
+<li><strong>评估基准</strong>：AIME 2024/2025、Beyond AIME、IMO-AnswerBench、GPQA-diamond（用于跨域泛化）。</li>
+<li><strong>对比基线</strong>：标准行为克隆（BC）、拒绝采样微调（RFT）、强化学习与可验证奖励（RLVR）等。</li>
+<li><strong>数据规模</strong>：训练使用的专家解决方案少于1000个。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br><img src="https://arxiv.org/html/2602.02405v1/x2.png" alt="主要结果"></p>
+<blockquote>
+<p><strong>图2</strong>：在AIME 2024测试集上的pass@1结果。DAIL在Qwen2.5-Instruct和Qwen3 (think)上均显著优于标准行为克隆（BC）和拒绝采样微调（RFT），分别取得了约10%和15%的绝对提升。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.02405v1/x3.png" alt="扩展结果"></p>
+<blockquote>
+<p><strong>图3</strong>：在多个数学推理基准上的pass@k（k=1,10,40）结果。DAIL consistently outperforms baselines，在Beyond AIME和IMO-AnswerBench上对Qwen3 (think)带来高达15%的pass@1提升。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.02405v1/x4.png" alt="效率与泛化"></p>
+<blockquote>
+<p><strong>图4</strong>：左图显示DAIL训练后的模型能以2倍到4倍更少的令牌数达到或超过未训练模型的性能，体现了推理效率的提升。右图显示DAIL在跨领域的GPQA-diamond基准上也能实现泛化提升。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.02405v1/x5.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图5</strong>：消融实验。移除对比损失（仅用NLL）或使用直接采样而非混合策略解码，性能均会下降，验证了DAIL两个核心组件的必要性。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：</p>
+<ol>
+<li><strong>对比损失的作用</strong>：移除对比损失（即 $\gamma=0$）会导致性能显著下降，说明其对于防止学习合理化捷径至关重要。</li>
+<li><strong>混合策略解码的作用</strong>：对于Qwen3 (think)，用直接采样替代混合策略解码会损害性能，表明保留学生自然推理流程对生成高质量轨迹很重要。</li>
+<li><strong>数据规模的影响</strong>：即使仅使用250个专家样本，DAIL也能带来明显增益，体现了其样本高效性。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了分布对齐模仿学习（DAIL），一种新颖的两阶段方法，成功地将高质量但分布外的人类专家解决方案转化为模型可学习的训练信号。</li>
+<li>设计了混合策略解码来生成分布内推理轨迹，以及基于负参考模型的对比损失来抑制对表面捷径的学习，从而实现了从少量专家数据中学习通用推理能力。</li>
+<li>在多个高难度数学推理基准上验证了DAIL的有效性，仅用少于1000个样本即实现了10-25%的pass@k提升，同时提升了推理效率并展示了跨域泛化能力。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，生成合成轨迹 $\mathcal{D}_{\text{syn}}$ 的过程依赖于初始学生模型的质量。如果初始模型能力非常有限，生成的轨迹质量可能不高，从而限制学习效果。此外，构建负参考模型所需的路径点提取（$\tilde{s}$）目前依赖于特定领域（如数学）的启发式方法（正则表达式），可能不易直接推广到其他领域。</p>
+<p><strong>启示</strong>：DAIL为利用昂贵、小规模专家数据提升模型复杂推理能力开辟了新途径，特别是在模型自身难以探索出正确解的问题上。其核心思想——先对齐分布再针对性学习——可能适用于其他需要从人类高级、抽象演示中学习的任务。未来的工作可以探索更通用的路径点提取方法，以及将DAIL框架应用于数学之外的复杂推理领域。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对大语言模型难以直接模仿专家解题步骤进行推理训练的问题，提出了一种名为分布对齐模仿学习（DAIL）的两步方法。该方法首先将专家提供的教学式解答转化为详细的、符合模型分布的推理轨迹，然后通过对比学习目标让模型专注于学习专家的核心思路与方法。实验表明，仅使用不到1000个高质量专家解答，DAIL就能使Qwen2.5-Instruct和Qwen3模型在pass@k指标上提升10-25%，推理效率提高2到4倍，并具备良好的跨领域泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.02405" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

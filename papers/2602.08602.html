@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Mimic Intent, Not Just Trajectories - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Mimic Intent, Not Just Trajectories</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.08602" target="_blank" rel="noreferrer">2602.08602</a></span>
+        <span>作者: Panpan Cai Team</span>
+        <span>日期: 2026-02-09</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人灵巧操作领域的主流方法是视觉-语言-动作模型，它们通过生成建模和预训练直接从视觉观察和语言指令映射到连续控制命令，在封闭场景中取得了显著成功。然而，这些方法在面对环境变化和新任务实例时泛化能力较差。本文认为，其关键局限性在于它们模仿的是原始轨迹信号，而没有建模动作序列背后的“行为意图”，导致策略过度拟合演示中的表面相关性，而非捕获控制任务执行的根本意图。</p>
+<p>现有基于动作标记化的方法虽然将连续轨迹映射到离散潜在表示，但其主要作为压缩机制，学习目标通常与动作语义无关，未能显式约束标记空间与可解释的行为概念（如意图）对齐。即使采用多尺度或分层标记化，粗粒度表示的语义也未被约束。</p>
+<p>本文针对“模仿轨迹而非意图”这一具体痛点，提出了从频谱分解的新视角显式解耦行为意图与执行细节。核心思路是：通过多尺度频域动作标记化，强制对动作块表示进行频谱分解，使最粗的标记捕获低频全局结构（意图），更细的标记编码高频细节（执行），从而实现意图与执行的解耦，并支持高效的意图到执行推理与单样本技能迁移。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>MINT是一个两阶段模仿学习框架，包含一个频谱解耦动作标记器和一个基于该标记空间的策略。</p>
+<p><img src="https://arxiv.org/html/2602.08602v1/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图1</strong>：频谱解耦动作标记器概览。左侧：多尺度分层标记化过程，将动作块编码为从粗（意图）到细（执行）的K个尺度的标记。右侧：在频域中的渐进重建约束，强制不同尺度的标记关注频谱的不同部分（意图标记关注低频，执行标记关注高频）。</p>
+</blockquote>
+<p><strong>第一阶段：频谱解耦动作标记器</strong><br>SDAT基于VQ-VAE架构，旨在从演示轨迹中学习结构化的离散多尺度动作表示。具体流程如下：</p>
+<ol>
+<li><strong>输入与预处理</strong>：将轨迹分割为重叠的动作块。每个动作块 $\mathbf{A} \in \mathbb{R}^{H \times D}$ 通过离散余弦变换从时域转换到频域，得到频谱表示 $\mathbf{F}$。</li>
+<li><strong>编码与量化</strong>：动作编码器 $\mathcal{E}$ 将动作块映射为潜在嵌入 $f$。一个共享的量化器通过向量量化将该嵌入映射到K个不同尺度的离散标记 $(S_1, S_2, ..., S_K)$。最粗尺度 $S_1$ 仅包含一个标记（意图标记），后续更细尺度包含更多标记以捕获残差信息（执行标记）。</li>
+<li><strong>核心训练目标 - 频域渐进重建</strong>：这是实现解耦的关键。训练时，模型被要求依次使用：仅 $S_1$、$S_1+S_2$、...、直到所有K个尺度的标记，来重建动作块的频域表示 $\mathbf{F}$。该约束强制 $S_1$ 必须捕获主导的低频成分以最小化初始重建误差，而更细的标记则专门用于建模高频残差，从而在频谱上实现意图与执行的分离。</li>
+<li><strong>辅助目标</strong>：同时使用所有尺度的标记进行时域重建，以确保执行细节的忠实恢复。</li>
+</ol>
+<p><strong>第二阶段：MINT策略</strong><br>策略以当前视觉观察、语言指令和机器人本体感知状态为输入，输出动作轨迹。</p>
+<p><img src="https://arxiv.org/html/2602.08602v1/x2.png" alt="策略框架"></p>
+<blockquote>
+<p><strong>图2</strong>：MINT策略概述。(a) 策略以从粗到细的方式自回归地预测K个时间尺度的动作标记，然后通过解码器映射为连续轨迹。(b) 基于意图的动作集成确保时间一致性和平滑的行为过渡。</p>
+</blockquote>
+<ol>
+<li><strong>架构</strong>：包含一个视觉-语言主干网络和一个动作专家模块。主干网络编码视觉和语言输入。动作专家以这些特征和机器人状态为条件，执行从粗到细尺度的自回归标记预测：在尺度内并行生成所有标记，但在尺度间保持自回归（即先预测 $S_1$，再以 $S_1$ 为条件预测 $S_2$，依此类推）。</li>
+<li><strong>解码与执行</strong>：预测出的多尺度标记被送入从SDAT继承的解码器，生成连续的动作轨迹。</li>
+<li><strong>变体与迁移</strong>：训练了语言条件版本（用于标准评估）和无语言版本（MINT-Zero，用于单样本迁移）。在迁移设置中，从单次演示中提取其意图标记（$S_1$），并在策略生成时固定该标记，策略仅需基于此意图生成适应新环境的执行标记。</li>
+<li><strong>模型规模</strong>：提出了30M参数（从头训练）和4B参数（使用预训练视觉-语言主干）两种变体。</li>
+</ol>
+<p><strong>创新点</strong>：与现有方法相比，MINT的核心创新在于通过<strong>频域渐进重建目标</strong>显式、原则性地解耦意图与执行，而非依赖启发式或事后解释。这使意图标记成为可重用、可注入的任务规范，实现了高效的意图到执行推理和单样本技能迁移。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准测试</strong>：LIBERO、MetaWorld、CALVIN以及更具挑战性的LIBERO-Plus（包含更强干扰）。</li>
+<li><strong>对比方法</strong>：预训练VLA模型（$\pi_{0.5}$）、基于动作标记化的方法（UniVLA）、经典模仿学习方法（ACT, Diffusion Policy）以及强基线OpenVLA-OFT。</li>
+<li><strong>评估指标</strong>：任务成功率、推理效率、抗干扰鲁棒性、单样本迁移性能。</li>
+<li><strong>真实机器人</strong>：在实体机器人系统上验证。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2602.08602v1/exp_ret.png" alt="主要结果"></p>
+<blockquote>
+<p><strong>图3</strong>：在LIBERO和LIBERO-Plus基准上的主要性能对比。MINT在多个任务系列上取得了最高的平均成功率。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>标准基准性能</strong>：在LIBERO、MetaWorld和CALVIN上，MINT达到了最先进的性能，超越了所有基线。</li>
+<li><strong>鲁棒性</strong>：在LIBERO上训练，在包含更强干扰的LIBERO-Plus上评估时，MINT表现出显著提升的鲁棒性，比最强基线OpenVLA-OFT的成功率高15%。</li>
+<li><strong>单样本技能迁移</strong>：利用意图级表示，MINT实现了单样本技能迁移。在未见过的任务和环境上，仅凭一次演示，其迁移性能比基线高60%。</li>
+<li><strong>真实机器人实验</strong>：MINT有效迁移到物理系统，每个任务仅需约20次演示，性能比最强基线（$\pi_{0.5}$）高29%。</li>
+<li><strong>推理效率</strong>：得益于从粗到细的生成过程，MINT的推理速度比Diffusion Policy快3倍。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.08602v1/x3.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图4</strong>：消融研究。(a) 不同标记化方法的比较，显示频谱解耦（Ours）在意图捕获和执行重建上均优于时域方法。(b) 渐进预测（Coarse-to-Fine）与并行预测（Parallel）的对比，表明渐进预测能带来显著性能提升。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：</p>
+<ul>
+<li><strong>频谱解耦 vs. 时域重建</strong>：使用频域渐进重建目标的SDAT，在意图捕获（低频重建误差低）和执行细节重建（时域重建误差低）上均优于仅在时域进行重建的基线方法。</li>
+<li><strong>渐进预测的重要性</strong>：策略采用从粗到细的渐进预测方式，相比并行预测所有尺度标记，带来了显著的性能提升。</li>
+<li><strong>模型规模</strong>：更大的4B参数模型（MINT-4B）相比30M参数模型（MINT-30M）性能更优。</li>
+<li><strong>动作集成</strong>：基于意图的动作集成机制（图2b）增强了长时程任务中的时间一致性和稳定性。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2602.08602v1/x5.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图5</strong>：单样本迁移的定性示例。从源任务演示中提取意图标记，并成功注入到策略中，使机器人能在目标任务（具有不同物体布局）中执行相似意图的行为。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了MINT框架，通过<strong>多尺度频域动作标记化</strong>，首次在端到端模仿学习中实现了行为意图与执行细节的<strong>显式、原则性解耦</strong>。</li>
+<li>设计了一种<strong>渐进意图到执行推理</strong>的策略，通过从粗到细的自回归标记预测，提升了学习效率和长时程生成的稳定性。</li>
+<li>证明了<strong>意图标记作为可移植任务规范</strong>的有效性，实现了高效的<strong>单样本技能迁移</strong>，并在多个仿真基准和真实机器人上展示了卓越的性能、鲁棒性和泛化能力。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，当前方法依赖于演示数据中意图与执行在频谱上的可分离性假设。对于频谱特征不明显的复杂行为，解耦效果可能受限。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>解耦表示学习</strong>：为机器人学习提供了一种新的表示学习范式，即通过设计特定的归纳偏置（如频谱分解）来获得可解释、可迁移的抽象表示。</li>
+<li><strong>技能组合与规划</strong>：意图标记作为一种紧凑的中间表示，有望用于更高层的任务规划、技能组合或与大型语言模型的交互。</li>
+<li><strong>数据效率</strong>：该方法展示了通过理解意图而非单纯模仿轨迹，可以大幅提升数据效率和跨任务泛化能力，为样本高效的机器人学习指明了方向。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对模仿学习中仅模仿轨迹而忽略行为意图，导致模型适应性差、技能迁移困难的问题，提出MINT方法。其核心是通过多尺度频域分词技术，将动作块表征分解为捕获低频全局结构的抽象意图令牌和编码高频细节的多尺度执行令牌。基于此层次结构，策略通过下一尺度自回归进行渐进式意图到执行的推理。该方法实现了单样本技能迁移，并在多个操作基准和真实机器人实验中取得了最优成功率，展现出卓越的推理效率、抗干扰鲁棒性和有效的单次迁移能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.08602" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

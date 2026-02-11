@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>World-Gymnast: Training Robots with Reinforcement Learning in a World Model - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>World-Gymnast: Training Robots with Reinforcement Learning in a World Model</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.02454" target="_blank" rel="noreferrer">2602.02454</a></span>
+        <span>作者: Sherry Yang Team</span>
+        <span>日期: 2026-02-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人通过与物理世界交互进行学习，从根本上受到物理交互成本的瓶颈制约。目前两种主流替代方案各有局限：基于专家演示的监督微调受限于可用专家数据的数量，且难以覆盖长尾场景和恢复行为；基于软件模拟器的强化学习则面临高昂的仿真构建成本以及因视觉特征差异导致的“模拟到现实”差距。近期，从真实世界视频-动作数据中学习的世界模型崭露头角，它们能够预测机器人动作下的视觉世界演变，成为一种基于真实数据学习的、动作条件化的视频模拟器。本文针对的核心痛点是：在世界模型中训练机器人策略，是否比监督学习或软件模拟器中的强化学习更能提升真实机器人的性能？本文提出World-Gymnast框架，其核心思路是：在一个从真实数据学习的世界模型中进行策略展开，并使用视觉语言模型计算任务完成奖励，以此对视觉-语言-动作策略进行强化学习微调。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>World-Gymnast的整体框架是一个模型基础的强化学习流程，其目标是优化一个视觉-语言-动作策略 $\pi_{\theta}$，该策略以初始观察图像 $o_0$ 和语言任务指令 $g$ 为输入，输出机器人动作。</p>
+<p><img src="https://arxiv.org/html/2602.02454v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：World-Gymnast 概述。策略在由初始帧和语言指令指定的任务上进行训练。训练时，策略输出动作，传递给世界模型以生成想象的轨迹展开。这些展开轨迹随后传递给视觉语言模型，后者返回二元任务完成奖励。此奖励用于更新策略。训练完成后，我们使用 AutoEval 设置在真实机器人上评估策略。来自 AutoEval 的真实世界轨迹可用于进一步改进特定环境下的世界模型。</p>
+</blockquote>
+<p>具体流程如下：对于给定的任务指令 $g$ 和初始观察 $o_0$，策略 $\pi_{\theta}$ 在世界模型 $\hat{T}$（本文采用 Quevedo 等人 (2025) 的 WorldGym 模型）中展开 $K$ 条独立轨迹。每一步，策略根据当前观测采样动作 $a_{t,k} \sim \pi_{\theta}(\cdot|o_{t,k}, g)$，世界模型则预测下一帧观测 $o_{t+1,k} \sim \hat{T}(o_{t,k}, a_{t,k})$，直至达到预设的视野长度 $H$，得到轨迹 $\tau_k$。随后，一个视觉语言模型奖励函数 $\hat{R}$（本文使用 GPT-4o）为每条轨迹分配一个二元任务完成奖励 $r_k = \hat{R}(\tau_k, g)$。</p>
+<p>其核心优化算法采用分组相对策略优化。首先，计算一个组（$K$ 条轨迹）内奖励的均值 $\mu$ 和标准差 $\sigma$，然后通过归一化计算每条轨迹的优势值 $\hat{A}<em>k = (r_k - \mu) / (\sigma + \epsilon)$。该轨迹级优势值被赋予轨迹内的每个时间步。最后，使用基于 PPO 风格的裁剪目标函数 $\mathcal{J}(\theta)$ 来更新策略参数 $\theta$，其中包含了概率比 $r</em>{t,k}(\theta)$ 和裁剪操作。</p>
+<p>与现有方法相比，World-Gymnast 的创新点不仅在于将世界模型和 VLM 作为动力学和奖励函数融入模型基础 RL，更体现在其利用世界模型特性所支持的一系列新颖训练范式：</p>
+<ol>
+<li><strong>从任意帧训练</strong>：世界模型仅需单张初始帧即可展开，使得策略可以从任何接近其训练分布的图像开始进行 RL 训练，极大地扩充了有效训练数据，并有助于学习恢复行为。</li>
+<li><strong>在新颖语言指令上训练</strong>：通过 VLM 为同一初始帧生成合理的、分布外的任务指令，使策略能在这些新指令上进行 RL 训练，从而学习与环境中已有但未在演示中交互过的物体进行互动。</li>
+<li><strong>使用干扰物训练</strong>：利用图像编辑工具在输入帧中合成额外的物体作为视觉干扰，训练策略在杂乱场景中的鲁棒性。</li>
+<li><strong>测试时训练</strong>：当在测试时遇到一个新颖的真实场景帧时，可以直接以此帧为起点，在世界模型中进行快速的 RL 微调，实现策略的快速适应。</li>
+<li><strong>迭代的世界模型与策略改进</strong>：受经典 Dyna 算法启发，可以将策略在真实世界（或世界模型）中收集的新轨迹数据用于微调世界模型，再用更新后的、更准确的世界模型来优化策略，形成一个数据飞轮。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：评估在 Bridge 机器人平台上进行，使用 AutoEval 自动化真实机器人评估框架（支持 4 个任务）。基模型为在 BridgeData V2 上微调后的 OpenVLA-OFT。世界模型采用在 Open X-Embodiment 数据集上预训练的 600M 参数版 WorldGym。奖励模型为 GPT-4o。训练使用 4 块 H200 GPU 进行 1-2 天的全参数微调。</p>
+<p><strong>基线对比</strong>：</p>
+<ol>
+<li><strong>软件模拟器</strong>：SIMPLER，一个为 Bridge 创建的真实到模拟框架。</li>
+<li><strong>监督学习</strong>：SFT（基模型）和 Iter-SFT（在 SFT 基础上，额外使用世界模型生成的成功合成轨迹进行迭代监督微调）。</li>
+</ol>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2602.02454v1/x2.png" alt="定性评估"></p>
+<blockquote>
+<p><strong>图2</strong>：在带有干扰物的 WorldGym 中策略展开的定性评估。在视觉干扰下，SFT 策略明显抓取了错误的物体，而两个 World-Gymnast 变体都能正确执行任务。World-Gymnast-Distract 具有更好的抓取和放置动作。</p>
+</blockquote>
+<p>表1和表2展示了真实机器人成功率对比。World-Gymnast 在“打开抽屉”（58% vs. 34%）、&quot;将茄子放入蓝色水槽&quot;（72% vs. 32%）和“将茄子放入黄色篮子”（78% vs. 40%）任务上显著优于 SIMPLER。与监督学习方法相比，World-Gymnast 在“将茄子放入蓝色水槽”（72% vs. 4%）和“将茄子放入黄色篮子”（78% vs. 8%）任务上分别取得了高达 18 倍和近 10 倍的性能提升。Iter-SFT 在困难任务上略有改进，但在简单任务上性能下降，表明 RL 通过主动探索能学到更具泛化性的行为。</p>
+<p><strong>多样化训练场景评估</strong>：如表3所示，通过在训练数据中增加带有干扰物的帧（World-Gymnast-Distract）、增加新颖语言指令任务（World-Gymnast-Language）或直接增加更多训练任务（World-Gymnast-Scaled），策略在原始任务上的成功率均得到进一步提升（从 World-Gymnast 的 74% 最高提升至 81%），证明了利用世界模型进行数据扩增的有效性。</p>
+<p><strong>测试时优化评估</strong>：仅使用测试帧和指令进行零样本的测试时训练，能将“关闭抽屉”任务的真实成功率从 62% 提升至 100%，但会损害其他任务性能，存在过拟合问题。</p>
+<p><strong>迭代改进评估</strong>：</p>
+<p><img src="https://arxiv.org/html/2602.02454v1/x3.png" alt="迭代改进对比"></p>
+<blockquote>
+<p><strong>图3</strong>：在真实机器人、软件模拟器 SIMPLER、原始 WorldGym 以及经过在线世界模型更新后的 World-Gymnast 上执行相同动作序列的定性对比。经过 Dyna 式迭代更新后的 World-Gymnast 展开更贴近真实世界。</p>
+</blockquote>
+<p>通过收集约 100 条真实机器人轨迹微调世界模型后，其生成的展开在视觉上比 SIMPLER 和原始 WorldGym 更接近真实情况，表明迭代改进能提升世界模型的质量。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了 World-Gymnast 框架，首次系统性地论证了在世界模型中进行 RL 微调，能够显著超越监督微调和软件模拟器 RL，在真实机器人任务上取得更优性能。</li>
+<li>展示了利用世界模型特性所支持的一系列创新训练范式，包括从任意帧训练、处理新颖指令和视觉干扰、测试时训练以及迭代的模型-策略改进，极大地扩展了机器人策略训练的灵活性和数据效率。</li>
+<li>通过实验验证了这些范式能够有效提升策略的鲁棒性和泛化能力。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到测试时训练可能导致对单一任务的过拟合；此外，世界模型本身可能存在幻觉问题，这会影响迭代 SFT 等方法的性能。</p>
+<p><strong>启示</strong>：本文结果表明，学习世界模型并在其中进行“云端”策略训练，可能是弥合“仅在演示中工作的机器人”与“能在任何家庭中工作的机器人”之间差距的关键。未来工作可探索如何减轻测试时训练的过拟合，以及如何更有效地利用世界模型进行持续学习和适应。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文旨在解决机器人学习中物理交互成本高昂的瓶颈问题。传统方法如专家监督微调(SFT)和软件模拟器强化学习(RL)分别受限于数据稀缺和仿真与现实间的差距。论文提出World-Gymnast方法，其核心是通过在基于真实数据训练的动作条件视频世界模型中执行策略展开，并利用视觉语言模型(VLM)对展开结果进行奖励，从而对视觉-语言-动作(VLA)策略进行RL微调。在Bridge机器人实验中，该方法性能超越SFT高达18倍，超越软件模拟器高达2倍，并展现出利用世界模型进行多样化指令训练、场景泛化等新兴能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.02454" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
