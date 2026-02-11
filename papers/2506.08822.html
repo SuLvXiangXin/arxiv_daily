@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FreqPolicy: Efficient Flow-based Visuomotor Policy via Frequency Consistency - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>FreqPolicy: Efficient Flow-based Visuomotor Policy via Frequency Consistency</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.08822" target="_blank" rel="noreferrer">2506.08822</a></span>
+        <span>作者: Jian Tang Team</span>
+        <span>日期: 2025-06-10</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于生成建模的视觉运动策略（如扩散策略和流匹配策略）因其能建模多模态动作分布而在机器人操作中广泛应用。然而，这些方法依赖于从噪声到动作的迭代采样过程，导致推理延迟高，成为实时机器人系统部署的瓶颈。为加速推理，现有工作主要借鉴为图像生成开发的加速技术（如一致性模型、一致性-FM），但忽略了一个根本区别：图像生成通常产生时间上独立的样本，而机器人操作需要生成具有连续性和时序一致性的时间序列动作轨迹。因此，本文针对现有加速方法未能有效利用动作序列时序信息这一痛点，提出从频率一致性的新视角来加速流匹配策略。其核心思路是：将动作块视为时序信号，在频域对不同时间步的动作速度向量施加一致性约束，并设计自适应频率分量损失，从而在利用时序知识的同时，实现高效、高质量的单步动作生成。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>FreqPolicy的整体目标是在流匹配框架下，通过引入频域约束，使学习到的概率流更“直”，从而支持从噪声到目标动作的单步确定性映射。</p>
+<p><img src="https://arxiv.org/html/2506.08822v1/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图1</strong>：FreqPolicy概述。a) 训练阶段：使用频率一致性约束在频域对齐不同时间步的速度向量，并引入自适应频率分量损失以适应操作任务中多样的频率结构。b) 推理阶段：FreqPolicy接收2D或3D观测输入，直接预测动作的速度向量作为输出。</p>
+</blockquote>
+<p><strong>整体流程与任务设定</strong>：任务设定为模仿学习，给定包含观测 ( \mathcal{O} ) 和专家动作 ( \mathcal{A} ) 的数据集 ( \mathcal{D} )，目标是训练一个流匹配策略 ( \pi_\theta(a_{1:H}|o) ) 来映射观测到动作块 ( a_{1:H} )。FreqPolicy的推理过程是单步的：给定观测 ( o ) 和从先验分布采样的初始噪声 ( a_0 )，策略网络直接输出预测的速度向量 ( v_\theta )，通过 ( a_1 = a_0 + v_\theta ) 一步生成目标动作。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><p><strong>基础流匹配学习目标</strong>：遵循最优传输理论下的流匹配，目标是让策略网络 ( v_\theta(t, a_t) ) 逼近真实条件速度场 ( u(t, a_t) = a_1 - a_0 )。损失函数为：<br>[<br>\mathcal{L}<em>{\text{fm}} = \mathbb{E}</em>{t, (a_0,a_1)} | v_\theta(t, a_t) - (a_1 - a_0) |_2<br>]<br>其中 ( a_t = (1-t)\cdot a_0 + t\cdot a_1 )。仅优化此目标仍需多步采样。</p>
+</li>
+<li><p><strong>频率一致性约束目标</strong>：这是实现单步生成的核心创新。受时序预测和语音处理启发，频域特征能更好地建模非平稳和振荡模式。具体而言，给定一对 ( (a_0, a_1) )，随机选择两个时间步 ( s, r \in [0,1] )，计算对应的插值状态 ( a_s, a_r )。策略网络预测这两个状态下的速度向量 ( v_\theta(s, a_s) ) 和 ( v_\theta(r, a_r) )。关键步骤是将这两个速度向量通过快速傅里叶变换（FFT）转换到频域，得到频域特征 ( \mathcal{F}(v_\theta(s, a_s)) ) 和 ( \mathcal{F}(v_\theta(r, a_r)) )。损失函数约束这些频域特征对齐：<br>[<br>\mathcal{L}<em>{\text{freq}} = \mathbb{E}</em>{s,r, (a_0,a_1)} | \mathcal{F}(v_\theta(s, a_s)) - \mathcal{F}(v_\theta(r, a_r)) |_2<br>]<br>该约束迫使流上任意两点速度的频域表示一致，从而促进整个概率流变直，使得从 ( a_0 ) 到 ( a_1 ) 的转移可以通过单步完成。</p>
+</li>
+<li><p><strong>自适应频率分量损失</strong>：机器人操作序列中，动作块的频率分量分布随时间变化（例如，低动态移动与高动态接触）。为了有效捕捉这种结构化的时序变化，受Focal Loss启发，设计了自适应加权方案。首先计算频域特征间的差值 ( D = |\mathcal{F}(v_\theta(s, a_s)) - \mathcal{F}(v_\theta(r, a_r))| )。然后根据差值大小动态分配权重，对差异更大的频率分量给予更高关注：<br>[<br>\mathcal{L}<em>{\text{adapt}} = \mathbb{E}</em>{s,r, (a_0,a_1)} | w(D) \odot D |_2<br>]<br>其中 ( w(D) ) 是依赖于差值 ( D ) 的自适应权重向量。这使模型能专注于学习动作序列中变化最显著的部分。</p>
+</li>
+</ol>
+<p><strong>总训练目标与创新点</strong>：FreqPolicy的总训练损失是上述三者的加权和：( \mathcal{L}<em>{\text{total}} = \mathcal{L}</em>{\text{fm}} + \lambda_1 \mathcal{L}<em>{\text{freq}} + \lambda_2 \mathcal{L}</em>{\text{adapt}} )。与现有方法（如FlowPolicy）相比，其创新点具体体现在：1) <strong>视角创新</strong>：首次将动作块视为时序信号，并利用其频域特性进行正则化。2) <strong>方法创新</strong>：提出了频率一致性约束目标，在频域而非时域对齐速度，以建模时序动态；并设计了自适应频率分量损失来捕捉非平稳的时序结构变化。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在3个模拟基准测试（RoboMimic、MetaWorld、ManiSkill2）的共53个任务上评估，涵盖2D图像和3D点云观测输入。实验平台未具体说明。</p>
+<p><strong>对比方法</strong>：与多种单步动作生成器对比，包括：Consistency Policy (CP)、ManiCM、OneDP、SDM、FlowPolicy，以及多步采样的流匹配基线（PI0、GR00T N1）。</p>
+<p><strong>关键定量结果</strong>：</p>
+<ul>
+<li><strong>总体性能</strong>：在MetaWorld上，FreqPolicy达到84.2%的平均成功率，显著优于其他单步生成器（CP: 81.3%, FlowPolicy: 80.3%），甚至与需要多步采样的教师模型PI0（84.8%）性能相当。</li>
+<li><strong>仿真综合</strong>：在三个基准的53个任务上，FreqPolicy在34个任务上取得最佳性能，平均排名第一。</li>
+<li><strong>VLA模型集成</strong>：将FreqPolicy集成到视觉-语言-动作模型PI0中，在Libero的40个任务上，实现了5倍的推理加速（从<del>20Hz到</del>100Hz），且任务性能没有下降。</li>
+<li><strong>现实世界效率</strong>：在现实机器人场景中，FreqPolicy实现了93.5 Hz的推理频率。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2506.08822v1/x2.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图2</strong>：在ManiSkill2任务上的定性结果。FreqPolicy生成的动作轨迹（红色）与专家演示（绿色）高度一致，且比基线方法FlowPolicy更平滑、更准确。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.08822v1/x3.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图3</strong>：在MetaWorld任务上的消融实验。同时使用频率一致性损失 ( \mathcal{L}<em>{\text{freq}} ) 和自适应损失 ( \mathcal{L}</em>{\text{adapt}} ) 能取得最佳性能（84.2%），移除任一组件性能都会下降。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.08822v1/x4.png" alt="组件贡献分析"></p>
+<blockquote>
+<p><strong>图4</strong>：不同损失组件对动作预测误差的贡献。频率一致性约束（Freq）是减少误差的主要贡献者，自适应加权（Adapt）进一步优化了性能。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.08822v1/x5.png" alt="方法对比"></p>
+<blockquote>
+<p><strong>图5</strong>：与现有单步生成方法在MetaWorld上的对比。FreqPolicy在成功率和推理速度（FPS）的权衡上表现最优。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.08822v1/x6.png" alt="任务成功率"></p>
+<blockquote>
+<p><strong>图6</strong>：在RoboMimic和MetaWorld各个任务上的详细成功率。FreqPolicy在大多数任务上领先或与其他最佳方法持平。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.08822v1/x7.png" alt="VLA加速"></p>
+<blockquote>
+<p><strong>图7</strong>：将FreqPolicy集成到VLA模型PI0后的性能。在保持任务成功率不变的情况下，推理速度（FPS）得到大幅提升。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.08822v1/x8.png" alt="现实世界测试"></p>
+<blockquote>
+<p><strong>图8</strong>：现实世界机器人操作测试。FreqPolicy能高效、准确地完成“放置葡萄”和“堆叠积木”等长视野任务。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：消融实验（图3，4）表明：1) <strong>频率一致性约束（( \mathcal{L}_{\text{freq}} \）</strong> 是性能提升的关键，其贡献最大，直接促进了流的笔直化。2) <strong>自适应频率分量损失（( \mathcal{L}_{\text{adapt}} \）</strong> 提供了进一步的增益，通过动态关注变化显著的频率分量，更好地建模了动作序列的非平稳特性。两者结合实现了最佳效果。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>首个</strong>将时序知识明确用于机器人操作的单步视觉运动策略FreqPolicy，通过频域一致性约束有效利用了动作轨迹的时间结构。</li>
+<li>引入了<strong>频率一致性约束目标</strong>，在频域对齐流上不同点的动作速度，以促进单步生成；并设计了<strong>自适应频率分量损失</strong>，以捕捉操作任务中固有的结构化时序变化。</li>
+<li>在仿真（53个任务）和现实世界中进行了广泛验证，证明了其优于现有单步生成器的性能与效率，并能无缝集成到VLA模型中实现显著加速。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，所提出的频率一致性方法可能更适用于展现一定周期性或平滑过渡的动作模式。对于完全非周期性或具有突发、剧烈变化的动作序列，其有效性可能需要进一步验证或调整。</p>
+<p><strong>后续研究启示</strong>：</p>
+<ol>
+<li><strong>频域表示的探索</strong>：可以研究更复杂的频域变换（如小波变换）或学习到的频域表示，以更精细地捕获不同时间尺度的动作模式。</li>
+<li><strong>范式扩展</strong>：将频域一致性思想扩展到其他生成模型（如扩散模型）的加速中，探索其普适性。</li>
+<li><strong>理论分析</strong>：深入分析自适应加权机制的理论基础，以及频率一致性约束如何影响概率流几何形状的理论保证。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对基于生成建模的视觉运动策略在多步采样时推理成本高、难以实时执行的问题，提出FreqPolicy方法。其核心是首次对基于流的策略施加频率一致性约束，通过强制动作在频域特征上对齐，并设计自适应一致性损失来捕捉时序结构，从而实现高效、高质量的一步动作生成。实验在3个基准的53个任务上验证了其优越性，集成到VLA模型后在40个任务上实现加速且性能无损，在真实机器人场景中推理频率达到93.5 Hz。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.08822" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

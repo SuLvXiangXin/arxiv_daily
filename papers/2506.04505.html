@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SGN-CIRL: Scene Graph-based Navigation with Curriculum, Imitation, and Reinforcement Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>SGN-CIRL: Scene Graph-based Navigation with Curriculum, Imitation, and Reinforcement Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.04505" target="_blank" rel="noreferrer">2506.04505</a></span>
+        <span>作者: Aleksandr Panov Team</span>
+        <span>日期: 2025-06-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在移动机器人领域，无地图导航方法是一种有前景的替代方案，它允许机器人在动态环境中无需显式建图即可导航。强化学习因其基于累积经验优化运动策略的能力而被广泛应用于此类任务。然而，经典RL方法面临稀疏奖励、训练不稳定以及对复杂条件适应周期长等挑战。现有的一些工作尝试结合模仿学习来利用专家演示，或使用课程学习来结构化训练过程，以加速和稳定训练。此外，也有研究探索利用场景图等先验知识来辅助导航，例如通过建模对象间的空间关系来约束目标搜索区域。本文的核心痛点在于，如何在仅使用相机（无额外传感器）的部分可观测环境中，提升机器人导航的成功率与效率。本文提出了一种名为SGN-CIRL的框架，其核心思路是：将可学习的开放词汇3D场景图表示与强化学习相结合，并辅以模仿学习和课程学习，以加速训练并提升在复杂导航场景中的性能。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>SGN-CIRL方法的整体框架是一个集成了场景图、强化学习、课程学习和模仿学习的导航策略训练流程。</p>
+<p><img src="https://arxiv.org/html/2506.04505v1/extracted/6513807/navigation_img/Block_graphRL_2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：SGN-CIRL方法的整体框架。其核心特点是强化学习、课程学习、通过控制模块实现的模仿学习以及3D场景图构建的结合。输入包括当前机器人速度<code>v</code>、位置信息<code>p</code>以及来自控制模块的动作<code>a’</code>；策略输出动作<code>a</code>。在训练模式下，监控模块（实现IL）会以30%的概率介入，以避免策略陷入局部最优。</p>
+</blockquote>
+<p><strong>状态与动作空间</strong>：问题被建模为一个马尔可夫决策过程。<strong>状态空间</strong> <code>S</code> 包括：(a) 分辨率400×400×3的相机图像<code>X_cam</code>；(b) 描述目标位置的文本命令<code>X_goal</code>；(c) 机器人当前的线速度和角速度<code>V_current</code>（2自由度）。<strong>动作空间</strong> <code>A</code> 是连续的速度控制指令<code>V_control</code>，由策略函数<code>f</code>根据当前状态生成。</p>
+<p><strong>核心模块1：3D场景图构建与编码</strong><br>在Isaac Sim中构建室内场景，使用移动相机捕获RGB-D图像序列。采用ConceptGraph或BBQ等算法构建开放词汇3D场景图。对于场景中的每个物体，提取其文本描述以及3D边界框的尺寸和位置（共6维）。文本描述通过CLIP模型编码为512维向量。将这两部分特征拼接，得到每个物体的518维特征向量，从而场景图被表示为一个形状为<code>(num_objects, 518)</code>的张量。在输入RL策略之前，该张量由一个<strong>图编码器</strong>处理：计算每个物体CLIP嵌入与目标物体（碗）CLIP嵌入之间的余弦相似度，然后以此相似度为权重，通过池化操作将原始场景图压缩为一个512维的向量。</p>
+<p><strong>核心模块2：课程学习</strong><br>课程学习的难度等级由初始距离误差<code>R</code>和角度误差<code>φ</code>定义。训练过程从简单的任务（小<code>R</code>和<code>φ</code>）开始。具体更新规则是：如果最近30个非IL回合的成功率超过85%，且当前角度误差未达最大值，则增加<code>φ</code>；否则，将<code>φ</code>重置为零，并增加<code>R</code>。这使得机器人能够从靠近目标的位置开始，快速获得成功体验，然后逐步面对更复杂的导航任务。</p>
+<p><strong>核心模块3：模仿学习</strong><br>模仿学习用于提供专家示范。首先，使用Dijkstra算法在可通行位置网格图上计算从每个网格点到目标位置（训练初期有限的一组可能位置）的路径。随后对路径进行简化，移除共线点。</p>
+<p><img src="https://arxiv.org/html/2506.04505v1/extracted/6513807/navigation_img/dijkstra.png" alt="路径规划示例"></p>
+<blockquote>
+<p><strong>图3</strong>：使用Dijkstra算法在可通行位置网格上构建路径的示例。绿色点表示简化后的轨迹。</p>
+</blockquote>
+<p>在每个回合开始时，选择距离智能体最近的网格点，并获取对应目标位置的路径。智能体通过Pure Pursuit算法跟踪该路径，该算法通过计算轨迹曲率来平滑地朝向路径上的前视点移动。</p>
+<p><strong>训练流程与奖励设计</strong><br>训练期间，智能体有两种动作模式：来自RL策略的动作和来自控制模块（IL）的动作。为了在探索新策略和避免局部最优之间取得平衡，框架设定在30%的训练回合中使用控制模块（见图2中的“Mode”）。奖励函数设计为稀疏形式：若未完成任何子任务（减小角度或距离误差），奖励为-0.2；若完成一个子任务，奖励为-0.1；若成功到达目标（完成两个子任务），奖励为+2；若超时或发生碰撞，奖励为-5。</p>
+<p><strong>创新点</strong>：与现有工作相比，本文的创新点在于提出了一个可学习的开放词汇3D场景图表示，并将其与模仿学习（基于Dijkstra和Pure Pursuit的启发式控制）和课程学习紧密结合。这种组合旨在帮助智能体更好地适应未知环境，并减少对专家轨迹的过拟合风险。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在Isaac Sim仿真环境中进行，使用Aloha轮式移动机器人。机器人配备两个前置RGB相机。目标物体为碗。使用SAC算法进行训练。评估了两种场景：简单场景（单个桌子，前方有障碍柱）和复杂场景（两个不同颜色墙壁旁的桌子，目标位于其中一张上，文本指令包含墙壁颜色）。</p>
+<p><img src="https://arxiv.org/html/2506.04505v1/extracted/6513807/navigation_img/scene2.png" alt="实验场景"></p>
+<blockquote>
+<p><strong>图4</strong>：实验使用的简单场景（左）和复杂场景（右）。</p>
+</blockquote>
+<p><strong>基准方法</strong>：</p>
+<ol>
+<li><strong>RL</strong>：不使用场景图的基线强化学习方法。</li>
+<li>**SGN-CIRL (target)**：仅使用场景图中目标物体（碗）的信息（边界框和CLIP嵌入）。</li>
+<li>**SGN-CIRL (scene)**：使用完整的场景图，并通过与目标的余弦相似度加权池化得到场景表示。</li>
+</ol>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>简单场景（无控制模块）</strong>：训练65万步。使用场景图的方法平均成功率为78.6%，而不使用场景图的基线为71.5%。在初始距离误差较大时（如2.4米），使用场景图的成功率优势更为明显（+19%）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.04505v1/extracted/6513807/navigation_img/g1_2.png" alt="简单场景推理成功率"></p>
+<blockquote>
+<p><strong>图8</strong>：简单场景下，推理成功率随初始距离误差变化的曲线。表明在更大初始距离下，使用场景图（蓝线）比不使用（橙线）有更显著的优势。</p>
+</blockquote>
+<ol start="2">
+<li><strong>复杂场景（有控制模块）</strong>：训练50万步。SGN-CIRL (scene)取得了最高的平均成功率89.8%，SGN-CIRL (target)为85.4%，而RL基线为82.4%。同样，在初始距离误差为2.4米时，SGN-CIRL (scene)相比基线有22%的绝对提升。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.04505v1/extracted/6513807/navigation_img/g2_2.png" alt="复杂场景推理成功率"></p>
+<blockquote>
+<p><strong>图10</strong>：复杂场景下，推理成功率随初始距离误差变化的曲线。SGN-CIRL (scene)（绿线）在所有距离上均表现最佳，尤其在困难情况下优势扩大。</p>
+</blockquote>
+<ol start="3">
+<li><strong>随机障碍物实验</strong>：将障碍物替换为随机摆放的椅子，并使用人工标注的真实场景图（SGN-CIRL (ground truth graphs)）。在初始距离误差3米时，使用真实场景图的成功率达到82%，而完全不使用场景图的RL方法仅为21%，优势高达61%。这证明了在环境复杂度极高时，场景图提供的空间知识至关重要。</li>
+</ol>
+<p><strong>消融实验贡献总结</strong>：实验结果表明，完整的场景图表示（SGN-CIRL (scene)）贡献最大，其通过加权池化融入了场景上下文，性能优于仅使用目标信息的版本。课程学习和模仿学习的结合保障了训练的稳定与高效。整体上，场景图的引入在导航任务变得困难时（初始距离误差大、环境复杂）带来的性能提升尤为显著（10-20%甚至更高）。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了SGN-CIRL框架，将强化学习、模仿学习和课程学习相结合，用于加速和稳定智能体训练。</li>
+<li>提出了一种可学习的开放词汇3D场景图表示，使基于强化学习的导航算法能够在部分可观测环境中显著提高成功率，尤其是在复杂和困难的导航案例中。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到的局限性包括：场景图构建依赖于外部算法（如ConceptGraph, BBQ）；实验仅在仿真环境（Isaac Sim）中进行；未来需要扩展到动态环境、更多场景和目标。</p>
+<p><strong>启示</strong>：本工作展示了将结构化知识表示（3D场景图）与经典RL训练技术（IL, CL）相结合，是实现高效、自适应自主导航的一条有效路径。它为“基于知识的强化学习”提供了实例，启发了后续研究可以进一步探索如何优化场景图表示（如节点特征、连接性、更新频率），以及如何设计更高效的架构将图信息集成到决策模型中，以提升策略的泛化能力和决策效率。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出SGN-CIRL框架，解决机器人在部分可观测环境中无地图导航并预测目标物体位置的难题。核心方法结合了3D场景图建模物体空间关系、模仿学习从演示中快速学习、以及课程学习逐步增加任务复杂度以稳定强化学习训练。在Isaac Sim环境中的实验表明，该方法能显著提升困难导航场景下的成功率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.04505" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Splatting Physical Scenes: End-to-End Real-to-Sim from Imperfect Robot Data - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Splatting Physical Scenes: End-to-End Real-to-Sim from Imperfect Robot Data</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.04120" target="_blank" rel="noreferrer">2506.04120</a></span>
+        <span>作者: Leonard Hasenclever Team</span>
+        <span>日期: 2025-06-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，从真实世界机器人交互数据直接创建物理精确且视觉逼真的仿真，对于可扩展机器人学至关重要。主流方法如神经辐射场（NeRF）和3D高斯点云（3DGS）能够生成高质量的新视角渲染图像，但在动态机器人场景下面临重大挑战：它们对真实轨迹中常见的噪声相机位姿非常敏感，并且其表示形式不适合直接用于MuJoCo等物理仿真器。提取可用的仿真资产通常需要繁琐的后处理或单独的几何估计流程，这打破了视觉输入与物理行为之间的联系，严重限制了为机器人学习和规划自动创建高保真数字孪生的能力。</p>
+<p>本文旨在解决上述痛点，提出一种新的视角：将场景外观重建、物体几何提取以及机器人/相机标定，在一个单一的、端到端的可微框架内联合解决。本文的核心思路是，通过一个融合了3DGS逼真渲染能力与显式物体网格的混合场景表示，并利用可微渲染和可微物理进行端到端联合优化，直接从原始、不精确的机器人轨迹数据中同时优化所有场景组件。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出一个端到端的真实到模拟框架，其核心是联合优化场景表示、相机参数和物理参数。</p>
+<p>整体框架的输入是未标定的机器人及其传感器数据（RGB图像和本体感知数据）。输出是经过标定的机器人模型、场景元素的几何与外观重建。整个流程通过最小化仿真预测观测值与真实观测值之间的差异（预测误差）来实现端到端优化。</p>
+<p><img src="https://arxiv.org/html/2506.04120v2/extracted/6525522/fig/figure1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：框架概览。从一台未标定的机器人和真实世界传感器数据（RGB图像和本体感知）开始，我们执行机器人标定，并重建场景元素的几何与外观。</p>
+</blockquote>
+<p>核心模块是名为 <strong>SplatMesh</strong> 的混合场景表示。它将用于几何的三角形网格与用于外观的3D高斯点云紧密结合。3D高斯点云被约束在网格面上，其方向随底层网格的移动而变换。这种解耦提供了灵活性，可以学习每个元素的外观、位姿和/或形状，或将其视为原始模型固定。几何优化通过变形顶点同时保持底层连接性来实现，确保了可控的网格复杂度。每个高斯的均值使用加权重心坐标方法初始化在网格面上，并进一步参数化了协方差、与视角相关的球谐系数颜色以及不透明度。</p>
+<p><img src="https://arxiv.org/html/2506.04120v2/extracted/6525522/fig/methodology.png" alt="优化流程"></p>
+<blockquote>
+<p><strong>图2</strong>：使用可微渲染进行拟合。我们优化场景参数θ，包括物体顶点、3D高斯参数、相机位姿和机器人关节角度，仅使用机器人传感器获取的真实世界数据。</p>
+</blockquote>
+<p>优化过程采用可微渲染（基于3DGS的渲染管线）和可微物理仿真（基于MuJoCo MJX）。目标函数通常是三个大类损失项的加权和：</p>
+<ol>
+<li><strong>光度损失</strong>：使用预测与真实RGB像素值之间的L1或L2损失来监督3D高斯的优化。</li>
+<li><strong>几何正则化</strong>：由于显式优化几何，可以加入拉普拉斯正则化，惩罚顶点与其最近邻点质心的偏差，从而促进表面平滑。</li>
+<li><strong>对象分割损失</strong>：一个L2轮廓掩码损失。将预测的轮廓（通过适配3D高斯光栅化器得到）与使用SAM2获得的真实物体掩码进行比较。为了解决二值掩码在非重叠区域不提供梯度的问题，使用欧几里得距离变换对真实掩码进行平滑处理。</li>
+</ol>
+<p>与现有方法相比，本文的创新点具体体现在：1) 提出了SplatMesh这一统一表示，将适用于仿真的显式网格与适用于高质量渲染的3D高斯绑定；2) 构建了端到端的可微优化管道，允许视觉误差的梯度直接传播回网格几何、外观、机器人位姿和相机参数；3) 专门针对低成本机器人平台产生的不完美、动态、多视角受限的数据进行设计。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了两个数据集：</p>
+<ol>
+<li><strong>模拟数据集</strong>：使用YCB物体生成的合成数据集，包含64个物体各50张姿态图像，按80%/20%划分为训练集和测试集。</li>
+<li><strong>真实到模拟数据集</strong>：在ALOHA2双臂操作平台上捕获的新数据集，包含6条观测轨迹（总计约800帧），含4个相机的多视角RGB图像和记录的关节角度。其中16帧来自移动相机的图像被留出用于评估。</li>
+</ol>
+<p>对比的基线方法包括：NeRFacto（nerfstudio中的NeRF先进实现）和3DGS（nerfstudio中的实现）。此外，还进行了消融实验以评估各组件贡献。</p>
+<p>在模拟数据集上的关键结果如下表所示，评估指标为PSNR、SSIM和LPIPS。</p>
+<p><img src="https://arxiv.org/html/2506.04120v2/extracted/6525522/x1.png" alt="模拟新视角合成结果表"></p>
+<blockquote>
+<p><strong>表2</strong>：在模拟YCB物体数据集上经过15K次迭代后的新视角合成指标。本文方法（Ours）在PSNR（30.91 dB）上优于NeRFacto（30.29 dB）和3DGS（26.97 dB），并且LPIPS（0.044）最低，表明感知质量最佳。</p>
+</blockquote>
+<p>消融实验表明：移除网格正则化（Ours w/o mesh reg.）会导致PSNR轻微下降至30.70；移除面元约束（Ours w/o surfels，即不约束高斯协方差）会严重损害性能（PSNR降至25.82），因为无约束的高斯会过度膨胀以适应训练视图，导致泛化能力差。在几何重建质量上，完整框架的倒角距离（CD）为0.073 mm²，而无拉普拉斯正则化时CD增至0.237 mm²，无面元约束时CD为0.122 mm²。</p>
+<p>在真实机器人数据上，本文评估了六个YCB道具物体的重建。下表展示了与基线对比的几何重建（CD的平方根）和新视角合成（PSNR）结果。</p>
+<p><img src="https://arxiv.org/html/2506.04120v2/extracted/6525522/fig/real.png" alt="真实物体重建结果表"></p>
+<blockquote>
+<p><strong>表3</strong>：单个YCB道具物体的真实物体恢复指标。本文方法（Ours）在几何重建误差（CD平方根，单位mm）上显著优于仅使用本体感知的消融实验（Proprio-only）和经过对齐的TRELLIS模型。在新视角合成的PSNR上也具有优势。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.04120v2/extracted/6525522/fig/dataset/real-overview.png" alt="真实场景重建定性结果"></p>
+<blockquote>
+<p><strong>图3</strong>：仅从机器人数据恢复真实世界资产。展示了从真实ALOHA2数据重建的场景网格与渲染结果。</p>
+</blockquote>
+<p>此外，本文框架还展示了从单张图像或文本提示生成可用于仿真的3D资产的能力。通过CAT3D从单视图预测多视角，然后使用SplatMesh进行重建，并通过逆渲染优化纹理贴图，最终生成可直接导入MuJoCo等仿真器的带纹理网格资产。</p>
+<p><img src="https://arxiv.org/html/2506.04120v2/extracted/6525522/fig/genai_more.png" alt="资产生成示例"></p>
+<blockquote>
+<p><strong>图4</strong>：使用SplatMesh进行3D资产生成。从文本或单视图图像生成的资产可以导入任何仿真器。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li><strong>端到端真实到模拟管道</strong>：提出了一个完全可微的框架，能够直接从原始RGB序列联合优化场景外观、物体几何、机器人位姿和相机参数。</li>
+<li><strong>从不完美数据重建场景</strong>：展示了从真实机器人捕获的噪声单目轨迹中，成功重建包含新物体的动态机器人场景。</li>
+<li><strong>生成仿真就绪资产</strong>：实现了可控的物体网格重建，其几何可直接集成到物理引擎中，并由视觉一致性驱动。</li>
+</ol>
+<p>论文自身提到的局限性包括：</p>
+<ol>
+<li><strong>拓扑固定</strong>：基于梯度下降的网格优化要求参数平滑，且学习到的网格与初始化网格拓扑同胚（例如，从球体初始化无法得到环状物体）。这可通过初始化选择缓解，但需要更灵活的解决方案。</li>
+<li><strong>优化局部性</strong>：梯度下降只能找到局部最小值，对非凸问题的初始化敏感。论文建议结合数据驱动方法提供初始化，或使用更通用的不确定性感知推理方法。</li>
+<li><strong>渲染限制</strong>：3DGS的渲染模型不支持重光照，因此如果动态场景元素被移动，则无法表示反射和阴影等效果。</li>
+<li><strong>物理仿真限制</strong>：当前基于MuJoCo MJX的可微物理仿真仅限于刚体对象，暂不支持可变形物体。</li>
+</ol>
+<p>本文的启示在于，它证明了通过统一的、基于梯度优化的端到端框架，能够有效利用稀缺且噪声大的真实机器人数据来精炼仿真模型。这为未来工作开辟了广阔前景，例如：将此类优化框架与数据驱动的生成模型结合以获得更好的初始化；扩展可微物理仿真的能力以支持更复杂的物体类型；以及探索超越单纯优化的不确定性推理方法，以增强鲁棒性。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出一种端到端真实到模拟（Real-to-Sim）框架，旨在直接从有缺陷的真实机器人数据中创建可用于物理仿真的高保真数字孪生。核心挑战在于真实数据存在遮挡、相机位姿噪声和动态干扰。关键技术是提出 **SplatMesh混合场景表示**，它将3D高斯泼溅（3DGS）的光线真实渲染能力与显式物体网格几何相结合，并构建了一个**端到端的可微分优化流程**，联合优化物体几何、外观、机器人位姿及物理参数。实验表明，该框架在真实ALOHA 2双手操作器数据上能有效实现高保真网格重建、逼真新视图生成和无标注机器人位姿校准。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.04120" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

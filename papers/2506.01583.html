@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FreqPolicy: Frequency Autoregressive Visuomotor Policy with Continuous Tokens - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>FreqPolicy: Frequency Autoregressive Visuomotor Policy with Continuous Tokens</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.01583" target="_blank" rel="noreferrer">2506.01583</a></span>
+        <span>作者: Yuexin Ma Team</span>
+        <span>日期: 2025-06-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人视觉运动策略学习的主流方法可分为基于扩散模型的方法和基于自回归模型的方法。扩散模型具有强大的生成能力，但迭代采样过程导致计算成本高、推理延迟大。自回归模型计算效率高、推理快，但容易产生长时程的累积误差，且通常依赖于离散的动作表示，难以精确建模本质上连续的动作空间，限制了捕捉复杂时间相关性的能力。两者共有的一个根本局限性是：它们忽视了由任务复杂性和机器人操作自由度带来的动作空间多样性，未能有效表示不同动作内在的结构化特征，这对于策略的泛化性和鲁棒性至关重要。</p>
+<p>本文从频域视角重新思考机器人动作表示，观察到在频域中表示动作能更有效地捕捉运动的结构化本质：低频分量反映全局运动模式，高频分量编码精细的局部细节。同时，不同复杂度的机器人操作任务需要对这些频带进行不同精度的建模。基于此，本文提出了一种新颖的视觉运动策略学习范式，即渐进式地建模分层频率分量。为了进一步提高精度，本文引入了连续的潜在表示，以保持动作空间的平滑性和连续性。核心思路是结合频域表示与连续自回归建模，实现从低频全局结构到高频精细细节的从粗到细的动作生成。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>FreqPolicy 的整体流程分为训练和推理两个阶段，其核心是利用离散余弦变换在频域中对动作进行分层建模，并结合连续令牌表示进行自回归生成。</p>
+<p><img src="https://arxiv.org/html/2506.01583v2/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：FreqPolicy 的流程，展示了训练 (a) 和推理 (b) 过程。训练时，通过 DCT 将动作轨迹转换到频域，FreqPolicy 学习不同频率级别动作的潜在编码，并通过掩码预测和基于扩散的解码器重建动作。推理时，进行分层生成，从零开始迭代，逐步从低频细化到全频动作。</p>
+</blockquote>
+<p><strong>整体流程</strong>：给定配对序列数据集 { (o, x) }，其中 o 是观测序列（如图像、点云），x 是对应的动作序列。目标是训练一个策略，能根据新观测 o-hat 生成动作轨迹 x-hat。</p>
+<ul>
+<li><strong>训练阶段</strong>：对动作序列 x 应用 DCT 分解为频率分量，并通过逆 DCT 在不同级别 k 进行重建，得到 k 级重建动作 y^k。FreqPolicy 的编码器-解码器处理 y^k、观测特征和频率索引 k，生成一个连续令牌 z^k。该令牌作为条件输入一个扩散模型，用于重建原始的全频动作 x。训练中采用了频率感知的掩码机制（图中灰色块）以提高效率。</li>
+<li><strong>推理阶段</strong>：进行 N_iter 次迭代的分层生成。从零动作 (y^{l0}=0) 开始，每次迭代 i 以前一次迭代的输出 y^{l_{i-1}} 为条件，生成一个全频动作 x-hat^i，然后将其滤波至 y^{l_i} 作为下一次迭代的输入。频率级别序列 {l_i} 递增，实现从低频到全频的渐进细化。</li>
+</ul>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>频域分析与 DCT 分解</strong>：论文首先系统分析了动作轨迹的频域特性（图3）。发现对于高自由度复杂任务（如 Adroit），高频信息至关重要；而对于简单任务（如 Robomimic），仅需少量低频信息即可维持性能。这为分层生成提供了依据。方法采用 DCT 将时域动作序列 x 转换到频域。保留前 k 个 DCT 系数并进行逆 DCT 重建，得到 k 级重建动作 y^k，它是一个保留了主要结构但更平滑的版本。</li>
+<li><strong>连续令牌表示</strong>：为解决离散化带来的信息损失，FreqPolicy 采用基于扩散模型的连续令牌表示。对于给定频率级别 k，编码器将 k 级重建 y^k、观测 o 和级别索引 k 编码为潜在特征，解码器输出条件向量 z^k（即连续令牌）。然后使用反向扩散过程建模条件概率 p(x | z^k)，以从 z^k 恢复原始动作序列 x。扩散损失函数采用标准的噪声预测损失，对 FreqPolicy 的编码器、解码器和噪声预测器进行端到端优化。</li>
+<li><strong>分层生成策略</strong>：定义递增的频率级别序列 {l_0=0, l_1, ..., l_{N_iter}=N}。每次迭代 i，基于前一级别 l_{i-1} 的重建动作 y^{l_{i-1}} 生成连续令牌 z^{l_{i-1}}，扩散模型据此采样出全频动作 x-hat^i。接着，对 x-hat^i 进行 l_i 级重建得到 y^{l_i}，作为下一轮迭代的输入。此过程逐步增加保留的频率成分，实现从全局趋势到局部细节的细化。</li>
+</ol>
+<p><strong>创新点</strong>：</p>
+<ul>
+<li><strong>频域自回归</strong>：在频域而非时域进行自回归生成，将不同频率的信号分开建模，防止低频成分受高频噪声影响。</li>
+<li><strong>连续令牌</strong>：结合扩散模型实现连续动作表示，避免了离散化信息损失，同时保持了自回归的效率优势。</li>
+<li><strong>从粗到细的渐进生成</strong>：通过分层频率级别序列，先学习容易建模的低频全局运动，再逐步引导生成高频细节，降低了复杂动作的直接生成难度。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准测试</strong>：在多样化的 2D 和 3D 机器人操作基准上进行评估。2D任务（仅有图像观测）包括 Robomimic 和 Push T。3D任务（有 3D 视觉观测）包括 Adroit、DexArt、MetaWorld 和 RoboTwin，涵盖了灵巧手操作、双臂协作等复杂场景，自由度从 10 到 28 不等。</li>
+<li><strong>基线方法</strong>：对比了基于扩散的方法（Diffusion Policy/DP, 3D Diffusion Policy/DP3）和基于自回归的离散令牌方法（Behavior Transformer/BeT, CARP），以及 Mamba Policy。</li>
+<li><strong>实现细节</strong>：FreqPolicy 可无缝集成到 DP 和 DP3 的代码库中，保持观测输入处理等参数一致以确保公平比较。模拟实验使用 4 次迭代，真实世界实验使用 1 次迭代。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2506.01583v2/x4.png" alt="成功率对比"></p>
+<blockquote>
+<p><strong>图4</strong>：在 Adroit、DexArt 和 Meta-World 的 10 个模拟任务上的成功率对比。FreqPolicy 在绝大多数任务上超越了所有基线方法，平均成功率显著领先。</p>
+</blockquote>
+<p>如表1（对应图4）所示，FreqPolicy 在 10 个复杂的 3D 模拟任务上取得了最佳的平均成功率（71.7%），显著优于 DP3（58.3%）、DP（44.0%）和 Mamba Policy（65.7%）。特别是在高自由度的灵巧操作任务（如 Adroit Pen, DexArt Faucet）上，提升尤为明显。</p>
+<p><img src="https://arxiv.org/html/2506.01583v2/x5.png" alt="推理速度对比"></p>
+<blockquote>
+<p><strong>图5</strong>：不同方法在 Adroit Door 任务上的推理速度（FPS）对比。FreqPolicy 在保持高成功率的同时，推理速度远超扩散模型（DP3），并与高效的自回归方法（CARP）相当。</p>
+</blockquote>
+<p>如图5所示，在达到接近 100% 成功率的前提下，FreqPolicy 的推理速度（约 45 FPS）远高于扩散模型 DP3（约 3 FPS），并与基于离散令牌的自回归方法 CARP 处于同一效率水平，实现了精度与效率的平衡。</p>
+<p><img src="https://arxiv.org/html/2506.01583v2/x6.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图6</strong>：在 Adroit Door 任务上的消融研究。(a) 不同频率级别序列的影响：渐进式分层生成（[0,4,8,12,16]）效果最佳。(b) 连续令牌与离散令牌对比：连续令牌显著优于离散VQ令牌。(c) 迭代次数的影响：增加迭代次数能持续提升性能。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>（图6）：</p>
+<ol>
+<li><strong>分层生成策略</strong>：对比一次性生成全频信号，渐进式分层生成（[0,4,8,12,16]）成功率最高（~100%），验证了从粗到细方法的有效性。</li>
+<li><strong>连续令牌的贡献</strong>：使用基于扩散的连续令牌，相比使用 VQ-VAE 的离散令牌，成功率有大幅提升（从约75%到近100%），证明了连续表示对精度的重要性。</li>
+<li><strong>迭代次数的影响</strong>：性能随着迭代次数增加而提升并趋于饱和，4次迭代已达到很好效果，说明方法能通过更多迭代进一步细化。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种基于频率的动作空间表示方法，并通过渐进式建模分层频率分量来学习有效的视觉运动策略，以捕捉机器人运动的结构化本质。</li>
+<li>引入了结合扩散解码的连续潜在表示，在保持动作空间连续性和自回归效率的同时，消除了离散化需求。</li>
+<li>在广泛的机器人基准测试中达到了最先进的性能，在成功率和计算效率方面均显著优于现有方法。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，分层生成过程可能比单次通过的自回归方法引入更多的推理延迟，尽管它比扩散模型快得多。此外，需要为不同任务选择合适的频率级别序列 {l_i}。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li><strong>频域视角的潜力</strong>：将频域分析引入机器人学习，为理解和表示复杂动作提供了新工具，尤其适用于需要区分运动全局模式与局部细节的任务。</li>
+<li><strong>连续表示与自回归的结合</strong>：证明了自回归模型不必依赖离散化，连续概率建模（如扩散）可以与之有效结合，在保持效率的同时提升精度。</li>
+<li><strong>分层生成策略的通用性</strong>：从粗到细、渐进复杂的生成范式，可以缓解直接生成复杂输出的困难，这一思想可能适用于其他序列生成任务。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出FreqPolicy，用于解决机器人视觉运动策略学习中动作表示精度不足与计算效率难以兼顾的问题。针对现有扩散模型延迟高、自回归方法累积误差大的局限，核心创新是**频率自回归框架**，通过分层建模频率分量（低频表全局运动、高频表局部细节），并结合**连续潜在表示**保持动作空间平滑性。实验表明，该方法在多样2D/3D操作任务中，在精度与效率上均优于现有方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.01583" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

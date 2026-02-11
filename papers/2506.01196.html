@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>OG-VLA: 3D-Aware Vision Language Action Model via Orthographic Image Generation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>OG-VLA: 3D-Aware Vision Language Action Model via Orthographic Image Generation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.01196" target="_blank" rel="noreferrer">2506.01196</a></span>
+        <span>作者: Valts Blukis Team</span>
+        <span>日期: 2025-06-01</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人操作领域存在两类主流方法。一类是<strong>3D感知的关键帧策略</strong>（如PerAct、RVT、Act3D），它们使用体素网格、正交视图或点云等3D场景表示，从少量演示中高效学习，并对相机和物体位姿变化具有鲁棒性。然而，这些方法通常在特定任务、机器人和场景上从头训练，难以泛化到未见过的指令、物体和场景。另一类是<strong>视觉-语言-动作模型</strong>，它们利用大规模语言模型和视觉基础模型的先验知识，在指令和场景的泛化方面表现出色，但通常需要海量演示数据训练，且对输入相机和机器人位姿的变化敏感，缺乏精确的3D空间推理能力。</p>
+<p>本文针对上述痛点，旨在结合VLA模型的泛化能力与3D感知策略的鲁棒性。核心思路是：利用语言和视觉基础模型中嵌入的先验知识，通过将多样化的输入观测反投影到点云并渲染为标准正交视图，确保输入视角不变性以及输入与输出空间的一致性，进而使用图像生成来预测编码了末端执行器位姿的关键帧图像。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>OG-VLA的整体框架是一个端到端训练的流水线，输入为自然语言指令 <code>l</code> 和一组带位姿的RGBD观测 <code>O_k = {I_k, D_k, P_k, K_k}</code>，输出为末端执行器的6-DOF目标状态 <code>s = ⟨p, ω⟩</code>（位置和旋转）。系统包含四个核心组件：1) 点云渲染器，用于生成场景的正交投影视图；2) 视觉骨干网络，编码这些视图；3) 大语言模型，预测动作token；4) 图像扩散模型，将动作token解码为带有动作标注的图像。</p>
+<p><img src="https://arxiv.org/html/2506.01196v2/x2.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：OG-VLA模型总览。输入为任务指令和多个RGB-D场景视图。系统将输入视图构建为点云，并重新投影到一组标准正交视图上。这些视图经视觉编码器编码后，其CLS嵌入被投影到LLM的潜在空间，并与提示词token拼接。LLM输出图像token嵌入，用于条件化图像生成器。图像生成器结合跳跃连接的视觉特征，为每个正交视图生成指示下一末端执行器位姿的热图。最后，通过解码热图推断出3D位置和旋转。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>3D感知与正交投影</strong>：系统将所有输入相机图像反投影到一个固定参考系下的点云 <code>C</code>。随后，定义一组 <code>m</code> 个标准正交相机（如前、左、右、顶视图），将点云渲染为RGB图像 <code>I_c^C</code>。这一步骤使输入与后续动作预测输出处于同一视觉空间，并确保了输入视角不变性。</li>
+<li><strong>多模态LLM处理</strong>：使用视觉编码器（ImageBind）处理每个标准视图 <code>I_c^C</code>，获得CLS嵌入 <code>e_c^CLS</code> 和图像块嵌入。CLS嵌入通过一个学习的MLP输入投影层映射为LLM兼容的token <code>t_c^CLS</code>。LLM（基于Vicuna-7b v1.5）的输入token序列为 <code>⟨Prompt(l), t_CLS^1, ..., t_CLS^m⟩</code>。LLM的输出序列包含四个代表下一动作的图像token <code>t_a^i</code> 以及一些辅助文本token。</li>
+<li><strong>基于图像生成的动作解码</strong>：这是方法的创新关键。LLM输出的图像token <code>t_a^i</code> 通过一个输出投影层映射回视觉嵌入 <code>e_a^i</code>。这些嵌入与视觉编码器提取的所有视觉特征（CLS token和图像块嵌入）共同作为条件，输入到一个图像生成器（基于Stable Diffusion 1.5）中。图像生成器为每个正交视图 <code>c</code> 输出一张图像 <code>H_c</code>，该图像是输入视图 <code>I_c^C</code> 的重建，并叠加了编码末端执行器位置和方向的标注（以不同颜色的高斯热图形式）。</li>
+<li><strong>3D位姿解码</strong>：<ul>
+<li><strong>位置</strong>：通过求解优化问题（公式2）从所有视图的热图中推断出最可能的3D位置 <code>p_hm</code>。该优化寻找一个3D点，使其在所有正交视图上的投影点处的热图响应值的乘积最大。</li>
+<li><strong>旋转</strong>：旋转角被编码在特定视图的热图中（例如，X轴旋转在前视图，Y轴旋转在左/右视图，Z轴旋转在顶视图）。通过从热图中提取最可能的像素位置，并计算其相对于从平移点向右绘制的水平参考线的反正切角来解码。</li>
+<li><strong>夹爪状态</strong>：以二值化彩色热点的形式编码在图像的左上角。</li>
+</ul>
+</li>
+</ol>
+<p><strong>与现有方法的创新点</strong>：</p>
+<ol>
+<li><strong>正交图像生成的动作表示</strong>：不同于VLA直接输出动作token或数值，也不同于其他生成模型在透视图像上绘制轨迹，OG-VLA在标准正交视图上通过图像生成来编码动作。这结合了图像生成的精确性和正交视图的无歧义性，便于直接解码为3D SE(3)位姿。</li>
+<li><strong>输入输出空间一致性</strong>：通过将任意输入渲染到固定的标准正交视图，实现了输入视角的归一化，使模型专注于3D推理而非视角变化，同时保证了动作预测（也生成在相同视图上）与输入在几何上对齐。</li>
+<li><strong>高效利用先验与数据</strong>：模型基于多模态对话模型X-VILA的权重初始化，利用了其已有的跨模态对齐能力。训练时采用SE(3)数据增强，并能从相对较少的演示中学习（如Arnold基准上每任务约500个演示）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.01196v2/x1.png" alt="方法示意图"></p>
+<blockquote>
+<p><strong>图1</strong>：OG-VLA示意图。系统在标准正交视图的图像上，用易于解码的标注来表示机器人末端执行器关键帧。红色热点指示末端执行器位置，黄、蓝、绿色热点共同编码末端执行器三个轴的朝向，左上角热点的颜色编码夹爪开合状态。该方法对干扰物和光照变化具有鲁棒性。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>Benchmark与数据集</strong>：在<strong>Arnold</strong>和<strong>Colosseum</strong>两个基准上进行评估。Arnold包含8个语言条件任务（如拾取、重新定向、打开抽屉等），测试在未见过的物体位姿、物体、场景和状态上的泛化能力。Colosseum包含20个桌面任务，通过在“所有扰动”测试集上同时改变物体/背景外观、光照、相机位姿并添加干扰物来评估鲁棒性。</p>
+<p><strong>Baseline方法</strong>：对比了3D感知关键帧策略（PerAct、RVT）、视觉基础模型策略（R3M、MVP）以及最先进的VLA模型（π0-FAST、π0.5）。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>Arnold基准</strong>：如表I所示，OG-VLA在训练100k次迭代后，在“Novel Pose”（见过物体和场景）测试集上，任务平均成功率相比PerAct有10.8%的相对提升。在泛化测试集上提升更显著：“Novel Object”相对提升48.5%，“Novel Scene”相对提升37.1%，“Novel State”相对提升53.8%（尽管绝对成功率仍较低）。这证明了OG-VLA有效结合了泛化与鲁棒性。</li>
+</ol>
+<blockquote>
+<p><strong>表I</strong>：ARNOLD基准上的成功率。展示了OG-VLA在30k和100k训练迭代时，在8个任务和4个测试划分上的表现，均优于或与基线PerAct相当，尤其在泛化划分上优势明显。</p>
+</blockquote>
+<ol start="2">
+<li><strong>与VLA的对比</strong>：如表II所示，在Arnold最简单的“Pickup Object”任务上，OG-VLA（95%）大幅超过π0-FAST（35%）和π0.5（0%），验证了注入3D理解能显著提升VLA的精确操作能力，同时保持泛化性（在Novel Object和Novel Scene上表现良好）。</li>
+</ol>
+<blockquote>
+<p><strong>表II</strong>：与VLA模型的对比（%）。在Pickup Object任务上，OG-VLA的成功率远高于π0-FAST和π0.5。</p>
+</blockquote>
+<ol start="3">
+<li><strong>Colosseum基准</strong>：如图3所示，在最难的“所有扰动”测试集上，OG-VLA取得了10.5%的任务平均成功率，相对于最佳基线（RVT的7.2%）有45.8%的相对提升，达到了新的SOTA。但绝对成功率仍低，作者归因于任务序列长导致的误差累积。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.01196v2/x3.png" alt="Colosseum结果"></p>
+<blockquote>
+<p><strong>图3</strong>：COLOSSEUM基准评估结果。任务平均成功率显示，OG-VLA在最难的泛化测试集（所有扰动）上超越了所有基线。</p>
+</blockquote>
+<ol start="4">
+<li><strong>推理延迟</strong>：如表III所示，OG-VLA的单步推理延迟（4.5秒）高于PerAct（0.2秒）和VLA基线（0.2-0.4秒），这是由于其复杂的编码-解码流程。但由于是关键帧策略，<strong>每 episode 所需推理步骤数极少</strong>（仅2步），因此整体episode推理时间（10.2秒）远低于需要连续预测的VLA基线（70-103秒），尽管仍比PerAct（1.5秒）慢。</li>
+</ol>
+<blockquote>
+<p><strong>表III</strong>：模型延迟（秒）。OG-VLA虽然单步推理慢，但作为关键帧策略总步数少，整体episode耗时远低于需连续预测的VLA。</p>
+</blockquote>
+<p><strong>消融实验</strong>：论文验证了图像生成动作解码的关键性。尝试替代方案：1) LLM直接输出文本描述的动作；2) 增加额外的动作token并由MLP直接解码为夹爪状态。两种方案在相同训练条件下均未能学会有效策略，凸显了通过图像生成进行视觉推理对精确操作的必要性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了OG-VLA架构</strong>：一种新颖的机器人策略架构，通过正交图像生成，成功地将VLA的指令泛化能力与3D感知策略的视角鲁棒性结合起来。</li>
+<li><strong>创新了动作表示与解码方法</strong>：利用图像扩散模型在标准正交视图上生成编码SE(3)位姿的热图，实现了精确的、可泛化的3D空间推理。</li>
+<li><strong>展示了从少量演示中学习的能力</strong>：在仿真和真实机器人实验中，仅需3-5个演示即可适应新任务，突出了其在动觉示教和快速领域适应方面的潜力。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li><strong>推理速度</strong>：由于涉及多个编码器、解码器和扩散模型采样，单步推理延迟较高。</li>
+<li><strong>特定泛化挑战</strong>：在Arnold的“Novel State”（未见过的目标状态）任务上表现相对较弱，可能因为缺乏类似的大规模语言理解预训练。</li>
+<li><strong>对图像生成质量的依赖</strong>：解码精度依赖于生成图像的质量，过长的训练可能损害生成质量（如在Colosseum上观察到的）。</li>
+<li><strong>长序列任务</strong>：在需要多关键帧的长序列任务（如Colosseum）上，错误会累积，绝对成功率有待提升。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>架构方向</strong>：证明了将3D几何感知与大规模视觉-语言先验结合是一条有效路径，未来可探索更高效的3D表示（如神经辐射场）与VLA的融合。</li>
+<li><strong>表示学习</strong>：正交视图作为一种与视角无关的、几何清晰的中间表示，可能成为连接不同模态和任务的通用接口。</li>
+<li><strong>优化与扩展</strong>：未来工作可专注于优化推理速度（如使用更快的图像生成模型）、融入更丰富的多模态数据（如视频、音频以增强人机交互），以及通过混合外部数据集进行协同训练来进一步提升泛化能力。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出OG-VLA模型，旨在解决3D感知机器人策略对新指令泛化能力弱、而视觉语言动作模型（VLA）对相机与机器人姿态变化敏感的问题。其核心技术是通过正交图像生成实现输入视图不变性：将多视角RGBD观测反投影为点云，渲染为标准正交视图，再经视觉骨干网络、大语言模型与图像扩散模型生成编码末端执行器下一目标位姿的图像。实验表明，该方法在Arnold与Colosseum基准上对新环境泛化性能达到SOTA，相对提升超过40%，同时在已知场景中保持鲁棒性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.01196" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

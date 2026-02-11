@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Time-Unified Diffusion Policy with Action Discrimination for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Time-Unified Diffusion Policy with Action Discrimination for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.09422" target="_blank" rel="noreferrer">2506.09422</a></span>
+        <span>作者: Le Wang Team</span>
+        <span>日期: 2025-06-11</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人操作领域，生成模型被广泛用于估计多种成功动作的分布。扩散模型因其优于其他生成模型的训练鲁棒性，在模仿学习（通过成功的机器人示教）中表现良好。然而，基于扩散的策略方法通常需要大量时间进行迭代去噪以生成机器人动作，这阻碍了操作的实时响应。此外，现有的扩散策略建模的是一个随时间变化的动作去噪过程，其时间复杂性增加了模型训练的难度，并导致次优的动作准确性。本文旨在高效且准确地生成机器人动作，提出了时间统一扩散策略（TUDP），其核心思路是利用动作判别能力构建一个时间统一的去噪过程，通过消除不同时间步之间的冲突来简化学习，并借助动作判别信息明确去噪方向，从而在减少迭代次数的同时提升精度。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>TUDP的整体框架采用基于关键帧的操作范式，每个关键帧包含场景观测x和标签动作（成功动作）ŷ。动作y定义为末端执行器的位姿，包括位置y_pos、旋转y_rot和夹爪开合状态y_open。</p>
+<p><img src="https://arxiv.org/html/2506.09422v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：TUDP的架构。动作判别网络预测动作分数s，用于识别成功动作；统一扩散网络预测噪声ε，用于校正噪声动作y。多模态特征通过预训练模型（如CLIP）提取并融合。</p>
+</blockquote>
+<p>整体框架包含两个核心模块：</p>
+<ol>
+<li><strong>动作判别网络</strong>：仅在训练阶段使用。其功能是预测噪声动作y的动作分数s，用以判断y是否在以某个成功动作ŷ^i为中心、半径为l的邻域U(ŷ^i, l)内。标签分数ŝ在邻域内为1，否则为0。该网络的学习为后续去噪提供了关键的“动作判别信息”。</li>
+<li><strong>统一扩散网络</strong>：这是策略的核心。与需要去噪时间步t作为输入的经典扩散策略网络不同，TUDP的统一扩散网络仅以场景观测x和噪声动作y为输入，预测噪声ε(y)。这意味着它学习了一个<strong>时间统一的速度场</strong>ϵ(y)，该速度场在整个去噪迭代过程中保持不变，显著降低了模型需要拟合的函数的复杂性。</li>
+</ol>
+<p>去噪过程如算法1所示，采用时间统一的迭代去噪，并设计了早期终止机制以进一步缩短推理时间。</p>
+<p>时间统一速度场的设计是关键创新。在存在多个成功动作的场景中，直接合并各条件速度场ε(y|ŷ)会相互干扰，导致在成功动作点处速度不为零（如公式4所示），使去噪结果偏离目标。</p>
+<p><img src="https://arxiv.org/html/2506.09422v1/x3.png" alt="速度场对比"></p>
+<blockquote>
+<p><strong>图3</strong>：两种时间统一速度场的对比。(a) 无动作判别信息时，不同成功动作（红点）的条件速度场相互干扰，导致在成功动作点处速度非零（蓝点）。(b) 引入动作判别信息（通过相关性权重λ）后，速度场在成功动作的邻域内只受该动作影响，消除了干扰，确保去噪能收敛到成功动作（半红半蓝点）。</p>
+</blockquote>
+<p>为解决此问题，TUDP引入了**相关性权重λ(y, ŷ^i)**（公式5）。该权重基于噪声动作y到其他成功动作的最小距离：当y距离其他成功动作太近（≤l）时，λ=0，屏蔽当前标签动作ŷ^i的贡献；否则λ=1。由此构建的条件速度场为ϵ(y|ŷ)=λ(y, ŷ)ε(y|ŷ)（公式6）。最终，时间统一速度场ϵ(y)是所有条件速度场按其概率的加权和（公式7）。这样，在某个成功动作的邻域内，速度场仅由该动作决定，确保了去噪的准确性。</p>
+<p>训练采用两阶段的<strong>动作判别训练方法</strong>（算法2）：</p>
+<ul>
+<li><strong>阶段一（动作判别训练）</strong>：训练动作判别网络s_θ，使用损失函数L_score使其能准确预测动作分数s。</li>
+<li><strong>阶段二（时间统一扩散训练）</strong>：训练统一扩散网络ε_ϑ。关键创新是设计了<strong>动作加权损失函数L_noise</strong>。该损失在计算预测噪声ε_ϑ(x,y)与目标条件速度场ε(y|ŷ)的误差时，会利用训练好的动作判别网络s_θ(x,y)来估计相关性权重λ，从而让扩散网络在训练中隐式地学习动作判别能力，专注于向正确的成功动作去噪。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验主要在RLBench仿真环境中的10项任务上进行评估，同时也在真实机器人上进行了验证。对比的基线方法包括：基于Transformer的方法（RVT）、基于流匹配的方法（FlowPolicy）、基于一致性模型的方法（ManiCM）以及其他扩散策略方法（Diffusion Policy, DNActor, READ）。</p>
+<p><img src="https://arxiv.org/html/2506.09422v1/x4.png" alt="仿真结果对比"></p>
+<blockquote>
+<p><strong>图4</strong>：在RLBench多视图设置下的成功率对比。TUDP取得了最高的平均成功率82.6%，显著优于其他基线方法。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.09422v1/x5.png" alt="单视图结果"></p>
+<blockquote>
+<p><strong>图5</strong>：在RLBench单视图设置下的成功率。TUDP同样以83.8%的平均成功率取得最优性能。</p>
+</blockquote>
+<p>关键实验结果：</p>
+<ul>
+<li><strong>总体性能</strong>：在RLBench多视图和单视图设置下，TUDP分别取得了<strong>82.6%</strong> 和 <strong>83.8%</strong> 的最高平均成功率，达到了最先进的性能。</li>
+<li><strong>去噪效率</strong>：图6显示，当使用较少的去噪迭代次数（N）时，TUDP的性能优势更为显著。例如，在N=5时，TUDP的成功率远超其他扩散基线，证明了其高效性。</li>
+<li><strong>真实世界实验</strong>：TUDP在6项真实机器人操作任务中表现良好，成功率与仿真实验相当，验证了其泛化能力。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2506.09422v1/x6.png" alt="迭代次数影响"></p>
+<blockquote>
+<p><strong>图6</strong>：不同去噪迭代次数（N）下的成功率。TUDP在N较小时（如5步）仍能保持较高性能，而其他扩散方法性能下降严重，证明了TUDP的高效性。</p>
+</blockquote>
+<p>消融实验验证了各组件贡献：</p>
+<ol>
+<li><strong>移除动作判别（w/o AD）</strong>：即使用图3(a)所示的无判别速度场，性能大幅下降，平均成功率降至约70%，证明了动作判别信息对消除干扰、提升精度的关键作用。</li>
+<li><strong>移除统一速度场（w/o Unified）</strong>：恢复为需要时间步t输入的传统时间变化速度场，性能也有所下降，证明了时间统一设计降低了学习难度，有利于精度提升。</li>
+<li><strong>两阶段训练顺序</strong>：实验表明，先训练动作判别网络再训练扩散网络的顺序是有效的。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.09422v1/x7.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图7</strong>：消融实验结果。移除动作判别（w/o AD）或时间统一设计（w/o Unified）均会导致性能下降，证明了这两个核心组件的必要性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.09422v1/x8.png" alt="真实机器人结果"></p>
+<blockquote>
+<p><strong>图8</strong>：真实机器人实验的定性结果。TUDP成功完成了开门、拾放物体等复杂操作任务。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>时间统一扩散策略（TUDP）</strong>，通过构建时间统一的速度场，显著降低了扩散策略的学习复杂度和推理时间。</li>
+<li>引入了<strong>动作判别能力</strong>，通过动作判别网络和动作加权损失函数，使策略能够区分不同的成功动作，明确了去噪方向，从而在复杂多解场景中提高了动作生成的准确性。</li>
+<li>设计了两阶段的<strong>动作判别训练方法</strong>，有效地将动作判别信息融入扩散去噪过程的学习中。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，动作判别网络在训练和推理时，其输入（噪声动作y）的分布可能存在细微差异，这可能会影响其判别性能。</p>
+<p><strong>后续研究启示</strong>：</p>
+<ul>
+<li>TUDP证明了在扩散策略中显式建模动作判别信息的重要性，未来可以探索更高效或更鲁棒的动作判别机制。</li>
+<li>时间统一的设计思想可以扩展到更复杂的动作序列生成或具有长期依赖的任务中。</li>
+<li>如何将这种高效准确的扩散策略与在线学习、强化学习进一步结合，以适应动态变化的环境，是一个值得探索的方向。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中基于扩散的策略方法存在生成速度慢、训练复杂且动作准确性不足的问题，提出时间统一扩散策略（TUDP）。核心创新是构建了融合动作判别信息的时间统一速度场，以简化去噪过程并加速生成；同时提出动作智能训练方法，通过动作判别分支提升去噪精度。在RLBench上的实验表明，该方法取得了最先进的性能，多视图和单视图设置下的最高成功率分别达到82.6%和83.8%，尤其在减少去噪迭代时性能提升更为显著。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.09422" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

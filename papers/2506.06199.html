@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>3DFlowAction: Learning Cross-Embodiment Manipulation from 3D Flow World Model - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>3DFlowAction: Learning Cross-Embodiment Manipulation from 3D Flow World Model</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.06199" target="_blank" rel="noreferrer">2506.06199</a></span>
+        <span>作者: Mingkui Tan Team</span>
+        <span>日期: 2025-06-06</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作长期以来是一项具有挑战性的任务，而人类却能轻松执行复杂的物体交互。一个关键原因在于缺乏用于教导机器人操作技能的大规模、统一的训练数据集。当前的机器人数据集通常在简单场景中记录不同动作空间（如不同基坐标系下的关节角度或末端执行器位姿）的机器人动作，这阻碍了机器人学习适用于不同机器人和多样化场景的统一且鲁棒的动作表示。观察人类如何理解操作任务，我们发现理解物体在3D空间中应如何运动是指导动作的关键线索，这种线索是与具身无关的，适用于人类和不同的机器人。现有方法如视频世界模型（如UniPi、AVDC）存在局限性：它们并非以物体为中心，需要处理背景和机械臂等无关内容，导致泛化能力差；并且对未来状态的规划主要局限于2D平面，难以准确表示物体在3D空间的运动。本文针对这些痛点，提出从人类和机器人操作视频中学习一个<strong>3D光流世界模型</strong>，该模型预测被操作物体在3D空间的未来运动轨迹，为动作策略提供指导。本文的核心思路是：利用3D光流作为一种鲁棒、统一且与具身无关的动作表示，通过大规模预训练学习物体运动模式，并以此引导机器人动作规划。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>3DFlowAction的整体流程分为三个阶段：1）从原始视频构建大规模3D光流数据集ManiFlow-110k；2）基于视频扩散模型训练3D光流世界模型；3）利用预测的3D光流进行闭环动作规划与生成。</p>
+<p><img src="https://arxiv.org/html/2506.06199v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：3D光流生成流程总览。(I) 通过移动物体自动检测流程合成3D光流数据集ManiFlow-110k。(II) 在ManiFlow-110k上预训练一个视频扩散模型作为光流世界模型，以学习操作任务中物体的物理运动模式。(III) ManiFlow-110k来源于广泛的机器人和人类视频。</p>
+</blockquote>
+<p><strong>核心模块1：3D光流数据提取</strong><br>由于开源操作视频数据集背景杂乱且包含相似物体，标准检测器难以准确识别被操作物体。为此，论文提出一个<strong>移动物体检测流程</strong>。首先，利用Grounding-SAM2从视频第一帧分割出机械手夹爪掩码。然后，在整个第一帧生成一组分布点，并排除位于夹爪掩码内的点。接着，使用2D跟踪模型Co-tracker3跟踪这些点的运动，识别出在视频中表现出显著运动的点，并围绕这些点确定移动物体的边界框。最后，再次使用Co-tracker3提取物体运动的2D光流，并通过DepthAnythingV2进行深度预测，将2D光流投影至3D空间，得到最终的3D光流。该流程在BridgeV2数据集上实现了超过80%的移动物体检测准确率。最终，从多个开源数据集合成了包含11万条实例的<strong>ManiFlow-110k</strong>数据集用于预训练。</p>
+<p><strong>核心模块2：3D光流世界模型</strong><br>目标是生成目标物体在3D空间中的运动轨迹，条件为初始RGB观察、任务指令和初始点集ℱ₀。论文采用类似Im2Flow2Act的方法，使用AnimateDiff作为光流生成器G。与Im2Flow2Act不同，本文<strong>不将3D光流压缩到潜在空间</strong>，因为发现StableDiffusion的图像VAE难以有效编码深度信息。因此，绕过VAE，直接将3D光流输入U-Net。3D光流定义为ℱ∈ℝ^(T×H×W×4)，其中前两个通道代表图像空间的2D坐标，第三通道是深度，第四通道是可见性。遵循AnimateDiff，注入一个运动模块来建模3D光流的时序动态。训练时，运动模块层从头开始训练，但仅在SD模型中插入LoRA层以保留预训练获得的生成能力。推理时，初始点ℱ₀通过检测器获得，并经过腐蚀处理以防止物体外部点的干扰。</p>
+<p><strong>核心模块3：基于光流的动作规划</strong><br><img src="https://arxiv.org/html/2506.06199v1/x3.png" alt="动作生成框架"></p>
+<blockquote>
+<p><strong>图3</strong>：基于光流的动作生成流程总览。(I) 3DFlowAction首先通过自校正过程执行闭环3D光流生成。(II) 任务感知的抓取姿态生成过程选择与任务相关的抓取姿态，同时避免机器人无法到达的目标位置。(III) 以3D光流为条件的优化过程求解一系列动作。</p>
+</blockquote>
+<p><strong>3.1 闭环运动规划</strong>：为增强系统稳定性，提出一个<strong>以物体为中心的目标状态渲染机</strong>。利用奇异值分解（SVD）估计从光流首帧点集P₁到末帧点集P₂的变换矩阵𝐓。将此变换矩阵应用于被操作物体初始位置的点云，得到其预测的目标状态位置。将变换后的物体点云添加到当前3D场景点云中，并重投影为2D图像作为任务完成时的预测输出。最后，将任务指令和预测图像输入GPT-4o，判断是否需要重新预测3D光流，从而实现闭环规划。</p>
+<p><strong>3.2 任务感知抓取姿态生成</strong>：提出基于功能性和预测3D光流的抓取姿态生成方法。首先提示GPT-4o根据任务指令输出物体应被抓握的部位，然后使用AnyGrasp在该部位周围生成一系列候选抓取姿态。为避免机械臂可达性问题，利用从预测光流中提取的变换矩阵𝐓来优化抓取阶段：用𝐓变换所有候选抓取姿态（这代表了与光流预测的目标物体位置相对应的目标夹爪姿态），然后利用机械臂的逆运动学（IK）判断这些目标姿态是否可达，从而选择与任务相关的抓取姿态。</p>
+<p><strong>3.3 基于光流的动作生成</strong>：将3D光流作为优化过程的约束函数。首先，在物体表面使用最远点采样选择N个关键点，并获取其对应的3D光流。然后，最小化所选初始关键点与在时间步t时预测光流对应的关键点之间的3D欧氏距离，从而得到该时间步的末端执行器位姿。最终，获得一系列末端执行器位姿作为最终执行动作。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在四个复杂的基础任务上评估（见图4）：1）将茶从茶壶倒入杯子；2）将笔插入笔筒；3）将杯子挂到杯架上；4）打开顶层抽屉。每个任务在随机化物体姿态下进行10次试验，报告任务成功率。硬件平台为Dobot Xtrainer，使用Femto Bolt相机提供第三人称视角。对比基线包括：视频世界模型<strong>AVDC</strong>、VLM代码约束模型<strong>Rekep</strong>、模仿学习方法<strong>PI0</strong>以及2D光流方法<strong>Im2Flow2Act</strong>。训练数据方面，仅为3DFlowAction手动收集了每个任务30个人类演示（无动作标签）进行微调，耗时约每任务10分钟。</p>
+<p><img src="https://arxiv.org/html/2506.06199v1/x4.png" alt="任务示例"></p>
+<blockquote>
+<p><strong>图4</strong>：四个基础任务的示例演示。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>与操作世界模型对比</strong>：如表1所示，3DFlowAction在四个任务上的总成功率达到**70.0%*<em>，显著优于AVDC（20.0%）、Rekep（20.0%）和Im2Flow2Act</em>（25.0%）。这证明了3D光流在捕捉物体复杂3D运动方面的优势，以及物体中心表示对下游策略的积极影响。</li>
+<li><strong>跨具身实验</strong>：如表2所示，将3DFlowAction直接部署到Franka和XTrainer两个不同的机器人平台，<strong>无需任何机器人相关的微调</strong>，分别取得了67.5%和70.0%的总成功率，性能一致，证明了其强大的跨具身适应能力。</li>
+<li><strong>与模仿学习方法对比</strong>：如表3所示，在使用相同数量人类演示微调的情况下，3DFlowAction（70.0%）的性能优于PI0（50.0%）和Im2Flow2Act（27.5%），表明在良好引导的动作特征下，优化策略无需遥操作数据也能达到有竞争力的性能。</li>
+<li><strong>泛化能力实验</strong>：如表4所示，在面对未见过的物体和背景时，3DFlowAction在物体泛化和背景泛化上的总成功率分别为<strong>55.0%</strong> 和**50.0%**，远高于AVDC（15.0%， 0.0%）和PI0（40.0%， 32.5%），体现了其物体中心框架和大规模预训练带来的强大泛化能力。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.06199v1/x5.png" alt="对比可视化"></p>
+<blockquote>
+<p><strong>图5</strong>：不同世界模型在“将茶从茶壶倒入杯子”任务上的规划与执行可视化。基线方法的规划虽然正确，但其基于代码或2D的规划难以完全捕捉物体在3D空间的运动，导致动作规划失败。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>如表5所示，移除<strong>闭环规划</strong>（Variant 1）会使总成功率平均下降20%；移除<strong>大规模预训练</strong>（Variant 2）会使总成功率平均下降40%。这分别验证了闭环规划对应对环境干扰的有效性，以及大规模预训练对学习物体运动物理规律和下游任务泛化能力的必要性。</p>
+<p><img src="https://arxiv.org/html/2506.06199v1/x6.png" alt="执行可视化"></p>
+<blockquote>
+<p><strong>图6</strong>：3DFlowAction在四个任务上的执行过程可视化。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>3DFlowAction</strong>框架，首次将<strong>3D光流</strong>作为一种鲁棒、统一、物体中心且与具身无关的动作表示用于机器人规划，并通过从视频数据中学习3D光流世界模型来模拟未来物体轨迹。</li>
+<li>提出了一套<strong>基于光流的动作策略</strong>，包括用于闭环规划的流引导渲染机、任务感知抓取姿态生成机制以及以光流为条件的优化过程，实现了无需机器人动作标注的跨具身动作生成。</li>
+<li>通过广泛实验证明了该方法在多种复杂机器人操作任务上具有<strong>强大的泛化能力</strong>，并且能够<strong>可靠地进行跨具身适应</strong>，而无需硬件特定的训练。</li>
+</ol>
+<p><strong>局限性</strong>：论文指出，3D光流在建模<strong>柔性物体</strong>的运动时面临挑战，因为严重的遮挡和复杂的运动会导致下游动作策略无法输出有效动作。</p>
+<p><strong>启示</strong>：本文的工作表明，从视觉数据中提取与具身无关、物体中心的中间表示（如3D光流）是连接人类演示与机器人执行的有效途径。这为减少对特定机器人数据集的依赖、构建更具通用性的机器人技能学习系统提供了新思路。未来的工作可以探索如何更好地处理非刚性物体，并将此框架扩展到更动态和交互更复杂的任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>这篇论文针对机器人操作学习缺乏统一数据集、难以实现跨具身泛化的问题，提出3DFlowAction方法。核心是通过构建大规模3D光流数据集ManiFlow-110k，训练视频扩散世界模型来预测物体在语言指令下的未来运动轨迹。该方法进一步利用流引导渲染机制和GPT-4o评估生成轨迹的合理性，实现闭环规划，并将预测的3D光流作为优化策略的约束来生成机器人动作。实验表明，该方法在多种复杂操作任务上展现出强大的泛化能力，无需针对特定硬件进行训练即可实现可靠的跨具身适应。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.06199" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AntiGrounding: Lifting Robotic Actions into VLM Representation Space for Decision Making - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>AntiGrounding: Lifting Robotic Actions into VLM Representation Space for Decision Making</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.12374" target="_blank" rel="noreferrer">2506.12374</a></span>
+        <span>作者: Qingyao Wu Team</span>
+        <span>日期: 2025-06-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前将视觉语言模型（VLM）应用于机器人操作的主流方法，通常通过压缩的中间表示来“落地”语言指令，例如将任务分解为预定义的符号技能序列（如 <code>pour(teapot, cup)</code>），或生成语言条件化的空间表示（如3D价值图或基于关键点的约束）。这些方法虽然有效，但引入了信息瓶颈，丢弃了任务相关的细粒度空间、物理和几何细节，以及VLM内部基于这些细节的扩展推理能力。例如，倒茶任务中连续的倾斜调整和精确的壶嘴对齐，被简化为固定的运动基元，失去了轨迹连续性和隐含的空间关系推理。</p>
+<p>本文针对这一核心痛点，提出了“反落地”的新视角。它逆转了传统的指令落地流程，不是将高层指令压缩为低层动作，而是将底层候选动作“提升”到VLM本征的高维表示空间中进行评估。核心思路是：在模型预测控制（MPC）框架内生成多条候选轨迹，将其渲染到多视角场景图像中，然后利用VLM通过结构化的视觉问答（VQA）模板对这些“动作可视化”图像进行评估和打分，从而进行零样本的闭环轨迹决策。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>AntiGrounding框架遵循一个“真实-仿真-真实”的闭环流程，核心包含四个部分：场景重建与仿真的Real2Sim2Real管道、MPC框架下的VLM引导轨迹生成、VLM驱动的轨迹评估，以及仿真到真实的转移与离线策略优化。</p>
+<p><img src="https://arxiv.org/html/2506.12374v2/x3.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图3</strong>：AntiGrounding框架总览。遵循真实-仿真-真实管道，集成了真实世界感知、精确仿真和离线策略优化。包括几何重建、物理属性识别和6D位姿对齐以构建场景。轨迹通过多阶段生成，使用结构化VQA模板评估，并在闭环控制架构下执行。</p>
+</blockquote>
+<p><strong>1. Real2Sim2Real 感知-动作循环</strong>：首先，使用单张RGB图像通过SPAR3D进行3D网格重建，对于铰接结构则直接在仿真中定义为运动学模型。然后，使用SAM-6D估计物体的6D位姿，将重建的网格精确对齐到仿真环境中。为了缩小仿真与真实的动力学差距，使用Scalable Real2Sim基于机器人抓放交互数据来估计关键物理属性（质量、质心、转动惯量）。仿真环境作为动态感知和实时同步的评估平台，VLM先在仿真中验证动作，只有可行的动作才会同步到物理机器人执行，形成闭环。</p>
+<p><strong>2. MPC框架下的VLM引导轨迹生成</strong>：在每个MPC时间步 <code>t</code>，以前端执行器当前位姿 <code>p_t</code> 为中心，在一个半径和角度会随时间衰减的球面区域内采样 <code>N</code> 个目标位姿 <code>p_target^n</code>。通过线性插值和球面线性插值生成从 <code>p_t</code> 到 <code>p_target^n</code> 的候选轨迹 <code>T_t^n</code>，并沿路径分配离散的夹爪状态。采样过程引入了退火探索偏置和经验引导模块，后者利用先前VLM评估识别的有希望的方向来指导采样。生成的候选轨迹经过碰撞检查和目标交互等基本物理约束过滤，得到可行轨迹集 <code>ℱ_t</code>。最后，将这些可行轨迹以不同的视觉标注（如颜色编码、轨迹标签）渲染到当前的多视角场景图像 <code>I_v,t</code> 上。</p>
+<p><strong>3. VLM驱动的轨迹评估</strong>：这是决策的核心。将渲染了可行轨迹的多视角增强图像 <code>{I‘_v,ℱ,t}</code> 输入给一个VLM智能体集合 <code>ℰ</code>。每个智能体根据一个结构化的评估模板 <code>P_v,t</code> 进行评估，该模板集成了任务描述 <code>D</code>、增强图像和一组加权的结构化子问题 <code>Q={(q_k, w_k)}</code>。子问题评估轨迹的关键属性，包括安全性、任务对齐性、效率、物理可行性，以及一个不加权的视角清晰度分数 <code>q_view</code>。每个智能体生成文本回答，并被映射为数值分数 <code>s_m,v,j,k,t</code>。</p>
+<p>为量化视角可靠性，定义了<strong>视角置信度</strong> <code>C_v,t</code>，它结合了清晰度分数和不同智能体对同一视角下所有轨迹评分的一致性（方差）。基于此置信度的自适应视角选择机制 <code>Ψ_view</code> 会优先选择内部一致性更高的视角。最终，每条轨迹 <code>j</code> 的得分 <code>S_j,t</code> 通过对结构化子问题（加权）、视角评估（按归一化置信度加权）和智能体响应进行聚合计算得出（公式3）。得分最高的轨迹被选中执行。此外，VLM还会生成关键控制信号，如子任务转换、夹爪开合和任务完成信号，以实现跨任务阶段的平滑过渡。</p>
+<p><strong>4. 仿真到真实转移与离线策略优化</strong>：选中的最优轨迹 <code>T_t^*</code> 在仿真中执行一步，然后将对应的末端执行器位姿和夹爪状态同步给真实机器人。系统记录执行历史，并利用这些数据通过离线策略优化机制，自适应地调整VLM评估模板中子问题的权重 <code>w_k</code>，从而基于经验反馈持续改进长期性能。</p>
+<p>与现有方法相比，AntiGrounding的核心创新在于：1) <strong>逆向流程</strong>：将动作提升至VLM空间进行评估，避免了压缩中间表示的信息损失。2) <strong>多视角融合推理</strong>：通过策略性选择的多视角2D图像，隐式编码3D场景几何，并利用自适应置信度加权进行融合。3) <strong>闭环集成</strong>：将VLM评估深度集成到MPC闭环中，并引入离线优化，实现了从语义推理到细粒度执行的直接桥接。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在模拟环境（Isaac Sim）和真实机器人平台（UR5e机械臂）上进行。评估任务涵盖了需要精确空间推理、杂乱场景导航和上下文感知规划的复杂操作，例如“将茶倒入杯中”、“将积木堆成塔”、“将工具放入杂乱抽屉”等。</p>
+<p>对比的基线方法包括三类依赖压缩中间表示的经典方法：1) <strong>符号技能序列方法</strong>（如“Pick and Place”基元序列）；2) <strong>3D价值图方法</strong>；3) <strong>基于关键点约束的方法</strong>。</p>
+<p><img src="https://arxiv.org/html/2506.12374v2/x4.png" alt="定性对比"></p>
+<blockquote>
+<p><strong>图4</strong>：在“倒茶”任务上的定性对比。基线方法（左）因使用固定技能“pour(teapot, cup)”而失败，导致茶壶碰撞或倾倒不准确。AntiGrounding（右）通过VLM评估连续轨迹，成功实现了精确的壶嘴对齐和平稳倾倒。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.12374v2/x5.png" alt="定量结果"></p>
+<blockquote>
+<p><strong>图5</strong>：在模拟环境中6项任务上的平均成功率对比。AntiGrounding取得了86.7%的最高平均成功率，显著优于最好的基线方法（价值图，73.3%）和技能序列方法（66.7%）。</p>
+</blockquote>
+<p>关键实验结果总结：在模拟环境的6项任务中，AntiGrounding取得了**86.7%<strong>的平均成功率，显著优于最好的基线方法（3D价值图方法的73.3%和符号技能序列方法的66.7%）。在真实世界的4项任务中，AntiGrounding达到了</strong>82.5%**的平均成功率，而基线方法最高为72.5%。对于复杂的“倒茶”任务，AntiGrounding的成功率（模拟90%，真实85%）远超技能序列基线（模拟40%，真实35%）。</p>
+<p><img src="https://arxiv.org/html/2506.12374v2/x6.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图6</strong>：消融研究结果，展示了移除各个核心组件对平均成功率的影响。移除“多视角融合”影响最大（-11.7%），其次是“离线策略优化”（-6.6%）和“VLM智能体集合”（-5.0%）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.12374v2/x7.png" alt="组件贡献分析"></p>
+<blockquote>
+<p><strong>图7</strong>：各评估子问题（安全性、任务对齐、效率、物理可行性）在决策中的权重贡献分布，显示了不同任务类型下VLM关注点的差异。</p>
+</blockquote>
+<p>消融实验验证了各核心组件的贡献：移除<strong>多视角融合</strong>导致性能下降最严重（-11.7%），证明了其对于鲁棒空间推理的关键性。移除<strong>离线策略优化</strong>（-6.6%）和<strong>VLM智能体集合</strong>（-5.0%）也会导致性能显著下降，说明了经验学习和集成决策的重要性。移除<strong>退火探索引导</strong>（-3.3%）和<strong>自适应视角选择</strong>（-2.5%）也有一定的负面影响。</p>
+<p><img src="https://arxiv.org/html/2506.12374v2/x8.png" alt="真实机器人实验"><br><img src="https://arxiv.org/html/2506.12374v2/x9.png" alt="任务序列展示"><br><img src="https://arxiv.org/html/2506.12374v2/x10.png" alt="复杂操作展示"><br><img src="https://arxiv.org/html/2506.12374v2/x11.png" alt="长期任务展示"></p>
+<blockquote>
+<p><strong>图8-11</strong>：在真实机器人UR5e上执行的一系列复杂操作任务序列截图，包括堆叠、放置、倒茶和整理抽屉等，展示了AntiGrounding在真实场景中的有效性和泛化能力。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) 提出了 <strong>AntiGrounding范式</strong>，通过将候选动作提升至VLM表示空间进行评估，逆转了传统指令落地流程，避免了中间表示的信息瓶颈。2) 设计了一个完整的、闭环的 <strong>Real2Sim2Real框架</strong>，集成了精确的场景重建、物理仿真、基于多视角VQA的MPC决策以及离线策略优化。3) 在模拟和真实平台上进行了 <strong>系统性的实现与验证</strong>，证明了该方法在多种复杂操作任务上的先进性和鲁棒性。</p>
+<p>论文提到的局限性包括：框架依赖于相对精确的3D重建和物理参数识别，在极度杂乱或动态快速变化的环境中可能面临挑战；此外，VLM推理和仿真渲染步骤带来了较高的计算开销，可能影响实时性能。</p>
+<p>这项工作对后续研究的启示在于：为利用基础模型进行机器人控制提供了一条新路径，即直接在其高维语义空间中进行动作评估与优化，而非强行压缩输出。它提示可以进一步探索更高效的“动作-视觉”表示方法、开发专为轨迹评估优化的VLM，以及研究如何将类似的“提升”思想应用于其他模态（如触觉）或决策层级。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出AntiGrounding框架，解决现有方法将视觉语言模型（VLM）知识用于机器人操作时，因压缩为中间表示（如符号化技能序列）而丢失细粒度空间、物理与几何信息的问题。其核心方法逆转传统指令落地流程，通过多视角渲染候选动作轨迹，将其直接提升至VLM原生表示空间，并利用结构化视觉问答（VQA）进行指令条件下的决策，实现零样本合成闭环最优轨迹。实验在仿真和真实平台上验证了该方法在多种操作任务中优于传统方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.12374" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Deep Reinforcement Learning-Based Motion Planning and PDE Control for Flexible Manipulators - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Deep Reinforcement Learning-Based Motion Planning and PDE Control for Flexible Manipulators</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.08639" target="_blank" rel="noreferrer">2506.08639</a></span>
+        <span>作者: Jouni Mattila Team</span>
+        <span>日期: 2025-06-10</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>柔性机械臂因其轻量化和低能耗的优势而日益普及，但其固有的柔性使得建模与控制变得复杂。当前主流方法主要分为两类：控制策略与运动规划。在控制方面，研究者们采用了基于偏微分方程（PDE）的控制器或将其简化为常微分方程（ODE）进行设计；在振动抑制上，一些方法依赖于在末端施加输入力，但这在实际实验中存在驱动约束的挑战，而仅使用基座单一扭矩的欠驱动系统则更难控制末端振动。从运动规划视角看，现有研究大多针对刚性机械臂，尽管柔性机械臂的运动轨迹对系统振动有显著影响，但结合振动抑制的轨迹规划研究仍很缺乏。深度强化学习（DRL）在刚性机械臂运动规划中展现出潜力，但其在柔性连杆机械臂上的应用几乎未被探索。</p>
+<p>本文针对的关键痛点是：在仅使用基座单一扭矩的欠驱动柔性机械臂控制中，传统的“先规划后控制”方法往往忽略了期望轨迹本身对末端振动的影响，导致控制效果受限。本文提出了一个新视角：将运动规划与控制视为一个协同整体，通过DRL生成主动抑制振动的优化轨迹，再通过基于模型的非线性PDE控制器进行精确跟踪。核心思路是：利用模型无关的DRL（SAC算法）进行高层运动规划，生成振动最小的角位置轨迹；同时，设计一个基于Lyapunov稳定性理论的模型相关非线性PDE控制器作为低层跟踪器，二者结合以同时实现高精度跟踪和振动抑制。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的框架是一个高层-低层结构。高层是一个基于深度强化学习（DRL）的运动规划器，其输入是目标角度，输出是优化后的期望角位置轨迹 <code>θ_d(t)</code>，该轨迹旨在最小化运动过程中的端点振动。低层是一个非线性PDE控制器，其输入是运动规划器生成的 <code>θ_d(t)</code> 和系统实际状态，输出是驱动机械臂所需的单一输入扭矩 <code>τ(t)</code>，以确保系统稳定且精确地跟踪规划轨迹。</p>
+<p><img src="https://arxiv.org/html/2506.08639v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：所提出的高层运动规划器与低层控制器示意图。高层DRL规划器根据目标角度生成优化的角位置轨迹 <code>θ_d</code>；低层PDE控制器计算控制扭矩 <code>τ</code> 以跟踪 <code>θ_d</code>。</p>
+</blockquote>
+<p><strong>核心模块1：非线性PDE控制器</strong><br>该控制器设计基于论文第二节推导的无限维PDE模型（欧拉-伯努利梁理论）。控制律设计如下：<br><code>τ(t) = K_p e(t) + K_d ė(t) - H(t)</code><br>其中，<code>e(t) = θ_d(t) - θ(t)</code> 为跟踪误差，<code>K_p</code>, <code>K_d</code> 为正增益。<code>H(t)</code> 项是关键的非线性补偿项，用于抵消系统动力学中的柔性、重力等影响：<br><code>H(t) = EIω″(0,t) - (1/2)mgL cosθ(t) + Mgω(L,t) sinθ(t) - I_m θ¨_d(t)</code><br>该控制器通过构造一个包含耦合项 <code>α I_m e ė</code> 的候选Lyapunov函数（CLF），并选择合适的参数（<code>α I_m &lt; K_p</code> 且 <code>α &lt; 1</code>），证明了闭环系统的指数稳定性。</p>
+<p><strong>核心模块2：基于SAC的DRL运动规划器</strong><br>规划器采用Soft Actor-Critic (SAC)算法，这是一种最大熵DRL算法，擅长处理连续状态和动作空间，并通过熵正则化鼓励探索，适用于柔性机械臂的非线性和欠驱动特性。</p>
+<ul>
+<li><strong>状态空间</strong>: 包括当前角位置 <code>θ</code>、角速度 <code>θ̇</code>、目标角度 <code>θ_T</code>、以及端点弹性偏差 <code>ω(L,t)</code> 及其导数 <code>ω̇(L,t)</code>。</li>
+<li><strong>动作空间</strong>: 为期望的角位置 <code>θ_d</code>。</li>
+<li><strong>奖励函数</strong>: 旨在鼓励快速、准确、低振动的运动。具体形式为：<br><code>r = -(c1 * |θ_T - θ| + c2 * |θ̇| + c3 * |ω(L,t)| + c4 * |ω̇(L,t)| + c5 * |τ|)</code><br>其中，各项分别惩罚与目标的距离、角速度（鼓励平滑）、端点振动位移、端点振动速度以及控制扭矩（鼓励节能）。系数 <code>c1</code> 至 <code>c5</code> 为权重。</li>
+</ul>
+<p><strong>创新点</strong></p>
+<ol>
+<li><strong>轨迹规划的创新</strong>: 首次将DRL应用于柔性连杆机械臂的运动规划，且规划目标直接包含振动抑制，生成的轨迹 <code>θ_d</code> 本身即有利于降低振动。</li>
+<li><strong>控制与规划的协同</strong>: 提出了一种模型无关（DRL）与模型相关（PDE控制）相结合的新型协同框架。DRL规划器无需精确模型即可学习振动最小的轨迹，而PDE控制器则利用模型实现高精度、稳定的跟踪。这种方法有效处理了欠驱动问题，无需传统边界控制方法中的末端作动。</li>
+<li><strong>控制器设计</strong>: 设计了具有严格Lyapunov稳定性证明的非线性PDE控制器，仅使用基座单一扭矩，同时处理了跟踪和由重力、柔性引起的非线性项。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>:</p>
+<ul>
+<li><strong>仿真平台</strong>: MATLAB/Simulink。</li>
+<li><strong>实物平台</strong>: 一台液压驱动的单连杆柔性机械臂。</li>
+<li><strong>对比方法（Baseline）</strong>:<ol>
+<li><strong>PD控制器</strong>：标准的比例-微分控制器。</li>
+<li><strong>PDE控制器 + 正弦轨迹</strong>：本文的PDE控制器跟踪一个简单的正弦函数轨迹。</li>
+<li><strong>PDE控制器 + 多项式轨迹</strong>：本文的PDE控制器跟踪一个5次多项式插值轨迹。</li>
+<li><strong>PDE控制器 + DRL轨迹（本文方法）</strong>。</li>
+</ol>
+</li>
+</ul>
+<p><strong>关键实验结果</strong>:</p>
+<ol>
+<li><strong>仿真对比</strong>: 在从0°运动到40°的场景下，本文方法（PDE+DRL）的跟踪误差和端点振动幅度均显著低于其他方法。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.08639v1/x4.png" alt="仿真结果对比"></p>
+<blockquote>
+<p><strong>图4</strong>：仿真中角位置跟踪对比。本文方法（PDE+DRL）的跟踪误差最小。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.08639v1/x5.png" alt="仿真振动对比"></p>
+<blockquote>
+<p><strong>图5</strong>：仿真中端点振动对比。本文方法（红色）的残余振动幅度最低，多项式轨迹（绿色）和正弦轨迹（蓝色）均引发较大振动。</p>
+</blockquote>
+<ol start="2">
+<li><strong>实物实验验证</strong>: 在真实液压柔性机械臂上执行了相同的0°到40°运动任务。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.08639v1/x12.png" alt="实验跟踪对比"></p>
+<blockquote>
+<p><strong>图12</strong>：实物实验中角位置跟踪对比。PD控制器（紫色）跟踪效果差且波动大；PDE+多项式（绿色）有改进但仍有过冲；本文方法（PDE+DRL，红色）跟踪最平滑、准确。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.08639v1/x13.png" alt="实验振动对比"></p>
+<blockquote>
+<p><strong>图13</strong>：实物实验中端点振动对比。本文方法（红色）的振动抑制效果最佳，稳态振动幅度比PDE+多项式方法降低了约66%，比PD控制器降低了约86%。</p>
+</blockquote>
+<ol start="3">
+<li><strong>消融实验与组件贡献</strong>:<ul>
+<li><strong>控制器消融</strong>: 固定使用DRL规划的轨迹，分别用PD控制器和PDE控制器进行跟踪。实验表明，PDE控制器的跟踪精度远高于PD控制器，验证了PDE控制器设计的有效性。</li>
+<li><strong>规划器消融</strong>: 固定使用本文的PDE控制器，分别跟踪正弦轨迹、多项式轨迹和DRL轨迹。实验表明，DRL规划器生成的轨迹能带来最小的端点振动，验证了DRL运动规划对于振动抑制的关键作用。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.08639v1/x10.png" alt="控制器消融实验"></p>
+<blockquote>
+<p><strong>图10</strong>：控制器消融实验（跟踪相同DRL轨迹）。PDE控制器（红色）的跟踪误差远小于PD控制器（蓝色）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.08639v1/x11.png" alt="规划器消融实验"></p>
+<blockquote>
+<p><strong>图11</strong>：规划器消融实验（使用相同PDE控制器）。DRL规划的轨迹（红色）产生的端点振动远小于正弦轨迹（蓝色）和多项式轨迹（绿色）。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>:</p>
+<ol>
+<li>开发了一种用于柔性机械臂的非线性PDE控制器，通过Lyapunov理论保证了闭环稳定性，且仅需基座单一输入扭矩。</li>
+<li>首次引入了基于SAC算法的DRL运动规划器用于柔性机械臂，能够生成主动抑制端点振动的优化轨迹。</li>
+<li>提出并验证了一种模型相关（PDE控制）与模型无关（DRL规划）协同的新框架，有效解决了欠驱动柔性系统的振动抑制与精确跟踪问题。</li>
+<li>通过全面的仿真和实物实验（液压驱动柔性臂）验证了所提框架的优越性，证明了其在真实世界条件下的有效性。</li>
+</ol>
+<p><strong>局限性</strong>:<br>论文自身提到的局限性包括：目前的工作仅针对单连杆柔性机械臂系统。此外，DRL训练过程通常需要大量的交互数据，存在一定的计算成本。</p>
+<p><strong>后续研究启示</strong>:</p>
+<ol>
+<li><strong>系统扩展</strong>: 将所提框架扩展到多连杆柔性机械臂或更复杂的柔性机器人系统。</li>
+<li><strong>算法优化</strong>: 探索其他更高效或更稳健的DRL算法用于运动规划，或研究如何减少训练所需的数据量。</li>
+<li><strong>在线学习</strong>: 研究在线自适应或元学习策略，使DRL规划器能适应系统参数变化或未知扰动。</li>
+<li><strong>硬件实现优化</strong>: 进一步优化控制算法在实时系统中的计算效率，以应用于更高动态要求的场景。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出了一种结合深度强化学习（DRL）与非线性偏微分方程（PDE）控制的柔性机械臂运动规划与控制框架。核心问题是解决传统方法在轨迹跟踪时难以抑制端点振动的问题。关键技术包括：1）采用软演员-评论家（SAC）算法的DRL运动规划器，生成能最小化振动的优化轨迹；2）基于PDE的非线性控制器，通过李雅普诺夫分析保证闭环稳定，并计算跟踪所需扭矩。仿真与实物实验验证表明，该方法在振动抑制和跟踪精度上均优于传统方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.08639" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

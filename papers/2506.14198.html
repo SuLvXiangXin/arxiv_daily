@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AMPLIFY: Actionless Motion Priors for Robot Learning from Videos - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>AMPLIFY: Actionless Motion Priors for Robot Learning from Videos</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.14198" target="_blank" rel="noreferrer">2506.14198</a></span>
+        <span>作者: Animesh Garg Team</span>
+        <span>日期: 2025-06-17</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人学习领域，获取大量带动作标签的专家演示数据既稀缺又昂贵，这限制了学习策略的泛化能力。相比之下，互联网上存在海量的无动作标签视频数据，但如何将这些观测转化为有效的策略仍然是一个挑战。当前主流方法主要分为两类：一是基于视频预训练学习静态观测的表示，但未显式建模序列动态；二是基于模型的视频预测方法，通过在像素空间预测未来帧来捕捉动态，但计算成本高昂，通常被迫采用开环控制等折衷方案。一些工作尝试使用光流或关键点轨迹来提取运动信息，但仍存在局限性：如Track2Act依赖目标图像假设且输出空间受限；ATM依赖不切实际的训练时关键点采样启发式方法，且两者均未学习关键点的潜在空间抽象，导致计算成本高、预测粗糙。</p>
+<p>本文针对从无动作视频中高效学习有价值运动先验这一具体痛点，提出了一个新的视角：将视觉运动预测与动作推断解耦，使用潜在关键点运动作为中间表示。其核心思路是：首先从丰富的无动作视频中学习一个紧凑的、离散化的关键点运动表示（前向动力学），然后仅利用有限的带动作交互数据，学习如何将这些预测的运动解码为机器人动作（逆动力学），从而实现两种数据源的独立扩展与灵活结合。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Amplify框架将策略学习分解为三个顺序阶段：运动令牌化、前向动力学建模和逆动力学学习。整体输入为当前观测图像$o_t$、机器人本体感知状态$q_t$和任务描述$g$，最终输出为未来$T$个时间步的动作块$\bm{a}<em>t = a</em>{t:t+T}$。其核心创新在于引入了一个潜在关键点动力学模型，将密集关键点运动压缩到离散潜在空间，从而分离了“学习任务定义的运动”与“学习机器人如何执行它”的挑战。</p>
+<p><img src="https://arxiv.org/html/2506.14198v1/x2.png" alt="方法架构"></p>
+<blockquote>
+<p><strong>图2</strong>：Amplify的三阶段架构分解：(a) 运动令牌化：将关键点轨迹压缩为离散潜在代码；(b) 前向动力学：根据当前图像和任务描述预测未来潜在运动代码；(c) 逆动力学：将预测的运动令牌解码为动作块。</p>
+</blockquote>
+<p><strong>1. 预处理与运动令牌化</strong><br>首先，使用现成的点跟踪模型（如[36]）对视频数据集$\mathcal{V}$进行预处理。在每个图像$o_t$中初始化一个$20\times20$的均匀网格（共$N=400$个点），并跟踪其在后续$T=16$帧中的2D像素坐标，得到轨迹$\kappa_t$。计算单步速度$u_t$后，通过一个关键点自编码器将其映射到离散潜在空间。编码器$\mathcal{E}_\theta$采用因果掩码的Transformer架构，将速度序列映射为$d$个潜在向量。随后使用有限标量量化（FSQ）进行离散化，得到代码$z_t$。解码器$\mathcal{D}_\theta$（非掩码Transformer解码器）则根据这些代码进行重建。关键设计在于，解码器并非直接回归2D坐标，而是为每个点输出一个在$W\times W$局部窗口上的分类分布，该窗口以上一时间步的同一点为中心。这引入了“运动通常局部连续”的归纳偏置，并能更好地捕捉多模态分布。训练使用交叉熵损失（公式1）。</p>
+<p><strong>2. 前向动力学（无动作运动先验）</strong><br>前向动力学模型$f(o_t, g)$是一个自回归Transformer，其目标是根据当前观测和任务描述，预测对应于未来视频$o_{t:t+T}$的令牌化运动序列$z_t$。图像通过预训练的ResNet-18编码为$7\times7=49$个视觉令牌，文本通过T5编码。这些条件令牌与一个序列开始（SOS）令牌以及潜在运动令牌拼接，使用块因果注意力掩码（条件部分非因果，运动令牌部分因果）来预测下一个令牌。训练时冻结令牌化器，仅使用交叉熵损失（公式2）预测代码，无需解码为完整轨迹。</p>
+<p><strong>3. 逆动力学</strong><br>逆动力学模型$f_{\text{inv}}(o_t, q_t, z_t)$是一个Transformer解码器，它将预测的潜在运动令牌$z_t$（连同图像令牌和本体感知状态的线性投影）解码为未来$T$步动作块$\bm{a}_t$的分布。该模型不依赖于目标$g$，被训练为一个通用的“参考跟随器”。采用各向同性高斯先验，并使用带时间折扣因子$\gamma$的负对数似然损失（公式3）进行训练，以减少序列末端不准确预测的影响。在实践中，会在前向动力学模型预测的输出$\hat{z}_t$上对动作解码器进行微调。</p>
+<p><strong>与现有方法的创新点</strong></p>
+<ol>
+<li><strong>潜在关键点动力学模型</strong>：首次提出并系统研究了从关键点轨迹学习紧凑离散潜在表示的方法，避免了直接在像素空间或关键点坐标空间预测的高计算成本。</li>
+<li><strong>解耦与模块化训练</strong>：明确将前向动力学（可训练于任何视频）与逆动力学（可训练于任何交互数据）分离，允许两类数据源独立、灵活地扩展。</li>
+<li><strong>局部窗口分类预测</strong>：在运动令牌化解码器中，使用局部窗口上的分类分布来重建关键点速度，引入了有益的归纳偏置并提升了多模态建模能力。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在模拟和真实世界环境中进行，使用了三个大规模视频数据集：真实机器人数据集BridgeData v2（&gt;60k条轨迹）、人类日常操作视频数据集Something-Something v2（&gt;220k视频）和模拟机器人基准LIBERO（6500条演示轨迹）。对比的基线方法包括关键点预测方法ATM、Track2Act，以及作为基线的行为克隆（BC）。</p>
+<p><strong>前向动力学预测质量</strong><br>在关键点轨迹预测任务上，Amplify显著优于基线。</p>
+<p><img src="https://arxiv.org/html/2506.14198v1/x4.png" alt="关键点轨迹预测对比"></p>
+<blockquote>
+<p><strong>图4</strong>：在BridgeData v2数据集上关键点轨迹预测的均方误差（MSE）对比。Amplify在短期和长期预测上均大幅降低MSE，最高达3.7倍。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.14198v1/x5.png" alt="像素预测对比"></p>
+<blockquote>
+<p><strong>图5</strong>：将预测的关键点轨迹渲染为像素后的预测准确性（PCK@阈值）对比。Amplify在多个阈值下均取得最佳性能，<a href="mailto:&#80;&#67;&#75;&#x40;&#x30;&#46;&#49;">&#80;&#67;&#75;&#x40;&#x30;&#46;&#49;</a>提升超过2.5倍。</p>
+</blockquote>
+<p><strong>下游策略学习效用</strong><br>评估了在四种数据设置下策略学习的成功率：分布内（充足数据）、少样本（仅5条演示）、跨具身（前向模型加入人类视频）和泛化（测试未见过的任务）。Amplify在逆动力学中以前向模型预测的运动令牌为条件，作为有价值的先验。</p>
+<p><img src="https://arxiv.org/html/2506.14198v1/x6.png" alt="策略学习成功率"></p>
+<blockquote>
+<p><strong>图6</strong>：在LIBERO基准上的策略学习成功率。Amplify在少数据、跨具身和泛化设置下均表现优异，特别是在零分布内动作数据的泛化任务上首次取得成功，平均提升达1.4倍。</p>
+</blockquote>
+<p><strong>消融实验</strong><br>消融实验验证了核心组件的贡献：1）<strong>潜在表示</strong>：使用离散潜在空间（FSQ）相比直接回归坐标，显著提升了预测精度和下游任务性能；2）<strong>局部窗口分类</strong>：相比直接回归，该方法提升了关键点预测精度；3）<strong>跨具身数据</strong>：在前向动力学训练中加入人类视频，提升了策略在少样本和跨任务上的泛化能力。</p>
+<p><strong>超越控制的通用性：条件视频生成</strong><br>将Amplify学习到的动力学作为潜在世界模型，应用于条件视频生成任务。给定起始帧和运动令牌，通过解码器生成未来帧。</p>
+<p><img src="https://arxiv.org/html/2506.14198v1/extracted/6547799/figures/video-prediction-sample.png" alt="条件视频生成"></p>
+<blockquote>
+<p><strong>图20</strong>：条件视频生成示例。给定起始帧（左）和Amplify预测的运动令牌，可以生成连贯的未来帧序列，证明了所学运动表示的通用性。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了首个潜在关键点动力学模型，为从视频中学习运动先验提供了高效、紧凑的表示；2）通过模块化设计解耦了前向与逆动力学，使得能够灵活利用海量无动作视频和有限机器人数据，在关键点预测精度和下游策略学习（尤其是低数据、跨具身和零样本泛化）上达到了最先进水平；3）展示了所学的运动表示可作为通用的潜在世界模型，适用于视频预测等任务。</p>
+<p>论文自身提到的局限性主要在于其依赖于离线的关键点跟踪模型进行预处理，这可能导致跟踪误差传播并影响系统性能。</p>
+<p>这项工作为机器人学习开辟了一条新范式：利用异构数据源（无动作视频与有动作交互数据）构建高效、可泛化的世界模型。它对后续研究的启示包括：探索更鲁棒或在线自监督的关键点提取方法，将此类运动先验与更高级的任务规划结合，以及将该框架扩展到更复杂的动态场景和多智能体交互中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出AMPLIFY框架，旨在解决机器人学习中动作标记数据稀缺、成本高的问题，以利用丰富的无动作视频数据。其核心技术是模块化方法：首先从关键点轨迹提取离散运动令牌，在大量无动作视频上训练前向动力学模型；然后在少量动作标记数据上训练逆动力学模型，实现运动预测与动作推断的解耦。实验表明，该方法的动态预测更准确（MSE提升达3.7倍，像素预测精度提升2.5倍以上），并在下游策略学习中显著提升性能：低数据 regime 下性能提高1.2-2.2倍，利用无动作人类视频学习平均提升1.4倍，且首次实现了在零分布内动作数据下对LIBERO任务的泛化。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.14198" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

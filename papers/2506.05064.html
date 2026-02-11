@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DemoSpeedup: Accelerating Visuomotor Policies via Entropy-Guided Demonstration Acceleration - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>DemoSpeedup: Accelerating Visuomotor Policies via Entropy-Guided Demonstration Acceleration</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.05064" target="_blank" rel="noreferrer">2506.05064</a></span>
+        <span>作者: Huazhe Xu Team</span>
+        <span>日期: 2025-06-05</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>模仿学习在机器人操作任务中取得了显著的成功，但策略的执行效率往往不尽如人意，其主要原因在于人类操作员收集的演示通常速度缓慢。当前主流方法，如ACT或Diffusion Policy等生成式策略，在任务完成率上表现出色，但其执行速度受限于缓慢的演示数据。现有的一些测试时加速技术，通过在部署时简单地降采样待执行的动作块来提升速度，但往往会导致明显的性能下降，这主要是由于加速引起的分布偏移。</p>
+<p>本文针对由人类收集的缓慢演示导致行为克隆策略执行缓慢这一具体痛点，提出了一个新的视角：不应以恒定速率对整个演示轨迹进行简单降采样，而应根据不同片段对操作精度的要求进行自适应加速。其核心思路是：利用一个在原始演示上训练的生成式策略作为代理，估计每个帧的动作条件熵，熵值高的部分对应低精度、可安全加速的“随意”阶段，熵值低的部分对应高精度、需保留的“精确”阶段；基于熵值对演示进行分段并施加不同速率的加速，最终在加速后的数据上训练出既快又准的策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>DemoSpeedup的整体流程分为三个阶段：首先，在原始速度的演示数据上训练一个任意的生成式策略（如ACT或DP），作为代理策略用于估计每个时间步的动作条件熵；其次，基于估计的熵值对演示轨迹进行聚类分割，区分出高精度和低精度部分；最后，对不同精度的片段应用不同的降采样速率进行加速，生成加速后的演示数据集，用于训练最终的行为克隆策略。</p>
+<p><img src="https://arxiv.org/html/2506.05064v2/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：DemoSpeedup方法整体框架。首先利用原始演示训练的生成策略估计条件动作熵。具有高熵（红点）的动作以更高的速率降采样，而低熵（绿点）的动作以较低的速率降采样。</p>
+</blockquote>
+<p><strong>核心模块一：动作熵估计</strong>。该模块旨在量化每个演示帧所需的操作精度。具体而言，给定当前观测 $o_t$，从训练好的代理策略 $\pi_\theta(A_t|o_t)$ 中采样 $N$ 个动作块样本。随后，使用高斯核密度估计（KDE）计算给定 $o_t$ 下动作 $a_t$ 的概率密度分布 $\hat{p}(a_t|o_t)$（公式1）。最后，通过该分布估计条件动作熵 $\hat{H}(a_t|o_t)$（公式2）。熵值越高，表明在该观测下策略可采取的动作越多样、越“随意”，对应低精度需求；熵值越低，则表明动作选择越一致、越“精确”。</p>
+<p><strong>核心模块二：熵引导的演示加速</strong>。该模块负责根据熵值处理并加速演示。</p>
+<ol>
+<li><strong>熵预处理</strong>：由于遥操作数据可能存在噪声，首先使用孤立森林检测并修正轨迹中的异常熵值。</li>
+<li><strong>聚类与精度标注</strong>：将每个帧的熵值与其时间索引拼接以保留时序信息，并进行归一化。接着，使用基于密度的层次聚类方法（HDBSCAN）将所有熵点划分为细粒度（高精度）和粗粒度（低精度）区域。将聚类中平均熵值低于零的簇内时间索引标记为精度集 $P$，其余标记为随意集 $C$。</li>
+<li><strong>复制后降采样策略</strong>：为了避免直接降采样导致访问的状态多样性减少和信息丢失，DemoSpeedup采用了一种创新的“复制-降采样”策略。对于目标加速速率 $N\times$，将原始动作块复制 $N$ 份，第 $i$ 份从偏移 $i$ 帧开始进行 $N\times$ 降采样。这相当于将原始块拆分成 $N$ 个加速子块，从而保留了与原始演示相同的状态访问多样性。</li>
+<li><strong>几何一致性与控制器要求</strong>：为确保加速策略的性能，保持加速前后一个动作块所经过的几何距离大致相同。同时，论文指出高速执行需要高精度的机器人控制器，对于抓取器跟踪高速动作失败的情况，可通过增加抓取器增益来解决。</li>
+</ol>
+<p><strong>创新点</strong>：与现有恒定速率加速或测试时加速方法相比，DemoSpeedup的核心创新在于：1）提出使用生成式策略作为无监督的“动作熵估计器”，从而间接量化演示中隐含的精度需求，无需人工标注或特定任务先验；2）提出了“复制后降采样”的数据加速策略，在提升速度的同时最大程度保留了原始数据分布。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：论文在仿真和真实世界环境中进行了广泛验证。仿真实验使用了来自Aloha和BiGym数据集的共11个任务，涵盖双手操作和移动操作。真实世界实验在Galaxea R1双手机器人平台上设计了6个任务，强调长视野或时间敏感性。使用的基线方法包括在原始演示上训练的ACT和DP策略（ACT, DP），以及对这些策略进行2倍测试时动作降采样的版本（ACT-2x, DP-2x）。评估指标包括任务成功率（越高越好）和平均回合长度或耗时（越低越好）。</p>
+<p><strong>关键实验结果</strong>：<br>仿真结果表明，使用DemoSpeedup加速数据集训练的ACT和DP策略，在保持与原始策略相当甚至更高成功率的同时，实现了显著的加速。平均加速比约为2倍，最高可达3倍。相比之下，测试时加速（ACT-2x, DP-2x）虽然缩短了时间，但导致了平均超过8%的性能下降。</p>
+<p><img src="https://arxiv.org/html/2506.05064v2/x3.png" alt="仿真任务"></p>
+<blockquote>
+<p><strong>图3</strong>：仿真实验的任务环境，来自Aloha和BiGym，包含从人类收集数据集中提取的双手和移动操作任务。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.05064v2/x5.png" alt="仿真结果表"></p>
+<blockquote>
+<p><strong>图5</strong>：仿真实验结果汇总表。DemoSpeedup在不同机器人平台和任务上实现了显著的加速效果，同时保持了可比的成功率。例如，ACT+DemoSpeedup在平均成功率82%的同时达到了2.1倍加速。</p>
+</blockquote>
+<p>真实世界实验结果进一步证实了方法的有效性。在“Pen in Cup”、“Sort”、“Conveyer”等任务中，DemoSpeedup加速的策略在成功率持平或提升的同时，耗时大幅减少（例如，ACT在Sort任务上从56.78秒加速到20.38秒）。特别是在对速度敏感的“Conveyer Fast”任务（传送带速度加倍）中，DemoSpeedup策略（ACT+Ours成功16/30，DP+Ours成功27/30）相比原始策略（ACT成功2/30，DP成功7/30）表现出了巨大的鲁棒性优势。</p>
+<p><img src="https://arxiv.org/html/2506.05064v2/x4.png" alt="真实世界设置"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界实验设置。考虑了五个具有挑战性的任务，其中Sort、Kitchenware强调长视野操作，Bomb Deposal需要精确操作，Conveyer及其变体Conveyer Fast对操作速度敏感。</p>
+</blockquote>
+<p><strong>消融实验</strong>：论文通过对比测试时加速与DemoSpeedup的性能差异，间接证明了其“熵引导分段加速”和“复制-降采样”策略的有效性。测试时加速导致性能显著下降，而DemoSpeedup在加速的同时维持了成功率，说明其自适应加速方法缓解了分布偏移问题。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1）提出了DemoSpeedup，一种自监督的熵引导演示加速框架，能够从缓慢的人类演示中训练出执行速度大幅提升的视觉运动策略；2）引入了利用生成式策略估计动作条件熵作为隐式精度度量，并设计了基于聚类的轨迹分割和“复制-降采样”加速策略；3）在仿真和真实世界多种任务上验证了方法的有效性，实现了1.7倍至3倍的加速，且任务成功率与原始策略相当或更高。</p>
+<p><strong>局限性</strong>：论文提到，高速执行对机器人控制器的精度提出了更高要求，控制器的动态特性差异可能导致性能下降。此外，方法依赖于初始代理策略的熵估计质量。</p>
+<p><strong>后续启示</strong>：DemoSpeedup为提升模仿学习策略的时效性开辟了新方向。其核心思想——区分任务中对精度敏感与非敏感的阶段并进行差异化处理——可推广至其他领域。熵估计作为数据内在属性的度量，也可能用于其他数据筛选或课程学习任务。未来工作可以探索更鲁棒的熵估计方法，或将此框架与在线学习、强化学习结合以进一步优化策略。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出DemoSpeedup方法，旨在解决模仿学习中因人类示范动作缓慢而导致策略执行效率低下的问题。其核心技术是**熵引导的示范加速**：首先训练一个生成策略作为动作熵估计器，根据熵值高低判断各帧所需操作精度；随后对高熵（低精度要求）的片段进行更高比例的下采样加速，生成加速后的示范数据。实验表明，基于加速示范训练的策略**执行速度提升至3倍**，且任务成功率保持甚至优于原速示范训练的策略。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.05064" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

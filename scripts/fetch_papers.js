@@ -403,6 +403,25 @@ const main = async () => {
   // Final save (ensure consistency)
   fs.writeFileSync(outputPath, JSON.stringify(payload, null, 2));
 
+  // Generate lightweight index for fast main-page loading
+  const indexItems = payload.items.map((p) => ({
+    id: p.id,
+    title: p.title,
+    arxivId: p.arxivId,
+    date: p.date,
+    authors: p.authors,
+    category: p.category,
+    summary: p.summary,
+    tags: p.tags,
+    updatedAt: p.updatedAt,
+  }));
+  const indexPath = path.resolve(__dirname, "..", "data", "papers-index.json");
+  fs.writeFileSync(
+    indexPath,
+    JSON.stringify({ generatedAt: payload.generatedAt, source: payload.source, items: indexItems })
+  );
+  console.log(`Index file saved to data/papers-index.json (${(Buffer.byteLength(JSON.stringify({generatedAt: payload.generatedAt, source: payload.source, items: indexItems})) / 1024).toFixed(0)} KB)`);
+
   console.log(`\n========== 完成 ==========`);
   console.log(
     `Saved ${payload.items.length} papers to ${OUTPUT_PATH} + detail pages`

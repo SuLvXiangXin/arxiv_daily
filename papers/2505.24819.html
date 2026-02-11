@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Bi-Manual Joint Camera Calibration and Scene Representation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Bi-Manual Joint Camera Calibration and Scene Representation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2505.24819" target="_blank" rel="noreferrer">2505.24819</a></span>
+        <span>作者: Weiming Zhi Team</span>
+        <span>日期: 2025-05-30</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作，尤其是双手操作，通常需要在多个机械臂上安装多个摄像头。传统的手眼标定方法依赖于外部标记（如棋盘格或AprilTag），要求机械臂移动到一系列预设位姿并拍摄标记图像。对于双机械臂设置，这些方法需要分别对每个机械臂进行标定，然后再通过额外步骤融合两个坐标系，过程繁琐。此外，下游的双手机器人操作需要在共享工作空间中协调两个末端执行器和多个物体，这需要一个统一的、尺度一致的环境表示。</p>
+<p>本文针对上述痛点，提出了一种无需标记的双手机器人联合标定与表示框架（Bi-JCR）。其核心思路是：利用现代3D基础模型从双机械臂捕获的RGB图像中直接获取无尺度的相机位姿和密集场景重建，然后结合机械臂的正向运动学，通过一个联合的尺度恢复与双标定优化问题，一次性求解出所有未知变换（相机外参、机械臂间相对位姿）并获得一个度量尺度的统一3D场景表示。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Bi-JCR框架旨在同时解决两个机械臂的“眼在手”标定问题，并恢复机器人基座间的相对位姿，同时获得桌面场景的稠密3D表示。整个过程不依赖任何外部标记。</p>
+<p><strong>问题设定</strong>：考虑一个主机械臂和一个副机械臂，每个末端安装一个RGB相机。在共享工作空间中放置一些物体。控制每个机械臂末端执行器依次经过N个不同的位姿，并在每个位姿拍摄一张RGB图像。已知的是每个机械臂从基座到末端执行器的正向运动学（位姿），未知的是：相机到各自末端执行器的刚体变换 (T^{E_1}<em>{C_1}) 和 (T^{E_2}</em>{C_2})；基础模型输出坐标系 (w) 到真实世界度量坐标系的尺度因子 (\lambda)；副机械臂基座 (b_2) 相对于主机械臂基座 (b_1) 的位姿 (P^{b_1}<em>{b_2})；以及基础模型输出坐标系 (w) 到主基座 (b_1) 的变换 (T^{b_1}</em>{w})。目标是从这些图像和末端位姿中恢复所有未知量。</p>
+<p><img src="https://arxiv.org/html/2505.24819v1/x1.png" alt="变换关系图"></p>
+<blockquote>
+<p><strong>图2</strong>：双机械臂及其相机的变换关系示意图。变换 (T^{E_1}<em>{C_1})、(T^{E_2}</em>{C_2}) 和 (P^{b_1}_{b_2}) 均为未知，将由Bi-JCR恢复。</p>
+</blockquote>
+<p><strong>整体流程与核心模块</strong>：</p>
+<ol>
+<li><strong>3D基础模型处理</strong>：将两个机械臂拍摄的图像集输入一个预训练的3D基础模型（如DUSt3R）。该模型输出每张图像对应的无尺度相机位姿 (P^{w}<em>{m,i}) 以及每个像素对应的3D点集 (\hat{X}</em>{m,i})（即场景在坐标系 (w) 中的无尺度重建）和置信度图。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.24819v1/extracted/6497875/imgs/gjcr_sim_4.png" alt="3D基础模型输出示例"></p>
+<blockquote>
+<p><strong>图4</strong>：3D基础模型（DUSt3R）输入一组RGB图像，输出3D点集、相机位姿和置信度图。</p>
+</blockquote>
+<ol start="2">
+<li><p><strong>初始解求解</strong>：由于基础模型的输出缺少绝对尺度，引入尺度因子 (\lambda)，使得在真实世界坐标系中的相机位姿为 (P^{w}<em>{m,i}(\lambda) = \begin{bmatrix} R</em>{m,i} &amp; \lambda t_{m,i} \ 0 &amp; 1 \end{bmatrix})。基于经典手眼标定方程 (AX = XB) 的形式，但右侧依赖于 (\lambda)。Bi-JCR首先求解旋转部分（与尺度无关），通过将旋转矩阵映射到李代数 (\mathfrak{so}(3))，利用外积和矩阵运算求解出 (R^{E_m}<em>{C_m}&#39;)。随后，通过最小化一个尺度恢复问题（SRP）的残差，联合求解平移部分 (t^{E_m}</em>{C_m}&#39;) 和尺度因子 (\lambda&#39;)，该优化假设两个机械臂共享同一个尺度因子。</p>
+</li>
+<li><p><strong>联合优化</strong>：获得初始解 ([\lambda&#39;, T^{E_1}<em>{C_1}&#39;, T^{E_2}</em>{C_2}&#39;]) 后，Bi-JCR构建一个联合优化问题，同时优化所有未知参数：尺度因子 (\lambda)，两个手眼变换 (T^{E_1}<em>{C_1})、(T^{E_2}</em>{C_2})，以及基础模型坐标系到两个机械臂基座的变换 (T^{b_1}<em>{w})、(T^{b_2}</em>{w})。损失函数由三部分组成：</p>
+<ul>
+<li><strong>手眼标定损失</strong> (L_{hand-eye})：确保对于每个机械臂，由末端运动 (T^{E_{m,i}}<em>{E</em>{m,i+1}}) 和相机运动 (T^{P^{w}<em>{m,i}(\lambda)}</em>{P^{w}_{m,i+1}(\lambda)}) 计算出的手眼变换一致。</li>
+<li><strong>基座对齐损失</strong> (L_{base})：确保通过两个机械臂各自的变换链（基座-&gt;末端-&gt;相机-&gt;基础模型坐标系）计算出的、从基础模型坐标系到“另一个”基座坐标系的变换是一致的，这隐式地恢复了机械臂基座间的相对位姿 (P^{b_1}_{b_2})。</li>
+<li><strong>重建一致性损失</strong> (L_{rec})：利用基础模型输出的点云和置信度，鼓励从不同相机视角观察到的同一场景点，在优化后的度量尺度坐标系中位置一致。<br>该优化在变换矩阵的流形上通过梯度下降进行。</li>
+</ul>
+</li>
+</ol>
+<p><strong>创新点</strong>：与现有方法相比，Bi-JCR的主要创新在于：1) <strong>完全无标记</strong>，利用3D基础模型替代了传统的标定板；2) <strong>联合求解</strong>，将双机械臂的手眼标定、机械臂间标定、尺度恢复和场景重建统一在一个优化框架内，使用同一组图像数据完成所有任务；3) <strong>直接输出统一表示</strong>，优化后直接得到一个位于主机械臂基座坐标系下的、度量尺度的3D场景表示，可直接用于下游任务。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在真实世界的多种桌面环境中进行评估，使用了两个配备腕部相机的Franka Emika Panda机械臂。收集了10个不同的场景数据集，每个场景包含约9-15个机械臂位姿及对应的图像。实验平台涉及实际机器人硬件。</p>
+<p><strong>对比与评估</strong>：</p>
+<ul>
+<li><strong>标定精度评估</strong>：将Bi-JCR标定得到的相机外参与基于标记的传统方法（使用CALICO库）的标定结果进行对比。计算了旋转误差（角度差）和平移误差（欧氏距离）。在多个场景中，Bi-JCR取得了与基于标记方法相当或更优的精度。例如，在一个场景中，Bi-JCR的平移误差为0.9厘米，而基于标记的方法为1.2厘米。</li>
+<li><strong>重建精度评估</strong>：通过测量重建场景中物体的尺寸并与真实尺寸对比来评估。对勺子、茶壶盖、胶带、电池、工具箱、游戏手柄等多个物体进行了测量。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2505.24819v1/extracted/6497875/object_size/spoon.png" alt="物体尺寸测量示例-勺子"><br><img src="https://arxiv.org/html/2505.24819v1/extracted/6497875/object_size/measure_spoon.png" alt="物体尺寸测量示例-勺子测量"></p>
+<blockquote>
+<p><strong>图6与图7</strong>：左图为重建场景中的勺子点云，右图为在该点云上测量的尺寸（22.1厘米），与真实尺寸（22.5厘米）接近。</p>
+</blockquote>
+<ul>
+<li><strong>消融实验</strong>：评估了集成不同3D基础模型（DUSt3R，SfM，COLMAP）对Bi-JCR性能的影响。结果显示，使用DUSt3R作为基础模型时，在标定和重建任务上均能获得最佳性能。</li>
+<li><strong>下游任务演示</strong>：利用Bi-JCR产生的标定结果和场景表示，成功执行了多种下游任务：<ul>
+<li><strong>单臂抓取</strong>：将重建的3D场景导入仿真器（PyBullet）进行碰撞检查和抓取规划，并在真实机器人上成功执行抓取。</li>
+</ul>
+</li>
+</ul>
+<p><img src="https://arxiv.org/html/2505.24819v1/extracted/6497875/downstream/grasp_toolbox.png" alt="下游抓取任务-工具箱"></p>
+<blockquote>
+<p><strong>图38</strong>：使用Bi-JCR重建的场景在PyBullet中进行抓取规划（左），并在真实机器人上成功执行抓取（右）。</p>
+</blockquote>
+<pre><code>*   **语义分割与双臂协调**：在重建的点云上运行分割模型识别物体，并基于统一坐标系规划双臂任务，如将一个物体从一只手传递到另一只手。
+</code></pre>
+<p><img src="https://arxiv.org/html/2505.24819v1/extracted/6497875/downstream/pass_wrench.png" alt="双臂传递任务-扳手"></p>
+<blockquote>
+<p><strong>图50</strong>：基于Bi-JCR提供的统一坐标系，成功规划并执行了双臂物体传递任务（此处为传递扳手）。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了Bi-JCR方法，首次利用3D基础模型实现无需标记的双机械臂相机标定，并同时构建环境表示。</li>
+<li>构建了一个新颖的联合优化问题，能够同时恢复两个相机的外参、机械臂间的相对位姿、尺度因子，并生成度量尺度的统一3D场景表示。</li>
+<li>在真实世界数据上进行了 rigorous 评估，展示了其在标定精度、重建准确性以及赋能下游双臂操作任务方面的有效性。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，方法的性能在一定程度上依赖于所选3D基础模型在桌面场景下的表现。基础模型输出的噪声和误差会传播到后续的优化中。</p>
+<p><strong>启示</strong>：Bi-JCR展示了利用大规模预训练视觉模型（基础模型）解决机器人传统感知与标定问题的潜力，为构建更加自主、易于部署的机器人系统提供了新思路。该方法将标定从离线的、依赖人工干预的步骤，转变为在线的、与场景感知自然融合的过程，对推动机器人“开箱即用”和终身学习具有重要意义。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出Bi-JCR框架，解决双机械臂系统中末端相机标定依赖标定板、过程繁琐的问题。该方法利用3D基础模型，从双机械臂采集的RGB图像中直接估计密集的多视角对应关系，通过流形上的梯度下降联合优化，一次性求解各相机外参、机械臂间相对位姿及尺度一致的共享场景3D表示。实验表明，该方法在多种桌面环境中具有鲁棒性，并能有效支持后续的双臂协调任务。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2505.24819" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

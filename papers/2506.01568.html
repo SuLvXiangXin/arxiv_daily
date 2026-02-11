@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Trajectory First: A Curriculum for Discovering Diverse Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Trajectory First: A Curriculum for Discovering Diverse Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.01568" target="_blank" rel="noreferrer">2506.01568</a></span>
+        <span>作者: Marc Toussaint Team</span>
+        <span>日期: 2025-06-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在强化学习领域，大多数方法假设单峰动作分布，仅产生单一策略。然而，能够以多种方式解决任务可以使智能体对任务变化更具鲁棒性，并减少陷入局部最优的风险。为此，约束多样性优化已成为一个强大的强化学习框架，用于并行训练一组多样化的智能体。现有方法主要包括质量多样性（QD）等进化方法，以及结合了内在多样性奖励的基于梯度的强化学习方法。然而，这些方法存在关键局限性：QD方法通常样本效率较低且需要手动设计特征描述符；而基于梯度的多样性或熵奖励方法在复杂的、接触丰富的任务（如机器人操作）中可能探索不足，导致策略多样性匮乏，最终可能坍缩到少数几种模式。</p>
+<p>本文针对现有方法在复杂任务中探索不足、导致策略多样性低的具体痛点，提出了一种新的视角：利用结构化的、基于样条的轨迹先验作为归纳偏置，在逐步学习策略之前，先“播种”出多样且高奖励的行为。本文的核心思路是提出一个两阶段的课程学习方法：首先在低维的轨迹空间进行进化搜索以发现多样行为，然后将这些行为提炼成不同的、离线的、无模型的策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法是一个两阶段的课程学习流程，旨在更有效地优化策略多样性。整体框架如图1所示。</p>
+<p><img src="https://arxiv.org/html/2506.01568v2/x1.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图1</strong>：所提出的多样性课程概览。我们使用基于样条的轨迹先验来改进探索。首先，进化策略在轨迹空间中进行探索，以在性能约束下最大化轨迹参数 $\omega \in \Omega$ 的新颖性。然后，这些数据被用来预热启动多个RL智能体 $\pi \in \Pi$ 的在线训练，以在策略空间中解决相同的优化问题。</p>
+</blockquote>
+<p><strong>第一阶段：基于样条探索的约束新颖性搜索（CNS）</strong><br>此阶段的输入是轨迹参数 $\omega \in \mathbb{R}^{m \times u}$（控制点矩阵），输出是一组多样且接近最优的轨迹 $\tau(\omega)$ 及其对应的技能标签 $z_i$。具体而言，该方法将轨迹表示为B样条，并直接优化一组轨迹参数 $\Omega = {\omega_i}_{i=1}^n$，目标是在接近最优的约束下最大化多样性（公式4）。由于任务奖励函数通常不可微，本文采用多群体进化策略（ES）进行优化。</p>
+<p>核心创新在于其奖励设计。它遵循约束优化框架，使用拉格朗日乘子 $\lambda_i$ 动态平衡内在多样性奖励 $r_{\text{int}}$ 和外在任务奖励 $r_{\text{ext}}$（公式5-7）。其中，内在奖励基于粒子熵估计器（公式3），衡量当前轨迹状态与存档中其他轨迹状态的差异。为了稳定优化并避免手动设计特征，该方法使用一个固定的随机投影 $\phi(x)=Qx$ 将状态映射到低维空间，其近似误差受约翰逊-林登斯特劳斯引理约束。与直接在维度 $d$（策略参数维度）上进行优化相比，在维度 $m \times u \ll d$ 的轨迹参数空间中使用CMA-ES进行优化，样本效率更高。</p>
+<p><strong>第二阶段：基于先验数据的高效在线多样性优化</strong><br>此阶段的输入是来自CNS的多样化数据集 $\mathcal{D} = {(\tau_i, z_i, r_{\text{ext}}(\tau_i))}$，输出是 $n$ 个技能条件化的反应式策略。该阶段基于Domino框架，并引入了三项关键修改以高效利用离线数据：</p>
+<ol>
+<li><strong>对称采样</strong>：每个训练批次由等量的在线和离线转移数据组成。但仅保留满足宽松近最优性标准（$\alpha/4$）的CNS轨迹，并按技能平衡离线数据量。</li>
+<li><strong>高更新数据比（UTD）</strong>：采用较高的学习步数与环境步数之比，以快速从多样化的CNS数据中学习。</li>
+<li><strong>正则化</strong>：为防止因高UTD导致的过拟合，采用了随机集成蒸馏、观察归一化和层归一化。</li>
+</ol>
+<p>内在奖励的计算与Domino一致（公式8），即鼓励每个技能的特征期望远离其最近邻技能的特征期望，并在相同的特征投影空间 $\phi$ 中进行。拉格朗日乘子继续用于在线阶段平衡奖励并强制执行近最优性约束。</p>
+<p><strong>创新点总结</strong><br>与现有方法相比，本文的核心创新体现在：</p>
+<ol>
+<li><strong>轨迹空间探索</strong>：将探索从高维的神经网络参数空间转移到低维、结构化的轨迹参数空间，利用进化策略更高效地发现多样行为模式。</li>
+<li><strong>两阶段课程</strong>：明确分离了“探索”（发现多样轨迹）和“利用”（学习稳健策略）两个阶段，使用第一阶段的高质量数据作为第二阶段策略学习的“热启动”，缓解了直接进行策略多样性优化时探索不足的问题。</li>
+<li><strong>约束新颖性搜索（CNS）</strong>：将约束多样性优化的拉格朗日乘子框架与进化策略相结合，用于轨迹级别的优化，实现了对多样性和性能约束的动态、自适应平衡。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在MuJoCo连续控制环境（如HalfCheetah、Walker2D）和Franka机器人模拟操作任务（如推方块、堆叠）上进行。使用随机投影特征，并在PyTorch中实现。</p>
+<p><strong>对比基线</strong>：主要对比了以下基线方法：</p>
+<ul>
+<li><strong>Domino</strong>：最新的基于约束优化和拉格朗日乘子的并行策略多样性算法。</li>
+<li><strong>DNoise</strong>：在策略参数上添加噪声进行探索的多样性方法。</li>
+<li><strong>SimpleQ</strong>：一种简单的基于种群的方法，使用固定标量平衡内在和外在奖励。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>本文通过最终策略集的多样性得分和成功率来评估性能。</p>
+<p><img src="https://arxiv.org/html/2506.01568v2/x2.png" alt="MuJoCo locomotion任务上的多样性-性能曲线"></p>
+<blockquote>
+<p><strong>图2</strong>：在MuJoCo运动任务上，本文方法（Trajectory First）与基线方法的多样性-性能帕累托前沿对比。本文方法在大多数任务中找到了多样性更高、性能相当或更好的策略集。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.01568v2/x3.png" alt="Franka机器人操作任务上的成功率与多样性"></p>
+<blockquote>
+<p><strong>图3</strong>：在Franka机器人推方块任务上，本文方法（红色）相比Domino（蓝色）和DNoise（绿色），在训练过程中能更快达到高成功率，并最终获得更高的多样性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.01568v2/imgs/cube/domino.png" alt="推方块任务的定性策略展示"></p>
+<blockquote>
+<p><strong>图4</strong>：基线方法Domino学习到的推方块策略。可能表现出有限的策略变化。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.01568v2/imgs/cube/dnoise.png" alt="推方块任务的定性策略展示"></p>
+<blockquote>
+<p><strong>图5</strong>：基线方法DNoise学习到的推方块策略。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.01568v2/imgs/cube/simpleq.png" alt="推方块任务的定性策略展示"></p>
+<blockquote>
+<p><strong>图6</strong>：基线方法SimpleQ学习到的推方块策略。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.01568v2/x4.png" alt="推方块任务的定性策略展示"></p>
+<blockquote>
+<p><strong>图7</strong>：本文方法（Trajectory First）学习到的推方块策略。展示了明显更多样化的策略，例如从不同角度推动或使用多次接触。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br><img src="https://arxiv.org/html/2506.01568v2/x5.png" alt="课程学习各阶段的消融研究"></p>
+<blockquote>
+<p><strong>图8</strong>：消融实验展示了课程学习两个阶段的重要性。仅使用CNS（阶段1）能获得高多样性但性能不稳定；仅进行在线学习（阶段2，即标准Domino）多样性较低；完整的课程（两阶段）结合了前两者的优点，获得了高且稳定的多样性及性能。此外，使用B样条轨迹先验比使用简单线性轨迹先验效果更好。</p>
+</blockquote>
+<p>消融实验表明：1) 完整的课程（两阶段）对于同时获得高多样性和高性能至关重要；2) 使用结构化的B样条轨迹先验比简单的线性插值更有效；3) 第一阶段CNS提供的优质数据是第二阶段策略能保持多样性的关键。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种新颖的“轨迹优先”课程学习方法，用于在外部任务奖励下进行多样性优化，通过将探索置于低维轨迹空间来克服复杂任务中的探索不足问题。</li>
+<li>引入了约束新颖性搜索（CNS），一种利用进化策略在轨迹空间最大化多样性同时满足性能约束的方法。</li>
+<li>通过实证研究揭示了现有技能多样性优化方法在接触丰富任务中的短板，并展示了所提课程如何成功学习到多样化的机器人操作策略集。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文自身提到，CNS阶段依赖于进化策略，其计算成本可能随搜索维度和群体大小而增加。此外，B样条轨迹先验的通用性可能因任务而异，对于高度动态或需要精细即时反应的任务可能不是最优选择。</p>
+<p><strong>对后续研究的启示</strong>：<br>本文的工作表明，将高层行为规划（轨迹）与底层策略学习分离，并为探索阶段引入合适的结构化归纳偏置，是提升多样性优化效率的有效途径。未来的工作可以探索更通用或自适应的轨迹表示方法，研究如何将课程学习框架扩展到更广泛的任务领域，以及如何进一步降低两阶段方法的总样本复杂度。同时，如何更平滑地将离线探索数据整合到在线策略训练中，也是一个值得深入的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有约束多样性强化学习方法在复杂任务（如机器人操作）中探索不足、导致策略多样性缺乏的问题，提出一种两阶段课程方法。该方法首先利用基于样条的轨迹先验，通过进化搜索在开环动作序列上发现多样化的高奖励行为；随后将这些行为蒸馏成不同的离策略、无模型策略。实证评估表明，该课程能有效提高学习技能的多样性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.01568" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

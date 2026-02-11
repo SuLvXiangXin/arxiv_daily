@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>BEAST: Efficient Tokenization of B-Splines Encoded Action Sequences for Imitation Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>BEAST: Efficient Tokenization of B-Splines Encoded Action Sequences for Imitation Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.06072" target="_blank" rel="noreferrer">2506.06072</a></span>
+        <span>作者: Rudolf Lioutikov Team</span>
+        <span>日期: 2025-06-10</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>模仿学习通过从人类演示中学习来训练机器人执行复杂任务。近期研究强调学习动作序列以捕捉演示中的时序连贯性，并减少复合误差。受自然语言处理中自回归下一令牌预测模型成功的启发，将类似技术应用于建模动作序列颇具吸引力。然而，连续动作空间并非天生离散，因此需要有效的离散化策略。</p>
+<p>现有动作令牌化方法主要基于向量量化或字节对编码。向量量化方法（如VQ-BeT）需要单独训练编码器-解码器网络，增加了系统复杂性并对超参数和量化损失敏感。压缩方案（如FAST）虽然能减少令牌数量，但会产生变长令牌序列，这阻碍了并行解码等快速令牌生成技术的应用。此外，现有方法通常未考虑相邻动作块之间的平滑过渡，可能导致连接处出现不希望的跳跃。</p>
+<p>本文针对上述痛点，提出了一种基于B样条的动作序列令牌化新视角。核心思路是利用B样条将连续动作序列编码为紧凑的、固定长度的控制点表示，这些控制点可直接作为离散或连续令牌，从而无需单独训练令牌化器，并能保证生成轨迹的平滑性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>BEAST的核心是将连续动作序列通过B样条逼近，表示为少量控制点，并将其量化为离散令牌或直接作为连续令牌使用。</p>
+<p><img src="https://arxiv.org/html/2506.06072v3/x2.png" alt="BEAST编码流程总览"></p>
+<blockquote>
+<p><strong>图2</strong>：BEAST编码流程总览。给定归一化的动作序列，BEAST首先使用线性回归提取连续值控制点，形成控制点矩阵作为中间连续表示。然后将这些矩阵均匀量化为[0, 255]范围内的离散值，最后展平以产生用于自回归或并行预测的离散动作令牌。</p>
+</blockquote>
+<p><strong>整体流程</strong>：输入是长度为T、自由度为D的归一化动作序列。对于每个自由度（DoF），通过求解最小二乘问题（公式4）独立拟合一组N个B样条控制点，形成一个D×N的控制点矩阵。随后将该矩阵展平（交错不同动作维度但对应相同基函数的控制点），得到最终的令牌序列。对于离散令牌，控制点会被均匀量化为0-255的整数。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>B样条编码</strong>：使用P次钳制均匀B样条。钳制确保生成的曲线精确起始和终止于第一个与最后一个控制点。通过岭回归（Ridge Regression）闭式解计算控制点，每个批次仅引入3-5毫秒开销。</li>
+<li><strong>平滑过渡机制</strong>：为了实现连续动作块之间的平滑连接，BEAST利用了钳制B样条的属性。在生成新动作块时，将其第一个控制点直接设置为上一动作块的最后一个动作值。然后计算残差轨迹，并对剩余控制点进行回归，从而在数学上保证块间连续性。</li>
+<li><strong>与不同架构的集成</strong>：<ul>
+<li><strong>离散令牌</strong>：可与仅解码器Transformer或编码器-解码器架构的视觉语言模型（如Florence-2）结合。BEAST产生的定长令牌序列使得并行解码成为可能，即使用双向注意力掩码在单次前向传播中预测所有令牌。<br><img src="https://arxiv.org/html/2506.06072v3/x3.png" alt="BEAST-F架构"><blockquote>
+<p><strong>图3</strong>：BEAST-F架构，将BEAST与Florence-2 VLM结合。BEAST产生统一长度的令牌，使BEAST-F能通过可学习的动作嵌入进行并行解码。离散令牌被送入B样条解码器，先映射为实值控制点，再转换为连续动作序列。</p>
+</blockquote>
+</li>
+<li><strong>连续令牌</strong>：可与ACT等条件变分自编码器（CVAE）结合。直接预测归一化的B样条控制点（连续令牌），而非原始动作序列，从而大幅减少需预测的序列长度（例如从100步减至15步）。</li>
+</ul>
+</li>
+</ol>
+<p><strong>创新点</strong>：</p>
+<ol>
+<li><strong>无需训练的令牌化器</strong>：与基于向量量化需要训练编码器-解码器的方法不同，BEAST通过解析的B样条拟合直接获得令牌表示，简化了流程。</li>
+<li><strong>固定长度表示</strong>：与FAST等产生变长序列的方法相比，BEAST始终输出固定数量的令牌，为并行解码提供了必要条件。</li>
+<li><strong>内在的平滑性保证</strong>：通过B样条数学形式和钳制边界条件，BEAST能够自然生成平滑的动作轨迹，并确保动作块间的连续连接，无需额外的时序平均操作。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在166个模拟任务（CALVIN， LIBERO）和3种不同机器人设置的8个真实世界任务（ALOHA挑战赛、Franka厨房等）上评估。集成了三种架构：BEAST-F（基于Florence-2）、BEAST-D（基于从头训练的仅解码器Transformer）、BEAST-ACT（基于ACT的连续令牌变体）。</p>
+<p><strong>对比方法</strong>：包括扩散策略（Diffusion Policy-CNN， MDT）、先进的VLA模型（OpenVLA， π0， π0-FAST）以及动作分块Transformer（ACT）。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><p><strong>与分桶令牌化的对比（RQ1）</strong>：在1D玩具任务中，BEAST的MSE（0.0004）显著低于分块级分桶（0.0009）和单步分桶（0.0215）。可视化显示，BEAST能生成平滑且块间连续的轨迹，而分桶方法产生跳跃。<br><img src="https://arxiv.org/html/2506.06072v3/x5.png" alt="与分桶方法的对比"></p>
+<blockquote>
+<p><strong>图5</strong>：BEAST、单步分桶及带动作分块的分桶方法对比。BEAST在每个序列内部和序列间过渡处都是平滑连续的。</p>
+</blockquote>
+</li>
+<li><p><strong>模拟基准性能（RQ2）</strong>：</p>
+<ul>
+<li><strong>CALVIN</strong>：在ABC和ABCD设置下，BEAST-F在完成5个连续指令的平均成功率（74.4%， 84.8%）和平均完成长度（4.42， 4.61）上达到SOTA水平（表1）。</li>
+<li><strong>LIBERO</strong>：在最具挑战性的长视野（Long）任务设置中，BEAST-F取得了86.4%的成功率，排名第一。在其他设置中也与经过大规模预训练的π0模型性能相当（表2）。</li>
+<li><strong>ALOHA</strong>：BEAST-ACT在双手操作任务（Transfer和Insertion）上的成功率（54%， 23%）均优于原始ACT（50%， 21%），并显著领先于π0和扩散策略（图6）。<br><img src="https://arxiv.org/html/2506.06072v3/x6.png" alt="ALOHA基准结果"><blockquote>
+<p><strong>图6</strong>：ALOHA基准结果。BEAST-ACT在两项任务上均取得了最高的成功率。</p>
+</blockquote>
+</li>
+</ul>
+</li>
+<li><p><strong>训练与推理效率（RQ3）</strong>：BEAST-F的推理吞吐量达到23.2 Hz，远高于OpenVLA（6.09 Hz），延迟仅为0.043秒。在训练效率上，BEAST-D达到收敛所需的步骤数（<del>8k）远少于分桶方法（</del>50k）。<br><img src="https://arxiv.org/html/2506.06072v3/x7.png" alt="效率对比"></p>
+<blockquote>
+<p><strong>图7</strong>：推理吞吐量与延迟对比。BEAST-F在保持高性能的同时，实现了高吞吐量和低延迟。<br><img src="https://arxiv.org/html/2506.06072v3/x8.png" alt="训练效率对比"><br><strong>图8</strong>：训练收敛曲线对比。BEAST-D比基于分桶的模型收敛快得多。</p>
+</blockquote>
+</li>
+<li><p><strong>消融实验（RQ5）</strong>：研究表明，B样条次数P=3在平滑性和拟合能力间取得了良好平衡。控制点数量N=15足以有效表示100步的动作块。使用钳制B样条和平滑过渡机制对实现连续、无跳跃的轨迹至关重要。</p>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了BEAST，一种新颖的、基于B样条的、无需单独训练的动作序列令牌化器，能生成固定长度的离散或连续令牌。</li>
+<li>通过钳制B样条数学性质，内在保证了生成动作轨迹的块内平滑性与块间连续性。</li>
+<li>通过广泛的模拟与真实世界实验，验证了BEAST在保持高任务成功率的同时，能显著提升训练与推理效率，并展示了其与多种模型架构（小规模模型到大型预训练VLM）的良好兼容性与可扩展性。</li>
+</ol>
+<p><strong>局限性</strong>：论文指出，对于需要极高动态响应（如高频振动）的任务，B样条的平滑性假设可能成为限制。BEAST更适用于强调平滑、连贯运动的精细操作任务。</p>
+<p><strong>后续启示</strong>：</p>
+<ol>
+<li><strong>探索更高阶连续性</strong>：可研究利用B样条实现加速度甚至加加速度（jerk）级别的连续性，以生成更符合物理规律的运动。</li>
+<li><strong>自适应参数选择</strong>：未来工作可以探索根据任务动态特性或数据分布自适应选择B样条次数（P）和控制点数量（N）。</li>
+<li><strong>与更广泛模型结合</strong>：BEAST的定长、平滑特性为将其集成到更多类型的序列预测模型（如其他模态的生成模型）中提供了便利。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对模仿学习中连续动作序列的离散化表示问题，提出BEAST方法。其核心是采用B样条编码动作序列，无需单独训练标记器即可生成统一长度的离散或连续标记，支持并行解码并保证轨迹平滑。实验在166个模拟任务和8个真实机器人任务中验证，BEAST显著降低了训练和推理计算成本，能生成适合连续控制的高频平滑信号，并取得了具有竞争力的任务成功率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.06072" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

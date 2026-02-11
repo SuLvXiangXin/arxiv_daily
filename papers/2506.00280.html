@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>3D Gaussian Splat Vulnerabilities - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>3D Gaussian Splat Vulnerabilities</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.00280" target="_blank" rel="noreferrer">2506.00280</a></span>
+        <span>作者: Polo Chau Team</span>
+        <span>日期: 2025-05-30</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>3D高斯泼溅（3DGS）因其在新视角合成和复杂场景实时渲染方面的高效性而迅速流行，性能超越NeRF等传统方法，并日益应用于自动驾驶、机器人导航等安全关键领域。尽管应用广泛，但针对3DGS优化过程及其表示的安全漏洞研究尚不充分。现有工作非常有限：一项研究通过扰动训练图像攻击3DGS算法的分裂/致密化阶段以增加计算成本，但不针对下游任务；另一项工作仅针对单一模型（CLIP），通过图像数据投毒诱导误分类，并未直接操纵3DGS场景表示。本文针对3DGS在安全关键应用中未被充分探索的脆弱性，提出了两种新型攻击。核心思路是：利用3DGS中球谐函数（SH）带来的视角依赖外观特性，在训练阶段嵌入仅在特定视角可见的对抗性内容（CLOAK攻击）；以及将经典的投影梯度下降（PGD）攻击推广至直接扰动3D高斯参数，以欺骗下游目标检测模型（DAGGER攻击）。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出了两种威胁模型不同的攻击方法：CLOAK（仅能操纵训练数据）和DAGGER（可直接修改高斯表示）。</p>
+<p><img src="https://arxiv.org/html/2506.00280v1/extracted/6498612/figs/crown_jewel.png" alt="CLOAK攻击示意图"></p>
+<blockquote>
+<p><strong>图1</strong>：CLOAK攻击利用球谐函数在3DGS场景中隐藏多个对抗性纹理，使得汽车的3DGS表示在不同视点（红点）下呈现对抗性外观。例如，（A）从顶部看，汽车呈现为行李箱；（B）“汽车”检测置信度下降；（C）从正后方看，则显示为“停止标志”。</p>
+</blockquote>
+<p><strong>CLOAK攻击</strong>：该攻击利用3DGS的视角依赖外观特性，在看似正常的3D场景中隐藏对抗性内容。其核心是操纵用于训练3DGS模型的图像数据集。具体而言，给定良性数据集 𝒟 = {(x_i, c_i)}，攻击者选择一个目标相机姿态子集 C* ⊂ C，并为每个 c_i ∈ C* 生成对抗性图像 x̃_i，修改目标对象的外观同时保持场景视觉真实性。然后，用对抗性图像替换原始图像，形成被攻击的数据集 𝒟&#39;。在 𝒟&#39; 上训练3DGS模型，可确保从非目标视角看，目标对象保持良性外观；而从目标视角 c ∈ C* 看，对抗性修改则被嵌入到学习到的场景中。这种攻击的关键在于3DGS使用球谐函数（SH）系数而非固定RGB颜色来表示每个高斯，SH定义了颜色如何随观察方向变化，使得高斯的外观能动态依赖于观察者视角。</p>
+<p><img src="https://arxiv.org/html/2506.00280v1/extracted/6498612/figs/fig_2.png" alt="视角依赖的颜色变化"></p>
+<blockquote>
+<p><strong>图2</strong>：展示由球谐渲染实现的视角依赖颜色变化的对抗性高斯泼溅。我们用一个浅色边框高亮单个泼溅点以便于跟踪其颜色变化，可见当其从侧视图（帧A–B）旋转到俯视图（帧C–E）时，颜色从绿色变为灰色。</p>
+</blockquote>
+<p><strong>DAGGER攻击</strong>：该攻击假设对手更强大，可以访问3DGS场景表示和目标下游模型（白盒访问）。一个3DGS场景由一组3D高斯 𝒢 = {g_1, …, g_n} 表示，每个高斯包含位置 p、SH系数 c、缩放 s、旋转 r 和透明度 α 等属性。攻击通过可微分渲染器 R(𝒢) 将这些参数映射到2D图像，再输入下游模型 M。对手选择要操纵的参数子集 Θ，旨在约束 ‖Θ - Θ_0‖ ≤ ε 下，最大化损失 ℓ(M(R(𝒢)), y)。攻击采用投影梯度下降（PGD）进行迭代优化：Θ_{t+1} ← Π_{‖Θ-Θ_0‖≤ε} (Θ_t + η ∇_{Θ_t} ℓ(M(R(𝒢)), y))。通过此过程，修改后的高斯集 𝒢&#39; 其渲染输出会误导模型 M。</p>
+<p><img src="https://arxiv.org/html/2506.00280v1/extracted/6498612/figs/fig_3.png" alt="DAGGER攻击效果"></p>
+<blockquote>
+<p><strong>图3</strong>：DAGGER通过操纵高斯属性诱导Faster R-CNN误检测。第一行，对汽车颜色进行目标攻击，导致其被高置信度误分类为“人”、“大象”和“停止标志”。第二行，对停止标志进行攻击，导致模型将其误分类为“电视”、“火车”和“鸟”。</p>
+</blockquote>
+<p>创新点在于：CLOAK是首个利用3DGS中球谐函数的视角依赖性来隐藏多纹理对抗内容的攻击；DAGGER则是首次将PGD等梯度优化攻击直接推广到3DGS场景表示上，无需原始图像训练数据即可攻击下游模型。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用Blender的Cycles渲染器创建了从210个不同相机角度（覆盖半球区域）拍摄的汽车照片级真实感渲染图作为数据集。</p>
+<p><strong>CLOAK实验</strong>：在数据集中嵌入了三种外观：从110个角度的正常外观、从80个俯视角度的“道路”纹理、以及从20个汽车正后角度的“停止标志”纹理。使用该数据集训练3DGS场景成功创建了对象，其隐藏的对抗纹理仅在特定视角出现。使用YOLOv8进行黑盒评估，结果显示攻击效果显著：YOLOv8在110个良性视角中的80个成功检测到汽车，但在80个对抗性俯视（“道路”）视角中的78个未能检测到。</p>
+<p><img src="https://arxiv.org/html/2506.00280v1/extracted/6498612/figs/fig_4.png" alt="CLOAK攻击的检测结果"></p>
+<blockquote>
+<p><strong>图4</strong>：YOLOv8在受CLOAK攻击的对抗性视角上的检测结果。该图展示了随着视角向对抗性角度过渡，检测置信度下降乃至完全漏检的情况。</p>
+</blockquote>
+<p><strong>DAGGER实验</strong>：针对Faster R-CNN模型进行白盒攻击。实验通过维护目标对象泼溅点的高斯索引并屏蔽所有非目标场景泼溅点的梯度，确保扰动和优化仅应用于目标对象。通过PGD迭代优化目标高斯点的SH系数（颜色属性）。例如，成功优化使Faster R-CNN将“汽车”误分类为“人”，仅用11次迭代（使用 ℓ2 范数PGD，攻击者预算 ε=5.0）就达到了持续高于70%的检测置信度。这证明了直接操纵3DGS参数可以有效影响特定视角下的物体检测结果。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献有两点：1）提出了CLOAK攻击，首次利用3DGS的球谐函数视角依赖性，在训练数据中嵌入仅在特定视角可见的对抗性纹理以欺骗检测器；2）提出了DAGGER攻击，将PGD等梯度优化方法推广至直接操纵3D高斯属性，无需训练数据即可对下游模型进行目标对抗攻击。</p>
+<p>论文自身提到的局限性主要在于攻击所需的威胁模型（如访问训练数据或白盒访问场景与模型），但作者指出这些条件在现实世界中可能实现（如通过数据投毒或模型泄露），因此其安全影响是切实的。</p>
+<p>本文的启示在于：随着3DGS在安全关键领域的应用增多，其安全性必须得到同等重视。研究界需要开发针对此类3D表示攻击的鲁棒性防御策略，并重新评估在自动驾驶等高风险系统中依赖3DGS生成数据的可靠性。论文开源了代码，为后续的防御研究提供了基础。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文探讨3D高斯溅射（3DGS）在安全关键应用中的脆弱性，即对手如何操纵场景造成危害。提出CLOAK攻击，利用球谐函数实现视图相关对抗纹理嵌入，使内容仅在特定视角可见；以及DAGGER攻击，通过投影梯度下降直接扰动3D高斯，无需训练数据即可欺骗多阶段对象检测器如Faster R-CNN。实验表明，攻击能导致误检测，例如汽车从顶部看显示为行李箱、检测置信度下降，从后面看显示停止标志，揭示了3DGS未充分探索的漏洞，对自动驾驶等领域构成新威胁。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.00280" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

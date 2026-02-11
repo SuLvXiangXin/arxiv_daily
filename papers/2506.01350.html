@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Variational Adaptive Noise and Dropout towards Stable Recurrent Neural Networks - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Variational Adaptive Noise and Dropout towards Stable Recurrent Neural Networks</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.01350" target="_blank" rel="noreferrer">2506.01350</a></span>
+        <span>作者: Shingo Murata Team</span>
+        <span>日期: 2025-06-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>处理时间序列数据的深度学习在机器人学中至关重要，因为机器人需要在现实世界中连续运行。Transformer模型虽然流行，但其计算成本高昂，不适合需要实时性能或计算资源有限的模块。因此，循环神经网络（RNN）因其推理速度快、资源占用少，仍然是处理时间序列数据的有用技术。然而，RNN训练存在困难：通过时间反向传播（BPTT）会因计算图随时间变长而导致梯度不稳定；此外，作为一种动力学系统，RNN需要具备无输入时的自主稳定性，但基于梯度的优化无法保证这一点。</p>
+<p>为稳定RNN学习，已有研究提出了两种主要方法：向RNN内部状态添加噪声，或对内部状态（而非输入）应用dropout。然而，这些噪声和dropout是分别推导和验证的，其尺度和比率需要精细调整，这导致它们不实用。许多用户转而选择降低学习率，但理论上这会损害泛化性能。</p>
+<p>本文针对噪声与dropout方法分离、需手动调参的痛点，从变分推断的新视角重新审视RNN的优化问题。核心思路是：将RNN优化重构为基于变分推断的随机模型，从而同时推导出内部状态的噪声和dropout，并通过重参数化技巧使噪声尺度和dropout比率能够针对主目标进行自适应优化。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法称为变分自适应噪声与丢弃（VAND），旨在通过引入函数平滑性和自主稳定性来稳定RNN学习。</p>
+<p><img src="https://arxiv.org/html/2506.01350v1/x1.png" alt="稳定RNN的因素"></p>
+<blockquote>
+<p><strong>图1</strong>：稳定RNN学习的因素。左侧表示函数平滑性，要求RNN输出随内部状态的变化而平滑变化，以避免梯度爆炸/消失。右侧表示自主稳定性，要求RNN在无输入时内部状态不发散。</p>
+</blockquote>
+<p><strong>整体框架与推导</strong>：方法首先将RNN的监督学习问题重新表述为一个包含隐变量（即内部状态 (h_t)）的变分推断问题。目标是最大化观测数据 (y_t) 的对数似然 (\ln p(y_t | x_t))。通过引入一个近似后验分布 (q(h_t | x_t, h_{t-1}))（对应RNN的动态更新）和一个先验分布 (p(h_t | x_t))，可以推导出证据下界（ELBO）：<br>[<br>\ln p(y_t | x_t) \geq \mathbb{E}<em>{q(h_t|x_t, h</em>{t-1})}[\ln p(y_t|h_t)] - \text{KL}(q(h_t|x_t, h_{t-1}) | p(h_t|x_t))<br>]<br>最大化该下界的第一项对应于标准的最大似然训练（但内部状态带有来自 (q) 分布的噪声），第二项KL散度则是一个显式正则化项，迫使后验分布接近先验分布。若先验分布设计为具备自主稳定性，则该正则化能将此特性引入模型。</p>
+<p><strong>隐式正则化转换</strong>：为避免在损失函数中显式添加KL散度项，论文将其转换为隐式正则化。关键步骤是利用一个判别器 (D(h_t)) 来区分 (h_t) 是来自后验 (q) 还是先验 (p)。当两者分布匹配时，判别器最难区分（正确率最多50%）。基于此解释，正则化后的后验分布 (\tilde{q}(h_t | x_t, h_{t-1})) 被建模为 (q) 和 (p) 的混合分布：<br>[<br>\tilde{q}(h_t | x_t, h_{t-1}) = (1-\beta) q(h_t | x_t, h_{t-1}) + \beta p(h_t | x_t)<br>]<br>其中 (\beta \in [0,1]^H) 是混合系数（每个隐状态维度独立）。(\beta) 越大，正则化越强。</p>
+<p><strong>具体实现与VAND</strong>：论文具体设定先验分布为 (p(h_t | x_t) = q(h_t | x_t, 0))，即以前一时刻隐状态为零（(h_{t-1}=0)）的条件下来运行RNN更新。将此代入混合分布，并引入一个掩码 (m \sim \mathcal{B}(\beta))（维度独立的伯努利分布，以 (\beta) 为丢弃率），则从 (\tilde{q}) 中采样 (h_t) 等价于执行以下操作：<br>[<br>h_t \sim q(h_t | x_t, (1-m) \odot h_{t-1})<br>]<br>这里，(1-m) 作为一个dropout掩码应用于上一时刻的隐状态 (h_{t-1})，然后再用于当前时刻的RNN更新。同时，分布 (q) 本身是一个含参数的高斯分布（例如，RNN的确定性输出加上高斯噪声），其噪声尺度也是可学习的参数。</p>
+<p><strong>自适应优化</strong>：通过重参数化技巧，从 (q) 分布采样噪声的过程以及dropout掩码 (m) 的生成，都可以表示为确定性计算加上随机变量的形式。这使得噪声尺度参数和dropout比率参数 (\beta) 能够与RNN的主参数一起，通过标准的随机梯度下降进行端到端的优化，从而自适应地调整。</p>
+<p><strong>创新点总结</strong>：1) <strong>统一框架</strong>：从变分推断角度同时推导出噪声和dropout，为两者提供了一个共同的理论基础。2) <strong>隐式正则化</strong>：将显式的KL正则化转化为对历史隐状态的dropout操作，无需在损失中添加额外项。3) <strong>完全自适应</strong>：噪声尺度和dropout比率作为模型参数，在优化主目标（预测精度）的过程中自动学习调整，无需手动调参。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在一个移动机械臂的模仿学习场景中进行验证，使用了两个具有不同时间序列特征的任务：1) <strong>顺序任务</strong>：机械臂依次触碰三个指定点。2) <strong>周期任务</strong>：机械臂连续地、周期性地画圆。</p>
+<p><strong>对比的Baseline方法</strong>包括：1) <strong>标准RNN</strong>：无任何稳定措施。2) **带噪声的RNN (RNN+N)**：向内部状态添加固定尺度的高斯噪声。3) **带Dropout的RNN (RNN+D)**：对内部状态应用固定比率的dropout。4) **降低学习率的RNN (RNN+LR)**。5) **截断BPTT (RNN+TBPTT)**。所有对比方法中的噪声尺度、dropout比率、学习率衰减因子等均经过网格搜索以获取最佳性能。</p>
+<p><img src="https://arxiv.org/html/2506.01350v1/x2.png" alt="顺序任务模仿结果"></p>
+<blockquote>
+<p><strong>图2</strong>：顺序任务中，各种方法学习后的机械臂末端轨迹（蓝色）与目标轨迹（红色）对比。所有方法，包括VAND，在该任务上都能成功模仿。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.01350v1/x3.png" alt="周期任务模仿结果"></p>
+<blockquote>
+<p><strong>图3</strong>：周期任务中，各种方法学习后的轨迹对比。只有VAND能够稳定地学习并生成周期性的圆形轨迹，其他所有baseline方法均失败，轨迹要么发散要么停滞。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.01350v1/x4.png" alt="任务成功率"></p>
+<blockquote>
+<p><strong>图4</strong>：两个任务的定量成功率（基于轨迹误差阈值）。在顺序任务中，所有方法成功率均为100%。在更具挑战性的周期任务中，只有VAND达到了100%的成功率，其他方法成功率为0%。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.01350v1/x5.png" alt="训练损失曲线"></p>
+<blockquote>
+<p><strong>图5</strong>：周期任务训练期间的损失曲线。VAND的损失下降平稳且最终值最低。RNN+N和RNN+D的损失波动剧烈且最终较高，标准RNN则很快发散（损失激增）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.01350v1/x6.png" alt="隐状态范数"></p>
+<blockquote>
+<p><strong>图6</strong>：推理期间（无输入阶段）隐状态范数的变化，用于评估自主稳定性。VAND的隐状态范数保持有界且平滑衰减，表明其具备自主稳定性。标准RNN的隐状态范数发散。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.01350v1/x7.png" alt="自适应参数变化"></p>
+<blockquote>
+<p><strong>图7</strong>：VAND在训练过程中自适应学习到的噪声尺度（左）和dropout比率（右）的变化。两个参数在训练初期较高，随着训练进行而下降，表明模型自适应地调整了正则化强度。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.01350v1/x8.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图8</strong>：VAND的消融研究。<code>VAND (fixed b)</code>使用固定的dropout比率，<code>VAND (fixed s)</code>使用固定的噪声尺度。两者在周期任务上的性能均下降（轨迹扭曲或轻微发散），证明了自适应调整噪声和dropout比率的重要性。</p>
+</blockquote>
+<p><strong>关键实验结果总结</strong>：</p>
+<ol>
+<li>在相对简单的顺序任务上，所有方法均能成功。</li>
+<li>在需要长期记忆和稳定动力学的周期任务上，只有VAND能够稳定学习并成功模仿，成功率达100%。所有基线方法（RNN, RNN+N, RNN+D, RNN+LR, RNN+TBPTT）的成功率均为0%。</li>
+<li>训练过程显示，VAND的损失曲线更平稳，收敛更好。</li>
+<li>自主稳定性测试表明，VAND的隐状态在无输入时不会发散。</li>
+<li>自适应参数学习曲线显示，噪声尺度和dropout比率在训练中被动态调整。</li>
+<li>消融实验证实，将噪声尺度或dropout比率固定会损害VAND在困难任务上的性能，凸显了自适应机制的必要性。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>理论框架</strong>：提出了一种基于变分推断的RNN稳定学习理论（VAND），首次将内部状态添加噪声和应用dropout这两个稳定技术统一到一个共同的理论推导中。</li>
+<li><strong>自适应机制</strong>：通过隐式正则化和重参数化技巧，使得稳定化因子（噪声尺度和dropout比率）能够与模型主目标一起进行端到端的自适应优化，免除了繁琐的手动调参。</li>
+<li><strong>实证有效性</strong>：在机器人模仿学习的挑战性场景中（特别是周期任务），VAND是唯一能够稳定学习并成功完成任务的方法，显著优于各种基线方法。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，所提方法在训练时由于需要从随机分布中采样并进行梯度估计，可能会比标准的确定性RNN前向传播略微增加计算复杂度。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>理论扩展</strong>：这种将显式正则化转化为隐式操作（如dropout）的变分框架，可能适用于其他需要稳定训练的序列模型或循环结构。</li>
+<li><strong>结合其他技术</strong>：论文指出VAND与其他RNN稳定方法（如梯度裁剪、权重归一化）是互补的，未来工作可以探索将它们结合以获得更鲁棒的训练。</li>
+<li><strong>应用领域</strong>：VAND使RNN在需要长程依赖和动态稳定性的任务（如连续控制、实时预测）中更具实用性，为在资源受限的边缘设备上部署高效的时序模型提供了新工具。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对循环神经网络（RNNs）存在的梯度不稳定和自主稳定性问题，提出了一种新的稳定学习理论——变分自适应噪声和丢弃（VAND）。该方法通过变分推断重新解释RNNs优化问题，将噪声和丢弃作为隐式正则化，并自适应调整其尺度和比率。在移动操作器的模仿学习实验中，VAND是唯一能够成功模仿顺序和周期性行为的方法，验证了其稳定性和有效性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.01350" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

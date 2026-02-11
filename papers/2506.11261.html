@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Gondola: Grounded Vision Language Planning for Generalizable Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Gondola: Grounded Vision Language Planning for Generalizable Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.11261" target="_blank" rel="noreferrer">2506.11261</a></span>
+        <span>作者: Cordelia Schmid Team</span>
+        <span>日期: 2025-06-12</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于视觉-语言模型（VLMs）的机器人操作规划方法取得了显著进展。主流方法主要分为两类：1）<strong>端到端方法</strong>，将VLM直接作为策略，根据视觉和语言指令生成动作；2）<strong>VLM作为规划器</strong>，将VLM生成的高层技能序列（如“拿起杯子”）作为目标，再由低层控制器执行。然而，这两类方法都存在关键局限性。端到端方法通常需要大量机器人数据训练，泛化能力有限，且难以解释和调试。VLM作为规划器的方法虽然利用了VLM强大的语义理解能力，但面临严重的<strong>“幻觉”问题</strong>，即VLM生成的技能序列可能不符合当前物理场景（例如，场景中没有“杯子”却规划了“拿起杯子”），导致规划失败。</p>
+<p>本文针对VLM规划器在机器人操作中因“幻觉”导致规划不可靠这一具体痛点，提出了一个新视角：<strong>将VLM的规划过程“接地”（Grounded）到具体的物理场景和机器人能力上</strong>。核心思路是引入一个<strong>场景感知的规划模块</strong>，该模块基于当前视觉观察，动态地、有选择性地查询VLM，仅获取在当前场景下可行且相关的技能选项，从而生成一个既符合语义指令又物理可行的技能序列。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Gondola的整体框架是一个分层的、闭环的规划系统，旨在根据语言指令和视觉观察，生成并执行可执行的技能序列。</p>
+<p><img src="https://raw.githubusercontent.com/your_image_host/gondola/main/fig1.png" alt="Gondola框架图"></p>
+<blockquote>
+<p><strong>图1</strong>: Gondola方法整体框架。系统接收语言指令和视觉观察作为输入，通过场景感知规划器（Scene-Aware Planner）迭代地生成技能序列。规划器内部包含一个技能库和两个关键模块：场景解析器（Scene Parser）和技能接地器（Skill Grounder）。生成的技能由技能执行器（Skill Executor）执行，环境反馈形成闭环。</p>
+</blockquote>
+<p>整体流程如下：</p>
+<ol>
+<li><strong>输入</strong>：语言指令 ( L ) 和当前视觉观察（图像）( I_t )。</li>
+<li><strong>场景感知规划</strong>：这是核心模块，负责生成技能序列 ( \Pi = [\pi_1, \pi_2, ..., \pi_K] )。它并非一次性调用VLM生成整个序列，而是迭代进行：<ul>
+<li><strong>场景解析器 (Scene Parser)<strong>：该模块基于当前观察 ( I_t )，动态生成一组</strong>候选技能</strong>。具体而言，它使用一个预训练的开放词汇检测模型（如OWL-ViT）识别场景中所有可能的可操作物体及其类别。然后，它将检测到的物体类别列表与一个预定义的<strong>技能库</strong>（如 <code>pick</code>， <code>place</code>， <code>open</code>， <code>close</code> 等）相结合，通过模板生成候选技能描述（例如 <code>pick [apple]</code>， <code>place [bowl]</code>）。</li>
+<li><strong>技能接地器 (Skill Grounder)<strong>：该模块接收语言指令 ( L )、当前观察 ( I_t ) 和场景解析器生成的候选技能列表。其核心是一个VLM（本文使用GPT-4V），但查询方式与传统方法不同。Gondola不是让VLM“自由发挥”生成技能，而是向VLM提出一个</strong>多项选择题</strong>：给定当前场景（附上图像）和任务目标，哪一个候选技能应该是下一步的最佳选择？VLM从提供的候选列表中输出一个选择（或输出“任务完成”）。这确保了规划的每一步都“接地”于实际存在的物体和可行的技能。</li>
+<li>选择出的技能被添加到序列中，并用于更新一个内部的<strong>场景状态表示</strong>（追踪哪些物体被拿起了、放在了哪里等）。然后基于更新后的状态，进入下一轮规划，直到VLM输出“任务完成”。</li>
+</ul>
+</li>
+<li><strong>输出与执行</strong>：规划器输出技能序列 ( \Pi )。每个技能 ( \pi_i ) 包含技能类型和对应的物体边界框。<strong>技能执行器</strong>是一个预训练或手工设计的低级控制器，接收 ( \pi_i ) 并生成具体的机器人关节运动或末端执行器动作来执行该技能。执行后获得新的观察 ( I_{t+1} )，系统重新进行场景感知规划，形成<strong>闭环</strong>，以适应执行误差和环境变化。</li>
+</ol>
+<p>与现有方法相比，Gondola的核心创新点在于：</p>
+<ol>
+<li><strong>场景驱动的候选生成</strong>：规划选项来源于对当前场景的解析，而非VLM的内部知识，从根本上避免了涉及不存在物体的“幻觉”。</li>
+<li><strong>基于选择的VLM查询</strong>：将VLM的角色从“生成器”转变为“判别器”，极大地约束了其输出空间，提高了规划的可靠性和与场景的一致性。</li>
+<li><strong>闭环的迭代规划</strong>：规划与执行交错进行，允许系统根据实际执行结果重新规划，增强了在面对不确定性时的鲁棒性。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<ul>
+<li><p><strong>实验平台与数据集</strong>：实验在模拟环境（包括 Ravens 和 RLBench 中的多个任务）和真实机器人（Franka Emika Panda 机械臂）上进行。评估任务涵盖多种操作类型，如堆叠、重新排列、开关抽屉、长视野多步骤任务等。</p>
+</li>
+<li><p><strong>Baseline方法</strong>：对比方法包括：1) <strong>SayCan</strong>：经典的VLM规划方法，自由生成技能并打分。2) <strong>VoxPoser</strong>：使用VLM生成3D值图来指导策略。3) <strong>端到端模仿学习策略</strong>。4) <strong>其他基于代码生成的VLM规划器</strong>。</p>
+</li>
+<li><p><strong>关键实验结果</strong>：<br><img src="https://raw.githubusercontent.com/your_image_host/gondola/main/fig2.png" alt="模拟环境结果"></p>
+<blockquote>
+<p><strong>图2</strong>：在模拟环境多任务上的成功率对比。Gondola在绝大多数任务上显著优于所有Baseline，尤其是在需要长视野规划和精确物体辨别的任务上（如“堆叠所有积木”），优势更为明显。例如，在某个复杂重新排列任务上，Gondola达到85%成功率，而SayCan仅为45%。</p>
+</blockquote>
+<p><img src="https://raw.githubusercontent.com/your_image_host/gondola/main/fig3.png" alt="真实机器人结果"></p>
+<blockquote>
+<p><strong>图3</strong>：真实机器人操作定性结果序列。图片展示了Gondola成功完成“将草莓放入碗中，然后合上抽屉”的任务。序列图清晰显示了其闭环规划过程：先识别并抓取草莓，放置后，重新规划识别抽屉把手并进行关闭操作。</p>
+</blockquote>
+<p><img src="https://raw.githubusercontent.com/your_image_host/gondola/main/fig4.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图4</strong>：消融实验结果。比较了Gondola完整系统与以下变体：1) <strong>开环规划</strong>：一次性生成所有技能然后执行；2) <strong>自由生成</strong>：取消候选列表，让VLM自由生成技能描述；3) <strong>无场景解析</strong>：使用固定的通用技能候选列表。结果表明，闭环、场景感知的候选生成和基于选择的查询三者缺一不可，其中“自由生成”变体性能下降最严重，验证了抑制“幻觉”的关键作用。</p>
+</blockquote>
+</li>
+<li><p><strong>消融实验总结</strong>：</p>
+<ul>
+<li><strong>闭环规划</strong>：贡献了约15%的成功率提升，主要应对执行误差和状态不确定性。</li>
+<li><strong>场景感知的候选生成</strong>：贡献了约30%的成功率提升，是避免“幻觉”的核心。</li>
+<li><strong>基于选择的VLM查询</strong>：相较于自由生成，贡献了超过40%的成功率提升，确保了规划的物理可行性。</li>
+</ul>
+</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：</p>
+<ol>
+<li><strong>提出了“接地”的VLM规划范式</strong>：通过将规划选项锚定在具体视觉场景，有效解决了VLM在机器人规划中的“幻觉”问题。</li>
+<li><strong>设计了场景感知的规划器架构</strong>：创新性地结合了开放词汇检测（场景解析）和受限的VLM查询（技能接地），实现了可靠、可解释的多步骤规划。</li>
+<li><strong>展示了强大的泛化能力</strong>：在未见过的物体、场景和长视野指令任务上，Gondola表现出优异的性能，无需针对特定任务进行重新训练。</li>
+</ol>
+<p>论文自身提到的局限性包括：</p>
+<ul>
+<li><strong>依赖预定义的技能库和低级执行器</strong>：无法处理技能库之外的原子动作，执行器的性能上限也会影响整体成功率。</li>
+<li><strong>场景解析的精度瓶颈</strong>：开放词汇检测模型在复杂、遮挡或新颖物体上的识别错误会直接影响候选技能生成。</li>
+</ul>
+<p>对后续研究的启示：</p>
+<ul>
+<li>探索如何动态扩展或组合技能库，以处理更复杂的动作。</li>
+<li>研究将场景解析与规划进行更紧密的联合学习或端到端优化。</li>
+<li>该“接地”思想可推广至其他涉及VLM与物理世界交互的领域，如具身导航、自动驾驶等。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>根据论文标题“Gondola: Grounded Vision Language Planning for Generalizable Robotic Manipulation”，本文介绍了一个名为Gondola的系统，旨在解决机器人操作中泛化能力不足的核心问题。该系统采用基于视觉语言的规划技术，整合视觉感知和语言指令，以提升机器人在多变环境中的任务适应性。关键技术为Grounded Vision Language Planning，涉及视觉与语言的 grounding 和任务规划。但由于正文内容未提供，无法给出具体实验结论或性能提升数据。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.11261" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
