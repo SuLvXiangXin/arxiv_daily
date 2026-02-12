@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Say, Dream, and Act: Learning Video World Models for Instruction-Driven Robot Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Say, Dream, and Act: Learning Video World Models for Instruction-Driven Robot Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.10717" target="_blank" rel="noreferrer">2602.10717</a></span>
+        <span>作者: Yanwei Fu Team</span>
+        <span>日期: 2026-02-11</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作需要预测环境如何随动作演变，但现有系统大多缺乏这种预测能力，导致错误和低效。视觉语言模型能提供高级指令引导，但无法显式预测未来状态；而现有的世界模型要么只能预测短时程，要么生成的空间帧不一致。扩散视频生成器质量高但迭代去噪计算成本高，蒸馏加速技术又难以保持对操作至关重要的时空保真度。</p>
+<p>本文针对机器人操作中需要<strong>长时程、空间一致且高效</strong>的未来预测这一具体痛点，提出了一个集成高保真视频世界模型与上下文条件动作模型的新框架。核心思路是：首先筛选并适配一个鲁棒的视频生成模型作为世界模型，然后通过对抗蒸馏实现快速、少步生成，最后训练一个动作模型，利用生成的预测视频和真实观测来纠正空间误差，从而指导精确操作。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的Dream4manip框架遵循“说（Say）、梦（Dream）、行（Act）”三阶段，整体流程如下图所示。</p>
+<p><img src="https://arxiv.org/html/2602.10717v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：整体框架。(a) 世界模型蒸馏的训练流程。(b) 提出的策略模型流程：给定当前观测和指令，世界模型首先生成想象的未来帧；上下文条件动作模型随后以闭环方式产生动作。</p>
+</blockquote>
+<p><strong>1. Say: 世界模型的选择与适配</strong></p>
+<ul>
+<li><strong>选择</strong>：基准测试多个视频生成模型在<strong>具身一致性（EC）</strong>、<strong>空间指代成功率（RSR）</strong> 和<strong>任务完成率（TCR）</strong> 等关键指标上的表现，最终选择Cosmos-Predict2作为基础世界模型。</li>
+<li><strong>域适应与蒸馏</strong>：为使模型适应新的机器人场景、视角和本体，并加速推理，采用了<strong>潜在空间对抗蒸馏</strong>。<ul>
+<li><strong>去噪公式</strong>：沿用Cosmos-Predict2的扩散Transformer，根据条件预测去噪后的潜在表示 <code>x_hat_0</code>。</li>
+<li><strong>少步噪声调度</strong>：为将去噪步数减少至目标步数 <code>T_g</code>（默认为8），采用公式 <code>σ_t = (σ_min^(1/p) + t/T_g * (σ_max^(1/p) - σ_min^(1/p)))^p</code> 采样离散噪声水平。</li>
+<li><strong>潜在对抗蒸馏</strong>：初始化一个判别器 <code>D</code>，其主干使用预训练的DiT权重并冻结，仅优化新增的轻量级3D卷积头。训练时，判别器的目标是区分干净潜在 <code>x_0</code>（得分接近1）和生成器 <code>G</code> 的去噪预测 <code>x_hat_0</code>（得分接近-1）。在输入判别器前，会对两者注入额外噪声以提高特征稳定性。生成器的对抗损失为 <code>L_adv^G = E[-D(x_hat&#39;)]</code>。</li>
+<li><strong>重建损失与域适应</strong>：保留原始重建损失 <code>L_rec = ||x_hat_0 - x_0||_2^2 * (1+σ_t)^2 / σ_t^2</code>，其加权项放大了高噪声样本的贡献。在同一个训练迭代中，也应用此重建损失进行域适应。生成器的总损失为 <code>L_G = λ * L_adv^G + L_rec</code>（λ=0.1）。</li>
+</ul>
+</li>
+</ul>
+<p><strong>2. Dream: 长度无关的世界想象</strong><br>关键思想是将任意长度的执行轨迹压缩为固定数量的关键帧，实现与帧率无关的<strong>整体视频生成</strong>。具体做法是：对于长度为 <code>T</code> 的轨迹，通过均匀时间采样提取 <code>n</code> 个关键帧（<code>n &lt;&lt; T</code>，实验中设为93），然后微调视频扩散模型，使其学会生成固定长度但内容上能概括整个执行过程的视频，从而高效地预测长时程结果，而无需与底层动作步骤严格对齐。</p>
+<p><strong>3. Act: 上下文条件动作模型</strong><br>关键思想是将想象的轨迹视为<strong>上下文示例</strong>来指导动作预测，而非严格指令，使动作模型能基于真实观测修正生成视频中的空间误差。模型结构基于ACT的Transformer架构，如图2所示。</p>
+<p><img src="https://arxiv.org/html/2602.10717v1/x2.png" alt="动作模型结构"></p>
+<blockquote>
+<p><strong>图2</strong>：上下文条件动作模型的结构。使用基于Transformer的主干，并集成了独立的视觉编码器来处理视频和观测。模型为每个观测输出一个动作块。</p>
+</blockquote>
+<p>模型接收生成的未来帧和真实的历史观测作为输入。其功能类似于下一个词预测器：给定以生成帧形式呈现的执行示例，它输出动作，这些动作的执行应产生遵循示例所示模式的真实世界观测。</p>
+<p><strong>创新点</strong>：1) 通过域适应和潜在对抗蒸馏，获得了一个高效、高保真的机器人领域视频世界模型；2) 提出了长度无关的想象机制，实现了长时程、低频率的未来预测；3) 设计了上下文条件动作模型，将预测视频作为可修正的参考，而非不可变的命令，提升了策略的鲁棒性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准测试</strong>：在模拟环境<strong>LIBERO</strong>基准上进行闭环评估，包含Spatial, Object, Goal, Long四个任务套件。</li>
+<li><strong>对比方法</strong>：与OpenVLA、UniVLA、WorldVLA、4D-VLA、π0、GR00t N1、DreamVLA等十余种当前先进的VLA或世界模型驱动的方法进行对比。</li>
+<li><strong>评估指标</strong>：除了通用的FVD、SSIM、PSNR、LPIPS，还提出了针对机器人操作的四个指标：**Embodiment Consistency (EC)<strong>、</strong>Referring Success Rate (RSR)<strong>、</strong>Interaction Success Rate (ISR)<strong>、</strong>Task Completion Rate (TCR)**。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>世界模型零样本空间指代能力评估</strong>：如表2所示，原始Cosmos2系列模型（2B和14B）在EC、RSR、ISR、TCR上均表现最佳。经过DROID多视角微调的Cosmos-14B-Droid因域差距性能下降，Wan模型则因缺乏操作相关训练而表现不佳。定性结果（图3）直观展示了不同模型在生成视频中出现的本体不一致、相机视角错位、动作逻辑错误等问题。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.10717v1/x3.png" alt="模型定性比较"></p>
+<blockquote>
+<p><strong>图3</strong>：不同视频生成模型对指令“将蓝色积木移动到木盒中”的生成结果定性比较。展示了模型在机器人本体、视角和动作逻辑上的典型错误，以及域适应后的改善。</p>
+</blockquote>
+<ol start="2">
+<li><strong>世界模型生成质量</strong>：如表1所示，域适应（DA）显著提升了Cosmos-2B模型的生成质量（FVD从571.46降至211.84，SSIM从0.70升至0.82）。直接在机器人数据上微调（C-14B-Droid-F.T.）反而因观测设置不匹配导致性能严重下降（FVD高达1098.24），凸显了针对性域适应的重要性。在LIBERO各任务上，适配后的世界模型也表现出一致的高质量（表1a）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.10717v1/figs/libero_gen_vis.png" alt="LIBERO生成结果"></p>
+<blockquote>
+<p><strong>图4</strong>：在LIBERO基准上的世界模型生成结果定性展示。红框为条件帧，其余为生成帧。</p>
+</blockquote>
+<ol start="3">
+<li><p><strong>整体策略性能</strong>：如表3所示，Dream4manip在LIBERO基准上取得了<strong>98.1%</strong> 的总成功率，显著优于所有对比基线，并在Spatial（99.2%）、Object（98.2%）、Goal（95.4%）、Long（98.1%）所有子套件上均达到领先水平。这证明了其框架在模拟长时程操作任务中的有效性。</p>
+</li>
+<li><p><strong>消融实验</strong>：表4展示了去噪步数（D）对Cosmos-2B模型性能的影响。随着步数减少，生成速度（Time）加快，但质量（FVD, SSIM等）在步数过少（如D=1或5）时会急剧下降。本文选择的蒸馏目标步数（D=8）在速度和质量间取得了良好平衡。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.10717v1/x4.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>表4</strong>：在Cosmos-predict2 2B模型上对不同去噪步数（D）的消融研究。展示了时间（Time）和多个质量指标。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个集成了高保真视频世界模型与上下文条件动作模型的统一框架Dream4manip，实现了“想象-规划-执行”的闭环，显著提升了指令驱动机器人长时程操作的性能。</li>
+<li>提出了一种针对机器人操作的<strong>潜在空间对抗蒸馏方法</strong>，在大幅加速世界模型推理（少步去噪）的同时，保持了预测的时空保真度。</li>
+<li>引入了<strong>长度无关的世界想象机制</strong>和<strong>上下文条件动作建模</strong>，使系统能够进行高效的长时程预测，并能基于真实观测修正世界模型的预测误差，增强了策略的鲁棒性。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身未明确陈述局限性，但从方法描述可推断，其性能依赖于基础世界模型（Cosmos-Predict2）的能力，且域适应和蒸馏需要额外的训练数据和计算。</p>
+<p><strong>后续研究启示</strong>：</p>
+<ol>
+<li>本文展示了将大型视频生成模型有效适配并加速用于机器人闭环控制的路径，为利用更强大的生成式基础模型构建具身智能体提供了范例。</li>
+<li>“将预测视为可修正的上下文示例而非命令”的思想，为融合生成模型与基于观测的决策提供了新思路，可缓解生成模型的不确定性带来的问题。</li>
+<li>提出的针对机器人操作的评估指标（EC, RSR, ISR, TCR）对后续世界模型的研究具有参考价值。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对指令驱动的机器人操作任务，提出了一种学习视频世界模型的方法，以解决现有系统缺乏环境演化预测能力、导致操作错误与低效的问题。关键技术包括：1）选用并适配稳健的视频生成模型以保障预测可靠性；2）采用对抗蒸馏实现快速、少步数的视频生成；3）训练动作模型，结合生成视频与真实观测以修正空间误差。实验表明，该方法能生成时空一致、空间准确的视频预测，显著提升了体现一致性、空间指代能力与任务完成率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.10717" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

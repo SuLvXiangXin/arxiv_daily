@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Scaling World Model for Hierarchical Manipulation Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Scaling World Model for Hierarchical Manipulation Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.10983" target="_blank" rel="noreferrer">2602.10983</a></span>
+        <span>作者: Xinghang Li Team</span>
+        <span>日期: 2026-02-11</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）模型通过大规模预训练，为通用机器人操作提供了有前景的范式。然而，VLA模型在分布外（OOD）场景，特别是真实机器人数据稀缺时，表现依然脆弱。这一局限源于预训练视觉语言模型（VLM）与VLA之间数据结构的不匹配：VLM在成对的图像-文本数据上训练以建模离散的语言分布，而VLA则在单个指令下由数百个图像-动作对构成的长轨迹上训练，学习目标是连续的动作回归。这使得VLA缺乏VLM的零样本泛化能力，且长时域操作中组合爆炸的状态转移使得从静态语言指令直接映射到精确动作序列变得病态且数据密集。因此，分层任务分解至关重要。现有方法面临表征权衡：语言子目标语义泛化好但缺乏具体的空间和物理约束，而密集视频预测提供了丰富细节但存在长时域的时间漂移和物理不一致性问题。</p>
+<p>本文针对VLA在OOD场景下泛化能力弱、数据效率低的痛点，提出了一种新视角：利用基础模型的泛化能力，将操作任务抽象为一种既能提升鲁棒性又能提高数据效率的中间表示——视觉子目标。核心思路是构建一个分层框架VISTA，其中高层世界模型将操作任务分解为一系列紧凑的、视觉上接地的子目标（文本子任务+目标图像），低层VLA策略则在这些离散视觉子目标的引导下执行细粒度控制。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>VISTA框架包含两个核心模块：作为高层规划器的具身世界模型和作为低层执行器的目标条件VLA策略（GoalVLA）。</p>
+<p><img src="https://arxiv.org/html/2602.10983v1/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图1</strong>：VISTA框架总览。左侧为高层规划器VISTA，它将视觉目标和文本子任务视为统一的多模态序列，根据全局指令和初始观察自回归地生成交错的文本子任务和视觉目标。右侧为低层控制器GoalVLA，它接收实时观察和生成的子目标，预测可执行的动作块。执行过程由子任务切换器进行层级管理，在当前阶段完成后切换到下一阶段。</p>
+</blockquote>
+<p><strong>世界模型规划器</strong>：世界模型 𝒲 旨在将全局指令 L 分解为可执行的里程碑序列 (l_i, g_i)。其核心是将视觉目标和文本子任务统一为多模态序列进行自回归建模。首先，使用IBQ-Tokenizer对图像、Qwen3 tokenizer对文本进行编码，将多视角图像（按固定顺序展平）和文本转换为共享词汇表 𝒱 中的离散令牌序列 S。模型通过标准的自回归建模进行训练，优化序列 S 的交叉熵损失 ℒ = -∑_{k=1}^K log P(u_k | u_{&lt;k}; θ_𝒲)。在推理时，模型从初始上下文 (ϕ(I_0), ϕ(L)) 开始，使用束搜索自回归地预测后续子任务和目标图像的令牌，最终选择整体概率最高的序列，并通过逆标记器 ϕ^{-1} 在像素级重建目标图像 g_i。该模型在开源的EMU3.5检查点上进行持续训练。</p>
+<p><strong>目标条件VLA</strong>：低层策略 π_θ 接收当前观察 I_t、文本子任务 l_i 和对应目标图像 g_i，预测驱动机器人朝向该里程碑的动作块 𝒂 ∈ 𝒜^k。为了有效融合视觉信息，在输入模型骨干网络之前，将当前观察的令牌与目标图像令牌进行拼接。策略采用流匹配目标进行训练，定义噪声样本 𝒛 与真实动作块 𝒂 之间的线性插值为 𝐱<em>τ = (1-τ)𝒛 + τ𝒂，策略预测对应的速度场 𝒗_τ = 𝒂 - 𝒛。损失函数为 ℒ_FM = 𝔼</em>{τ,𝒛}[|π_θ(𝐱<em>τ, l_i, I_t, g_i, τ) - 𝒗_τ|^2]。此外，论文引入了两项关键技术：1) <strong>子任务感知动作填充</strong>：对跨越子任务边界的动作块中属于下一阶段的部分进行零填充，显式地教导策略在当前目标 g_i 满足后停止。2) <strong>随机目标图像偏移</strong>：在子任务边界附近的时间重叠窗口内，随机使用 g_i 或 g</em>{i+1} 作为目标条件，并使策略对边界噪声具有鲁棒性，鼓励平滑的阶段过渡。</p>
+<p><strong>数据集构建</strong>：为训练世界模型，论文构建了一个大规模的具身操作数据集。数据源包括Open-X-Embodiment、AgiBot World Beta和Mobile Aloha数据集，总计超过100万条轨迹。通过自动化流程将这些仅包含全局指令和图像-动作对的轨迹重新标注为交错的子任务和目标图像序列。流程包括：1) 使用Qwen3聚类指令动词，构建50个原子技能库；2) 利用Ramer–Douglas–Peucker算法在运动轨迹和夹爪状态转换上检测候选里程碑边界；3) 使用Qwen2.5-VL 72B合并具有相同技能的相邻片段并生成自然语言子任务描述 l_i。最终处理得到涵盖14种机器人本体、支持多视角、总计152亿令牌的数据集。</p>
+<p><img src="https://arxiv.org/html/2602.10983v1/imgs/robot_dataset_v3.001.jpeg" alt="数据集样本"></p>
+<blockquote>
+<p><strong>图2</strong>：构建的具身数据集样本可视化。数据集将操作任务表示为文本子任务和对应视觉目标交错的序列。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：训练数据仅使用在5个物体（鸡蛋、可乐罐、苹果、牛奶盒、牛角包）上收集的2小时拾取-放置任务遥操作数据。基线方法选择性能优异的 π_0 模型，并引入其变体 π_0-subtask（将数据集中原始指令替换为子任务指令）。评估场景分为域内和分布外（OOD）。域内场景包括基础设置、替换未见干扰物、替换未见目标物体，共15种场景。OOD场景涉及21个新物体，每次选取5个（1个作为目标，4个作为干扰物），并组合不同的桌布和布局，共63种场景。每个场景评估3次，计算平均指标。</p>
+<p><strong>视觉子目标分解定性结果</strong>：在合成场景（使用Nano Banana生成OOD初始帧）和真实机器人场景上的生成结果表明，VISTA能够生成物理一致的操作过程，保持多视角和物理一致性，并将独立技能组合成全新的长时域任务。例如，在仅训练了全板擦除任务的情况下，模型能根据“仅擦除字母‘B’和‘C’”的指令正确识别并移除指定区域。此外，模型展示了跨本体泛化能力，能够为Aloha、AgiBot G1和WidowX等不同机器人手臂在未见环境中生成高质量的目标序列。</p>
+<p><img src="https://arxiv.org/html/2602.10983v1/x3.png" alt="多视角目标图像生成"></p>
+<blockquote>
+<p><strong>图5</strong>：VISTA在真实机器人工作空间（包含未见布局、干扰物、目标物体和背景）中生成的多视角目标图像可视化。生成的序列在头、左腕、右腕相机视角下保持了空间一致性。</p>
+</blockquote>
+<p><strong>目标条件VLA定量分析</strong>：关键实验结果如表I所示。在基础设置和未见干扰物设置下，所有方法性能相近，VISTA略优。在最具挑战性的<strong>未见目标物体</strong>设置下，π_0 的接近成功率和执行成功率分别骤降至40%和4%，π_0-subtask 提升至73%和31%，而 <strong>VISTA 达到了100%的接近成功率和67%的执行成功率</strong>，显著优于基线。这证明了目标图像提供的显式空间线索对于在未见物体上实现精确抓取和执行至关重要。</p>
+<p><img src="https://arxiv.org/html/2602.10983v1/x7.png" alt="定量结果对比表"></p>
+<blockquote>
+<p><strong>表I</strong>：与基线方法在基础设置、未见干扰物和未见目标物体设置下的对比结果。“App”表示接近成功率，“Suc”表示执行成功率。在未见目标设置下，VISTA（Ours）取得了显著优势。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.10983v1/x6.png" alt="执行过程可视化对比"></p>
+<blockquote>
+<p><strong>图8</strong>：在未见场景下的执行可视化结果对比。VISTA（右）能够成功完成放置任务，而基线方法（左）在放置阶段失败。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：通过对比 π_0（仅全局指令）、π_0-subtask（子任务指令）和 VISTA（子任务+视觉目标）的结果，可以清晰看到每个组件的贡献。在未见目标设置下，从 π_0 到 π_0-subtask，接近成功率从40%提升至73%，说明文本子任务分解有助于高层规划。但从 π_0-subtask 到 VISTA，执行成功率从31%大幅提升至67%，这直接归功于视觉子目标提供的空间 grounding，验证了视觉子目标是实现强泛化能力的关键创新点。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了一个可扩展的数据处理流程，将数百万条机器人轨迹重新标注为文本子任务和视觉目标图像交错的格式；2) 提出了一个生成式具身世界模型，能够为操作任务生成物理和多视角一致的视觉子目标；3) 提出了基于视觉子目标的任务分解框架VISTA，该分层框架通过世界模型生成的视觉目标引导低层VLA策略，在OOD设置下显著优于标准基线。</p>
+<p>论文自身提到的局限性包括：世界模型的性能依赖于大规模、高质量的多模态数据；生成视觉目标的计算成本高于纯文本规划；对于极度复杂、动态变化的环境，离散子目标的表示可能仍需进一步研究。</p>
+<p>本工作对后续研究的启示在于：证明了视觉子目标作为一种中间表征，能有效桥接高层语义规划和低层动作执行，显著提升泛化能力和数据效率。未来可探索更高效、更稠密的视觉子目标表示，或将此框架扩展到更复杂的多任务、多模态交互场景中。同时，如何降低世界模型的训练与推理成本，以及如何实现更精细的物理一致性保证，是值得深入的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型在分布外场景中泛化能力弱、依赖大量真实机器人数据的问题，提出分层框架VISTA。其核心是使用大规模预训练世界模型作为高层规划器，将操作任务分解为带目标图像的子任务序列；低层VLA策略依据文本与视觉引导生成动作序列。目标图像提供了具体视觉与物理约束，显著提升了泛化能力。实验表明，在相同结构VLA中，借助世界模型引导，其在未见场景下的性能从14%大幅提升至69%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.10983" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
