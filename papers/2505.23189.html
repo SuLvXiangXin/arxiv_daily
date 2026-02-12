@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>TrackVLA: Embodied Visual Tracking in the Wild - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>TrackVLA: Embodied Visual Tracking in the Wild</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2505.23189" target="_blank" rel="noreferrer">2505.23189</a></span>
+        <span>作者: Wang, Shaoan, Zhang, Jiazhao, Li, Minghan, Liu, Jiahang, Li, Anqi, Wu, Kui, Zhong, Fangwei, Yu, Junzhi, Zhang, Zhizheng, Wang, He</span>
+        <span>日期: 2025/05/29</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>具身视觉追踪是具身AI的一项基本技能，要求智能体仅依靠自我中心视觉在动态环境中持续跟踪特定目标。该任务极具挑战性，因为它需要在严重遮挡和高动态场景下，同时具备准确的目标识别和有效的轨迹规划能力。现有方法通常通过模块化分离来应对这一挑战，即将识别和规划解耦为独立的检测模型和规划模型。这种松耦合的设计会导致错误累积，例如错误的识别会导致错误的规划，反之亦然，从而限制了方法在类别级追踪和相对开放区域的应用。</p>
+<p>本文针对识别与规划模块分离导致错误累积、协同性差的痛点，提出了一个新的视角：构建一个统一的模型来同时掌握识别与追踪能力，以实现两者之间的协同。本文提出了TrackVLA，一个视觉-语言-动作模型，其核心思路是使用共享的LLM骨干网络进行特征编码和推理，并通过一个语言建模头进行目标识别，以及一个基于锚点的扩散模型进行轨迹规划，两者在一个统一的框架下进行联合训练。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>TrackVLA的整体流程如图2所示。给定一个描述特定目标外观的自然语言指令 ℐ 和一个自我中心的RGB观察序列 𝒪_T = {𝐱_1, …, 𝐱_T}，模型需要输出下一时刻的动作 a_T（线性速度v和角速度ω）以持续跟踪目标，或者在识别任务中回答关于视频的问题。模型通过一个特殊的[Track]令牌来区分当前是追踪任务还是识别任务。</p>
+<p><img src="https://arxiv.org/html/2505.23189v1/x2.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图2</strong>：TrackVLA的整体流程。给定视频和语言指令，TrackVLA根据任务类型（由[Track]令牌指示）输出机器人的跟踪轨迹或识别问题的答案。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>观察编码</strong>：使用预训练的EVA-CLIP视觉编码器提取视频帧的视觉特征。为了平衡令牌长度和性能，采用网格池化策略生成两种分辨率的特征：细粒度特征 V_fine ∈ ℝ^(64×C) 用于最新的跟踪观察以增强目标识别，粗粒度特征 V_coarse ∈ ℝ^(4×C) 用于历史跟踪帧和基于VQA的识别任务。在跟踪时，使用滑动窗口机制仅保留最近的k=32帧。视觉特征通过一个2层MLP的跨模态投影器映射到LLM的潜在空间。</li>
+<li><strong>大型语言模型转发</strong>：将视觉令牌 𝐄_T^V 与语言令牌 𝐄^I（跟踪任务会添加一个特殊的[Track]令牌）拼接，并输入到LLM（Vicuna-7B）中，得到预测的令牌 𝐄_T^pred。该令牌后续的处理取决于任务类型。</li>
+<li><strong>任务特定解码</strong>：<ul>
+<li><strong>识别任务</strong>：当不存在[Track]令牌时，使用标准的语言建模头对 𝐄_T^pred 进行自回归解码，生成词汇单词以回答问题。</li>
+<li><strong>跟踪任务</strong>：当存在[Track]令牌时，LLM仅执行单步自回归，并将输出的隐藏状态 𝐄_T^pred 作为条件输入到动作头模型，以生成用于导航的路径点轨迹。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.23189v1/x3.png" alt="基于锚点的扩散动作模型"></p>
+<blockquote>
+<p><strong>图3</strong>：基于锚点的扩散动作模型。通过对从训练数据中聚类得到的轨迹锚点进行加噪和去噪，生成最终的跟踪轨迹。</p>
+</blockquote>
+<ol start="4">
+<li><strong>基于锚点的扩散动作模型</strong>：这是规划模块的核心创新。首先，从训练数据中收集所有轨迹，并使用K-means聚类得到一组轨迹锚点 {τ_i}_{i=1}^M。每个锚点代表一个机器人轨迹模式。在推理时，对每个锚点添加高斯噪声得到加噪锚点 {τ̃_i}。动作模型 𝒜_θ(·) （采用扩散Transformer，DiT）以加噪锚点集和条件 𝐄_T^pred 为输入，输出去噪后的轨迹 {τ̂_i} 及其对应的分类分数 {ŝ_i}。对于每个样本，将最接近真实轨迹 τ_gt 的锚点标记为正样本（s_nearest=1），其余为负样本（s_else=0）。跟踪损失 ℒ_track 是轨迹回归损失（MSE）和分数预测损失（BCE）的加权和。整体训练损失是跟踪损失 ℒ_track 和文本预测损失 ℒ_text 的加权组合：ℒ = ℒ_track + αℒ_text。</li>
+</ol>
+<p><strong>创新点</strong>：与现有方法相比，TrackVLA的主要创新在于：1) <strong>统一的VLA框架</strong>：首次将目标识别和轨迹规划整合到一个共享LLM骨干的模型中，通过联合训练实现两者的紧密协同。2) <strong>并行分支预测</strong>：根据任务指令动态切换解码头，使单一模型具备多任务能力。3) <strong>高效的锚点扩散策略</strong>：利用预定义的轨迹锚点初始化去噪过程，仅需2步去噪即可生成轨迹，相比原始扩散策略实现了5倍加速，保证了10 FPS的实时推理速度。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准测试</strong>：在公开基准<strong>Gym-UnrealCV</strong>上进行零样本评估，以及在自建的<strong>EVT-Bench</strong>上进行评估。EVT-Bench包含三个难度递增的子任务：单目标跟踪（STT）、分心跟踪（DT）和模糊跟踪（AT）。</li>
+<li><strong>基线方法</strong>：对比了三大类方法：1) 基于模型的方法（IBVS）；2) 基于强化学习的方法（DiMP, SARL, AD-VAT, AD-VAT+, TS, EVT, PoliFormer）；3) 基于模仿学习的方法（Uni-NaVid）。</li>
+<li><strong>评估指标</strong>：成功率（SR）、平均回合长度（EL）、跟踪率（TR）、碰撞率（CR）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>在Gym-UnrealCV上的零样本性能</strong>：TrackVLA在“单干扰物”和“未见目标物体”两种设置下均取得了最佳性能。特别是在“未见目标物体”设置下，TrackVLA的成功率（SR）达到**74.0%**，显著优于次优的EVT方法（58.0%），并且平均回合长度（EL）也最长，表明其跟踪最为持久稳定。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.23189v1/x5.png" alt="在Gym-UnrealCV基准上的性能对比"></p>
+<blockquote>
+<p><strong>图5</strong>：在Gym-UnrealCV基准上的定量结果。TrackVLA在零样本设置下，在成功率和平均回合长度上均超越了所有基线方法。</p>
+</blockquote>
+<ol start="2">
+<li><strong>在EVT-Bench上的性能</strong>：TrackVLA在三个子任务上均达到最优。在最具挑战性的“模糊跟踪”（AT）任务中，TrackVLA的成功率高达**85.7%**，远超其他方法（例如，Uni-NaVid为65.4%，PoliFormer为58.5%）。这证明了其强大的细粒度识别和复杂场景下的决策能力。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.23189v1/x7.png" alt="在EVT-Bench上的性能对比"></p>
+<blockquote>
+<p><strong>图7</strong>：在EVT-Bench三个子任务上的定量结果。TrackVLA在所有任务上均取得最高成功率，尤其在需要精细识别和处理的DT和AT任务上优势明显。</p>
+</blockquote>
+<ol start="3">
+<li><strong>消融实验</strong>：<ul>
+<li><strong>数据混合比例</strong>：如图6所示，联合训练跟踪数据和识别数据对性能至关重要。仅使用跟踪数据（比例1:0）或仅使用识别数据（比例0:1）性能均不佳。当跟踪与识别样本比例为<strong>1:1</strong>时，模型在EVT-Bench上取得最佳性能（平均SR 83.3%）。</li>
+<li><strong>模型组件</strong>：消融研究表明，移除基于锚点的扩散策略会导致性能大幅下降（SR从83.3%降至77.0%）；而移除细粒度视觉令牌或历史帧信息也会导致性能损失，证明了这些设计的有效性。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.23189v1/x6.png" alt="数据混合比例的消融研究"></p>
+<blockquote>
+<p><strong>图6</strong>：不同跟踪数据与识别数据混合比例对模型性能的影响。1:1的比例在EVT-Bench上取得了最佳的平均成功率。</p>
+</blockquote>
+<ol start="4">
+<li><strong>泛化与定性结果</strong>：<ul>
+<li><strong>模拟到现实迁移</strong>：TrackVLA在现实世界中能够鲁棒地跟踪之前未见过的物体（如玩具、盒子），并能处理遮挡和高动态场景。</li>
+<li><strong>长时程跟踪</strong>：如图9所示，TrackVLA能在复杂室内环境中成功进行超过200步的长时程跟踪。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.23189v1/x8.png" alt="现实世界中的定性结果"></p>
+<blockquote>
+<p><strong>图8</strong>：TrackVLA在现实世界中的跟踪示例。展示了其对未见物体的跟踪能力、对遮挡的鲁棒性以及处理动态障碍物的能力。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了TrackVLA</strong>：一个统一的视觉-语言-动作模型，通过共享的LLM骨干网络和任务特定解码头，首次实现了目标识别与轨迹规划的紧密协同学习。</li>
+<li><strong>构建了EVT-Bench</strong>：一个大规模、多样化的具身视觉跟踪基准与数据集，包含超过170万个样本，涵盖多种难度等级的场景，以促进该领域的研究。</li>
+<li><strong>设计了高效的锚点扩散策略</strong>：显著提升了扩散模型在轨迹规划中的推理效率，使模型能够以10 FPS的速度进行实时决策。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，尽管在模拟和现实世界中表现出色，但模型的训练数据主要来源于模拟环境。虽然加入了开放世界的VQA数据以增强识别泛化能力，但在极端复杂的真实环境中的全面鲁棒性仍有待进一步验证。此外，10 FPS的推理速度虽然满足实时性，但对于需要极低延迟的某些机器人应用可能仍有提升空间。</p>
+<p><strong>启示</strong>：TrackVLA的工作表明，利用统一的VLA框架进行多任务联合训练，是解决具身任务中感知与决策耦合问题的有效途径。其构建大规模仿真数据集的思路以及提升扩散模型推理效率的技术，为后续开发更高效、更通用的具身AI系统提供了重要参考。未来的研究可以探索将该框架扩展到更复杂的多模态指令理解、多智能体协作追踪等场景。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出TrackVLA模型，以解决具身视觉跟踪中目标识别与轨迹规划协同的难题。该方法采用统一的视觉-语言-动作框架，基于共享LLM主干，分别用语言建模头执行识别、基于锚点的扩散模型进行规划。模型在包含170万样本的EVT-Bench数据集上训练，在合成与真实环境中均达到SOTA性能：以零样本方式显著超越现有基准，并在高动态和遮挡的真实场景中保持鲁棒性，推理速度达10 FPS。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2505.23189" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

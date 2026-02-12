@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>From Language to Locomotion: Retargeting-free Humanoid Control via Motion Latent Guidance - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>From Language to Locomotion: Retargeting-free Humanoid Control via Motion Latent Guidance</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.14952" target="_blank" rel="noreferrer">2510.14952</a></span>
+        <span>作者: Li, Zhe, Chi, Cheng, Wei, Yangyang, Zhu, Boan, Peng, Yibo, Huang, Tao, Wang, Pengwei, Wang, Zhongyuan, Zhang, Shanghang, Xu, Chang</span>
+        <span>日期: 2025/10/16</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于自然语言指导的人形机器人运动控制主流方法采用多阶段流程：首先通过文本到运动（T2M）模型从语言指令解码出人体运动序列，接着通过运动重定向（Retargeting）将该序列适配到特定机器人的形态上，最后使用基于物理的控制器来跟踪这个重定向后的轨迹。这一流程存在三个关键局限性：1) 解码、重定向和跟踪各阶段的误差会累积，损害语义保真度和物理可行性；2) 多阶段顺序处理导致高延迟，难以实现实时交互；3) 语言与控制之间是松耦合的，每个阶段被孤立优化而非端到端学习。本文针对这些痛点，提出了一个全新的视角：绕过显式的运动解码和重定向步骤，将语言生成的“运动潜在表示”作为一级条件信号，直接用于驱动人形机器人的控制策略。其核心思路是提出一个名为RoboGhost的免重定向框架，利用基于扩散模型的策略，直接从噪声中“去噪”出可执行的动作，并以运动潜在为语义锚点进行条件化，从而实现高效、鲁棒且语义对齐的端到端控制。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RoboGhost的整体框架是一个两阶段、免重定向的潜在驱动强化学习架构，如图2所示。其输入是自然语言指令，输出是可直接在物理人形机器人上执行的动作。整个流程摒弃了生成显式运动序列并重定向的步骤。</p>
+<p><img src="https://arxiv.org/html/2510.14952v2/figures/icon.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图2</strong>：RoboGhost框架总览。包含三个核心组件：连续自回归运动生成器、基于混合专家（MoE）的教师策略，以及基于扩散的潜在驱动学生策略。该方案绕过了对运动重定向的需求。</p>
+</blockquote>
+<p><strong>第一阶段：连续自回归运动生成器</strong>。该模块接收文本提示 T，目标是生成一个紧凑的运动潜在表示 <code>l_ref</code>，而非显式的运动序列。它采用因果自编码器和连续掩码自回归架构，并配合因果注意力掩码。训练时，遵循类似语言模型的随机掩码策略，掩码比例根据函数 <code>γ(τ) = cos(πτ/2)</code> 进行调度。与先前方法不同，它不进行随机令牌洗牌或批量令牌预测，并使用因果注意力掩码来缓解训练中低秩矩阵近似导致的表达能力限制。文本特征使用LaMP文本变换器提取。生成器完成掩码令牌预测任务后，其输出的潜在表示将用于条件化下一阶段的扩散模型。</p>
+<p><strong>第二阶段：策略学习与部署</strong>。此阶段包含一个教师策略和一个学生策略，采用师生蒸馏框架。</p>
+<ul>
+<li><strong>MoE-based教师策略</strong>：这是一个在仿真环境中利用特权信息（如真实根速度、全局关节位置等）训练的高性能专家策略，使用PPO算法优化。其网络结构集成了混合专家模块，包含多个专家网络和一个门控网络。门控网络根据输入的状态和参考运动产生一个专家权重分布，最终动作为各专家输出的加权组合。这种设计旨在增强策略的表达能力和对多样化运动输入的泛化能力，为后续学生策略提供更精确的监督信号。</li>
+<li><strong>潜在驱动扩散学生策略</strong>：这是本文的核心创新。与以往使用显式参考运动进行蒸馏不同，该学生策略 <code>π_s</code> 以运动生成器产生的潜在表示 <code>l_ref</code>、本体感知状态和历史观测作为条件输入。其训练过程类似于DAgger：在仿真中滚推学生策略，并在访问到的状态处查询教师策略获得最优动作 <code>â_t</code>。训练时，向教师动作中逐步添加高斯噪声，形成一个扩散过程的前向噪声化序列。学生策略作为一个去噪网络 <code>ε_θ</code>，学习从带噪动作 <code>x_t</code> 和步数 <code>t</code> 中预测噪声，并通过 <code>x_0</code> 预测策略重构干净动作。损失函数为预测动作与教师动作之间的均方误差。这种设计使得策略在推理时无需任何显式参考运动或特权信息。</li>
+<li><strong>推理流程</strong>：为满足实时性，推理时采用DDIM加速采样。文本指令首先通过运动生成器得到 <code>l_ref</code>，然后直接将其与机器人当前状态一起条件化学生策略中的扩散模型。模型以一个随机噪声为起点，经过去噪过程直接输出干净的可执行动作 <code>a = ε_θ(ε | l_ref, p_o, o_{t-H:t})</code>。整个流程完全免重定向。</li>
+</ul>
+<p><strong>因果自适应采样</strong>：为了更高效地训练教师策略学习长时序、高难度的运动技能，本文提出了一种因果感知的自适应采样机制。它将运动序列分成K个等长区间，并非均匀采样，而是根据失败经验动态调整各区间的采样概率。当一次滚推在第 <code>k_t</code> 区间因失败终止时，算法假设失败根源可能出现在此前的若干区间（如前序的错误步伐）。通过一个指数衰减核函数，为导致失败的因果前驱区间分配更高的采样权重，从而让策略更专注于学习困难片段，提升样本效率。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在运动生成方面，使用HumanML3D数据集以及MotionMillion数据集中的HumanML和Kungfu子集进行评估，指标包括检索精度（R Precision）、FID、MM-Dist和多样性。在运动跟踪（控制）方面，在IsaacGym和MuJoCo物理仿真器中进行评估，使用成功率、平均每关节位置误差和平均每关键点位置误差作为指标。最终在Unitree G1真人形机器人上进行实物部署验证。</p>
+<p><strong>基线对比</strong>：运动生成方面对比了MDM、MLD、T2M-GPT、MotionGPT、MoMask、AttT2M、MotionStreamer等方法。运动跟踪方面，将“Baseline”定义为使用MLP骨干网络、依赖显式运动重定向的传统流程。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>运动生成质量</strong>：如表1所示，本文的生成器（无论是DDPM还是SiT目标）在HumanML3D和MotionMillion的HumanML子集上均取得了具有竞争力的性能，表明其能够产生高质量且多样化的运动潜在表示。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.14952v2/x1.png" alt="运动生成定量结果"></p>
+<blockquote>
+<p><strong>表1</strong>：在HumanML3D数据集和HumanML子集上的文本到运动生成定量结果。本文方法（Ours-DDPM/Ours-SiT）在检索精度（R Precision）、FID和MM-Dist等关键指标上表现优异。</p>
+</blockquote>
+<ol start="2">
+<li><strong>运动跟踪性能</strong>：如表2所示，在HumanML和Kungfu测试集上，RoboGhost（Ours-DDPM/Ours-SiT）在IsaacGym和MuJoCo中均显著优于基线方法。例如，在IsaacGym的HumanML集上，成功率从92%提升至97%-98%，关节误差从0.23大幅降低至0.12-0.14。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.14952v2/x2.png" alt="运动跟踪定量结果"></p>
+<blockquote>
+<p><strong>表2</strong>：在HumanML和Kungfu测试集上的运动跟踪性能仿真对比。本文的潜在驱动扩散策略在成功率和跟踪精度上全面超越传统MLP基线。</p>
+</blockquote>
+<ol start="3">
+<li><strong>消融实验（回答Q1）</strong>：如表3所示，对比了“显式”流程（生成潜在→解码为显式运动→重定向→策略跟踪）和“隐式”流程（本文的潜在直接驱动）。结果显示，显式流程由于误差累积，性能下降且部署时间成本高达17.85秒；而本文的隐式流程不仅性能更优，还将部署时间大幅缩短至5.84秒，验证了免重定向管道在效率和性能上的双重优势。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.14952v2/x3.png" alt="消融实验：显式 vs 隐式"></p>
+<blockquote>
+<p><strong>表3</strong>：显式流程与隐式（本文）流程的消融对比。本文的隐式潜在驱动方法在跟踪精度和部署时间成本上具有显著优势。</p>
+</blockquote>
+<ol start="4">
+<li><strong>定性结果</strong>：图3展示了策略在IsaacGym仿真、跨仿真器迁移到MuJoCo以及在真实Unitree G1机器人上执行的序列。可视化结果表明，策略能够保持运动语义，在动态转换中维持平衡，并能泛化到不同的物理引擎和真实硬件上，生成平滑、连贯的运动。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.14952v2/x4.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图3</strong>：在IsaacGym、MuJoCo和真实Unitree G1机器人上的定性运动跟踪结果。展示了从仿真到实物的平滑执行能力。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1) 提出了RoboGhost，首个免重定向的框架，通过直接利用语言生成的运动潜在表示进行端到端人形策略学习，消除了易错的解码和重定向阶段。2) 引入了首个基于扩散的、以运动潜在为条件的人形控制策略，能够直接从噪声去噪出可执行动作，并利用DDIM采样实现实时、平滑且物理合理的运动。3) 设计了一个混合Transformer-扩散架构的运动生成器，统一了长时序一致性与随机稳定性，产生了富有表现力的运动潜在表示。</p>
+<p>论文自身提到的局限性在于，运动生成器可能产生物理上不真实的动作，但文中指出，其学生策略中的可训练潜在编码器能够智能地条件化策略，将原始提议转化为可执行且稳定的命令，从而即使在不完美的引导下也能生成多样且鲁棒的动作。</p>
+<p>本工作对后续研究的启示在于，它为人形机器人的“视觉-语言-动作”系统提供了一个通用的参考架构。通过将驱动信号抽象为潜在表示，该框架可以自然地扩展到图像、音频、音乐等其他输入模态，为实现多模态、具身智能的人形控制奠定了坚实的基础。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有语言引导人形机器人运动流程繁琐、易出错、延迟高的问题，提出了RoboGhost框架。该方法摒弃了传统的多阶段（解码-重定向-跟踪）流程，通过直接基于语言接地的运动潜在表示来调节策略，绕过了显式的运动重定向。其核心采用扩散策略直接从噪声生成可执行动作，并结合混合因果Transformer-扩散运动生成器确保长期一致性。实验表明，该方法能大幅减少部署延迟，提高任务成功率和运动跟踪精度，在真实机器人上实现了流畅且语义对齐的运动。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.14952" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

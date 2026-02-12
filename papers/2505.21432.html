@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Hume: Introducing System-2 Thinking in Visual-Language-Action Model - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Hume: Introducing System-2 Thinking in Visual-Language-Action Model</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2505.21432" target="_blank" rel="noreferrer">2505.21432</a></span>
+        <span>作者: Song, Haoming, Qu, Delin, Yao, Yuanqi, Chen, Qizhi, Lv, Qi, Tang, Yiwen, Shi, Modi, Ren, Guanghui, Yao, Maoqing, Zhao, Bin, Wang, Dong, Li, Xuelong</span>
+        <span>日期: 2025/05/27</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型已成为通用机器人策略的主流范式。然而，在处理物理世界中动态、灵巧且复杂的任务时，现有方法面临关键局限：1）基于直觉的快速“系统1”思维难以应对精细、易错的动作预测；2）虽然已有工作尝试引入类似大语言模型的思维链推理来增强VLA模型，但这显著拖慢了策略推理速度；3）现有的双系统架构虽提升了效率，但其“系统2”并未进行有效的思考和推理来指导“系统1”的动作预测。</p>
+<p>本文针对“如何为通用机器人策略装备有效的System-2慢思考能力以实现精确动作预测”这一核心痛点，提出了一个新视角：将价值引导的重复采样作为System-2思考的实现机制，并通过级联动作去噪与快速反应的System-1无缝集成。本文的核心思路是：构建一个双系统VLA模型，其中System-2通过价值函数评估多个候选动作并进行择优选择，实现慢思考；System-1则对选出的动作进行高频、实时的精细化去噪执行。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Hume是一个异步工作的双系统模型。整体流程为：给定观测，System-2模块生成N个不同噪声水平的候选动作块，并通过价值查询头估计各自的状态-动作值，选择价值最高的最优候选动作块传递给System-1；System-1模块接收该动作块中的一个短片段，结合当前视觉观测和机器人状态，通过级联去噪生成最终流畅的机器人动作。</p>
+<p><img src="https://arxiv.org/html/2505.21432v4/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图1</strong>：Hume整体框架。System 2（上方）接收观测，通过动作去噪头生成多个候选动作块，并由价值查询头评估其Q值，执行Best-of-N选择。选出的最优动作块被分段传递给System 1（下方），后者结合当前观测进行级联动作去噪，输出高频控制指令。</p>
+</blockquote>
+<p><strong>System-2：价值引导的慢思考</strong><br>System-2基于一个预训练的视觉-语言模型构建，并附加了两个专用头：动作去噪头和价值查询头。</p>
+<ol>
+<li><strong>候选动作生成</strong>：动作去噪头采用基于Transformer的流匹配去噪过程。它学习一个向量场 (\mathbf{v}<em>{\theta}(\mathbf{A}</em>{t}^{\tau}, \mathbf{o}<em>{t}))，用于预测含噪动作 (\mathbf{A}</em>{t}^{\tau}) 中的剩余噪声（(\tau \in [0,1]) 表示噪声水平）。从随机噪声 (\mathbf{A}<em>{t}^{0} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})) 开始，通过前向欧拉法逐步去噪（实践中使用10步，(\delta=0.1)）生成动作。为实现重复采样，该模块在相同观测条件下，通过控制积分上限 (\tau = 1-(n-1)\xi)，分别生成N个具有不同噪声水平的候选动作块 ({\mathbf{A}</em>{t}^{\tau_{1}}, \mathbf{A}<em>{t}^{\tau</em>{2}}, ..., \mathbf{A}<em>{t}^{\tau</em>{N}}})，其中 (\xi) 控制候选动作间的噪声差距。</li>
+<li><strong>状态-动作值估计</strong>：价值查询头用于评估候选动作的质量。它在VLM输入序列末尾引入一个可学习的特殊查询令牌 (\mathbf{q}<em>{t})，该令牌会关注所有先前的令牌（图像、指令），从而聚合必要信息。该头接收查询令牌 (\mathbf{q}</em>{t}) 和一个动作块（真实动作或候选动作），输出估计的状态-动作值 (Q_{\theta}(\mathbf{q}<em>{t}, \mathbf{A}</em>{t}))。其训练使用离线强化学习（Calibrated Q-learning）在预先收集的机器人演示数据集上进行。</li>
+<li><strong>价值引导的思考</strong>：实现为Best-of-N选择策略。System-2生成N个候选动作后，价值查询头为每个候选估计Q值，并选择具有最高值的动作作为最优候选 (\mathbf{A}_{t}^{\tau^{*}}) 传递给System-1。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.21432v4/x2.png" alt="价值图谱"></p>
+<blockquote>
+<p><strong>图2</strong>：候选动作价值图谱。通过PCA将候选动作和真实动作投影到二维空间，颜色强度表示状态-动作值Q的大小。可见真实动作均位于高价值区域，验证了价值查询头评估的合理性。</p>
+</blockquote>
+<p><strong>System-1：级联动作去噪的快速执行</strong><br>System-1是一个轻量级的反应式视觉运动策略。它接收来自System-2的最优动作块中的一个短片段、当前视觉观测和机器人状态，通过一个独立的轻量级扩散策略进行级联动作去噪，生成最终的高频（90 Hz）机器人动作。这种“级联”设计意味着System-1在System-2提供的粗粒度、长时程动作规划基础上，进行细粒度、实时的动作修正和流畅化。</p>
+<p><strong>创新点</strong>：与现有双系统模型（如Helix）仅使用潜在向量或语言指令作为系统间桥梁不同，Hume的创新在于：1) 为System-2引入了<strong>价值引导的重复采样机制</strong>，实现了对动作质量的主动评估和择优，这是其“思考”能力的核心；2) 提出了<strong>级联动作去噪</strong>，使System-1能够基于System-2的“思考”结果进行精细化、高频的执行。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：评估涵盖了模拟基准测试和真实机器人平台。模拟环境包括LIBERO、Simpler Benchmark以及一个具身问答任务。真实机器人测试涉及21种不同的现实世界机器人设置。对比的基线方法包括当前最先进的VLA模型，如 (\pi_{0})、OpenVLA、HiRT、DexVLA以及思维链推理方法ECoT。</p>
+<p><img src="https://arxiv.org/html/2505.21432v4/x3.png" alt="模拟基准结果"></p>
+<blockquote>
+<p><strong>图3</strong>：在LIBERO基准测试上的成功率。Hume以74.1%的成功率显著优于所有基线方法，相比最强的 (\pi_{0}) 提升了4.4%。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.21432v4/x4.png" alt="模拟基准结果2"></p>
+<blockquote>
+<p><strong>图4</strong>：在Simpler Benchmark上的成功率。Hume达到52.9%，比 (\pi_{0}) 高出25.9%，展现了其在复杂、长视野任务中的优势。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.21432v4/x5.png" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>图5</strong>：真实机器人部署的整体成功率。Hume在21个场景中平均成功率为70.4%，相比 (\pi_{0}) 的57.5%提升了12.9%。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.21432v4/x6.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图6</strong>：价值引导思考的消融研究。在LIBERO上，“Best-of-2”和“Best-of-4”策略均比“Best-of-1”（即无重复采样思考）有显著提升，证明了重复采样与价值选择的有效性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.21432v4/x7.png" alt="消融实验2"></p>
+<blockquote>
+<p><strong>图7</strong>：级联去噪的消融研究。比较了Hume（级联）、仅System-2、以及非级联的联合训练双系统。Hume的级联设计取得了最佳性能，证明了该设计在整合双系统优势方面的有效性。</p>
+</blockquote>
+<p><strong>关键实验结果总结</strong>：</p>
+<ol>
+<li><strong>模拟基准</strong>：在LIBERO上，Hume成功率为74.1%，超越 (\pi_{0})（69.7%）4.4%；在更复杂的Simpler Benchmark上，Hume达到52.9%，远超 (\pi_{0})（27.0%）25.9%。</li>
+<li><strong>真实机器人</strong>：在21个真实场景测试中，Hume平均成功率为70.4%，相比 (\pi_{0})（57.5%）提升12.9%。</li>
+<li><strong>消融实验</strong>：<ul>
+<li><strong>价值引导思考</strong>：Best-of-N选择策略（N=2,4）相比无思考的Best-of-1带来显著性能增益（图6）。</li>
+<li><strong>级联去噪</strong>：Hume的级联设计优于仅使用System-2或非级联的双系统（图7），表明该设计对融合双系统能力至关重要。</li>
+<li><strong>系统频率</strong>：实验表明System-2以4Hz频率运行可在性能和延迟间取得良好平衡。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.21432v4/x8.png" alt="人形机器人结果"></p>
+<blockquote>
+<p><strong>图8</strong>：在人形机器人控制任务上的表现。Hume成功完成了复杂的开门和移动物体任务，展示了其处理高自由度、动态任务的潜力。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.21432v4/x9.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图9</strong>：真实机器人任务定性示例。Hume能够成功完成“打开微波炉并放入杯子”、“排列香蕉”等需要多步骤规划和精密操作的任务。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>Hume</strong>，一个探索System-2慢思考范式的双系统通用机器人策略，为VLA模型引入了类人的深思熟虑能力。</li>
+<li>设计了<strong>价值引导的思考</strong>和<strong>级联动作去噪</strong>两大创新机制，前者通过重复采样与价值评估实现有效推理，后者无缝融合了低频System-2与高频System-1，实现了既“深思”又“速行”的机器人控制。</li>
+<li>在模拟与真实机器人测试中均实现了<strong>最先进的性能</strong>，显著提升了复杂任务的成功率。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，System-2的重复采样过程会引入额外的计算开销。尽管通过低频运行（4Hz）来缓解，但在计算资源极其受限的边缘设备上部署可能仍需进一步优化。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>价值函数作为思考引导</strong>：证明了在连续动作空间中，利用价值函数评估和筛选候选动作是一种有效的“思考”形式，这为机器人推理开辟了新路径，不同于传统的语言链式思维。</li>
+<li><strong>异步双系统设计模式</strong>：Hume成功验证了“低频深思规划+高频精细执行”的异步架构在机器人控制中的有效性，该模式可广泛应用于需要平衡计算复杂度与实时性的具身智能场景。</li>
+<li><strong>从数字推理到物理推理的迁移</strong>：将LLM领域成功的System-2思维理念，通过适应性的机制（如价值引导）迁移到物理世界的机器人控制中，为跨模态推理研究提供了有价值的案例。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>论文Hume旨在解决通用机器人策略中如何引入有效的System-2慢思考能力，以处理物理世界中的复杂、动态和灵巧任务。现有基于直觉的System-1快速思考难以应对精细动作预测。Hume提出双系统视觉-语言-动作模型：系统2通过价值查询头估计状态-动作价值，进行重复采样和选择实现价值引导思考；系统1作为轻量级反应策略，接收选定动作并执行级联动作去噪以实现实时控制。实验表明，Hume在多个模拟基准和真实机器人部署中优于现有最先进的视觉-语言-动作模型。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2505.21432" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

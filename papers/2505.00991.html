@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DexCtrl: Towards Sim-to-Real Dexterity with Adaptive Controller Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>DexCtrl: Towards Sim-to-Real Dexterity with Adaptive Controller Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2505.00991" target="_blank" rel="noreferrer">2505.00991</a></span>
+        <span>作者: Zhao, Shuqi, Yang, Ke, Chen, Yuxin, Li, Chenran, Xie, Yichen, Zhang, Xiang, Wang, Changhao, Tomizuka, Masayoshi</span>
+        <span>日期: 2025/05/02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>灵巧操作策略在仿真中已能执行许多复杂、接触丰富的任务，但将其从仿真迁移到现实世界仍面临重大挑战。现有方法通常通过对观测信息添加随机噪声或对物体施加随机力来增强输出轨迹的鲁棒性，但一个关键问题未得到充分重视：仿真与现实世界中机器人控制器之间的差异。由于发送给机器人的最终指令是由轨迹和控制参数共同计算出的电机扭矩，控制器参数的差异会导致相同的轨迹在仿真和现实中产生完全不同的接触力和行为。当前解决方案主要依赖基于先验经验的手动调参或控制器参数随机化，前者劳动密集且难以达到执行成功所需的精度，后者则会显著增加训练难度。</p>
+<p>本文针对控制器动态不匹配这一具体痛点，提出了一个新颖的视角：将控制器参数作为策略观察和输出的一部分，实现基于历史信息的自适应闭环调整。核心思路是设计一个框架，联合学习动作和控制器参数，使策略能够在执行过程中自动调整控制参数，从而无需大量手动调参或过度随机化即可缩小仿真到现实的差距。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>DexCtrl的整体框架包含训练和推理两个阶段，目标是分别预测期望的关节动作（轨迹）和控制器参数（PD增益）。</p>
+<p><img src="https://arxiv.org/html/2505.00991v1/x2.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：DexCtrl的整体框架概述。a) 训练阶段：首先使用在仿真中训练的Oracle策略收集数据，然后基于收集的数据集，利用提取的历史信息分别蒸馏出动作预测模块和控制器参数预测模块。b) 推理阶段：给定当前和历史观测，递归预测下一步的期望动作，然后基于生成的期望动作预测下一步的控制参数。</p>
+</blockquote>
+<p><strong>Oracle策略数据收集</strong>：首先在仿真环境中，利用无模型近端策略优化（PPO）强化学习训练一个Oracle策略 π(at, Kt | st)。该策略输入状态st，同时输出关节动作at和控制器参数Kt。动作at通过参数为Kt的控制器执行，期望关节轨迹通过qtd = qt-1d + at更新。状态st包含过去三个时间步的物体和机器人信息，具体为机器人信息str = (qtc, qtd, Kt)和物体信息stobj = (ptobj, μ)，其中μ是包含尺度、质量和摩擦系数的物体属性向量。奖励函数包含旋转速度奖励、接触奖励、平滑性奖励和终止奖励四部分。</p>
+<p><strong>模块设计与训练</strong>：学生策略被分离训练为两个独立的模块：用于轨迹生成的动作预测模块和用于自适应控制参数的控制参数预测模块。这种分离是因为两者编码了任务中根本不同的方面，同时防止控制参数预测影响动作预测。</p>
+<ul>
+<li><strong>历史信息</strong>：两个模块的输入均为过去十个时间步的当前/期望关节轨迹以及对应的控制器参数。这用于蒸馏Oracle策略所使用的原始信息（如物体属性）。</li>
+<li><strong>动作预测模块</strong>：使用自注意力对时序历史输入进行建模，主要指示关节轨迹变化的趋势。</li>
+<li><strong>控制参数预测模块</strong>：使用交叉注意力进行建模，其中当前动作为查询（Query），历史输入为键（Key）和值（Value），模拟当前动作与历史输入之间的关系，类似于人类基于历史轨迹和先前参数推断当前控制参数决策的方式。<br>两个模块的训练以开环方式进行，所有输入数据直接从收集的仿真数据集中获取。而在仿真和现实推理时，方法执行闭环行为，当前轨迹值从实际机器人传感器获取。控制参数通过线性映射从仿真值转换到现实系统对应的值，仅需估计上下界而无需精细计算和调参。</li>
+</ul>
+<p><strong>创新点</strong>：与仅预测动作的现有方法相比，DexCtrl的核心创新在于：1) 将控制器参数与动作一同作为观察的一部分，使策略能更好地处理力信息；2) 通过独立的模块显式预测控制器参数，实现每一步的自适应调整，这不仅提升了任务性能，还通过直接获取控制器信息缓解了随机化带来的策略探索困难。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在仿真和真实机器人（LEAP手，16自由度）环境中进行，评估了两个接触丰富的灵巧操作任务：<strong>手内物体旋转</strong>（强调物体-手交互）和<strong>物体翻转</strong>（强调环境接触）。使用了四个评估指标：旋转奖励/弧度（RotR）、失败时间（TTF）、物体线速度（ObjVel）和扭矩惩罚（Torque）。</p>
+<p><strong>对比基线</strong>：</p>
+<ol>
+<li><strong>手动调参</strong>：基于仿真与现实轨迹输出对比仔细调参，并添加小范围控制器随机化，训练不输出自适应控制器参数的新Oracle策略和学生策略。</li>
+<li><strong>Ours w/o PD</strong>：学生策略中使用与手动调参相同的固定控制器参数，仅使用我们的Oracle策略收集的数据集训练动作预测模块。</li>
+</ol>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>仿真性能提升（无控制器差距）</strong>：在仿真中验证（控制器与训练时相同），DexCtrl显著提升了性能。例如在无扰动的旋转任务中（表1），DexCtrl的RotR为52.33，TTF为287.7，均高于手动调参（37.64, 247.5）和Ours w/o PD（47.87, 275.8）。在翻转任务中（表2），DexCtrl的优势更为明显，RotR达到184.00，远高于基线。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.00991v1/x3.png" alt="翻转任务性能"></p>
+<blockquote>
+<p><strong>图3</strong>：物体翻转任务在仿真和现实世界中的性能可视化。展示了DexCtrl方法在现实世界中成功执行翻转任务的序列。</p>
+</blockquote>
+<ol start="2">
+<li><strong>缩小仿真到现实差距</strong>：在现实世界的零样本迁移实验中，DexCtrl的优势更加显著。对12个不同质量和摩擦系数的未见物体进行手内旋转测试（表3），DexCtrl的平均RotR达到11.041弧度，远高于手动调参（2.431）和Ours w/o PD（4.986）。Ours w/o PD与现实世界性能的差距远大于仿真中的差距，凸显了在现实机器人中每一步自适应调整控制参数的必要性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.00991v1/x4.png" alt="现实世界旋转结果"></p>
+<blockquote>
+<p><strong>图4</strong>：使用不同物理参数物体进行手内旋转任务的现实世界结果可视化。展示了DexCtrl在处理多样化物体时的能力。</p>
+</blockquote>
+<ol start="3">
+<li><strong>对不同物理参数的适应性</strong>：通过控制变量（改变空心立方体的质量或使用不同纹理的立方体）进一步测试。如表4和图5所示，DexCtrl在所有情况下均显著优于基线，尤其是在重物上表现更好，表明其能更好地适应不同物理参数的物体。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.00991v1/x5.png" alt="相同形状物体旋转"></p>
+<blockquote>
+<p><strong>图5</strong>：对不同质量和摩擦系数的相同形状物体进行旋转的可视化。直观对比了不同方法的表现。</p>
+</blockquote>
+<ol start="4">
+<li><strong>控制器参数分析</strong>：研究学习的控制器参数（主要关注刚度KP）如何影响性能。如图6所示，平均刚度随物体质量单调增加（符合重物需要更大力的直觉），但与摩擦的关系更复杂。图7展示了在单次轨迹中，刚度随时间变化的模式会因物体属性而异，例如对于重物，策略倾向于在需要施加更大力的接触阶段增加刚度。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.00991v1/x6.png" alt="平均刚度曲线"></p>
+<blockquote>
+<p><strong>图6</strong>：物体质量（左）和表面摩擦（中、右）变化下的平均刚度曲线。表明刚度与质量正相关，与摩擦的关系则更为复杂。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.00991v1/x7.png" alt="刚度随时间变化"></p>
+<blockquote>
+<p><strong>图7</strong>：在不同质量和摩擦条件下，刚度随时间变化的曲线。显示策略会根据物体属性动态调整刚度，例如在操纵重物时，在接触阶段增加刚度。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 明确指出了机器人控制器不匹配是仿真到现实差距的一个关键因素；2) 提出了一个新颖的框架DexCtrl，能够基于历史信息联合学习动作和自适应控制器参数，以闭环方式自动调整控制器行为；3) 在多个接触丰富的灵巧操作任务上，通过仿真和现实实验验证了该方法在性能提升和缩小仿真到现实差距方面的有效性。</p>
+<p>论文自身提到的局限性包括：分析主要集中于刚度参数，阻尼和其他控制参数的影响尚未深入探讨；方法目前主要针对关节扭矩控制下的PD控制器。</p>
+<p>这项工作对后续研究的启示是：将控制器参数纳入学习范畴为解决仿真到现实迁移问题提供了一个有前景的新方向。未来可以探索将自适应控制器学习扩展到更复杂的控制器架构（如阻抗控制、力控），并研究其在更广泛的操作任务（如涉及工具使用或非刚性物体）中的通用性。此外，分析学习到的控制器参数与物理交互之间的因果关系，可能有助于发展出更具可解释性和泛化能力的灵巧操作策略。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出DexCtrl框架，旨在解决灵巧操作策略从仿真迁移到现实时，因底层控制器动态不匹配导致的性能下降问题。该方法的核心是自适应控制器学习：策略基于轨迹与控制器历史信息，联合输出动作与控制参数，从而在执行中自动调整控制器，减少对人工调参或随机化的依赖。实验表明，该方法能有效提升在多种接触丰富的灵巧操作任务（如旋转、翻转）中的迁移性能，显著降低了调参工作量。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2505.00991" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

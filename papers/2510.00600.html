@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Hybrid Training for Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Hybrid Training for Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.00600" target="_blank" rel="noreferrer">2510.00600</a></span>
+        <span>作者: Mazzaglia, Pietro, Sancaktar, Cansu, Peschl, Markus, Dijkman, Daniel</span>
+        <span>日期: 2025/10/01</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，通过在大规模机器人数据上微调视觉语言模型（VLM），产生了视觉-语言-动作模型（VLA），其能够接收语言指令和原始图像，并输出底层机器人动作。然而，VLA在分布外（OOD）场景下的泛化能力仍然有限。为了在数据有限的情况下进一步释放VLA的能力，近期工作引入了具身思维链（ECoT）等方法，训练模型在预测动作之前先输出中间语言形式的“思维”。这虽然提升了性能并增强了可解释性，但由于需要生成额外的思维令牌，显著降低了模型的动作推理频率（在机器人任务中通常慢3倍），影响了方法的实用性。本文针对思维链方法导致的推理延迟这一具体痛点，提出了一个新视角：模型性能提升的主要来源可能并非推理时生成的思维本身，而是模型在训练过程中通过预测思维和思维条件下的动作所内化的知识。基于此，本文提出混合训练框架，其核心思路是：通过引入一个模态变量，训练单个VLA模型学习多种条件输出分布，使其在推理时能够直接生成动作（从而保持高速），同时保留在需要时生成思维或跟随指令的能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>HyT框架旨在使单个VLA模型能够学习多种条件概率分布。其核心是引入一个模态变量 (m)，将动作的边际分布表示为对思维 (\tau) 和模态 (m) 的求和（公式1）。具体实现中，模型被训练来学习三种特定的条件分布（公式2），分别对应三种“模式”：</p>
+<ol>
+<li><strong>“行动”（Act）分布</strong>：类似于标准VLA，模态 (m^a)（如 <code>&lt;act&gt;</code>）指示模型直接预测动作，此时思维 (\tau) 为空。</li>
+<li><strong>“思考”（Think）分布</strong>：类似于ECoT，模态 (m^\tau)（如 <code>&lt;think&gt;</code>）指示模型先预测中间思维，再基于思维预测动作。</li>
+<li><strong>“跟随”（Follow）分布</strong>：类似于分层系统中的低级策略，模态 (m^f) 指示模型忽略任务描述 (l)，严格遵循外部提供的思维/指令 (\tau_t) 来预测动作。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.00600v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：混合训练框架示意图。左侧为模型输入，包括任务描述、图像和模态变量。右侧展示了模型根据不同的模态变量（如“思考”或“行动”）条件化生成的不同输出序列。</p>
+</blockquote>
+<p>训练时，目标函数是三种模式对应负对数似然损失的加权和（公式3）。为避免批次内数据重复导致多样性降低，论文采用蒙特卡洛估计：权重 (w_a, w_\tau, w_f) 被定义为采样相应模态数据（包括输入和期望输出）的概率。在本文实验中，设定采样概率为 ({w_a: 0.25, w_\tau: 0.5, w_f: 0.25})。模型通过这种方式接触并学习各种条件分布。</p>
+<p>推理时，通过向模型提供不同的模态变量，可以灵活控制其行为模式。默认使用“行动”模式（提供 <code>&lt;act&gt;</code> 令牌），使模型直接输出动作，从而获得与标准VLA相同的推理速度，同时受益于从思维链训练中获得的知识提升。“思考”模式可用于解释模型意图，“跟随”模式则允许人类或其他规划器提供细粒度指令。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在模拟基准（ClevrSkills、LIBERO）和真实世界任务（UFactory xArm 6）上进行验证。对比的基线方法包括：标准VLA训练、ECoT-like思维VLA训练和HiRobot-like分层VLA训练。</p>
+<p><img src="https://arxiv.org/html/2510.00600v1/x3.png" alt="性能对比"></p>
+<blockquote>
+<p><strong>图3</strong>：在ClevrSkills基准（9个任务）上的聚合性能。阴影区域表示标准误。结果显示，在不同规模（300至3000条示教）的数据集上，HyT方法的性能均优于标准VLA、ECoT和分层方法。</p>
+</blockquote>
+<p>在ClevrSkills上的关键结果显示（图3），HyT在不同数据规模下均取得了最佳性能，验证了其通过训练内化知识并提升直接动作预测能力的假设。ECoT性能次之。分层VLA在小数据量时优于标准VLA，但随数据量增加性能提升缓慢。</p>
+<p><img src="https://arxiv.org/html/2510.00600v1/x4.png" alt="多模式推理"></p>
+<blockquote>
+<p><strong>图4</strong>：指令跟随与其他推理模式的性能比较。展示了在三个复杂任务上，使用模型自身生成思维（默认）与跟随“预言机”提供指令的性能。HyT在“行动”、“思考”及使用预言机指令的“跟随/思考”模式下均表现良好。</p>
+</blockquote>
+<p>图4展示了HyT框架支持的多模式推理的实用性。结果显示，跟随“预言机”提供的优质指令（图中带斜线填充的条）可以进一步提升性能。同时，在“行动”和“思考”模式下（不使用预言机指令），HyT模型性能相近，表明在评估场景中，推理时生成中间思维可能并非必要。</p>
+<p><img src="https://arxiv.org/html/2510.00600v1/x5.png" alt="LIBERO结果"></p>
+<blockquote>
+<p><strong>图5</strong>：在LIBERO基准（4个任务套件）上的聚合性能。表格显示，HyT方法（结合OFT微调配方）取得了平均93.7%的成功率，优于包括CoT-VLA、ThinkAct等在内的多种先进方法。</p>
+</blockquote>
+<p>在更具挑战性的LIBERO基准上，为了与当前最优方法竞争，HyT与采用了动作分块和连续动作预测的OFT微调配方结合。如图5所示，HyT在Spatial、Object、Goal、Long四个任务套件上的平均成功率达到了93.7%，超过了表中列出的所有其他VLA方法（包括VLA-OFT的92.1%），证明了其有效性和通用性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了混合训练框架，首次在VLA中统一了标准动作预测、思维链生成和指令跟随等多种训练范式于单一模型；2）验证了通过该框架训练的模型，能在保持与标准VLA相同高速推理的同时，获得媲美甚至优于思维链方法的性能，实现了性能与效率的统一；3）展示了训练后的模型具备多模式推理的灵活性，可根据需要切换至“思考”或“跟随”模式以增强可解释性或执行能力。</p>
+<p>论文提到的局限性包括：未探索在任务执行中动态切换模态的机制及其潜在优势；对于需要更复杂具身推理的任务，推理时生成思维是否仍属必要，有待进一步验证。</p>
+<p>这项工作为VLA的训练范式提供了新思路，表明将“慢思考”过程的知识蒸馏到“快行动”模型中是一条有效路径。它对后续研究的启示包括：可以探索更复杂的模态切换策略（如基于任务难度的自适应切换），或将HyT思想与在线学习、更复杂的规划推理模块相结合，以处理更开放的长视野任务。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型（VLA）使用具身思维链（ECoT）时推理时间增加、影响实时操作的问题，提出混合训练（HyT）框架。HyT在训练时让模型学习中间思想以获得性能提升，推理时则可选择省略思维生成，直接输出动作，并支持条件预测多样输出。实验在ClevrSkills等模拟与真实基准中表明，HyT性能与ECoT相当，同时保持了标准VLA的快速推理速度。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.00600" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

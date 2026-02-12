@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>CRISP -- Compliant ROS2 Controllers for Learning-Based Manipulation Policies and Teleoperation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>CRISP -- Compliant ROS2 Controllers for Learning-Based Manipulation Policies and Teleoperation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.06819" target="_blank" rel="noreferrer">2509.06819</a></span>
+        <span>作者: Pro, Daniel San José, Hausdörfer, Oliver, Römer, Ralf, Dösch, Maximilian, Schuck, Martin, Schoellig, Angela P.</span>
+        <span>日期: 2025/09/08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>近年来，基于学习的机器人操作策略（如扩散策略和视觉语言动作模型）日益流行。这些方法通常以5-10Hz的低频，向机器人发送短时域的小轨迹（动作块）或目标位姿，绕过了传统的感知与路径规划栈。然而，这种范式需要一个能够响应部署过程中命令变化的底层控制器，而非仅仅跟踪预先计算好的平滑轨迹。同时，许多具有挑战性的操作任务涉及与环境的交互，需要控制器在接触中表现出柔顺行为。尽管ROS2及其ros2_control接口简化了机器人软件开发，并提供了广泛的扭矩控制支持，但现有的控制器方案存在局限：有的仅支持ROS1，有的专用于特定机器人（如Franka），缺乏机器人无关性，且与ros2_control标准集成不充分。本文针对这一痛点，旨在为基于学习的高层策略和遥操作提供一个轻量级、机器人无关、兼容ROS2标准的柔顺控制器实现。其核心思路是：实现一套与ros2_control标准集成的C++柔顺控制器，并通过统一的Python接口，为数据收集和高层策略部署提供无缝管道。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>CRISP的整体架构是一个分层系统，高层策略或遥操作界面通过ROS2话题发布目标命令，底层控制器以1kHz频率运行，将这些可能不连续的命令转换为关节扭矩，实现平滑、柔顺的跟踪。</p>
+<p><img src="https://arxiv.org/html/2509.06819v2/figures/crisp_drawio.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：CRISP架构概览及其与ROS2机器人的集成。用户可通过CRISP_PY（Python接口）或CRISP_GYM（Gymnasium环境）以任意频率发布目标命令。控制器在实时Linux工作站上以1kHz运行，跟踪最新目标。高层学习策略（如VLA模型）通常使用<code>target_pose</code>话题。CRISP_GYM还通过ROS2话题集成夹爪、相机等传感器。</p>
+</blockquote>
+<p>核心控制器在C++中实现，与ros2_control的关节扭矩接口兼容。其最终控制律是多个模块的叠加，每个模块可根据任务需求独立启用或禁用：</p>
+<pre><code>τ_cmd = τ_task + τ_ns + τ_joint + τ_gravity + τ_coriolis + τ_friction + τ_wrench
+</code></pre>
+<ol>
+<li><p><strong>任务扭矩（τ_task）</strong>：这是跟踪笛卡尔空间目标位姿的核心。首先计算机器人末端当前位姿与目标位姿之间的误差<code>e</code>（包含位置误差<code>e_pos</code>和旋转误差<code>e_rot</code>）。误差可在基座坐标系或末端坐标系下计算，以实现各向异性的刚度和阻尼行为。论文提供了两种计算τ_task的控制器：</p>
+<ul>
+<li><strong>笛卡尔阻抗控制器</strong>：在末端和目标之间建立一个虚拟弹簧，适用于接触丰富的柔顺任务。公式为 <code>τ_task = J^T (Kp * e - Kd * J * q_dot)</code>，其中<code>J</code>为几何雅可比矩阵，<code>Kp</code>和<code>Kd</code>为用户定义的刚度和阻尼矩阵。</li>
+<li><strong>操作空间控制器</strong>：在控制律中考虑了动力学（特别是惯性），通常跟踪更精确但接触柔顺性稍差。公式为 <code>τ_task = J^T * Λ(q, q_dot) * (Kp * e - Kd * J * q_dot)</code>，其中<code>Λ</code>是使用<code>pinocchio</code>库根据URDF计算的任务空间质量矩阵。</li>
+</ul>
+</li>
+<li><p><strong>零空间控制（τ_ns）</strong>：对于冗余机械臂，该模块将次级控制律（如关节阻抗控制器）投影到任务零空间，以限制不必要运动、避免奇异性或稳定关节至休息位置。提供了静态、动态和单位矩阵三种零空间投影器，其中动态投影器在机器人模型准确时能提供更好的主任务跟踪性能。</p>
+</li>
+<li><p><strong>关节屏障（τ_joint）</strong>：当关节角度接近物理极限时，施加一个逐渐增大的扭矩，防止机器人达到限位并造成损坏。</p>
+</li>
+<li><p><strong>重力与科里奥利力补偿（τ_gravity, τ_coriolis）</strong>：使用<code>pinocchio</code>库中的递归牛顿-欧拉算法高效计算动力学补偿项，以抵消重力和科里奥利力的影响。</p>
+</li>
+<li><p><strong>摩擦补偿（τ_friction）</strong>：提供了一个简化的摩擦模型（基于Franka机器人的模型），使用Sigmoid函数来近似库仑摩擦，避免在零速度附近出现不连续。此参数需用户针对不同机器人自行标定或省略，对遥操作手感提升明显。</p>
+</li>
+<li><p><strong>目标力矩控制（τ_wrench）</strong>：允许用户直接命令施加在末端执行器上的力和力矩（六维力矩），适用于需要精确力控的任务。</p>
+</li>
+</ol>
+<p>创新点在于：1) <strong>机器人无关性</strong>：通过严格遵循ROS2和ros2_control标准，并利用<code>pinocchio</code>库解析标准URDF文件进行计算，使控制器能适配任何暴露关节扭矩接口的机械臂。2) <strong>统一管道</strong>：通过CRISP_PY和CRISP_GYM接口，使用同一套代码和控制器既能进行数据收集（如遥操作录制），也能部署学习策略，简化了工作流程。3) <strong>高度可配置与模块化</strong>：所有控制器参数（刚度、阻尼等）可通过ROS2参数服务动态配置，且控制律中的各项均可独立开关，灵活性高。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在Franka Robotics FR3（实体）以及Kuka IIWA14和Kinova Gen3（仿真）上进行了验证。对比的基线主要是控制器本身的性能，论文通过三个代表性任务进行评估。</p>
+<p><img src="https://arxiv.org/html/2509.06819v2/figures/robots.jpg" alt="机器人平台"></p>
+<blockquote>
+<p><strong>图3</strong>：CRISP控制器验证所使用的机器人平台。左：Franka FR3（实体）；中：Kinova Gen3（仿真）；右：Kuka IIWA14（仿真）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.06819v2/x1.png" alt="跟踪性能"></p>
+<blockquote>
+<p><strong>图2</strong>：在Franka FR3上跟踪不连续目标位姿的误差演变。在t=1秒时设置新目标。左图位置误差的稳态误差分别为：OSC 5.54 mm， CI 4.73 mm， CI-clipped 0.81 mm。右图旋转误差稳态误差分别为：OSC 0.0998 rad， CI 0.0532 rad， CI-clipped 0.0029 rad。该图展示了不同控制器配置下的跟踪性能，其中带误差裁剪的CI控制器表现最佳。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.06819v2/x2.png" alt="遥操作数据收集"></p>
+<blockquote>
+<p><strong>图4</strong>：使用遥操作和力反馈进行乐高积木堆叠任务的数据收集。上图展示了跟随者机器人的目标位置和实际末端位置轨迹，下图显示了反馈给操作者（领导者机器人）的力矩。证明了CRISP在实现柔顺遥操作和力反馈方面的能力。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2509.06819v2/x3.png" alt="策略部署"></p>
+<blockquote>
+<p><strong>图5</strong>：使用CRISP_GYM接口在硬件上部署不同的模仿学习策略。左：运行在约30Hz的扩散策略；右：运行在约10Hz的SmolVLA模型。两者都通过CRISP控制器成功跟踪其输出的末端目标位姿更新。</p>
+</blockquote>
+<p>关键实验结果总结如下：</p>
+<ol>
+<li><strong>跟踪性能</strong>：在固定目标位姿跟踪测试中，带误差裁剪功能的笛卡尔阻抗控制器（CI-clipped）表现最佳，位置和旋转稳态误差分别达到0.81毫米和0.0029弧度，显著优于标准OSC和CI控制器。</li>
+<li><strong>遥操作与数据收集</strong>：成功实现了基于扭矩控制的力反馈遥操作，能够流畅地完成乐高堆叠等接触式任务，并同步记录操作数据。</li>
+<li><strong>学习策略部署</strong>：使用相同的CRISP_GYM接口，成功部署了扩散策略（<del>30Hz）和SmolVLA（</del>10Hz）两种不同类型、不同推理频率的基于视觉的学习策略，验证了控制器与高频学习策略集成的有效性。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出并开源了<strong>CRISP</strong>，一套机器人无关、兼容ROS2控制标准的柔顺笛卡尔与关节空间控制器C++实现，填补了现有工具在ROS2扭矩控制、通用性方面的空白。2) 提供了<strong>统一的软件管道</strong>（CRISP_PY/CRISP_GYM），极大简化了从数据收集到学习策略部署的整个流程，降低了在ROS2兼容机械臂上应用学习型方法的门槛。3) 控制器设计<strong>高度模块化与可配置</strong>，集成了阻抗控制、操作空间控制、零空间偏置、摩擦补偿、力控等多种功能，并包含关节限位、扭矩限幅等安全特性。</p>
+<p>论文自身提到的局限性主要在于<strong>摩擦补偿</strong>模块，其提供的参数仅针对Franka机器人，用户需为其他机器人自行标定或省略该功能。此外，控制器的最终性能依赖于用户提供的URDF模型准确性以及针对具体任务的参数调优。</p>
+<p>这项工作对后续研究的启示是：为机器人学习社区提供了一个<strong>可靠、易用且高性能的底层控制基础设施</strong>。其机器人无关的特性鼓励研究者在不同硬件平台上验证和迁移算法。统一的部署管道有望促进模仿学习、强化学习等算法从仿真到实物的快速迭代。未来工作可围绕自动参数整定、更精确的通用摩擦模型、以及集成更丰富的传感器反馈等方面展开。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对学习型操作策略（如扩散策略、VLA模型）生成的指令频率低、不连续，难以实现平滑跟踪和接触合规的问题，提出CRISP。它是一个轻量级、兼容ROS2控制标准的C++合规控制器库，提供笛卡尔与关节空间控制，并通过Python接口和Gymnasium环境提供统一的数据记录与策略部署流程。该系统已在Franka FR3机器人硬件及Kuka、Kinova机器人仿真中得到验证，旨在降低在ROS2兼容机械臂上应用学习方法的门槛。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.06819" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

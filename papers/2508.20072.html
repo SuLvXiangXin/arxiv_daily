@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Discrete Diffusion VLA: Bringing Discrete Diffusion to Action Decoding in Vision-Language-Action Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Computer Vision and Pattern Recognition (cs.CV)</span>
+      <h1>Discrete Diffusion VLA: Bringing Discrete Diffusion to Action Decoding in Vision-Language-Action Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.20072" target="_blank" rel="noreferrer">2508.20072</a></span>
+        <span>作者: Liang, Zhixuan, Li, Yizhuo, Yang, Tianshuo, Wu, Chengyue, Mao, Sitong, Nian, Tian, Pei, Liuao, Zhou, Shunbo, Yang, Xiaokang, Pang, Jiangmiao, Mu, Yao, Luo, Ping</span>
+        <span>日期: 2025/08/27</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前视觉-语言-动作模型主要遵循两种范式：一是受GPT启发，在Transformer内以固定从左到右的自回归顺序预测离散动作令牌；二是在VLM主干外附加独立的MLP或连续扩散头，将VLM输出的潜在令牌映射为可执行控制。这两种方法均存在关键局限性：自回归解码存在顺序瓶颈且效率较低；而独立的动作解码器则导致信息路径割裂，需要专门的训练流程，阻碍了构建统一、可扩展的架构。本文针对VLA模型架构不统一、动作解码效率与质量受限的痛点，提出了将离散扩散模型引入动作解码的新视角。核心思路是：将连续动作离散化为令牌并组织成固定长度的动作块，在统一的Transformer VLM主干内部，通过离散扩散的迭代去噪过程进行并行、可修正的解码，从而保留VLM的先验知识并提升动作建模的精度与一致性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Discrete Diffusion VLA的整体框架基于OpenVLA架构，但将其因果注意力主干修改为双向Transformer，以在同一个模型中编码视觉、语言并执行对离散动作块的扩散式去噪。</p>
+<p><img src="https://arxiv.org/html/2508.20072v3/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：Discrete Diffusion VLA架构。一个统一的Transformer VLM主干编码多视角RGB图像和语言指令，并通过扩散式的迭代细化解码离散动作块。底部展示了自适应解码（左）和二次重掩码（右）机制。</p>
+</blockquote>
+<p><strong>整体流程</strong>：输入包括单视角或多视角RGB图像观测、语言指令以及可选的本体感觉（如末端执行器位置）。每个连续控制维度通过分箱方案离散化为令牌，并将未来多个时间步的动作令牌打包成固定长度的动作块。该统一Transformer同时处理视觉特征、文本嵌入和（可能被掩码的）动作令牌，并逐步根据扩散进度表去掩码动作令牌，从而在一个模型内完成感知、指令理解和动作去噪。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>动作离散化与分块</strong>：沿用RT系列和OpenVLA的方法，每个控制维度（3个平移、3个旋转、1个夹爪）被离散化为256个令牌。将未来H个时间步的动作令牌排列成固定布局，构成总长度为L = H × 7的动作块序列。离散扩散模型擅长生成固定长度的序列。</li>
+<li><strong>离散扩散过程</strong>：定义前向（加噪）过程为马尔可夫链，在每个扩散步t，以概率β_t将每个动作令牌独立地腐蚀为特殊的[MASK]令牌。反向（去噪）过程在给定多模态上下文c的条件下，预测被掩码位置的原始令牌。训练时，通过采样掩码比率γ来模拟扩散时间，随机掩码一部分动作令牌，并训练Transformer使用交叉熵损失预测这些被掩码的原始令牌。这使得训练目标与VLM的预训练目标（交叉熵）兼容。</li>
+<li><strong>统一Transformer架构</strong>：模型基于Prismatic-7B VLM构建，包含SigLIP和DINOv2视觉编码器、投影器以及Llama 2语言模型主干。所有令牌（视觉、语言、动作）通过统一的双向Transformer进行处理。动作令牌使用双向注意力掩码，可以关注所有视觉和语言令牌，实现全跨模态融合。仅对动作位置的隐藏状态应用一个共享的分类头，投影到256路的动作词汇表上。</li>
+<li><strong>自适应解码与二次重掩码</strong>：这是推理阶段的核心创新。<ul>
+<li><strong>自适应解码</strong>：推理时，首先将所有动作令牌初始化为[MASK]。在每一轮迭代中，模型预测当前所有被掩码位置令牌的后验分布。然后，根据预设的余弦进度表确定本轮应保留的令牌数量（1-γ_t），并依据每个位置的置信度得分（如最大置信度或置信度间隙）进行排序，仅对置信度最高的那部分位置进行采样并“提交”（即确定其令牌），其余位置保持掩码状态进入下一轮。这种机制实现了“先易后难”的自适应解码顺序。</li>
+<li><strong>二次重掩码</strong>：为确保跨去噪步骤的一致性并进行错误修正，对已提交的令牌进行两项轻量级检查：1) <strong>阈值检查</strong>：若某令牌当前置信度低于一个随时间递增的绝对阈值，则将其重新掩码。2) <strong>残差下降检查</strong>：缓存每个令牌首次被提交时的参考置信度，若其置信度下降幅度超过一定阈值或属于下降幅度最大的前Q个，则将其重新掩码。被二次重掩码的令牌在后续步骤中可被重新预测。</li>
+</ul>
+</li>
+</ol>
+<p><strong>与现有方法的创新点</strong>：</p>
+<ol>
+<li><strong>架构统一</strong>：首次将离散扩散模型应用于VLA的动作解码，使动作生成与视觉-语言理解在同一个Transformer主干内完成，保持了VLM的预训练先验。</li>
+<li><strong>解码机制</strong>：摒弃了自回归的固定顺序，通过自适应解码实现并行、迭代的令牌生成，并引入二次重掩码机制进行主动纠错，提升了生成的一致性和鲁棒性。</li>
+<li><strong>训练一致性</strong>：使用与VLM预训练相同的交叉熵损失进行端到端训练，无需为扩散设计专门的训练循环，简化了流程并有利于能力保留。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准数据集</strong>：在三个机器人设置上进行评估：1) LIBERO（Franka Panda机械臂）；2) SimplerEnv–Fractal（Google Robot）；3) SimplerEnv–Bridge（WidowX Arm）。输入仅使用RGB图像、语言指令和可选末端位置，未使用深度或affordance等信息。</li>
+<li><strong>对比基线</strong>：涵盖了当前主流方法，包括：自回归解码器（如OpenVLA, π₀-FAST）、独立MLP解码器（如RT-1-X/RT-2-X）以及连续扩散/流匹配头（如Diffusion Policy, π₀, OpenVLA-OFT (Cont.-Diffusion)）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>LIBERO性能</strong>：Discrete Diffusion VLA在LIBERO的四个任务套件上取得了最佳的平均成功率96.3%，相比最直接的可比基线OpenVLA-OFT (Discrete)的95.5%提升了0.9个百分点。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.20072v3/x4.png" alt="LIBERO结果"></p>
+<blockquote>
+<p><strong>表1</strong>：LIBERO任务性能结果（%）。Discrete Diffusion VLA在四个任务套件上均取得最佳或接近最佳性能，平均成功率达到96.3%，超越了所有基线。</p>
+</blockquote>
+<ol start="2">
+<li><strong>SimplerEnv性能</strong>：在SimplerEnv-Fractal上，Discrete Diffusion VLA取得了71.2%的视觉匹配分数和64.1%的总体成功率；在SimplerEnv-Bridge上取得54.2%的总体成功率，分别超过π₀和π₀-FAST 14.7和6.4个百分点。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.20072v3/x5.png" alt="SimplerEnv结果"></p>
+<blockquote>
+<p><strong>表2</strong>：SimplerEnv-Fractal上的评估结果。Discrete Diffusion VLA在视觉匹配和总体成功率上均领先于其他对比方法。</p>
+</blockquote>
+<ol start="3">
+<li><strong>消融实验</strong>：论文对解码策略进行了消融研究。结果表明，完整的自适应解码机制（结合置信度排序和二次重掩码）贡献了主要的性能提升。例如，在LIBERO-Goal任务上，完整的Discrete Diffusion VLA相比仅使用固定顺序解码或没有二次重掩码的版本，成功率有显著提高。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.20072v3/x6.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图6</strong>：在LIBERO-Goal任务上对解码策略的消融研究。Discrete Diffusion VLA的完整方法（带自适应解码和二次重掩码）取得了最高的成功率，证明了各组件的重要性。</p>
+</blockquote>
+<ol start="4">
+<li><strong>VLM能力保留</strong>：在LIBERO-OOD（分布外）基准上的实验表明，Discrete Diffusion VLA在动作性能领先的同时，其视觉-语言能力（如图像-文本匹配分数）的下降幅度小于自回归和MLP解码器基线，证明了统一架构在保留VLM先验方面的优势。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了首个将离散扩散模型统一整合进VLM主干进行动作解码的VLA框架，实现了感知、理解和行动生成在单一Transformer内的协同。</li>
+<li>设计了一种结合自适应解码和二次重掩码的推理机制，实现了动作令牌的并行、迭代式生成与主动错误修正，突破了自回归解码的瓶颈。</li>
+<li>在多个机器人基准测试中验证了该方法的有效性，性能全面超越自回归、MLP解码器和连续扩散基线，同时展示了更好的VLM能力保留特性。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，离散扩散VLA在训练时引入了更高的计算复杂度，因为需要处理大量不同的掩码填充任务，这可以看作是换取测试时灵活解码顺序的代价。</p>
+<p><strong>后续启示</strong>：这项工作为构建统一、可扩展的多模态基础模型（涵盖视觉、语言和动作）奠定了基础。它表明，利用离散扩散在统一架构内生成动作是一条可行的路径，能够继承大型语言模型的缩放特性，有望推动未来大规模VLA模型的研究。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出Discrete Diffusion VLA，旨在解决视觉-语言-动作（VLA）策略中动作解码的架构统一性问题。现有方法采用固定顺序的自回归解码或与主干分离的MLP/扩散头，导致信息路径碎片化。本方法引入离散扩散技术，对离散化动作块进行建模，保留了扩散的渐进细化特性，并原生兼容视觉语言模型的离散令牌接口。其关键技术包括自适应解码顺序（先易后难）和二次重掩码机制，以提升一致性和纠错能力。实验表明，该方法在LIBERO任务上达到96.3%的平均成功率，在SimplerEnv基准上显著优于自回归、MLP及连续扩散基线。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.20072" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

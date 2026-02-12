@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Booster Gym: An End-to-End Reinforcement Learning Framework for Humanoid Robot Locomotion - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Booster Gym: An End-to-End Reinforcement Learning Framework for Humanoid Robot Locomotion</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.15132" target="_blank" rel="noreferrer">2506.15132</a></span>
+        <span>作者: Wang, Yushi, Chen, Penghui, Han, Xinyu, Wu, Feng, Zhao, Mingguo</span>
+        <span>日期: 2025/06/18</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>近年来，强化学习（RL）已成为人形机器人学习复杂行为（特别是步态）的强大技术。在仿真中训练运动策略显著降低了系统设计复杂度。然而，由于机器人动力学复杂性、传感器噪声和硬件限制等因素，将这些策略从仿真环境迁移到真实机器人仍然是一个挑战。现有基于仿真的RL方法虽能训练策略，但大量实现细节使得策略迁移变得困难。传统基于模型的方法（如全身控制WBC和模型预测控制MPC）需要大量模型调优，且对扰动和建模误差敏感。</p>
+<p>本文针对从仿真训练到真实部署的整个流程缺乏完整、易用工具链的痛点，提出了一个名为Booster Gym的综合性代码框架。该框架旨在提供一个端到端的解决方案，覆盖从训练、跨仿真测试到真实部署的全过程，并通过集成域随机化等技术来缩小仿真到真实的鸿沟，提升策略的鲁棒性。本文的核心思路是提供一个集成化、可配置的RL框架，通过精心设计的训练流程和接口，简化人形机器人步态策略的开发与部署。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架基于部分可观测马尔可夫决策过程（POMDP）进行建模，并采用近端策略优化（PPO）算法进行训练。框架的核心是<strong>不对称的演员-评论家（AAC）架构</strong>，其中演员网络基于部分观测（模拟真实传感器输入）输出动作，而评论家网络则利用仿真中的特权信息（完整状态）进行价值估计，以提供更优的学习信号。训练在GPU加速的仿真器Isaac Gym中进行，之后策略可零样本部署到真实机器人。</p>
+<p><img src="https://arxiv.org/html/2506.15132v1/extracted/6550888/figures/sim.jpg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：在Booster T1机器人上的训练、测试和部署流程。左上：在Isaac Gym中训练。右上：在MuJoCo中进行跨仿真测试。左下：通过SDK在Webots中验证。右下：在真实世界中部署。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.15132v1/x1.png" alt="控制架构"></p>
+<blockquote>
+<p><strong>图2</strong>：训练和部署的控制架构概述。演员和评论家网络在仿真环境中使用PPO进行优化。演员网络生成动作，随后通过PD控制器转换为控制信号。</p>
+</blockquote>
+<p><strong>核心模块与技术细节：</strong></p>
+<ol>
+<li><strong>观察空间</strong>：演员的观察 <code>o_t</code> 包含带噪声的本体感知信息（IMU测量的基座角速度 <code>ω_t</code>、重力向量 <code>g_t</code>，以及关节位置 <code>q_t</code> 和速度 <code>q̇_t</code>）、上一时刻动作 <code>a_{t-1}</code>、速度指令 <code>(v_x, v_y, ω_yaw)</code> 以及用于引导周期性步态的步态周期信号 <code>(cos(2πft), sin(2πft))</code>。评论家输入则额外包含无噪声的观测以及身体质量、质心、基座线速度、高度、外力/力矩等特权信息（详见表I）。</li>
+<li><strong>动作空间</strong>：策略以50Hz频率输出关节位置偏移量 <code>a_t</code>。期望关节位置 <code>q_des = q_0 + a_t</code>，其中 <code>q_0</code> 为默认关节位置。随后通过一个固定增益的PD控制器（运行频率更高）将期望位置转换为扭矩命令 <code>τ_des = k_p(q_des - q) - k_d q̇</code>。这种设计比策略直接输出扭矩更稳定。</li>
+<li><strong>奖励函数</strong>：奖励函数是多个加权分量的总和 <code>r(s_t, a_t) = Σ w_i r_i</code>，主要分为三部分：<ul>
+<li><strong>跟踪奖励</strong>：鼓励机器人跟踪躯干速度指令（x, y, yaw）。采用课程学习，逐步增加指令幅度，并随机将指令设为零以学习站立/行走切换。</li>
+<li><strong>步态奖励</strong>：鼓励双腿按照设定的参考步态周期迈步。由于Isaac Gym中接触力估计简化，通过脚与地面的高度差来判断抬腿。</li>
+<li><strong>正则化奖励</strong>：包括对躯干姿态、能量消耗、关节速度/加速度、基座加速度等的惩罚项，以提升整体性能和安全性（具体权重见表II）。</li>
+</ul>
+</li>
+</ol>
+<p><strong>创新点</strong>：</p>
+<ul>
+<li><strong>端到端流程集成</strong>：提供了一个覆盖训练、跨平台测试（MuJoCo, Webots）、真实部署的完整工具链。</li>
+<li><strong>针对人形机器人的设计</strong>：专门处理了并联机械结构、设计了包含步态周期的观察空间以及适合步态学习的复合奖励函数。</li>
+<li><strong>全面的域随机化</strong>：对环境、机器人本体和驱动器参数进行随机化，以提升策略的鲁棒性和泛化能力。</li>
+<li><strong>易用的接口</strong>：框架允许研究者方便地修改奖励函数、网络架构和物理参数，以适应不同任务。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与基准</strong>：实验在Booster T1人形机器人平台上进行验证。训练在NVIDIA Isaac Gym仿真环境中完成，并在MuJoCo和Webots中进行跨仿真测试以验证策略的泛化能力。论文展示了训练出的策略在真实机器人上实现的多项能力。</p>
+<p><strong>关键实验结果</strong>：<br>训练出的策略成功部署到真实的Booster T1机器人上，实现了以下能力：</p>
+<ul>
+<li><strong>全向行走</strong>：机器人能够以0.5米/秒的速度进行前向、侧向行走和转弯。</li>
+<li><strong>抗干扰能力</strong>：能够抵抗来自侧向的持续推力（约100N）和脉冲扰动。</li>
+<li><strong>地形适应性</strong>：能够在坡度达10度的斜坡上行走，并能适应具有高度变化的崎岖地形。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2506.15132v1/extracted/6550888/figures/omniwalk.jpg" alt="全向行走"></p>
+<blockquote>
+<p><strong>图3</strong>：真实机器人全向行走的定性展示，包括前向、侧向移动和转弯。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.15132v1/extracted/6550888/figures/slope.jpg" alt="斜坡适应"></p>
+<blockquote>
+<p><strong>图4</strong>：机器人在10度斜坡上行走。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.15132v1/extracted/6550888/figures/terrain.jpg" alt="地形适应"></p>
+<blockquote>
+<p><strong>图5</strong>：机器人在崎岖地形上行走，展示了其对高度变化的适应性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.15132v1/extracted/6550888/figures/push.jpg" alt="抗干扰"></p>
+<blockquote>
+<p><strong>图6</strong>：机器人抵抗侧向持续推力和脉冲扰动的测试。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.15132v1/x2.png" alt="训练曲线"></p>
+<blockquote>
+<p><strong>图7</strong>：训练过程中的平均奖励曲线。策略在大约1.5亿步后收敛，成功学习到步态。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.15132v1/x3.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图8</strong>：消融实验结果。(a) 移除步态周期观察导致学习失败。(b) 移除域随机化（DR）后，策略在测试时（引入噪声和延迟）性能显著下降，证明了DR对鲁棒性的关键作用。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：<br>消融实验验证了两个关键设计的重要性：</p>
+<ol>
+<li><strong>步态周期观察</strong>：将其从观察空间中移除会导致策略完全无法学习到有效的步态（图8a）。</li>
+<li><strong>域随机化（DR）</strong>：在测试时引入传感器噪声和延迟模拟真实条件时，未使用DR训练的策略性能急剧下降，而使用了DR的策略则能保持稳定，证明了DR对于缩小仿真到真实鸿沟、提升策略鲁棒性至关重要（图8b）。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个<strong>完整、开源的端到端强化学习框架（Booster Gym）</strong>，用于人形机器人步态策略的训练与部署，涵盖了从仿真到硬件的全流程。</li>
+<li>集成了<strong>全面的域随机化方案</strong>以及针对人形机器人步态任务精心设计的<strong>观察空间、动作空间和奖励函数</strong>，有效促进了策略的鲁棒性和仿真到真实的迁移。</li>
+<li>在真实的Booster T1机器人上进行了全面验证，展示了框架训练出的策略能够实现<strong>全向行走、抗干扰和地形适应</strong>等复杂能力。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文自身提到，其训练所依赖的Isaac Gym（基于PhysX物理引擎）存在一些局限性，例如<strong>不支持封闭运动链</strong>（这对精确模拟人形机器人足部接触有影响），以及<strong>接触力估计精度较低</strong>。作者通过设计选择（如用脚-地高度差替代接触力判断）来缓解这些问题。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>框架的实用性</strong>：Booster Gym作为一个集成化工具，可以显著降低人形机器人RL研究的入门门槛和工程重复，加速算法迭代和实验验证。</li>
+<li><strong>仿真器的发展需求</strong>：工作凸显了对更高精度、同时支持GPU并行计算的物理仿真器的持续需求，以更好地处理人形机器人特有的动力学特性。</li>
+<li><strong>促进社区协作</strong>：通过开源完整的代码和配置，该框架为社区提供了一个可复现的基准和可扩展的基础，有望促进该领域研究结果的比较与协作。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出Booster Gym，一个端到端强化学习框架，旨在解决人形机器人运动策略从仿真训练到真实部署的转移难题。框架整合了完整的训练-部署流程，关键技术包括可定制的RL算法、奖励函数设计、以及针对环境、机器人和执行器的全面领域随机化，以缩小仿真与现实差距。在Booster T1机器人上的实验表明，训练出的策略能成功迁移至实体机器人，实现了全向行走、抗干扰和地形适应等能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.15132" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

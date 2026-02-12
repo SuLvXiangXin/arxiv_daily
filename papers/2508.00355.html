@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>TOP: Time Optimization Policy for Stable and Accurate Standing Manipulation with Humanoid Robots - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>TOP: Time Optimization Policy for Stable and Accurate Standing Manipulation with Humanoid Robots</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.00355" target="_blank" rel="noreferrer">2508.00355</a></span>
+        <span>作者: Chen, Zhenghan, Xu, Haocheng, Zhang, Haodong, Zhang, Liang, Li, He, Wang, Dongqi, Yu, Jiyu, Yang, Yifei, Zhou, Zhongxiang, Xiong, Rong</span>
+        <span>日期: 2025/08/01</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>人形机器人执行多样化操作任务的前提是拥有一个鲁棒且精确的站立控制器。现有方法主要分为两类：全身控制器和解耦控制器。传统全身控制器（如模型预测控制MPC）能生成精确运动，但在现实世界中难以保持稳定性和鲁棒性。基于强化学习（RL）的全身控制器动态鲁棒性有所提升，但难以精确跟踪复杂的高维上身关节参考轨迹，且易陷入次优行为。解耦控制架构将高维上身交由PD控制器以保证轨迹跟踪精度，下身由RL策略控制以提供抗扰动的鲁棒平衡，在稳定性和精度上展现出潜力。</p>
+<p>然而，现有方法在执行上身运动时往往未充分考虑机器人的实际执行能力，忽略了快速上身运动引起的动量变化所带来的动态后果，这可能导致失稳、失衡甚至与环境碰撞。关键在于上身运动引入的动量：快速运动可能使机器人失稳并影响跟踪精度，而较慢的运动虽能减少动量变化、提高稳定性和精度，却牺牲了时间效率。换言之，无论参考轨迹来自遥操作、VLA还是其他规划器，在全身站立操作场景中，确定合适的运动速度始终是一个难题。</p>
+<p>本文针对这一痛点，提出了一个新视角：通过优化上身运动的时间轨迹（而非仅增强下身抗扰能力）来最小化动量引起的平衡扰动。核心思路是提出一种时间优化策略（TOP），训练一个站立操作控制模型，通过调整上身运动的时间戳，在稳定性、精度和时间效率之间取得平衡。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的框架包含三个阶段：1) 学习多样上身运动的先验表示以改善上下身控制器的协调性；2) 训练解耦控制器，固定运动片段时间戳，训练鲁棒的下身控制器；3) 训练TOP策略，通过监督强化学习优化运动片段间的时间戳。</p>
+<p><img src="https://arxiv.org/html/2508.00355v1/x1.png" alt="整体架构"></p>
+<blockquote>
+<p><strong>图1</strong>：方法整体架构。(A) 基于VAE结构训练潜在编码zt来表示多样化的上身运动。(B) 基于平衡RL的策略控制机器人保持静止，同时上身使用PD控制器执行当前运动mt，运动间有固定时间间隔Δt。(C) 训练TOP来优化运动片段间的时间戳，以降低运动速度及动量变化的影响，这将减慢当前运动mt并执行通过<code>linear_interpolate(mt-1, mt+Δt)</code>计算出的新运动m&#39;t。</p>
+</blockquote>
+<p><strong>1. 提取运动先验</strong><br>为提升下身控制器对上身过去及未来运动的感知，使用变分自编码器（VAE）学习上身运动的先验表示。输入是上身运动窗口Mt，包含过去和未来共2W+1帧的运动状态mt。每帧mt包含基座位置rt（设为常量）、基座朝向θt（6D向量）、上身关节角度qt_upper和速度q˙t_upper（共15维，包括两个7自由度手臂和一个腰部关节）。编码器Eφ将运动窗口映射到64维潜在空间zt，解码器Dθ将其重构为运动窗口M&#39;t。使用β-VAE，重建损失包括朝向（转换为旋转矩阵计算）、关节角度、关节速度和位置的重构误差。</p>
+<p><strong>2. 训练解耦策略</strong><br>下身平衡策略采用基于PPO的强化学习框架。策略πφ(at | st, gt)是目标条件式的，其中目标gt包含当前上身运动目标mt及其对应的潜在编码zt。状态观测st包含全身关节位置qt、速度q˙t、基座朝向θt、角速度ωt、上一时刻下身动作at-1以及当前目标gt。上下身关节均通过PD扭矩控制器τt = kp(at - qt) + kd q˙t驱动。奖励设计用于塑造站立模式并鼓励精确跟踪。为降低上身运动带来的探索负担并稳定训练过程，引入了课程学习策略，通过幅度因子αi ∈ [0,1]逐步增加上身目标运动的幅度。</p>
+<p><strong>3. 时间优化策略</strong><br>TOP策略πθ(Δt_seq | mt, zt, st, ht)是一个强化学习模块，输入包括当前运动mt、潜在编码zt、当前状态st和历史观测ht，输出是未来N个运动片段间的时间戳序列Δt_seq = {Δtt, ..., Δtt+N}。该时间戳序列会与运动对(mt, zt)一同输入给下身RL策略。一旦当前运动mt的时间戳被优化为t+Δtt，原始运动mt将通过线性插值被替换为新的运动m&#39;t = linear_interpolate(mt-1, mt+Δtt)。由于数据集中的运动满足机器人运动学与动力学约束，插值后的m&#39;t也不会违反约束。考虑到快速运动的滞后效应（过去几帧的快速运动可能影响当前及未来的平衡），TOP借鉴了动作分块思想，一次性优化未来一段时间（N步）的时间戳，使策略能够考虑过去决策对当前平衡状态的持续影响，从而做出更优的时序调整。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在仿真环境（Isaac Gym）和现实世界（Unitree H1机器人）中进行评估。使用了包含多种操作任务（如挥手、擦拭、搬运、插拔等）的运动数据集。对比的基线方法包括：1) <strong>RL（全身）</strong>：标准的全身RL控制器；2) <strong>Decouple</strong>：本文的解耦控制器（固定时间戳）；3) **Decouple w/ TOP (Ours)**：本文完整方法（解耦控制器+TOP）。</p>
+<p><strong>关键实验结果</strong>：<br><img src="https://arxiv.org/html/2508.00355v1/x2.png" alt="仿真成功率对比"></p>
+<blockquote>
+<p><strong>图2</strong>：在仿真中不同运动速度下的任务成功率对比。本文方法（Decouple w/ TOP）在多种速度下均能保持接近100%的成功率，显著优于全身RL和固定时间戳的解耦控制器，尤其是在高速运动时。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.00355v1/x3.png" alt="仿真跟踪误差对比"></p>
+<blockquote>
+<p><strong>图3</strong>：仿真中上身末端执行器（手部）的跟踪位置误差对比。本文方法（蓝色）的跟踪误差显著低于其他基线方法，表明TOP在提升稳定性的同时，也改善了运动跟踪精度。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.00355v1/x4.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图4</strong>：消融实验。比较了固定时间戳（Fixed）、随机调整时间戳（Random）、以及本文TOP策略在成功率和跟踪误差上的表现。TOP策略明显优于其他变体，证明了其学习的有效性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.00355v1/x5.png" alt="实物实验任务"></p>
+<blockquote>
+<p><strong>图5</strong>：现实世界中的任务展示。机器人成功执行了擦拭白板、搬运箱子、插拔电源线等需要稳定站立和精确上肢操作的任务。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.00355v1/x6.png" alt="实物实验稳定性量化"></p>
+<blockquote>
+<p><strong>图6</strong>：实物实验中机器人基座倾斜角度的变化。在使用TOP策略时，基座倾斜角度波动更小，表明机器人站立更稳定。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：消融实验验证了TOP策略的核心作用。与固定时间戳、随机调整时间戳相比，学习得到的TOP策略能主动、合理地放慢可能引发失稳的快速运动阶段，从而在成功率（图4左）和跟踪精度（图4右）上取得最佳平衡。此外，论文还验证了运动先验（VAE）和课程学习对训练稳定性的贡献。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个用于人形机器人站立操作的新型框架，通过引入<strong>时间优化策略</strong>，首次明确地通过优化运动时间轨迹来协同解决稳定性、精度和效率的平衡问题。</li>
+<li>框架整合了基于VAE的运动先验学习、上下身解耦控制（上身PD+下身RL）以及TOP策略，实现了对复杂上身运动的稳定、精确且高效的执行。</li>
+<li>在仿真和实物机器人（Unitree H1）上进行了广泛验证，证明了方法的有效性、优越性和泛化能力。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，当遇到非常剧烈或未见过的大幅度外部扰动时，当前策略可能仍然会失效。这表明TOP主要优化的是由自身运动引起的内部动量扰动，对于极端外部扰动的处理能力有限。</p>
+<p><strong>后续研究启示</strong>：</p>
+<ol>
+<li><strong>动态任务拓展</strong>：当前工作聚焦于静态站立操作，未来可将TOP思想与动态步态结合，用于行走中的操作任务。</li>
+<li><strong>在线自适应</strong>：TOP策略是离线训练的。未来可探索在线学习或自适应机制，使机器人能实时调整时间策略以应对未知扰动或任务变化。</li>
+<li><strong>多模态任务集成</strong>：将TOP框架与更高层的任务规划、视觉语言模型（VLA）结合，实现从高级指令到稳定、精确底层执行的全流程自动化。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对人形机器人在站立操作时难以同时保证鲁棒性、精度与时间效率的核心问题，提出时间优化策略（TOP）。方法核心包括：1）利用变分自编码器（VAE）学习运动先验，增强上下半身协调；2）将全身控制解耦为上半身PD控制器（保证精度）与下半身RL控制器（保证稳定）；3）训练TOP策略优化上半身运动时间轨迹，以减轻快速运动对平衡的冲击。通过仿真与实物实验验证，该方法能稳定、精确地完成站立操作任务。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.00355" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AutoPrune: Each Complexity Deserves a Pruning Policy - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Computer Vision and Pattern Recognition (cs.CV)</span>
+      <h1>AutoPrune: Each Complexity Deserves a Pruning Policy</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.23931" target="_blank" rel="noreferrer">2509.23931</a></span>
+        <span>作者: Wang, Hanshi, Xu, Yuhao, Xu, Zekun, Gao, Jin, Liu, Yufan, Hu, Weiming, Wang, Ke, Zhang, Zhipeng</span>
+        <span>日期: 2025/09/28</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>大型视觉-语言模型（LVLMs）因其强大的多模态理解能力而得到广泛应用，但其在处理高分辨率图像时产生的海量视觉令牌带来了巨大的计算负担。现有研究表明，视觉令牌在解码器的深层中获得的注意力较少，因此令牌剪枝成为一种有效的加速手段。当前主流的训练后（training-free）令牌剪枝方法主要分为两类：一类是采用固定的、预定义的剪枝计划，例如在特定层移除固定比例的令牌；另一类是采用启发式的、层特定的剪枝策略，例如根据解码器深度调整剪枝比例。然而，这两种方法均存在关键局限性：它们对所有输入样本和任务应用统一的剪枝策略，无法根据输入的具体复杂度和模型内部的推理轨迹进行动态调整。</p>
+<p>本文的动机源于认知科学对人类视觉处理过程的观察：人类在面对简单任务时，视觉注意会迅速聚焦于目标；而在处理复杂任务时，会先进行广泛的探索以积累证据，再逐步收窄焦点。论文通过实验发现，LVLMs中存在类似模式：对于简单的样本和任务，跨模态注意力在早期层迅速收敛并保持稳定；对于复杂的样本和任务，注意力则广泛分布并在各层间显著波动。这一观察表明，固定的剪枝计划无法满足不同复杂度输入的需求。因此，本文提出了一个核心问题：能否设计一种剪枝方法，既能动态适应不同样本和任务的复杂度，又能严格遵守预定义的计算预算，同时保持简单性和广泛的通用性？</p>
+<p>本文的核心思路是：受神经科学启发，通过计算视觉与文本令牌之间的互信息来量化输入样本和任务的复杂度，并将此标量映射到一个受预算约束的逻辑（Logistic）保留曲线上，从而为每个输入生成一个定制化的、动态的剪枝策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>AutoPrune 是一个训练后即插即用的剪枝框架，其目标是在给定全局计算预算约束下，优化令牌分配策略 ξ，即决定在每一层保留多少视觉令牌。整体框架的核心在于两个关键组件：1）基于互信息的复杂度量化；2）预算约束下的逻辑保留曲线生成。</p>
+<p><img src="https://arxiv.org/html/2509.23931v2/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：层间视觉-文本交互模式。左侧为简单任务（“找出所有香蕉”），跨模态注意力在早期层（如第4层）迅速收敛于目标区域并保持稳定。右侧为复杂任务（“为什么这个人看起来很沮丧？”），注意力在早期层（第2、4层）广泛分布，并在深层（第8、16层）发生显著转移，表明模型在进行迭代推理。此图揭示了任务复杂度与注意力动态的紧密关联，是设计自适应剪枝策略的动机来源。</p>
+</blockquote>
+<p><strong>核心模块一：基于互信息的复杂度量化</strong><br>该方法的核心创新在于使用互信息作为量化样本/任务复杂度的代理指标。受神经科学启发，早期视觉与语言区域间信息交换的强度可以反映任务的复杂程度。具体计算如下：给定视觉令牌 V 和文本令牌 T，利用Transformer中文本到视觉的注意力权重 α_ji（经过softmax归一化）来估计联合概率 p(v_i, t_j) = (1/N_t) * α_ji，边缘概率 p(v_i) = Σ_j p(v_i, t_j), p(t_j)=1/N_t。然后根据香农互信息公式计算 I(V, T)。高互信息值表示文本对视觉场景的约束强，对应简单任务，允许进行激进的早期剪枝；低互信息值表示对应关系弱或间接，对应复杂任务，需要保守地保留更多令牌以支持后续推理。</p>
+<p><strong>核心模块二：预算约束的逻辑保留曲线</strong><br>受人类眼动研究中“探索-确认-稳定”模式的启发，论文采用逻辑函数来模拟令牌保留数量随网络深度衰减的轨迹。对于一个给定的问题q，其初始保留曲线定义为 f_q(x) = N_init / (1 + exp(k_q (x - x0_q)))，其中x代表层索引，k_q控制衰减陡度，x0_q是拐点（保留数降至一半的层）。关键创新在于，将计算得到的互信息 I_q(V, T) 线性映射到曲线参数上：k_q = k_0 - γ * I_q， x0_q = x_0 + β * I_q。因此，低互信息（复杂任务）会产生较大的k_q和较高的x0_q，使得曲线在拐点前保持较高的平台期，延迟了令牌的急剧减少；高互信息（简单任务）则产生较小的k_q和较低的x0_q，使得曲线早期就快速下降，实现前置的激进剪枝。</p>
+<p><img src="https://arxiv.org/html/2509.23931v2/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：在TextVQA数据集上的逻辑保留曲线。每条曲线对应一个问答对，并由视觉与文本令牌间的互信息参数化。表现出较低互信息的样本/任务（蓝色曲线）显示出更保守的令牌保留策略（曲线衰减更晚、更平缓），而高互信息样本（橙色曲线）则采用更激进的早期剪枝策略。此图直观展示了互信息如何指导生成适应不同复杂度的剪枝策略。</p>
+</blockquote>
+<p>为确保满足预定义的计算预算 C_max（可以是令牌总数或FLOPs），论文对连续曲线 f_q(x) 在深度域 [0, L] 上进行积分得到总面积 I_q，然后对曲线进行重新缩放：f̂_q(x) = (C_max / I_q) / (1 + exp(k_q (x - x0_q)))，使得缩放后曲线的积分值严格等于 C_max。最后，通过二分搜索一个全局缩放因子 s，对离散层评估值进行取整和微调，使得各层保留令牌整数之和逼近预算。该方法将动态适应性（通过互信息调节曲线形状）与全局预算约束（通过积分和重缩放）统一起来，克服了现有方法要么固定、要么无法严格控预算的缺点。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：评估主要在 LLaVA-1.5-7B 模型上进行，使用了五个标准视觉-语言基准：MME（综合评估）、MMB（多模态模型全能基准）、ScienceQA (SQA)、GQA 和 TextVQA。实验平台为单张 NVIDIA Tesla A100 GPU。此外，论文还将 AutoPrune 应用于其他VLM（如 LLaVA-NeXT）以及用于自动驾驶的视觉-语言-动作（VLA）模型 Senna，以验证其通用性。</p>
+<p><strong>对比方法</strong>：对比了当前先进的训练后令牌剪枝方法，包括 PDrop (CVPR‘2025)、ZipVL、CLS、SparseVLM 以及保留所有令牌的原始模型（Dense）。</p>
+<p><strong>关键实验结果</strong>：<br>论文的表1（此处以文字总结）展示了在 LLaVA-1.5-7B 上的主要结果。在极端剪枝设置下（保留约64个令牌，相当于剪枝89%的视觉令牌，FLOPs减少76.8%），AutoPrune 在所有任务上的平均准确率保持了原始模型（Dense）的96.7%。这比近期工作 PDrop 在同等预算下高出9.1个百分点。即使在更宽松的预算下（如保留256个令牌），AutoPrune 也 consistently 优于所有基线方法，在MMB、SQA、GQA等多个数据集上达到甚至超过原始模型的性能。</p>
+<p><strong>通用性验证</strong>：</p>
+<ul>
+<li>应用于其他VLM（LLaVA-NeXT）：在MMBench基准上，AutoPrune在保留64令牌时性能显著优于PDrop和ZipVL。</li>
+<li>应用于自动驾驶VLA模型（Senna）：在 BDD-X 场景理解和规划任务上，AutoPrune 在大幅降低 FLOPs（如减少71.6%）的同时，性能下降极小（规划任务性能保持率99.6%），且明显优于直接应用 PDrop 策略。</li>
+</ul>
+<p><strong>消融实验</strong>：<br>论文通过消融实验验证了各个组件的贡献：</p>
+<ol>
+<li><strong>互信息作为复杂度指标的有效性</strong>：相比使用随机标量或注意力熵，使用互信息引导的剪枝策略性能最佳。</li>
+<li><strong>逻辑函数形状调节的必要性</strong>：仅通过互信息调节拐点（x0）或陡度（k）之一，性能均不如同时调节两者。</li>
+<li><strong>预算约束重缩放的重要性</strong>：如果不进行积分和重缩放以确保严格预算，性能会下降且计算量不可控。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>神经科学启发的分析</strong>：首次系统性地将LVLMs中的跨模态注意力动态与人类视觉处理中的“探索-利用”模式联系起来，为自适应剪枝提供了理论依据。</li>
+<li><strong>复杂度自适应剪枝框架</strong>：提出了AutoPrune，一个无需训练、即插即用的框架。它通过互信息量化样本/任务复杂度，并将其映射到受预算约束的逻辑保留曲线上，为每个输入生成定制化的剪枝策略。</li>
+<li><strong>广泛的实验验证</strong>：不仅在标准视觉-语言任务上证明了方法的优越性，还成功将其推广到自动驾驶的VLA模型中，展示了强大的通用性。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文自身提到的局限性包括：计算所有注意力头的互信息会引入少量开销（尽管分析表明其复杂度远低于模型前向传播）；逻辑函数参数（k0, γ, x0, β）需要根据目标模型在少量数据上进行初步校准以设定默认值。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>认知科学与AI效率的结合</strong>：这项工作展示了从认知科学中汲取灵感来解决AI模型效率问题的巨大潜力，为未来研究开辟了新方向。</li>
+<li><strong>动态与可预算的平衡</strong>：AutoPrune 成功示范了如何将动态自适应策略与硬性计算预算约束相结合，这一设计范式可应用于其他模型压缩领域。</li>
+<li><strong>通用性设计</strong>：该方法不依赖于特定模型结构或任务，其“即插即用”的特性使其易于集成到各种多模态系统中，促进了高效大模型的实际部署。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对大型视觉语言模型（LVLMs）中视觉token冗余且现有剪枝策略固定、无法适应不同输入复杂度的问题，提出了一种训练即插即用的自适应剪枝框架AutoPrune。该方法通过量化视觉与文本token间的互信息，并将其映射为预算约束下的逻辑保留曲线，为不同复杂度的样本和任务动态定制剪枝策略。在LLaVA-1.5-7B上的实验表明，AutoPrune可剪除89%的视觉token，减少76.8%的计算量（FLOPs），同时保持平均96.7%的原始精度，性能优于近期方法PDrop 9.1%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.23931" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

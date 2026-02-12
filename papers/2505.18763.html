@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>GenPO: Generative Diffusion Models Meet On-Policy Reinforcement Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Machine Learning (cs.LG)</span>
+      <h1>GenPO: Generative Diffusion Models Meet On-Policy Reinforcement Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2505.18763" target="_blank" rel="noreferrer">2505.18763</a></span>
+        <span>作者: Ding, Shutong, Hu, Ke, Zhong, Shan, Luo, Haoyang, Zhang, Weinan, Wang, Jingya, Wang, Jun, Shi, Ye</span>
+        <span>日期: 2025/05/24</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，生成式扩散模型因其强大的探索能力和多模态特性，在强化学习领域受到关注。然而，现有研究几乎全部集中于离线RL和离线策略RL，而将扩散或基于流的策略整合到像PPO这样的在线策略RL框架中，仍然是一个未充分探索的领域。这造成了显著的鸿沟，因为现有的大规模并行GPU加速模拟器（如IsaacLab）主要受益于在线策略RL算法的训练。将扩散策略整合到在线策略RL的一个关键挑战在于计算状态-动作对的对数似然，这对于高斯策略是直接的，但对于基于流的模型，由于前向-反向过程的不可逆性和离散化误差（如欧拉-丸山近似），变得难以处理。</p>
+<p>本文针对扩散策略无法直接计算精确对数似然这一具体痛点，提出了一个新视角：通过精确扩散反演技术构建可逆的动作映射。本文的核心思路是提出GenPO框架，利用双虚拟动作机制实现扩散过程的可逆性，从而精确计算对数似然，并进一步用于无偏的熵和KL散度估计，最终成功将扩散策略整合到PPO等在线策略RL算法中。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>GenPO的整体框架基于在线策略RL算法PPO，但将其中的策略替换为生成式扩散模型。其核心在于通过重构马尔可夫决策过程，实现扩散过程的可逆性，从而能够计算任意状态-动作对的精确概率密度，满足在线策略更新的需求。</p>
+<p><img src="https://arxiv.org/html/2505.18763v4/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：GenPO的训练和推理过程。前向过程是根据给定状态采样动作；反向过程是计算给定状态-动作对的概率密度。值得注意的是，前向和反向过程是可逆的。</p>
+</blockquote>
+<p>核心模块与技术细节如下：</p>
+<ol>
+<li><strong>可逆扩散映射的构建</strong>：受EDICT启发，GenPO通过维护两个耦合的噪声向量（x, y）并交替更新它们，实现了扩散模型前向和反向过程的可逆性。具体更新规则（以流匹配为例）如公式(7, 8)所示。反向过程从标准高斯噪声（x0, y0）开始，通过速度场vθ逐步“去噪”得到目标动作（x1, y1）；前向过程则从目标动作（x1, y1）开始，通过反向应用速度场，可逆地映射回初始噪声。</li>
+<li><strong>双虚拟动作与MDP重构</strong>：由于可逆映射需要两个耦合向量，这导致样本空间翻倍。GenPO因此将原始MDP重构为一个具有双倍虚拟动作空间𝒜<del>的新MDP。每个虚拟动作a</del> = (x, y)由两部分组成。在推理时，将两部分平均得到原始动作空间的动作：a = (x+y)/2。这样，当重构MDP中的策略最优时，通过平均映射在原始MDP中也是最优的。</li>
+<li><strong>混合与压缩损失</strong>：在双虚拟动作机制下，可能存在无效探索问题（例如，不同的(x, y)对可能对应相同的平均动作a）。为了促使x和y两部分保持接近，GenPO在更新步骤中引入了“混合”操作（见公式7），并在训练目标中增加了一项压缩损失：𝔼[(x1 - y1)²]，以最小化两部分之间的均方误差。</li>
+<li><strong>精确对数似然、熵与KL散度计算</strong>：由于构建了从标准高斯噪声到虚拟动作的可逆映射，GenPO可以利用变量变换定理（公式5）精确计算虚拟动作a<del>在给定状态s下的概率密度πθ(a</del>|s)。这带来了关键优势：<ul>
+<li><strong>精确对数似然</strong>：可直接用于PPO的代理目标函数（公式11），其中重要性采样比基于πθ(a<del>|s)/πθ_old(a</del>|s)。</li>
+<li><strong>无偏熵估计</strong>：熵损失定义为ℒᴱᴺᵀ = 𝔼[log(πθ(a~|s))]（公式9），可用于鼓励探索。</li>
+<li><strong>无偏KL散度估计</strong>：KL散度可估计为𝔼[log(πθ_old(a<del>|s)) - log(πθ(a</del>|s))]（公式10），这使得为扩散策略实现KL自适应的学习率调度成为可能。</li>
+</ul>
+</li>
+</ol>
+<p>与现有方法相比，GenPO的创新点具体体现在：首次将扩散策略稳定地整合到在线策略RL框架；通过双虚拟动作和精确反演技术，<strong>系统性解决了扩散策略对数似然计算的根本性难题</strong>，并首次实现了对扩散策略熵和KL散度的无偏估计，从而能够充分利用PPO的成熟技术（如熵正则化和KL自适应学习率）。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在8个IsaacLab机器人控制基准任务上进行，涵盖了足式运动（Ant, Humanoid, Anymal-D, Unitree H1, Go2）、灵巧操作（Shadow Hand）、空中控制（Quadcopter）和机械臂任务（Franka）。实验平台为大规模并行GPU模拟器IsaacLab。</p>
+<p>对比的基线方法包括：标准PPO（使用高斯策略）、PPO-L（增加层归一化的PPO）、以及将扩散策略与离线策略RL结合的DIPO和QVPO方法（在IsaacLab环境下重新实现）。</p>
+<p>关键实验结果如下：GenPO在大多数任务上取得了最佳或极具竞争力的最终性能（累计回报）。特别是在复杂的Humanoid、Anymal-D、Shadow Hand等任务上，优势明显。例如，在Humanoid任务中，GenPO最终成功率接近100%，显著高于其他基线。</p>
+<p><img src="https://arxiv.org/html/2505.18763v4/x3.png" alt="结果对比1"></p>
+<blockquote>
+<p><strong>图3</strong>：Ant任务上的学习曲线。GenPO展现了更快的初始收敛速度和更高的最终性能。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.18763v4/x4.png" alt="结果对比2"></p>
+<blockquote>
+<p><strong>图4</strong>：Humanoid任务上的学习曲线。GenPO是唯一能稳定学习并达到接近100%成功率的算法。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.18763v4/x5.png" alt="结果对比3"></p>
+<blockquote>
+<p><strong>图5</strong>：Anymal-D任务上的学习曲线。GenPO取得了最高的样本效率和最终回报。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.18763v4/x6.png" alt="结果对比4"></p>
+<blockquote>
+<p><strong>图6</strong>：Unitree H1任务上的学习曲线。GenPO表现出优越且稳定的性能。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.18763v4/x7.png" alt="结果对比5"></p>
+<blockquote>
+<p><strong>图7</strong>：Unitree Go2任务上的学习曲线。GenPO收敛更快，性能更优。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.18763v4/x8.png" alt="结果对比6"></p>
+<blockquote>
+<p><strong>图8</strong>：Shadow Hand任务上的学习曲线。这是一个高维、复杂的操作任务，GenPO显著优于所有基线。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.18763v4/x9.png" alt="结果对比7"></p>
+<blockquote>
+<p><strong>图9</strong>：Quadcopter任务上的学习曲线。GenPO取得了最高的最终回报。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.18763v4/x10.png" alt="结果对比8"></p>
+<blockquote>
+<p><strong>图10</strong>：Franka任务上的学习曲线。GenPO性能最佳。</p>
+</blockquote>
+<p>消融实验验证了各个组件的贡献：</p>
+<ul>
+<li><strong>可逆性</strong>：移除可逆性（即使用标准不可逆扩散）会导致训练完全失败。</li>
+<li><strong>熵正则化</strong>：加入熵损失能有效提升探索和最终性能。</li>
+<li><strong>KL自适应学习率</strong>：使用估计的KL散度进行学习率调度，有助于稳定训练。</li>
+<li><strong>压缩损失</strong>：该损失对于稳定训练至关重要，能有效防止双虚拟动作两部分发散导致的训练崩溃。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2505.18763v4/x11.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图11</strong>：在Ant任务上的消融研究。展示了可逆性（Invertibility）、熵正则化（Entropy）和压缩损失（Compression）各自的重要性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.18763v4/x12.png" alt="成功率对比"></p>
+<blockquote>
+<p><strong>图12</strong>：所有8个任务上，各算法最终成功率的对比柱状图。GenPO在绝大多数任务中取得了最高的成功率。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li><strong>桥梁作用</strong>：首次实现了扩散策略与在线策略RL（特别是PPO）的稳定集成，使扩散模型的探索能力和多模态优势能够在大规模并行模拟器（如IsaacLab）中得以发挥。</li>
+<li><strong>解决根本难题</strong>：通过双虚拟动作机制和精确扩散反演，构造了可逆的扩散映射，系统性地解决了扩散策略无法计算精确对数似然的瓶颈，并进一步实现了对策略熵和KL散度的无偏估计。</li>
+<li><strong>实证验证</strong>：在涵盖多种机器人形态的8个IsaacLab基准任务上进行了全面实验，证明了GenPO相对于传统高斯策略PPO及其他扩散RL方法的优越性。</li>
+</ol>
+<p>论文自身提到的局限性包括：由于使用双虚拟动作和可逆扩散步骤，<strong>计算开销比标准高斯策略PPO更大</strong>；方法主要针对连续动作空间，在离散动作空间的应用需要进一步探索；此外，在某些非常简单的任务上，其优势可能不如在复杂任务上明显。</p>
+<p>对后续研究的启示：GenPO为生成式模型（尤其是扩散模型）在在线策略RL中的应用开辟了新途径。其核心思想——通过设计可逆的生成过程来计算精确概率——可以启发其他生成模型与在线策略RL的结合。未来工作可以探索更高效的可逆架构，降低计算成本，并将此框架扩展到更广泛的决策制定问题中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出GenPO框架，旨在解决扩散模型策略难以集成到同策略强化学习（如PPO）中的核心挑战。关键难题在于扩散策略的状态-动作对数似然计算不可行。GenPO通过**精确扩散反演**构建可逆的动作映射，并引入**双重虚拟动作机制**实现可逆性，从而解决了对数似然计算问题，并支持无偏的熵与KL散度估计。在IsaacLab的八个机器人基准测试中，GenPO性能优于现有基线，首次成功将扩散策略应用于同策略RL，为大规模并行化训练与部署铺平了道路。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2505.18763" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

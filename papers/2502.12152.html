@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning Getting-Up Policies for Real-World Humanoid Robots - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Learning Getting-Up Policies for Real-World Humanoid Robots</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2502.12152" target="_blank" rel="noreferrer">2502.12152</a></span>
+        <span>作者: He, Xialin, Dong, Runpei, Chen, Zixuan, Gupta, Saurabh</span>
+        <span>日期: 2025/02/17</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>人形机器人的自动摔倒恢复是其可靠部署的关键前提。由于摔倒后机器人可能处于各种姿态，且需要在具有挑战性的地形上运行，手动设计站起控制器非常困难。DARPA机器人挑战赛（DRC）的数据突显了该问题的重要性。现有方法主要包括基于模型的控制（如ZMP、MPC），这些方法在基础步态上成功但难以泛化；基于运动规划和学习的方法，通常依赖于预定义的配置图或状态机，可能无法泛化到不可预测的初始状态；以及商业机器人常用的预定义轨迹回放，其泛化能力有限。近年来，仿真到实地（Sim2Real）的强化学习在四足和双足机器人步态控制上取得显著成功，但直接应用于站起任务却面临独特挑战：1) <strong>非周期性行为</strong>：站起动作无周期模式，接触序列需自行探索；2) <strong>接触丰富性</strong>：站起时不仅脚部，身体其他部位（如躯干、手臂）也可能与环境发生复杂接触，需要精确的碰撞几何建模；3) <strong>奖励稀疏性</strong>：站起过程中身体各部分可能先做“负向”运动（如躯干先下倾），导致难以设计密集有效的奖励信号。</p>
+<p>本文针对上述痛点，提出了一个两阶段强化学习框架 <strong>HumanUP</strong>。其核心思路是：通过一个从“发现”到“精炼”的课程学习范式，首先在弱约束下探索出有效的站起轨迹，然后通过跟踪该轨迹并施加强正则化，将其转化为平滑、鲁棒且可部署到真实机器人的策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>HumanUP 的整体框架是一个两阶段训练流程，旨在学习可部署的站起策略 π。</p>
+<p><img src="https://arxiv.org/html/2502.12152v2/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：HumanUP 系统概览。策略在仿真中通过两阶段RL训练，之后直接部署到现实世界。(a) 第一阶段训练发现策略 <em>f</em>，以最少的部署约束找出站起轨迹。(b) 第二阶段训练可部署策略 <em>π</em>，通过跟踪第一阶段发现的、放慢后的轨迹，并在多变地形和初始姿态下施加强控制正则化。(c) 两阶段训练构成一个课程：第一阶段在简单设置下发现动作；第二阶段使动作可部署、可泛化。</p>
+</blockquote>
+<p><strong>策略架构</strong>：两个阶段的策略模型 <em>f</em> (发现策略) 和 <em>π</em> (可部署策略) 均为MLP，使用PPO算法训练。输入观测 <strong>o_t</strong> 维度为868，包括：本体感知信息 <strong>s_t</strong> (74维，含滚转/俯仰角、角速度、关节速度与位置)、10步历史状态 **s_{t-10:t-1}**，以及通过正则化在线适应方法编码的环境外部潜在变量 <strong>z_t</strong> (54维)。策略输出为23维的动作 <strong>a_t</strong>。值得注意的是，观测中未使用线速度和偏航角信息，因其在现实中难以可靠估计。</p>
+<p><strong>第一阶段：发现策略</strong>。此阶段目标是在<strong>弱正则化</strong>约束下，高效探索出站起或翻滚的行为。其奖励函数设计侧重于任务完成，包含极弱的平滑性惩罚。</p>
+<ul>
+<li><strong>站起任务奖励</strong>：<code>r_up = r_height + r_Δheight + r_uprightness + r_stand_on_feet + r_Δfeet_contact_forces + r_symmetry</code>。这些奖励分别鼓励机器人达到目标高度、持续增加高度、保持直立、双脚站立、持续增加脚部接触力，以及通过<strong>软对称奖励</strong>鼓励（非强制）输出双侧对称的动作，以缩小搜索空间而不完全限制自由度。</li>
+<li><strong>翻滚任务奖励</strong>：<code>r_roll = r_gravity</code>，鼓励机器人改变身体朝向，使其投影重力接近仰面朝天时的状态。<br>此阶段使用<strong>简化的碰撞网格</strong>以加速训练，并从<strong>标准姿态</strong>开始学习。</li>
+</ul>
+<p><strong>第二阶段：可部署策略</strong>。此阶段目标是训练能够直接部署到真实世界的策略 <em>π</em>。其核心是模仿第一阶段发现的、经过<strong>8倍减速</strong>后的状态轨迹，同时施加<strong>强控制正则化</strong>和<strong>领域随机化</strong>。</p>
+<ul>
+<li><strong>跟踪奖励</strong>：<code>r_tracking = r_tracking_DoF + r_tracking_body</code>，鼓励机器人的关节位置和身体姿态与参考轨迹一致。</li>
+<li><strong>强正则化与随机化</strong>：包括动作平滑性奖励、关节速度惩罚、扭矩惩罚等（详见附录A.2）。同时，在<strong>完整碰撞网格</strong>、<strong>随机化的初始姿态</strong>（从生成的4万个仰卧/俯卧姿态数据集中采样）以及<strong>随机化的地形</strong>上进行训练，以提升泛化能力和Sim2Real性能。</li>
+</ul>
+<p><strong>课程学习设计</strong>：从第一阶段到第二阶段构成了一个“难到易”与“易到难”并行的课程。</p>
+<ol>
+<li><strong>任务难度</strong>：从“发现站起动作”（难）过渡到“跟踪已知轨迹”（易）。</li>
+<li><strong>约束与复杂度</strong>：从“简化碰撞网格、固定初始姿态、弱正则化、无地形变化”（易）过渡到“完整碰撞网格、随机初始姿态、强正则化、地形随机化”（难）。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：使用Unitree G1人形机器人平台。在仿真中，构建了包含20k个仰卧姿态和20k个俯卧姿态的数据集 <strong>P</strong>，用于训练和评估。真实世界测试了六种不同地形，包括平坦、可变形、光滑表面和斜坡（如草地、雪地）。</p>
+<p><strong>对比基线</strong>：主要与字符动画领域的方法 Tao et al. [70] 以及多个HumanUP的消融版本进行对比：1) 无第二阶段；2) 无完整URDF（碰撞网格）；3) 无姿态随机化；4) 使用硬对称约束。</p>
+<p><img src="https://arxiv.org/html/2502.12152v2/x3.png" alt="仿真结果对比表"></p>
+<blockquote>
+<p><strong>图3</strong>：仿真结果对比表（表1）。展示了不同方法在三个任务上的性能：❶ 从仰卧姿态站起，❷ 从俯卧翻滚成仰卧，❸ 从俯卧姿态直接站起（通过连续执行❷和❶）。关键指标包括成功率、平滑度（动作抖动、关节位置抖动）、安全性（能量消耗、扭矩/位置安全系数）以及是否成功转移到现实世界（Sim2Real）。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>任务成功率</strong>：对于从仰卧站起（任务❶），完整HumanUP取得了<strong>95.34%</strong> 的成功率，显著高于无第二阶段的版本（24.82%）和无姿态随机化的版本（65.39%）。对于翻滚任务（❷），完整方法成功率为**94.40%**。</li>
+<li><strong>Sim2Real 能力</strong>：只有包含完整两阶段、强正则化和随机化的HumanUP及其部分消融变体（如带硬对称的版本）能够成功转移到真实机器人。对比方法Tao et al. 虽然在仿真中从俯卧直接站起（任务❸）成功率高达98.99%，但其动作不平滑、能耗高（1015.27），无法进行实地部署（Sim2Real列为✗）。</li>
+<li><strong>消融实验分析</strong>：<ul>
+<li><strong>第二阶段至关重要</strong>：移除后（w/o Stage II），成功率暴跌，且动作抖动和能量消耗急剧增加，无法部署。</li>
+<li><strong>完整碰撞网格必要</strong>：在第二阶段使用简化网格（w/o Full URDF）虽在仿真中表现良好，但无法转移到现实。</li>
+<li><strong>姿态随机化提升泛化</strong>：移除后（w/o Posture Rand.），在未见过的测试姿态上成功率大幅下降。</li>
+<li><strong>软对称优于硬对称</strong>：使用硬对称约束（w/ Hard Symmetry）会限制灵活性，导致站起任务成功率降低（84.56% vs 95.34%）。</li>
+</ul>
+</li>
+</ul>
+<p><img src="https://arxiv.org/html/2502.12152v2/x4.png" alt="真实世界部署"></p>
+<blockquote>
+<p><strong>图4</strong>：在真实世界多种地形上的成功部署示例，包括石板、雪地、草地斜坡等。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2502.12152v2/x7.png" alt="成功率对比柱状图"></p>
+<blockquote>
+<p><strong>图7</strong>：消融研究柱状图。清晰展示了完整HumanUP方法在所有任务上均取得最高成功率，并突出了第二阶段、完整URDF和姿态随机化各组件对性能的贡献。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2502.12152v2/x8.png" alt="轨迹对比"></p>
+<blockquote>
+<p><strong>图8</strong>：第一阶段发现的原始轨迹与第二阶段可部署策略生成轨迹的对比。可部署策略的动作和关节位置轨迹明显更加平滑，满足了实际机器人的安全要求。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个针对人形机器人站起任务的两阶段强化学习框架 <strong>HumanUP</strong>，通过将困难的“动作发现”与相对简单的“轨迹跟踪与正则化”解耦，并设计相应的课程学习，有效解决了该任务奖励稀疏、接触复杂的问题。</li>
+<li>在真实的、成人尺寸的Unitree G1人形机器人上成功演示了从仰卧和俯卧姿态在多种复杂地形下的站起能力，这是该领域的早期成功案例之一，超越了厂商预置的手动设计控制器。</li>
+<li>构建了一个包含多样化初始姿态的数据集，并系统性地验证了各组件（两阶段设计、完整碰撞模型、姿态随机化、软对称奖励）对策略性能和可转移性的关键作用。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，目前翻滚策略和站起策略是分开训练和执行的，并非端到端的单一策略。此外，实验未在非常崎岖不平的地形上进行测试。</p>
+<p><strong>研究启示</strong>：HumanUP 的两阶段课程学习范式（先探索后正则化）可推广至其他接触丰富、非周期性的机器人运动技能学习任务。同时，对于需要兼顾探索效率与最终部署性能的Sim2Real问题，将“任务完成”与“控制质量”分阶段优化是一个有效的思路。软对称奖励相比硬约束提供了更好的灵活性平衡。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对人形机器人跌倒后自动恢复站立的难题，提出一种学习框架以生成适应不同跌倒姿态与地形的起身控制器。核心技术采用两阶段课程学习方法：第一阶段在最小约束下探索有效起身轨迹；第二阶段将其优化为平滑、缓慢且鲁棒的可部署运动。实验表明，该方法使Unitree G1人形机器人成功从仰卧、俯卧两种姿态，在平坦、柔软、光滑及斜坡等多种真实地形中稳健起身，是首个在真人尺寸人形机器人上实现学习式起身策略的真实世界验证。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2502.12152" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

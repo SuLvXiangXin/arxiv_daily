@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Flow Policy Gradients for Robot Control - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Flow Policy Gradients for Robot Control</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.02481" target="_blank" rel="noreferrer">2602.02481</a></span>
+        <span>作者: Yi, Brent, Choi, Hongsuk, Singh, Himanshu Gaurav, Huang, Xiaoyu, Truong, Takara E., Sferrazza, Carmelo, Ma, Yi, Duan, Rocky, Abbeel, Pieter, Shi, Guanya, Liu, Karen, Kanazawa, Angjoo</span>
+        <span>日期: 2026/02/02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人控制领域，基于似然的策略梯度方法（如PPO）是主流的训练范式。这些方法依赖策略输出的动作分布是可微的，这通常将策略约束为简单的分布（如对角高斯分布）。然而，在模仿学习中表现出更强表达能力的流或扩散策略，其精确似然计算涉及底层流场的体积变化，需要进行昂贵的采样或积分，在强化学习设置中计算成本过高。虽然已有工作尝试将流/扩散策略整合到强化学习中，但它们通常依赖于从特定随机采样轨迹计算噪声似然，这既增加了信用分配的跨度，也不等同于对初始噪声和采样轨迹进行边缘化后的动作似然。</p>
+<p>本文针对上述痛点，旨在使绕过似然计算的流匹配策略梯度框架在实际、具有挑战性的机器人控制任务中变得有效且稳定。本文的核心思路是：通过引入改进的目标函数（FPO++），包括每样本比率裁剪和不对称信任区域，使流策略梯度能够稳定地训练更具表达力的策略，从而成功应用于腿部运动、人形运动跟踪、操作任务微调以及仿真到现实的迁移。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的FPO++算法是对FPO（Flow Policy Optimization）的改进。FPO的核心思想是使用条件流匹配（CFM）损失的差异来近似动作对数似然的差异，从而绕过显式的似然计算，实现PPO风格的流策略训练。</p>
+<p><strong>整体框架</strong>：策略被参数化为一个流模型。给定观测 <code>o_t</code>，策略网络 <code>v_θ</code> 预测一个速度场。在训练时，通过从标准高斯分布采样初始噪声并进行欧拉积分来生成探索性动作；在测试或部署时，采用零采样（从零向量开始积分）以获得确定性动作。策略更新使用收集到的经验数据，通过FPO++目标函数计算梯度。</p>
+<p><img src="https://arxiv.org/html/2602.02481v1/iclr2026/fig/20260130_teaser.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：流策略在机器人控制中的应用。展示了如何利用流匹配策略梯度框架为四足机器人、人形机器人和机械臂训练和部署鲁棒的控制策略。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>条件流匹配（CFM）损失估计</strong>：对于每个动作 <code>a_t</code>，采样 <code>N_mc</code> 对噪声 <code>ϵ_i ~ N(0, I)</code> 和流步长 <code>τ_i ∈ [0,1]</code>。通过线性插值 <code>a_t^{τ_i} = τ_i * a_t + (1-τ_i) * ϵ_i</code> 构建加噪动作，对应的真实速度场为 <code>a_t - ϵ_i</code>。CFM损失是策略预测的速度 <code>v_θ(a_t^{τ_i}, τ_i; o_t)</code> 与真实速度之间平方误差的蒙特卡洛估计（公式7, 8）。</li>
+<li><strong>FPO的比率近似</strong>：原始的FPO使用CFM损失差异的指数来近似似然比 <code>ρ_θ</code>：<code>ρ̂_FPO(θ) = exp( ℓ_θ_old - ℓ_θ )</code>，其中 <code>ℓ_θ</code> 是平均后的CFM损失（公式3, 9）。这个近似比率被代入PPO的裁剪目标函数中进行优化（公式4）。</li>
+<li><strong>FPO++的关键改进</strong>：<ul>
+<li><strong>每样本比率（Per-sample ratio）</strong>：原始FPO对每个动作的所有<code>(τ_i, ϵ_i)</code>样本平均后计算一个比率。FPO++改为为每个样本<code>i</code>独立计算比率 <code>ρ̂_FPO++^{(i)}(θ) = exp( ℓ_θ_old^{(i,t)} - ℓ_θ^{(i,t)} )</code>（公式10）。这使得每个样本可以独立地被裁剪，提供了更细粒度的信任区域。</li>
+<li><strong>不对称信任区域（ASPO）</strong>：对于优势值为正的动作（需降低CFM损失），沿用PPO的裁剪目标 <code>ψ_PPO</code>；对于优势值为负的动作（需增加CFM损失），采用更受限的SPO目标 <code>ψ_SPO</code>（公式11）。SPO目标不是将超出信任区域的梯度置零，而是提供一个将比率拉回的梯度信号，这有助于防止策略熵崩溃和变分间隙的急剧增大。</li>
+</ul>
+</li>
+<li><strong>FPO++最终目标函数</strong>：结合上述改进，FPO++最大化以下目标（公式13）：<br><code>max_θ E[ Σ_{i=1}^{N_mc} ψ_ASPO( ρ̂_FPO++^{(i)}(θ), Â_t ) ]</code><br>其中 <code>ψ_ASPO</code> 是根据优势值符号在 <code>ψ_PPO</code> 和 <code>ψ_SPO</code> 之间切换的分段函数（公式12）。</li>
+</ol>
+<p><strong>创新点</strong>：与现有方法相比，FPO++的创新在于其改进的优化目标。它避免了直接计算流策略的似然，也无需像DPPO等方法那样处理噪声似然或将去噪步骤展开为MDP。其提出的每样本比率和不对称信任区域专门针对高维、带约束的真实机器人任务中的训练不稳定性问题，提供了更精细、更稳定的优化机制。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准测试</strong>：使用了IsaacLab的腿部运动环境（四足：Go2, Spot；人形：H1, G1）、HumanoidVerse和BeyondMimic用于人形机器人仿真到现实（T1运动，G1运动跟踪），以及RoboMimic和DexMimicGen的数据集用于操作任务微调（如开罐、穿线等）。</li>
+<li><strong>对比基线</strong>：原始FPO算法、两种DPPO变体（固定噪声尺度和预测噪声）、标准的Gaussian PPO。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>训练稳定性</strong>：在腿部运动任务中，原始FPO对超参数敏感且易陷入局部极小或灾难性失败，而FPO++在所有机器人平台上都表现出稳定的训练性能。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.02481v1/x1.png" alt="稳定性对比"></p>
+<blockquote>
+<p><strong>图2</strong>：FPO++在IsaacLab运动环境中显著提高了训练稳定性。FPO++的结果是5个种子的平均，而FPO的结果涵盖了多种超参数组合，显示FPO++解决了仅靠调参无法解决的稳定性问题。</p>
+</blockquote>
+<ol start="2">
+<li><strong>仿真到现实迁移</strong>：FPO++成功地将训练出的流策略直接部署到真实的Booster T1和Unitree G1机器人上，实现了稳定的运动步态和长时间动态运动序列跟踪，并能抵抗外部扰动。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.02481v1/iclr2026/fig/20260129_t1.png" alt="仿真到现实"></p>
+<blockquote>
+<p><strong>图3a</strong>：T1运动仿真到现实。箭头指示速度指令。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.02481v1/iclr2026/fig/20260129_g1_dynamic.png" alt="仿真到现实"></p>
+<blockquote>
+<p><strong>图3b</strong>：G1运动跟踪仿真到现实。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.02481v1/iclr2026/fig/20260129_g1_robustness.png" alt="仿真到现实"></p>
+<blockquote>
+<p><strong>图3c</strong>：G1鲁棒性测试。箭头突出显示施加的外部力。</p>
+</blockquote>
+<ol start="3">
+<li><strong>操作任务微调</strong>：在从演示预训练的策略基础上进行奖励微调，FPO++相比FPO和DPPO基线能更快收敛并达到更高的成功率，且对基础策略的性能更具鲁棒性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.02481v1/x2.png" alt="微调结果"></p>
+<blockquote>
+<p><strong>图4</strong>：操作任务微调成功率对比。第一行为零采样（测试时）结果，第二行为随机采样结果。FPO++在所有任务上均能取得高成功率。</p>
+</blockquote>
+<ol start="4">
+<li><strong>消融实验</strong>：<ul>
+<li><strong>每样本比率的作用</strong>：相比每动作比率，使用每样本比率能带来更高、更一致的最终回报。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.02481v1/x3.png" alt="每样本比率消融"></p>
+<blockquote>
+<p><strong>图5</strong>：每样本比率提升了运动策略性能。每个点代表一次不同超参数和种子的训练运行。</p>
+</blockquote>
+<pre><code>- **不对称信任区域（ASPO）的作用**：ASPO相比标准PPO裁剪或纯SPO，能产生更高且更稳定的回报，并有效防止了策略熵的崩溃。
+</code></pre>
+<p><img src="https://arxiv.org/html/2602.02481v1/x4.png" alt="ASPO消融"></p>
+<blockquote>
+<p><strong>图6</strong>：ASPO信任区域提升了运动策略性能。ASPO产生了更高、更一致的回报。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.02481v1/iclr2026/fig/forward1_ppo.png" alt="熵保持"></p>
+<blockquote>
+<p><strong>图7左</strong>：使用PPO裁剪训练的流场可视化（对应单关节），可能出现了熵崩溃。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.02481v1/iclr2026/fig/forward1_fpo.png" alt="熵保持"></p>
+<blockquote>
+<p><strong>图7右</strong>：使用ASPO裁剪训练的流场可视化，成功保持了熵。</p>
+</blockquote>
+<ol start="5">
+<li><strong>与高斯PPO的对比</strong>：在腿部运动任务中，FPO++通常比高斯PPO收敛到更高的回报，且随机种子间的方差更小，显示出更好的样本效率和利用数据的能力。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.02481v1/x5.png" alt="与高斯PPO对比"></p>
+<blockquote>
+<p><strong>图8</strong>：FPO++与高斯PPO在不同并行环境数量下的最终回报对比。FPO++在大多数设置下表现更优，方差更小。</p>
+</blockquote>
+<ol start="6">
+<li><strong>零采样（Zero-sampling）</strong>：测试时从零噪声开始积分（零采样）相比训练时的随机采样，能显著提升策略性能（成功率、回报），并且允许在部署时大幅减少积分步数以降低延迟，而对性能影响很小。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了FPO++算法，通过引入每样本比率裁剪和不对称信任区域（ASPO），显著提升了流匹配策略梯度在挑战性机器人控制任务中的训练稳定性和性能。</li>
+<li>首次在多种实际机器人任务上（包括腿部运动、人形运动跟踪与仿真到现实、操作任务微调）成功验证了绕过显式似然计算的流策略梯度方法的有效性。</li>
+<li>首次展示了人形机器人仿真到现实的流策略应用，且无需专家蒸馏或依赖显式似然计算的政策梯度技术。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，ASPO改进在需要大量探索的任务（如从零开始学习运动）中至关重要，但在策略初始化良好的微调任务中，有时反而会损害性能。此外，尽管FPO++比原始FPO更稳定，但仍可能需要仔细的超参数调整。</p>
+<p><strong>后续启示</strong>：FPO++的成功表明，无需复杂似然计算或特定架构约束，也能有效地对表达能力强的流策略进行强化学习训练。这为利用更复杂的策略表示进行机器人技能学习（特别是结合预训练与在线微调）开辟了新的途径。未来的工作可以进一步探索流策略在更长期、更稀疏奖励任务中的探索优势，以及如何将FPO++与更先进的策略梯度改进方案相结合。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对传统基于似然的策略梯度方法在训练复杂机器人控制策略时受限的问题，提出了改进的流匹配策略梯度算法FPO++。其关键技术包括每样本比率裁剪和不对称信任区域，以提升训练稳定性。实验表明，该方法能在腿式运动、人形运动跟踪和操作任务中有效训练策略，并实现模拟到现实的鲁棒转移，同时展现出优于基线的探索能力和微调鲁棒性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.02481" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

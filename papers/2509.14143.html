@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>CLAW: A Vision-Language-Action Framework for Weight-Aware Robotic Grasping - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>CLAW: A Vision-Language-Action Framework for Weight-Aware Robotic Grasping</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.14143" target="_blank" rel="noreferrer">2509.14143</a></span>
+        <span>作者: An, Zijian, Yang, Ran, Feng, Yiming, Zhou, Lifeng</span>
+        <span>日期: 2025/09/17</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型已成为机器人控制的一个强大范式，能够将自然语言指令与视觉观察相结合，生成端到端的策略。然而，现有的VLA系统在执行需要精确约束的动作时往往存在不足，例如基于物体的确切重量来决定何时停止抓取。其根本原因在于，VLA的动作生成是由训练数据隐式塑造的，缺乏对特定条件进行显式监控的机制。本文针对VLA难以满足精确任务约束（如基于数值阈值的停止）这一具体痛点，提出了一种新视角：通过引入一个额外的、轻量级的、任务专用的视觉语言模型作为外部校正模块，将条件评估与动作生成解耦。本文的核心思路是：利用微调后的CLIP模型实时监控秤的读数并生成基于重量阈值的离散指令（提示），再由一个基于流的VLA策略（π₀）整合这些提示和多视角观测，生成连续的机器人动作，从而实现结合符号化重量推理与高频视觉运动控制的精确抓取。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>CLAW框架的整体流程如图1所示，它耦合了一个轻量级VLM（CLIP）与VLA策略（π₀）。流程始于一条人类指定的任务指令（如“为我装载50g糖果”）。该指令被传递给CLIP模块，CLIP以固定频率持续观察秤的图像。基于当前视觉读数，CLIP评估测量重量是否达到指定阈值，并生成一个离散提示 <code>m_t</code> ∈ {<code>continue</code>, <code>stop</code>}。随后，该提示与来自三个工作空间摄像头的多视角观测 <code>o_t^scene</code> 一同输入到π₀策略中。π₀根据视觉上下文和提示，生成连续的低层级机器人控制动作 <code>a_t</code>。这样，CLAW形成了一个从感知到语言再到动作的闭环。</p>
+<p><img src="https://arxiv.org/html/2509.14143v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：CLAW架构。人类指令提供给微调后的CLIP模块，CLIP监控秤并生成指示目标物体及重量目标是否已达成的符号化提示。微调后的π₀ VLA接收此提示及多视角观测作为输入，产生驱动机器人执行任务的动作块。</p>
+</blockquote>
+<p>框架包含两个核心模块，均需进行针对性微调：</p>
+<ol>
+<li><strong>用于基于重量提示的CLIP微调</strong>：CLIP的零样本性能在数值比较任务上不佳，因此需要微调。作者构建了一个训练数据集：从固定摄像头采集2000张秤的图像，裁剪数字显示区域。对于每张图像及其对应的真实重量值 <code>w*</code>，将其与N条合成任务指令（如“为我装载k g目标”）配对，并根据 <code>k</code> 与 <code>w*</code> 的比较关系分配二元标签（<code>continue</code> 或 <code>stop</code>）。在此数据集上对CLIP进行微调，优化分类损失，使其能够可靠地将秤图像和任务指令映射为离散提示。</li>
+<li><strong>用于提示监督的π₀微调</strong>：为适应重量感知操作，作者为每项任务收集了50条演示轨迹。在数据收集时，并未使用CLIP，而是手动为每一帧标注一个 <code>clip_prompt</code> 标签来模拟CLIP的作用：抓取阶段的所有帧标记为“继续抓取目标”，终止阶段（移走碗）的帧标记为“停止抓取并移走碗”。随后，使用条件流匹配损失对π₀进行微调，该损失同时依赖于视觉输入和提示标签。部署时，手动标注的标签被微调后CLIP实时生成的提示所替代。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.14143v1/x2.png" alt="CLIP输入输出示例"></p>
+<blockquote>
+<p><strong>图2</strong>：CLIP在不同观测下的输出。展示了CLIP模块如何根据秤的读数图像和任务指令，生成“继续”或“停止”的提示。</p>
+</blockquote>
+<p>与现有VLA方法相比，CLAW的核心创新在于其<strong>解耦设计</strong>：将一个专门化的轻量级VLM（CLIP）作为独立的“条件监控器”，负责处理需要精确符号推理的任务（重量比较），而主VLA策略（π₀）则专注于将高级指令和视觉信息转化为流畅、连续的动作。这种设计克服了传统端到端VLA难以显式关注和响应特定、细粒度感官反馈（如秤的数字）的局限性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在三个代表性场景中进行评估：抓取糖果、抓取大蒜以及涉及两种物体的混合任务设置。实验平台使用了多摄像头观测和数字秤。对比的基线方法包括：1) <strong>原始π₀</strong>：未经任务数据微调的模型；2) <strong>微调π₀</strong>：使用任务演示数据微调，但<strong>不</strong>集成CLIP模块（即模型直接接收包含重量目标的指令，如“抓起20g糖果”）。</p>
+<p><img src="https://arxiv.org/html/2509.14143v1/x3.png" alt="实验配置"></p>
+<blockquote>
+<p><strong>图3</strong>：不同任务的配置。在单物体设置中，CLAW实现指定重量的抓取；在多物体设置中，它能够以指定重量抓取指定物体。</p>
+</blockquote>
+<p>关键实验结果总结如表I所示。评价分为两个方面：“动作”成功率（能否成功执行完整的抓取和放置动作）和“停止点”成功率（能否在达到正确重量时停止）。CLAW在<strong>所有任务</strong>的<strong>两项指标</strong>上均达到了<strong>100%</strong> 的成功率。原始π₀策略有时能正确执行抓取动作，但几乎无法在正确时间停止（停止点成功率多为0%）。微调π₀策略虽能可靠执行抓取和移碗动作，但仍无法一致地在目标重量处停止（停止点成功率在0%到35%之间波动）。</p>
+<p><img src="https://arxiv.org/html/2509.14143v1/x4.png" alt="基线对比"></p>
+<blockquote>
+<p><strong>图4</strong>：工作流程对比：(a) 微调π₀不依赖秤读数，倾向于在随机次数的抓取后停止（例如约7次），可能导致超过目标重量（此例中实际约30g，目标是20g）。(b) CLAW持续监控秤，一旦读数达到指定的20g阈值便立即停止。</p>
+</blockquote>
+<p>消融实验通过强制CLIP输出特定提示来验证系统各组件的功能：强制“继续”提示导致机器人无限抓取；强制“停止”提示导致机器人醒来后立即移走碗；而使用CLIP根据实际读数生成提示，则能成功执行期望行为。此外，实验还观察到CLAW对重量读数波动的鲁棒性：当糖果从高处落入碗中引起读数瞬时超过阈值时，机器人会先有移碗倾向，待读数稳定后恢复抓取，这表明了系统对意外输入的适应性。</p>
+<p><img src="https://arxiv.org/html/2509.14143v1/x5.png" alt="鲁棒性测试"></p>
+<blockquote>
+<p><strong>图5</strong>：抓取糖果期间的鲁棒性测试。重量阈值设为40g，手动添加多余糖果导致秤读数突然超阈。左图（掉落前），读数为19g，CLIP判断继续抓取；右图（掉落后），读数达54g，CLIP切换判断为停止抓取。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1) 提出了CLAW框架，通过引入一个额外的轻量级VLM进行显式条件监控，增强了标准VLA架构，实现了重量感知的机器人操作；2) 设计了一种针对CLIP的微调流程，使其能够作为可靠的提示生成器，将秤读数转化为VLA可理解的语言提示；3) 利用提示监督对π₀进行微调，确保其能有效整合CLIP生成的提示与多视角观测，以产生精确动作。</p>
+<p>论文自身提到的局限性在于，该方法需要针对特定的秤显示进行CLIP微调，若要泛化到其他类型的传感器或读数形式，可能需要额外的数据收集和微调工作。</p>
+<p>本研究对后续工作的启示在于，为提升VLA在精确约束任务上的性能，<strong>解耦条件监控与动作生成</strong>是一个有效的设计范式。这种思路可扩展到其他需要实时监控特定、细粒度感官信号（如压力、温度、特定视觉标志）的机器人任务中，通过专用、高效的感知模块提供符号化指导，从而弥补纯端到端VLA在精确控制方面的不足。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有视觉-语言-动作模型难以满足精确任务约束的问题，提出CLAW框架，用于实现基于重量感知的机器人抓取。其核心方法是将条件评估与动作生成解耦：利用微调的CLIP模型作为轻量提示生成器，实时监控秤的读数并基于重量阈值生成指令；再由基于流的VLA策略π₀整合多视角视觉观测与提示，输出连续机器人动作。实验表明，CLAW在单物体抓取和需双臂操作的混合物体任务中，均能可靠执行重量感知行为，性能优于原始及微调的π₀模型。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.14143" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

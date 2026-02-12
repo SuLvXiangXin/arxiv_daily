@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Real-Time Execution of Action Chunking Flow Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Real-Time Execution of Action Chunking Flow Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.07339" target="_blank" rel="noreferrer">2506.07339</a></span>
+        <span>作者: Black, Kevin, Galliker, Manuel Y., Levine, Sergey</span>
+        <span>日期: 2025/06/09</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>现代AI系统，特别是与物理世界交互的体现代理，对实时性能的要求日益增高。然而，包括先进的视觉-语言-动作模型在内的通用模型存在高延迟问题，这成为了一个重大挑战。动作分块通过在单次推理中输出并执行一个动作序列，为高频控制任务提供了时间一致性，已成为主流方法。但它并未完全解决延迟问题：当推理时间超过控制周期时，同步推理策略会在分块之间引入可见的停顿；而简单的异步推理策略则可能导致在分块过渡点出现不连续、超出训练分布范围的“抖动”动作，损害系统性能。</p>
+<p>本文针对动作分块策略在实时执行时面临的“延迟导致的动作不连续”这一具体痛点，提出了一个新颖的视角：将异步动作分块视为一个修复问题。核心思路是，在执行当前动作分块的同时生成下一个分块，通过“冻结”那些因延迟而注定会执行的动作，并“修复”其余部分，来确保跨分块的平滑过渡。该方法无需重新训练，可即插即用地应用于任何基于扩散或流的VLA模型。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>实时分块算法的整体目标是在保证实时性（每次控制周期都有动作可用）的前提下，生成与正在执行的前一个动作分块连续、一致的新动作分块。系统包含两个并行的部分：一个由控制器周期性调用的<code>GetAction</code>函数，用于提供当前要执行的动作；以及一个在后台线程中运行的<code>InferenceLoop</code>，负责提前开始生成下一个动作分块。核心创新在于生成过程中的引导机制。</p>
+<p><img src="https://arxiv.org/html/2506.07339v2/x3.png" alt="方法示意图"></p>
+<blockquote>
+<p><strong>图3</strong>：实时分块中动作生成关注上一个动作分块的示意图。假设推理延迟d=4，则新生成分块的前4个动作（a0:a3）在可用时已过时，必须被“冻结”为前一分块对应值（权重为1）。中间区域（a4:a10）的动作可被更新，但需参考前一分块的值（权重指数衰减至0）。最后s个动作（a11:a15）无参考，需全新生成。</p>
+</blockquote>
+<p>算法的核心模块是<strong>基于伪逆引导的修复</strong>。其技术细节如下：给定一个基于流匹配训练的策略π，其速度场为v_π。生成新动作分块A_t时，算法从噪声A_t^0开始，在多个去噪步（τ从0到1）中进行迭代。关键是在每一步的标准流更新（公式1）上，增加一个引导项。该引导项旨在最小化新生成分块的估计值（A_t^1_hat，由公式3计算）与一个“目标”Y之间的加权误差。目标Y由前一动作分块的剩余部分（A_prev）右填充至长度H构成。</p>
+<p>引导项的具体形式基于伪逆引导，计算公式为梯度修正项（公式2）。其中，W是一个软掩码权重向量，决定了每个时间步对上一步分块的“关注”程度。误差项e计算为(A_prev - f(A_t^τ))^T diag(W)，然后通过自动微分计算向量-雅可比乘积g = e · ∂f/∂A’，最终将g乘上一个与τ相关的系数后加到速度场上。</p>
+<p><strong>软掩码</strong>是该方法的另一个关键创新。与简单的硬掩码（冻结区权重1，新区权重0）不同，软掩码为重叠区域（介于冻结区和全新生成区之间）分配了从1指数衰减到0的实值权重（公式5）。其直觉是，对于重叠区域中较近的动作，我们有较高的确定性应延续前一策略；对于较远的动作，则有更多自由度根据新观测进行调整。这显著改善了跨分块的连续性，避免了因引导信号弱（当延迟d较小时）而导致的新旧分块策略跳变。</p>
+<p>与现有方法相比，RTC的创新点具体体现在：1) <strong>问题重构</strong>：首次将实时动作分块的连续性保证明确构建为一个序列修复问题。2) <strong>训练无关的推理时算法</strong>：利用流/扩散模型固有的修复能力，通过添加引导项实现，无需修改模型训练。3) <strong>软掩码机制</strong>：通过连续权重的设计，更精细地控制新旧分块间的过渡，相比硬掩码或简单平均（如时间集成）能产生更平滑、更合理的动作序列。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>本文在两个层面进行了评估：模拟基准和真实世界任务。</p>
+<ul>
+<li><strong>模拟基准</strong>：使用了基于Kinetix模拟器的12个高度动态和随机性的操作与移动任务新基准。动作分块流模型的预测视野H=8。</li>
+<li><strong>真实世界任务</strong>：使用π_0.5 VLA作为基础策略，在配备两个6自由度手臂的双手机器人上评估了6个挑战性操作任务，包括点燃蜡烛、插以太网线、移动叠床、折叠衬衫、批量叠衣和移动收拾碗碟。预测视野H=50，控制周期Δt=20ms。</li>
+<li><strong>实验平台</strong>：模拟实验在Kinetix中运行；真实实验使用远程推理（LAN）。</li>
+</ul>
+<p>对比的基线方法包括：</p>
+<ol>
+<li><strong>Naive async</strong>：天真异步，新分块就绪后立即切换，不保证连续性。</li>
+<li>**Bidirectional decoding (BID)**：双向解码，使用拒绝采样来保持连续性，计算开销大。</li>
+<li>**Temporal ensembling (TE)**：时间集成，对同一时刻多个预测动作进行平均。</li>
+<li><strong>Synchronous</strong>：同步推理，执行完一个分块后暂停等待下一个分块生成，是许多先前工作的默认策略。</li>
+<li><strong>TE, sparse / dense</strong>：真实实验中TE的两种变体，区别在于推理频率和重叠动作数量。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.07339v2/x1.png" alt="模拟实验结果"></p>
+<blockquote>
+<p><strong>图5</strong>：左图（执行视野vs.解决率）：在固定推理延迟d=1时，只有RTC和BID能充分利用更快的闭环更新，随着执行视野s减小（更新更频繁），性能严格提升。右图（推理延迟vs.解决率）：在固定s=max(d,1)时，RTC在所有延迟水平下均优于所有基线。软掩码（橙色）在较低延迟（d较小）时相比硬掩码（绿色）带来明显性能提升。TE方法表现不佳，表明平均动作在多模态任务中无效。</p>
+</blockquote>
+<p><strong>关键实验结果总结</strong>：</p>
+<ol>
+<li><strong>模拟延迟鲁棒性</strong>：在模拟基准上，RTC对推理延迟展现出最强的鲁棒性。当延迟d从0增加到4（最大支持值）时，RTC的性能下降最为平缓，始终优于BID和TE。例如，在d=4时，RTC（软掩码）的解决率显著高于其他异步基线。</li>
+<li><strong>软掩码有效性</strong>：消融实验证实了软掩码的重要性。特别是在延迟d较小（如d=1）时，软掩码相比硬掩码能带来更优的性能，验证了其对于改善跨分块连续性的作用。</li>
+<li><strong>真实世界性能与速度</strong>：在真实机器人任务中，RTC在存在显著延迟（注入额外100-200ms）时，仍能保持高任务完成度。更重要的是，RTC极大地提升了<strong>任务吞吐量</strong>。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.07339v2/x2.png" alt="真实世界实验结果"></p>
+<blockquote>
+<p><strong>图6</strong>：左图（时间vs.累计进度）：RTC（红色）在所有方法中完成任务进度最快，其曲线始终在最左侧。同步推理（蓝色）因分块间的停顿而最慢。右图（推理延迟vs.平均吞吐量）：RTC在不同注入延迟下均保持了最高的平均吞吐量（完成任务比例除以时间），而同步推理的吞吐量随延迟增加急剧下降。这证明了RTC在加速任务执行方面的核心优势。</p>
+</blockquote>
+<p>具体而言，在真实任务中，即使为RTC注入200ms额外延迟（总延迟约d≈16），其平均吞吐量也显著高于零额外延迟的同步推理基线。例如，在“点燃蜡烛”这类高精度任务中，RTC能在超过300毫秒推理延迟（占预测视野30%以上）的情况下成功执行，并将相同机器人动作的执行速度比同步推理提升20%。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：</p>
+<ol>
+<li><strong>提出实时分块算法</strong>：一种新颖的推理时算法，将异步动作分块构建为修复问题，通过冻结与修复实现跨分块平滑过渡，无需重新训练即可应用于流或扩散模型。</li>
+<li><strong>引入动态基准</strong>：创建了一个包含12个高度动态任务的模拟基准，用于评估实时推理方法在延迟下的鲁棒性，弥补了现有静态基准的不足。</li>
+<li><strong>全面的实验验证</strong>：在模拟和真实世界的多种挑战性任务上，实证了RTC在延迟鲁棒性、动作平滑性和任务吞吐量方面的显著优势，特别是在高精度操作任务中表现突出。</li>
+</ol>
+<p>论文自身提到的局限性在于：该方法需要策略基于流匹配或扩散模型（后者可转换），以利用其迭代去噪的修复能力；此外，算法保守地使用过去延迟的最大值来估计下一个延迟，在延迟波动大时可能过于保守。</p>
+<p>本工作对后续研究的启示在于：1) <strong>修复思想的泛化</strong>：展示了将计算机视觉中的修复概念成功迁移到连续动作序列生成中的潜力，为处理时序决策中的约束和连续性提供了新工具。2) <strong>软掩码的通用性</strong>：提出的软掩码权重衰减机制是一种通用技术，可用于其他需要平衡历史依赖与未来灵活性的序列生成场景。3) <strong>系统与算法的协同</strong>：强调了在具身AI中，解决模型推理延迟问题需要算法层面的创新（如异步、修复）与系统设计（如多线程、延迟估计）紧密结合。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决了视觉语言动作模型（VLA）高延迟导致机器人动作在分块边界处不连贯的问题。提出了一种无需重新训练的推理时算法——实时分块（RTC），其核心是在执行当前动作块的同时异步生成下一动作块，通过“冻结”确定执行的动作并“修复”其余部分来保证流畅性。在仿真和真实双手机器人任务上的实验表明，RTC能显著提升任务执行速度（比同步推理快20%），并在超过300毫秒延迟下仍能可靠完成点燃火柴等高精度动态任务。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.07339" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

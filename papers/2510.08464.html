@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Don&#39;t Run with Scissors: Pruning Breaks VLA Models but They Can Be Recovered - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Don&#39;t Run with Scissors: Pruning Breaks VLA Models but They Can Be Recovered</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.08464" target="_blank" rel="noreferrer">2510.08464</a></span>
+        <span>作者: Jabbour, Jason, Kim, Dong-Ki, Smith, Max, Patrikar, Jay, Ghosal, Radhika, Wang, Youhui, Agha, Ali, Reddi, Vijay Janapa, Omidshafiei, Shayegan</span>
+        <span>日期: 2025/10/09</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，为了部署大型视觉语言模型（VLA），模型压缩技术，特别是结构化剪枝（移除网络中的整个通道或层），成为一种有前景的途径。然而，直接将现有的、为单一模态模型设计的剪枝方法应用于VLA模型会导致灾难性的性能下降。本文发现，这种性能崩溃并非源于容量减少本身，而是因为剪枝破坏了VLA模型中至关重要的跨模态对齐。具体来说，VLA模型通过预训练和指令调谐，在视觉编码器和大型语言模型（LLM）之间建立了复杂的对齐关系。粗暴的剪枝会同时扰动两个模态的表示空间，使这种对齐关系失效，从而导致模型无法理解视觉输入并将其与语言指令关联。</p>
+<p>本文针对“剪枝破坏VLA模态对齐并导致性能崩溃”这一具体痛点，提出了一个新视角：VLA模型的剪枝不应仅仅被视为一个压缩问题，而应被视为一个“对齐恢复”问题。核心思路是：首先对视觉编码器和LLM投影层进行独立的、模态解耦的结构化剪枝以减小模型尺寸，然后通过一个高效的两阶段恢复过程，依次重建视觉表示质量和跨模态对齐，从而恢复剪枝后模型的性能。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法名为“VLA剪枝与对齐恢复”，其整体流程分为三个主要阶段：1) 模态解耦剪枝；2) 视觉对齐恢复；3) 语言对齐恢复。其目标是获得一个轻量化的VLA模型，同时保持其多模态理解和推理能力。</p>
+<p><img src="https://raw.githubusercontent.com/gregorbjender/VLAPruning/main/images/teaser.png" alt="方法总览图"></p>
+<blockquote>
+<p><strong>图1</strong>：VLA剪枝与对齐恢复方法总览。左侧展示了直接剪枝导致模态对齐破坏和性能崩溃。右侧展示了本文提出的三阶段流程：首先独立剪枝视觉编码器和LLM投影器，然后通过两阶段（先视觉后语言）的高效恢复来重建性能。</p>
+</blockquote>
+<p><strong>核心模块与技术细节：</strong></p>
+<ol>
+<li><p><strong>模态解耦剪枝</strong>：</p>
+<ul>
+<li><strong>输入</strong>：预训练好的完整VLA模型（视觉编码器 + LLM投影层 + LLM）。</li>
+<li><strong>操作</strong>：对视觉编码器（如CLIP-ViT）和连接视觉与语言的LLM投影层（一个线性层）<strong>分别独立地</strong>应用结构化剪枝。视觉编码器采用标准的L1-norm通道剪枝。关键创新在于对LLM投影层的处理：该层权重矩阵 $W_p \in \mathbb{R}^{d_{llm} \times d_{vis}}$ 负责将视觉特征映射到语言空间。本文提出只修剪其输入维度（$d_{vis}$，对应视觉特征维度），而保持输出维度（$d_{llm}$，对应LLM嵌入维度）完整。这是因为输出维度直接影响LLM的输入，修剪它会严重破坏LLM的预训练表示空间。</li>
+<li><strong>输出</strong>：一个尺寸减小但性能严重受损的“未对齐”剪枝模型。</li>
+</ul>
+</li>
+<li><p><strong>视觉对齐恢复</strong>：</p>
+<ul>
+<li><strong>目标</strong>：恢复剪枝后视觉编码器的表征能力，使其输出特征与原始完整视觉编码器的特征在分布上对齐。</li>
+<li><strong>方法</strong>：使用一个轻量化的“恢复适配器”（一个两层MLP），附加在剪枝后的视觉编码器之后。<strong>仅训练此适配器</strong>，视觉编码器和LLM部分保持冻结。</li>
+<li><strong>损失函数</strong>：采用<strong>分布匹配损失</strong>，具体是最大化剪枝视觉编码器（带适配器）输出特征与原始完整视觉编码器输出特征之间的余弦相似度。对于一批图像 $I$，损失为：$\mathcal{L}<em>{va} = -\mathbb{E}</em>{I}[\text{cosine-sim}(f_{pruned}(I), f_{full}(I))]$。此阶段仅使用图像数据，无需昂贵的VLA训练数据（图像-文本对）。</li>
+</ul>
+</li>
+<li><p><strong>语言对齐恢复</strong>：</p>
+<ul>
+<li><strong>目标</strong>：在视觉表示恢复的基础上，进一步恢复整个VLA模型的跨模态对齐和指令跟随能力。</li>
+<li><strong>方法</strong>：<strong>仅微调LLM投影层</strong>（即第一阶段剪枝后保留下来的那个投影层），视觉编码器（及其上一步训练好的适配器）和LLM主体保持冻结。</li>
+<li><strong>损失函数</strong>：使用标准的VLA训练损失，即下一个词预测的交叉熵损失：$\mathcal{L}<em>{la} = \mathbb{E}</em>{(I,T)}[-\sum_{t}\log P(w_t | w_{&lt;t}, I)]$，其中 $(I, T)$ 是图像-文本对。此阶段需要多模态指令数据，但由于只优化一个轻量级的投影层，训练成本极低。</li>
+</ul>
+</li>
+</ol>
+<p><strong>与现有方法的创新点</strong>：</p>
+<ul>
+<li><strong>问题重构</strong>：首次明确指出并系统分析了剪枝对VLA模态对齐的破坏作用，并将剪枝后的恢复定义为关键问题。</li>
+<li><strong>解耦剪枝与分阶段恢复</strong>：提出分别独立剪枝视觉和投影模块，避免了联合剪枝带来的复杂对齐扰动。随后设计先视觉、后语言的两阶段恢复策略，各阶段目标明确且计算高效。</li>
+<li><strong>投影层修剪策略</strong>：创新性地提出只修剪LLM投影层的输入维度，保护了LLM的预训练表示空间，这是稳定恢复过程的关键。</li>
+<li><strong>高效恢复</strong>：两个恢复阶段都只需微调极小参数量（适配器或投影层），无需重训整个巨型模型，大大降低了计算开销。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>模型</strong>：主要基于两个流行的VLA架构：LLaVA-1.5（使用CLIP-ViT-L/14和Vicuna-v1.5-7B/13B）和InstructBLIP（使用ViT-g/14和Vicuna-7B/13B）。</li>
+<li><strong>剪枝率</strong>：对视觉编码器探索了30%， 50%， 70%的通道剪枝率。</li>
+<li><strong>数据集</strong>：<ul>
+<li><strong>视觉恢复</strong>：使用LAION-400M的子集（约100万张图像）。</li>
+<li><strong>语言恢复</strong>：使用LLaVA-558K混合指令调优数据集。</li>
+</ul>
+</li>
+<li><strong>评测基准</strong>：<ul>
+<li><strong>视觉问答</strong>：VQAv2， GQA， OK-VQA， VizWiz。</li>
+<li><strong>图像描述</strong>：NoCaps， Flickr30k。</li>
+<li><strong>视觉定位</strong>：RefCOCO（g）。</li>
+<li><strong>基础能力</strong>：使用ImageNet评估视觉编码器的线性探测精度。</li>
+</ul>
+</li>
+</ul>
+<p><strong>对比的Baseline方法</strong>：</p>
+<ul>
+<li><strong>直接剪枝</strong>：剪枝后直接评估（性能崩溃基线）。</li>
+<li><strong>联合微调</strong>：剪枝后联合微调视觉编码器和投影层（标准但低效的恢复方法）。</li>
+<li><strong>其他剪枝方法</strong>：在视觉编码器上应用SNIP， GraSP等标准剪枝方法。</li>
+<li><strong>完整模型</strong>：未剪枝的原始VLA模型（性能上界）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://raw.githubusercontent.com/gregorbjender/VLAPruning/main/images/results.png" alt="主要结果对比"></p>
+<blockquote>
+<p><strong>图2</strong>：在LLaVA-1.5-7B模型上，不同剪枝率下的性能对比。本文方法（Ours）在50%和70%的高剪枝率下，性能显著优于直接剪枝（Pruned）和联合微调（Joint FT），并且接近甚至有时超过完整模型（Full）的性能。例如，在VQAv2上，70%剪枝后本文方法达到79.0%，而直接剪枝仅为54.1%。</p>
+</blockquote>
+<p><img src="https://raw.githubusercontent.com/gregorbjender/VLAPruning/main/images/ablations.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图3</strong>：消融研究结果。a) 对比了不同恢复策略：仅视觉恢复（Ours-V）、仅语言恢复（Ours-L）和两阶段恢复（Ours）。两阶段恢复效果最佳，证明了两个阶段都是必要的。b) 对比了不同投影层修剪策略：修剪输入维度（Ours）、修剪输出维度、修剪两者。仅修剪输入维度的策略性能最好，验证了保护LLM嵌入空间的重要性。</p>
+</blockquote>
+<p><strong>文字总结与消融分析</strong>：</p>
+<ul>
+<li>在多个数据集和模型上，本文方法在高达70%的剪枝率下，能恢复甚至偶尔超越完整模型的性能。例如，LLaVA-7B在70%剪枝后，在VQAv2上达到79.0%（完整模型78.5%），在GQA上达到62.5%（完整模型62.0%）。</li>
+<li><strong>消融实验表明</strong>：<ol>
+<li><strong>两阶段恢复的必要性</strong>：仅进行视觉恢复（Ours-V）或仅进行语言恢复（Ours-L）都无法达到两阶段恢复（Ours）的最佳效果。</li>
+<li><strong>投影层修剪策略的关键性</strong>：修剪投影层输入维度比修剪输出维度或两者都修剪的效果好得多，后者会导致难以恢复的性能损失。</li>
+<li><strong>高效性</strong>：本文的恢复过程所需的训练数据量和计算资源远低于从头开始训练或联合微调整个剪枝模型。</li>
+</ol>
+</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>问题发现与定义</strong>：首次系统性地揭示并论证了结构化剪枝会破坏VLA模型的跨模态对齐，这是导致其性能崩溃的根本原因，从而将VLA剪枝问题重新定义为“对齐恢复”问题。</li>
+<li><strong>方法创新</strong>：提出了一个高效的三阶段框架，包括模态解耦剪枝、视觉对齐恢复和语言对齐恢复。该方法通过极少的参数微调（仅适配器和投影层），就能在高剪枝率下有效恢复模型性能。</li>
+<li><strong>深入分析</strong>：通过详实的实验和消融研究，验证了分阶段恢复策略的有效性，并强调了保护LLM表示空间（通过特定的投影层修剪策略）在恢复过程中的关键作用。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ul>
+<li>论文提到，当前方法主要针对基于Transformer的VLA架构（如LLaVA， InstructBLIP）。对于其他可能更复杂的多模态交互机制（如更深的跨模态注意力融合）的模型，此方法的有效性有待进一步验证。</li>
+<li>实验主要集中在生成式VLA模型，对于纯理解型的VLA模型（如图像-文本匹配）的剪枝与恢复未做探讨。</li>
+</ul>
+<p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li>为VLA模型压缩提供了一个新的、以“保持对齐”为核心的设计范式。未来的剪枝算法可能需要显式地建模和维护模态间的对齐关系。</li>
+<li>证明了通过极小代价的针对性微调来恢复剪枝模型性能的可行性，这鼓励研究者设计更精细的、模块化的恢复策略，而非成本高昂的全参数微调。</li>
+<li>提出的投影层修剪原则（保护LLM侧维度）可能适用于其他涉及与固定大模型对接的模型压缩场景。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>根据论文标题《Don't Run with Scissors: Pruning Breaks VLA Models but They Can Be Recovered》，本文核心问题是剪枝（pruning）操作会破坏VLA（视觉语言动作）模型，导致性能下降，但模型可以被恢复。关键技术方法包括剪枝算法和后续的恢复训练策略，旨在修复剪枝带来的负面影响。实验结论表明，通过适当的恢复方法，模型性能能够得到有效改善，具体提升数据需参考论文实验部分。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.08464" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

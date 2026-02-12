@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Exploiting Policy Idling for Dexterous Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Exploiting Policy Idling for Dexterous Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.15669" target="_blank" rel="noreferrer">2508.15669</a></span>
+        <span>作者: Chen, Annie S., Brakel, Philemon, Bronars, Antonia, Xie, Annie, Huang, Sandy, Groth, Oliver, Bauza, Maria, Wulfmeier, Markus, Heess, Nicolas, Rao, Dushyant</span>
+        <span>日期: 2025/08/21</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人学习领域，基于学习的灵巧操作方法近年来取得了显著进展。然而，学习到的策略往往仍缺乏可靠性，并且对重要的变化因素表现出有限的鲁棒性。在许多场景中可以观察到一个常见的失败模式：策略会进入“闲置”状态，即当达到某些状态时，它们会停止移动，局限于一个很小的状态区域。这种策略闲置通常是训练数据的反映，例如，当数据中包含机器人需要执行高精度运动区域的小动作时（如准备抓取物体或进行物体插入），就可能发生。</p>
+<p>先前的工作尝试通过过滤训练数据或修改控制频率来缓解这种现象，但这些方法可能会以其他方式对策略性能产生负面影响。本文从一个新的视角出发，研究如何利用闲置行为的可检测性来指导探索和策略改进。其核心思路是：在检测到的闲置状态施加扰动，帮助策略逃离有问题的吸引域，并利用由此产生的交互数据进行更有针对性的策略迭代优化。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法名为“暂停诱导扰动”（Pause-Induced Perturbations, PIP），其整体流程包括：1) 从策略执行中检测闲置行为；2) 在测试时对闲置状态施加扰动以立即提升性能；3) 利用扰动产生的交互数据，通过基于偏好的模仿学习进行迭代策略改进。</p>
+<p><strong>核心模块一：闲置行为检测</strong><br>策略在环境中执行时，会表现出以长时间有限运动为特征的闲置行为，特别是在专家数据中存在小动作的关键状态区域。闲置行为被定义为：连续状态的序列，其中机器人关节位置在连续状态间变化的ℓ2范数低于阈值ϵ，且持续时间超过T个时间步。</p>
+<p><img src="https://arxiv.org/html/2508.15669v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：策略执行中的闲置行为指示关键状态。（上排）在“水果碗”和“架子上的玻璃杯”任务上的失败执行。图表描绘了关节位置变化ℓ2范数随时间的变化，低值表示闲置期。对应图像显示了机器人在这些暂停期间的配置，这些暂停发生在具有挑战性的操作（例如抓取水果或玻璃杯）之前或期间。（下排）使用我们的扰动策略在任务上的测试时执行。对应图像说明了扰动如何帮助机器人逃离闲置状态并成功完成任务。</p>
+</blockquote>
+<p><strong>核心模块二：测试时扰动</strong><br>在策略π0的测试时执行中，一旦检测到“闲置状态”，就采取一个扰动动作aδ。该扰动是对预测动作的简单修改，通过将动作向机器人手臂的初始关节配置插值来实现。具体而言，如果策略是位置控制的，则执行以下动作，在当前关节位置<code>s_joints,t</code>和初始关节位置<code>s_joints,0</code>之间进行插值：<br><code>aδ = σ * s_joints,t + (1 - σ) * s_joints,0</code><br>其中σ是一个超参数，用于控制扰动幅度并平衡探索与利用。经验上，σ在0.6到1.0之间效果良好。直观上，这种对执行动作的扰动旨在使策略摆脱与闲置行为相关的局部状态，鼓励探索附近状态，从而可能导向任务完成。</p>
+<p><strong>核心模块三：基于偏好模仿学习的迭代策略改进</strong><br>为了进行自主策略改进，收集这些测试时扰动产生的轨迹（包括成功和失败的结果），形成增强数据集<code>D_aug</code>。关键的是，闲置检测为优化策略提供了宝贵信息——通过识别失败轨迹中的闲置片段，可以定位可能导致失败的动作。作者在偏好学习框架PMPO中利用这一见解来微调策略。具体损失函数为：<br><code>L_PMPO(θ) = α * E_(s,a)~D_s [log π_θ(a|s)] - (1-α) * E_(s,a)~D_f [log π_θ(a|s)] - β * KL(π_ref, π_θ; s)</code><br>其中，<code>D_s</code>代表成功轨迹中的转移，<code>D_f</code>代表失败轨迹中导致闲置状态的转移。该损失函数最大化成功轨迹中动作的似然，最小化导致闲置的失败轨迹中动作的似然，并通过KL散度项正则化更新后的策略，防止其过度偏离初始策略π0。α和β是控制权重的超参数。</p>
+<p><strong>创新点</strong><br>与现有方法相比，PIP的创新性主要体现在：1) 将策略表现出的闲置行为本身作为一种内在、易检测的信号，来识别任务中的关键/困难状态，而非依赖额外的价值函数或外部信息。2) 提出了一种极其简单的测试时扰动机制（向初始位置插值），无需额外训练即可立即提升性能。3) 将闲置检测与偏好学习结合，为迭代策略改进提供了高质量、信息丰富的正负样本对，实现了有针对性的探索和数据收集。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong></p>
+<ul>
+<li><strong>Benchmark/数据集</strong>：1) 模拟ALOHA九项挑战性双手任务套件（如图3所示），使用人类遥操作演示作为专家数据。2) 真实世界DEX-EE三指手机器人的连接器插入任务（如图4所示），策略通过模拟到真实的蒸馏获得。</li>
+<li><strong>实验平台</strong>：模拟环境使用MuJoCo，策略架构主要使用感知器演员评论家（PAC）配合SigLIP视觉编码器，也测试了扩散策略。真实世界使用Kuka机械臂和DEX-EE手。</li>
+<li><strong>Baseline方法</strong>：对比了基础策略（Base）、添加高斯噪声（Noise）、基于RND的探索（RND）、以及过滤训练数据中小动作并增加开环步数的方法（Pause-Filtered）。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2508.15669v1/x3.png" alt="模拟任务"></p>
+<blockquote>
+<p><strong>图3</strong>：模拟ALOHA测试套件。我们在模拟ALOHA环境中的九项挑战性双手任务上进行评估，涵盖了一系列物体（如杯子、水果、玻璃杯、钉子）和初始状态，通常需要精确操作才能成功完成。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.15669v1/x4.png" alt="真实任务"></p>
+<blockquote>
+<p><strong>图4</strong>：DEX-EE连接器插入任务。我们评估一项精确的真实世界灵巧操作任务，三指DEX-EE手必须拾取连接器并将其插入插座。</p>
+</blockquote>
+<p><strong>关键实验结果</strong></p>
+<ol>
+<li><strong>闲置作为主要失败模式</strong>：如表I所示，在模拟ALOHA中，84.9%的PAC策略失败片段包含闲置；在真实世界DEX任务中，这一比例为90%。过滤小动作的方法可将闲置失败率降至3.5%，但会损害整体性能（见图5）。表II进一步表明，闲置状态下的动作方差显著低于非闲置状态，支持了闲置源于策略重复预测相同无效动作的假设。</li>
+<li><strong>测试时性能提升</strong>：<ul>
+<li>**模拟ALOHA (PAC)**：如图5所示，PIP相比基础策略带来了平均4.4%的绝对成功率提升，在“水果碗”等任务上提升近10%。PIP表现优于噪声、RND以及过滤暂停的方法。</li>
+<li>**模拟ALOHA (扩散策略)**：如表III所示，在“PlateOnRack”和“FruitBowl”任务上，PIP分别将成功率从46.7%提升至56.7%，从58.3%提升至63.3%。</li>
+<li><strong>真实世界DEX-EE</strong>：如图6所示，PIP在抓取连接器和完整任务成功率上，相比基础策略带来了15-35%的绝对成功率提升。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.15669v1/x6.png" alt="模拟结果"></p>
+<blockquote>
+<p><strong>图5</strong>：使用PAC智能体的ALOHA任务上的测试时扰动。对于（左）仅基于演示训练的基础策略和（右）基于演示及每任务5000次试验成功执行训练的基础策略，PIP在无需额外训练或监督的情况下，性能显著优于基础策略及其他对比方法。我们报告了每项任务超过1000次试验的成功率和90%置信区间。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.15669v1/figures/postpimprovement.png" alt="真实结果"></p>
+<blockquote>
+<p><strong>图6</strong>：PIP显著提升了真实世界DEX连接器插入任务的性能。我们报告了每种方法在两个不同连接器的插入任务上20次试验的成功率，发现PIP的扰动相比基础策略，在抓取连接器和完整任务成功率上带来了15-35%的绝对提升。</p>
+</blockquote>
+<ol start="3">
+<li><strong>迭代策略改进</strong>：<ul>
+<li>如图7所示，在初始策略基础上进行额外的迭代模仿学习（即使配合噪声或RND探索）性能提升微乎其微，表明很快进入平台期。而PIP（配合偏好学习）则能继续提升。</li>
+<li>如图8所示，在每轮1000次执行、共两轮的迭代改进中，PIP（+ Pref）始终优于基础策略及不使用偏好训练的变体，展示了其持续改进的能力。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.15669v1/figures/multrounds.png" alt="迭代改进1"></p>
+<blockquote>
+<p><strong>图7</strong>：没有PIP的迭代改进进入平台期。在基于演示和初始策略生成的5000次执行训练基础策略后，即使带有噪声或RND探索的迭代模仿学习，在额外250次执行后也显示出可忽略的改进，表明性能进入平台期。然而，PIP（+ Pref）持续改进，突出了在关键状态进行针对性探索的好处。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.15669v1/figures/plateau.png" alt="迭代改进2"></p>
+<blockquote>
+<p><strong>图8</strong>：PIP在多轮迭代改进中持续提升。在每轮每任务1000次执行、共两轮的迭代策略改进中，PIP（+ Pref）始终优于基础策略及不使用偏好训练的变体。</p>
+</blockquote>
+<p><strong>消融实验总结</strong><br>实验表明，PIP的成功依赖于其核心组件的协同作用：1) <strong>闲置检测</strong>是识别关键状态和提供偏好标签的基础。2) <strong>测试时扰动</strong>提供了立即的性能增益和探索出新成功轨迹的数据。3) <strong>基于偏好的模仿学习</strong>（PMPO）对于将扰动探索中获得的知识有效蒸馏回策略、实现迭代改进至关重要，如图7-8中“PIP (+Pref)”优于无偏好训练的变体所示。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong></p>
+<ol>
+<li>确立了策略闲置是多种灵巧操作设置中一个普遍且重要的失败模式。</li>
+<li>提出了一种简单有效的“暂停诱导扰动”（PIP）方法，可在测试时通过检测闲置并施加定向扰动来立即提升策略性能，且无需额外训练。</li>
+<li>展示了如何利用闲置检测来指导迭代策略改进，通过提供信息丰富的偏好标签进行基于偏好的模仿学习，从而突破性能平台期。</li>
+</ol>
+<p><strong>局限性</strong><br>论文提到，在插入类任务中，物体常会进入显著分布外（out-of-distribution）的配置，此时局部扰动可能不足以弥合与训练数据中成功状态的差距。此外，方法涉及闲置检测阈值、扰动幅度等超参数，虽然文中报告了一组在多个任务上表现良好的默认值，但其最优设置可能因任务和策略架构而异。</p>
+<p><strong>对后续研究的启示</strong><br>本文的核心启示在于，策略在部署时表现出的“失败行为”（如闲置）本身可以成为一种有价值的信号，用于指导在线适应和离线改进。这为机器人学习提供了一种数据驱动、自指涉（self-referential）的改进思路。未来工作可以探索更智能的扰动策略（例如，基于模型或学习得到的恢复策略），将闲置检测与其他形式的异常检测结合，以及将该框架应用于更广泛的策略僵局（如振荡或重复无效动作序列）场景中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对灵巧操作中学习策略常出现“闲置”行为（即策略在关键状态附近停止动作）的问题，提出“暂停诱导扰动”方法。该方法通过检测闲置状态并施加扰动，帮助策略逃离局部吸引域。实验表明，该方法在模拟双臂任务中显著提升了测试性能，无需额外监督；在真实世界的多指插入任务中，绝对成功率提高了15-35%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.15669" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

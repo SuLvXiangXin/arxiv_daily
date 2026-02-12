@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Verifier-free Test-Time Sampling for Vision Language Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Verifier-free Test-Time Sampling for Vision Language Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.05681" target="_blank" rel="noreferrer">2510.05681</a></span>
+        <span>作者: Jang, Suhyeok, Kim, Dongyoung, Kim, Changyeon, Kim, Youngsuk, Shin, Jinwoo</span>
+        <span>日期: 2025/10/07</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于大规模机器人数据训练的视觉-语言-动作模型（VLAs）在机器人控制中表现出色，其中自回归VLAs是主流方法之一。然而，其单次推理范式（贪婪解码，总是选择最高概率的动作）在需要高精度的任务（如抓取、物体放置）中成为瓶颈。为解决此问题，现有方法采用测试时缩放（TTS）策略，即通过重复采样生成多个候选动作，并依赖外部验证器（如在机器人数据上训练的价值函数）来选择最优动作。但这类方法存在关键局限性：1) 需要额外的训练来获取验证器，增加了计算开销和部署复杂性；2) 外部验证器难以泛化到未见过的输入条件（如新任务指令或物体），其奖励建模通常局限于特定数据集。</p>
+<p>本文针对依赖外部验证器所带来的训练负担和泛化能力差的痛点，提出了一种新的视角：利用模型自身的内部属性，无需额外训练或外部模块，即可在测试时选择更优动作。本文的核心思路是：通过从同一VLA模型在输入条件被随机掩码时生成的“不确定性参考分布”出发，计算候选动作分布与该参考分布之间的KL散度作为置信度度量，从而筛选出最自信、最精确的动作序列。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法称为掩码分布引导选择（MG-Select），其整体框架是一个两阶段的测试时缩放流程。</p>
+<p><strong>整体框架</strong>：给定当前状态 $s_t = (o_t, q_t)$ 和语言指令 $I$，第一阶段，自回归VLA策略 $\pi_{\theta}$ 以温度 $\tau$ 进行并行随机采样，生成 $N$ 个候选动作序列 $\tilde{A} = {\tilde{\mathbf{a}}^{(n)}}<em>{n=1}^{N}$。与此同时，模型并行计算每个生成步骤中，预测分布 $P_i = \pi</em>{\theta}(\cdot \mid o_t, q_t, I, a_{&lt;i})$ 与一个参考分布 $Q_i$ 之间的逐令牌KL散度 $C_i = \mathrm{KL}(Q_i | P_i)$。第二阶段，通过聚合每个候选动作序列对应的令牌级KL散度得分，得到动作级置信度分数 $C_{\tilde{\mathbf{a}}}$，并执行Best-of-N选择，选出置信度最高的动作 $\mathbf{a}^{*}$ 作为最终执行动作。</p>
+<p><img src="https://arxiv.org/html/2510.05681v1/x1.png" alt="方法总览图"></p>
+<blockquote>
+<p><strong>图1</strong>：MG-Select方法整体框架。(1) 自回归VLA $\pi_{\theta}$ 并行地从预测分布中采样动作令牌，同时计算从条件掩码分布到预测分布的逐令牌KL散度。(2) 然后，通过聚合这些令牌级分数得到动作置信度分数 $C_{\tilde{a}}$，并据此进行Best-of-N选择。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><p><strong>条件掩码参考分布</strong>：这是方法的核心创新。参考分布 $Q$ 由同一个VLA模型生成，但其输入中的状态 $q_t$ 和/或语言指令 $I$ 被随机掩码（替换为空集 $\emptyset$）。这模拟了任务解决所需关键信息缺失的“失败模式”，从而产生一个具有最大不确定性、但又与目标任务分布保持一定对齐的参考分布。具体有三种变体：</p>
+<ul>
+<li><strong>文本掩码</strong>：$KL_{\mathtt{text}} = \mathrm{KL}(\pi_{\theta}(\cdot \mid o_t, q_t, \emptyset, a_{&lt;i}) | \pi_{\theta}(\cdot \mid o_t, q_t, I, a_{&lt;i}))$</li>
+<li><strong>状态掩码</strong>：$KL_{\mathtt{state}} = \mathrm{KL}(\pi_{\theta}(\cdot \mid o_t, \emptyset, I, a_{&lt;i}) | \pi_{\theta}(\cdot \mid o_t, q_t, I, a_{&lt;i}))$</li>
+<li><strong>文本与状态掩码</strong>：$KL_{\mathtt{both}} = \mathrm{KL}(\pi_{\theta}(\cdot \mid o_t, \emptyset, \emptyset, a_{&lt;i}) | \pi_{\theta}(\cdot \mid o_t, q_t, I, a_{&lt;i}))$<br>最佳变体取决于任务环境，例如在仅有拾放任务的环境中，状态掩码最有效；而在多任务类型环境中，文本掩码或两者掩码更有效。</li>
+</ul>
+</li>
+<li><p><strong>联合训练策略</strong>：为了使VLA模型能够更好地生成有意义的条件掩码分布，本文提出在目标数据集上进行微调时，采用一种联合训练策略。具体而言，在每次训练中，随机对 proprioceptive 状态 $q_t$ 和指令 $I$ 应用四种掩码变体之一：$\mathcal{M} = {(q_t, I), (q_t, \emptyset), (\emptyset, I), (\emptyset, \emptyset)}$。损失函数为 $\mathcal{L}<em>{\text{Joint-IL}} = -\mathbb{E} [\mathbb{E}</em>{(q_t^{(m)},I^{(m)})\in\mathcal{M}}[\log\pi_{\theta}(\mathbf{a}_t \mid o_t, q_t^{(m)}, I^{(m)})]]$。这使得模型同时学习条件分布和无条件分布，提升了参考分布的质量，进而增强了测试时置信度度量的可靠性。应用了此策略的增强模型称为 MG-Select*。</p>
+</li>
+</ol>
+<p><strong>与现有方法的创新点</strong>：与需要额外训练外部验证器的TTS方法相比，MG-Select的创新点在于完全<strong>无需外部模块</strong>，仅利用模型内部生成的不确定性参考分布作为置信度判断基准，避免了训练负担和泛化问题。与简单的似然选择相比，MG-Select通过KL散度衡量与“不确定”参考的偏离程度，能更有效地识别出模型真正“自信”的动作，避免了因模型过拟合导致分布过于集中、采样多样性不足的问题。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：方法在模拟和真实世界环境中进行了验证。</p>
+<ul>
+<li><strong>模拟基准</strong>：使用了RoboCasa（24个任务，聚焦8个拾放任务）、SIMPLER-WidowX（4个拾放任务）、LIBERO（评估布局、物体、目标泛化及长视野任务）。</li>
+<li><strong>真实世界基准</strong>：使用7-DoF Franka Research 3机械臂，在DROID数据集微调的模型上，评估了分布内（ID，4种已知物体）和分布外（OOD，2种未见物体）的拾放任务。</li>
+<li><strong>基线方法</strong>：对比了GR00T N1、RT-1-X、Octo、RoboVLM、SpatialVLA等先进VLAs，以及基础VLA模型（$\pi_0$-FAST, OpenVLA）的贪婪解码结果。</li>
+<li><strong>基础模型</strong>：主要基于 $\pi_0$-FAST，并在LIBERO上额外测试了OpenVLA以证明架构通用性。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>RoboCasa模拟实验</strong>：如表1所示，MG-Select在不同演示数据量（30，100，300）下均能持续提升基础模型（$\pi_0$-FAST）在所有任务（尤其是拾放任务）上的成功率。在仅有30次演示的低数据场景下，结合联合训练的MG-Select*在拾放任务上取得了168%的相对提升（从0%到14.2%）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.05681v1/x3.png" alt="RoboCasa结果表"></p>
+<blockquote>
+<p><strong>表1</strong>：MG-Select在RoboCasa基准上的性能对比。结果显示，在不同演示数据规模下，MG-Select及其联合训练变体（*）在拾放（PnP）和所有任务上均能稳定提升基础模型的成功率，尤其在低数据场景提升显著。</p>
+</blockquote>
+<ol start="2">
+<li><strong>SIMPLER-WidowX模拟实验</strong>：如表2所示，MG-Select*在4个拾放任务上平均成功率从46.9%提升至50.3%，在所有任务上均优于基础模型。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.05681v1/x4.png" alt="SIMPLER-WidowX结果表"></p>
+<blockquote>
+<p><strong>表2</strong>：MG-Select在SIMPLER-WidowX基准上的性能对比。MG-Select*在所有四个任务上均取得了优于基础模型 $\pi_0$-FAST 的表现。</p>
+</blockquote>
+<ol start="3">
+<li><strong>真实世界实验</strong>：<ul>
+<li><strong>分布内（ID）任务</strong>：如表4所示，MG-Select*在4个ID拾放任务上的平均成功率从37.5%提升至47.9%，相对提升28%。</li>
+<li><strong>分布外（OOD）任务</strong>：如表3所示，MG-Select在2个OOD任务上的平均成功率从53.1%提升至71.9%，相对提升35%。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.05681v1/x2.png" alt="真实世界定性结果"></p>
+<blockquote>
+<p><strong>图2</strong>：真实世界“从盒子到碗”拾放任务的定性结果。可视化显示，在抓取(a)和释放(b)等关键步骤，MG-Select能生成更高精度的动作，而基础策略（$\pi_0$-FAST-DROID）在这些步骤常常失败。</p>
+</blockquote>
+<ol start="4">
+<li><strong>消融实验</strong>：表5系统地分析了MG-Select的各个组件。<ul>
+<li><strong>选择准则（M）</strong>：MG-Select（使用条件掩码KL散度）优于似然选择、均匀分布KL散度选择以及贪婪解码和纯采样。</li>
+<li><strong>候选数量（N）</strong>：N=4时取得最佳平衡，继续增加（N=8, 16）收益递减或下降。</li>
+<li><strong>掩码变体</strong>：在RoboCasa多任务环境下，文本掩码效果最佳，符合预期。</li>
+<li><strong>联合训练</strong>：联合训练（Joint-IL）与MG-Select结合（MG-Select*）带来了最大的性能增益，证明了联合训练对提升参考分布质量的重要性。</li>
+<li><strong>温度（τ）与聚合策略</strong>：较高的采样温度（τ=4.0）和仅聚合动作序列前5个令牌的策略效果最好。</li>
+</ul>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>MG-Select</strong>，一个无需外部验证器的测试时缩放框架，通过利用VLA模型内部生成的条件掩码参考分布与预测分布之间的KL散度作为置信度度量，从多个采样动作中选择最优动作。</li>
+<li>引入了<strong>条件掩码参考分布</strong>的概念，通过随机掩码输入状态和/或语言指令来构建一个具有最大不确定性且与任务对齐的分布，为置信度评估提供了有效的内在基准。</li>
+<li>提出了一种<strong>联合训练策略</strong>，使VLA模型能够同时学习条件分布和条件掩码分布，从而进一步提高了参考分布的质量和测试时选择的性能。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，尽管通过并行采样缓解了时间开销，但MG-Select相比贪婪解码仍然增加了推理时间（与候选数量N成正比）。</p>
+<p><strong>启示</strong>：</p>
+<ol>
+<li>对于提升模型决策精度，<strong>挖掘和利用模型内部的信号</strong>（如本文中的不确定性分布）可能比引入复杂的外部模块更简单有效，且具有更好的泛化能力。</li>
+<li><strong>条件掩码</strong>作为一种构建不确定性参考的方法，具有通用性，可适用于其他序列决策模型。</li>
+<li>该方法在<strong>低数据场景</strong>下表现尤为突出，为数据稀缺的机器人学习任务提供了有效的性能增强手段。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型在需要高精度任务中的局限性，提出了一种无需外部验证器的测试时采样框架MG-Select。该方法核心是利用模型内部属性，通过KL散度从参考动作分布中评估置信度以选择最优动作，并引入随机掩码输入生成参考分布。实验表明，该方法显著提升了性能，在真实世界分布内/外任务中分别获得28%和35%的改进，在RoboCasa拾放任务上实现了168%的相对增益。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.05681" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

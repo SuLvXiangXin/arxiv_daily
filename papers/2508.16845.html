@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>NinA: Normalizing Flows in Action. Training VLA Models with Normalizing Flows - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Computer Vision and Pattern Recognition (cs.CV)</span>
+      <h1>NinA: Normalizing Flows in Action. Training VLA Models with Normalizing Flows</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.16845" target="_blank" rel="noreferrer">2508.16845</a></span>
+        <span>作者: Tarasov, Denis, Nikulin, Alexander, Zisman, Ilya, Klepach, Albina, Lyubaykin, Nikita, Polubarov, Andrei, Derevyagin, Alexander, Kurenkov, Vladislav</span>
+        <span>日期: 2025/08/23</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）模型已成为通用机器人领域的主流架构，其通常采用两组件设计：一个预训练的视觉-语言模型（VLM）负责编码视觉观测和任务描述，另一个动作解码器负责将这些表示映射为连续的机器人动作。扩散模型因其能够建模复杂、多模态的动作分布，已被广泛采纳为动作解码器。然而，扩散模型在推理时需要多次迭代的去噪步骤（或依赖下游加速技术），这导致了显著的推理延迟，限制了其在需要高频控制的现实场景中的实用性。</p>
+<p>本文针对扩散解码器推理速度慢这一关键痛点，提出了一种快速且表达能力强的替代方案。核心思路是：用归一化流（Normalizing Flow）替换VLA架构中的扩散动作解码器，利用归一化流的可逆变换特性实现单步采样，从而显著提升推理效率，同时不牺牲性能。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>NinA的整体框架基于FLOWER VLA架构，仅将其原有的扩散动作解码器替换为归一化流模型。其输入为来自数据集的<code>(观测图像，文本目标，动作块)</code>三元组，输出为预测的动作。核心模块是归一化流动作专家，其作用是将VLM编码后的联合嵌入<code>h_t</code>映射为动作分布。</p>
+<p>NinA实现了两种归一化流变体：基于MLP的架构（灵感源自Ghugare &amp; Eysenbach，2025）和基于Transformer的架构（灵感源自Jet，Kolesnikov et al., 2024）。MLP变体追求更快的推理速度和更低的内存消耗，而Transformer变体则提供更好的性能和可扩展性。</p>
+<p>方法的核心流程如下：首先，对专家动作块注入高斯噪声（遵循Zhai et al., 2024的建议），经噪声处理后的动作<code>â_t</code>被视为<code>z_K</code>。然后，<code>â_t</code>通过一系列流层<code>f_k</code>进行前向变换。在每个耦合层中，输入<code>â_t</code>被随机划分为两部分<code>x1</code>和<code>x2</code>。接着，<code>x1</code>与VLM输出<code>h_t</code>一起输入一个可训练的网络<code>g_φk</code>，以生成缩放因子<code>s</code>和偏置<code>b</code>。在MLP变体中，<code>g_φk</code>是一个MLP，通过将<code>x1</code>和<code>h_t</code>拼接实现条件化；在Transformer变体中，<code>g_φk</code>由堆叠的自注意力和交叉注意力层组成，通过交叉注意力机制实现条件化。随后，<code>x2</code>根据公式<code>y2 = exp(s) · x2 + b</code>进行仿射变换。<code>y2</code>再与<code>x1</code>拼接，并通过一个可逆的线性层<code>PLU_k</code>（来自Kingma &amp; Dhariwal，2018）得到该层的最终输出<code>z_k</code>。经过K层变换后，得到最终的潜在变量<code>z_0</code>，其在对数似然损失（公式1）下被优化为服从标准正态分布<code>N(0, I)</code>。推理时，从<code>p_0</code>中采样<code>z_0</code>，并通过流层的逆变换一次性生成动作块。</p>
+<p><img src="https://arxiv.org/html/2508.16845v2/x2.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：NinA的训练与推理流程示意图。训练时（左），带噪声的动作<code>â_t</code>通过一系列流层变换为潜在变量<code>z_0</code>，并计算相对于标准正态基分布的对数似然损失。推理时（右），从基分布采样<code>z_0</code>，通过流层的逆变换一次性生成动作<code>â_t</code>。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.16845v2/x3.png" alt="流层变体"></p>
+<blockquote>
+<p><strong>图3</strong>：NinA两种归一化流变体的结构示意图。左图为MLP变体，右图为Transformer变体，展示了耦合层内部<code>g_φk</code>网络的不同架构（MLP vs. 注意力层）以及条件化方式（拼接 vs. 交叉注意力）。</p>
+</blockquote>
+<p>与现有扩散方法相比，NinA的主要创新点在于：1) <strong>单步采样</strong>：利用归一化流的可逆性，实现了从潜在空间到动作空间的一次性确定性映射，从根本上避免了扩散模型的多步迭代。2) <strong>精确似然估计</strong>：归一化流允许精确计算数据点的对数似然，这为不确定性估计、强化学习集成等下游任务提供了便利。3) <strong>参数高效</strong>：实验表明，达到相当性能所需的参数量远少于扩散模型。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在LIBERO基准测试（包含Spatial, Object, Goal, 10, 90五个任务套件）上进行，遵循FLOWER的微调协议。主要基线是原始使用扩散动作解码器的FLOWER模型。为了公平比较，所有实验都重新初始化了动作专家。此外，还将扩散基线缩小至约3100万参数（Diffusion (31M)），以与最佳NinA Transformer（3800万参数）的模型容量进行对比。</p>
+<p>关键定量结果总结如下：原始大型扩散策略（3.3亿参数）取得了最高的平均成功率0.952。NinA Transformer以仅3800万参数达到了0.938的平均成功率，性能接近，但参数量减少了一个数量级。极度轻量的NinA MLP（仅200万参数）也取得了0.909的平均成功率，表现强劲。在推理速度上，NinA展现出巨大优势。</p>
+<p><img src="https://arxiv.org/html/2508.16845v2/x1.png" alt="性能与效率对比"></p>
+<blockquote>
+<p><strong>图1</strong>：在LIBERO基准上的模型性能、大小和推理时间对比。NinA模型（Transformer和MLP）的推理速度比扩散模型快达10倍，所需参数显著更少，同时保持了可比的性能。</p>
+</blockquote>
+<p>消融实验揭示了关键设计选择的影响：</p>
+<ol>
+<li><strong>噪声注入</strong>：移除对专家动作的噪声注入会导致两种NinA变体的性能明显下降（MLP从0.909降至0.880，Transformer从0.938降至0.896），证实了噪声是一种重要的正则化手段。</li>
+<li><strong>PLU层</strong>：移除可逆线性层<code>PLU</code>对NinA Transformer有轻微负面影响（从0.938降至0.934），对NinA MLP影响不一，表明<code>PLU</code>能带来适度但非必需的增益。</li>
+<li><strong>流深度与隐藏维度</strong>：如图4、图5所示，Transformer变体在深度和隐藏维度上表现更稳定、可扩展性更好（深度18、隐藏维256时最佳），而MLP变体性能波动较大，但在特定配置（深度28、隐藏维64）下能达到峰值。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.16845v2/x4.png" alt="流深度消融"></p>
+<blockquote>
+<p><strong>图4</strong>：NinA Transformer和MLP在不同流深度（层数K）下的性能消融（基于LIBERO-10）。Transformer变体在较大深度下表现稳定，而MLP变体性能波动更明显。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.16845v2/x5.png" alt="隐藏维度消融"></p>
+<blockquote>
+<p><strong>图5</strong>：NinA Transformer和MLP在不同流隐藏维度下的性能消融（基于LIBERO-10）。Transformer在隐藏维256时最佳，MLP在较小隐藏维（16, 64）下表现良好。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.16845v2/x6.png" alt="噪声幅度消融"></p>
+<blockquote>
+<p><strong>图6</strong>：注入参考动作的高斯噪声幅度对NinA性能的影响（基于LIBERO-10）。对于两种架构，适度的噪声（σ=0.03）都能带来最佳性能，起到正则化作用。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了<strong>NinA</strong>，首次将归一化流成功作为高效的动作解码器集成到VLA模型中，在保持竞争力的任务成功率的同时，实现了<strong>数量级级别的推理加速</strong>和<strong>参数效率的大幅提升</strong>。2) 系统探索并比较了<strong>MLP与Transformer两种归一化流骨干</strong>在机器人控制任务中的设计权衡，为后续研究提供了实用见解。3) 实证验证了<strong>对专家动作注入噪声</strong>这一技术对训练归一化流策略的有效性。</p>
+<p>论文自身提到的局限性包括：1) 实验主要在模拟环境（LIBERO）中进行，尚未在真实机器人上验证。2) 由于计算限制，未进行完整的VLA预训练，仅进行了微调实验。3) 超参数调优仅在LIBERO-10上进行，可能未完全挖掘其在其他任务上的潜力。</p>
+<p>这项工作为高效VLA控制开辟了一条新路径。其启示在于：归一化流是扩散模型一个强有力的替代品，尤其适用于对延迟敏感的场景。未来研究可以探索将NinA扩展到大规模跨领域预训练，研究其精确似然估计能力在机器人强化学习、不确定性量化等方向的衍生应用，并推动其在真实世界高频控制任务中的部署。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作（VLA）模型中扩散动作解码器因多次迭代采样导致推理延迟、影响实时控制的问题，提出NinA方法，用归一化流（Normalizing Flows）替换扩散解码器，通过可逆变换实现一次性快速采样。在LIBERO基准上集成到FLOWER架构微调，实验表明NinA性能与扩散模型相当，推理速度提升高达10倍，且参数显著减少，为高效高频VLA控制提供了新路径。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.16845" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

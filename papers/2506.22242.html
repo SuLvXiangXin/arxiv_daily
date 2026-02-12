@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>4D-VLA: Spatiotemporal Vision-Language-Action Pretraining with Cross-Scene Calibration - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Computer Vision and Pattern Recognition (cs.CV)</span>
+      <h1>4D-VLA: Spatiotemporal Vision-Language-Action Pretraining with Cross-Scene Calibration</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.22242" target="_blank" rel="noreferrer">2506.22242</a></span>
+        <span>作者: Zhang, Jiahui, Chen, Yurui, Xu, Yueming, Huang, Ze, Zhou, Yanpeng, Yuan, Yu-Jie, Cai, Xinyue, Huang, Guowei, Quan, Xingyue, Xu, Hang, Zhang, Li</span>
+        <span>日期: 2025/06/27</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，利用多样化的机器人数据进行预训练是一个关键挑战。现有方法（如OpenVLA）通常仅使用单张RGB图像和文本指令作为输入来建模数据集的动作分布。然而，这种输入往往是不完整的，导致条件动作分布非常分散——本文将其称为“坐标系混乱”和“状态混乱”。坐标系混乱源于动作定义在机器人坐标系中，但视觉输入缺乏足够的空间上下文（例如，图像未完全捕捉到机器人本体），使得推断机器人精确位姿变得困难。状态混乱则发生在单帧图像缺乏必要的时序或上下文线索来消除动作歧义时，例如难以推断运动方向的对称轨迹，或视觉相似观测对应完全不同动作的情况。这些不一致性严重阻碍了预训练的效率。本文针对这一痛点，提出通过引入4D时空信息（深度+时序）来缓解这两种混乱，其核心思路是：通过整合深度和时序信息到视觉特征中，对齐机器人与场景的坐标系，并利用历史帧提升时序推理能力，从而学习到更平滑、方差更低的条件动作分布，显著提升预训练效率。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>4D-VLA的整体框架旨在处理顺序RGB-D图像输入，生成空间感知的视觉令牌，并与文本指令结合，最终通过Transformer解码出机器人动作。</p>
+<p><img src="https://arxiv.org/html/2506.22242v2/x2.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图2</strong>：4D-VLA整体流程。记忆库采样方法从顺序RGB-D输入中选择信息丰富的帧。带有3D坐标嵌入的视觉编码器生成空间感知令牌，这些令牌融合成4D时空表示。结合文本令牌后，由LLM处理，并通过动作头解码出动作。</p>
+</blockquote>
+<p><strong>核心模块1：空间感知视觉令牌生成</strong><br>为了解决坐标系混乱并增强空间感知，该方法将深度信息衍生的坐标信息与视觉令牌融合。具体流程如下：输入RGB图像 <code>I</code> 首先通过视觉编码器 <code>ℰ</code> 得到特征图 <code>f_v</code>。同时，获取一个下采样后的深度图 <code>D</code>。利用相机外参 <code>[R|T]</code> 和内参 <code>K</code>，将深度图反投影到世界（或机器人）坐标系中得到3D坐标点 <code>P_w</code>。随后，通过一个可学习的位置嵌入 <code>ℰ_S</code> 对3D坐标进行编码，并通过逐元素加法将其与原始视觉特征图融合，形成增强空间表示的“空间视觉特征”。最后，这些特征经由InternVL中的MLP投影器 <code>𝒫</code> 处理，生成最终的<strong>空间视觉令牌</strong> <code>e^ST</code>。</p>
+<p><strong>核心模块2：4D表示与多帧编码</strong><br>为了整合时序信息以应对状态混乱，模型将上述单帧的空间视觉令牌扩展至多帧。一个朴素的方法是均匀采样历史帧的空间视觉令牌作为输入。但实验发现，模型性能对采样间隔和总时间窗口 <code>n</code> 高度敏感，且均匀采样可能导致信息冗余和效率低下。</p>
+<p><strong>创新点：记忆库采样</strong><br>为此，本文提出了<strong>记忆库采样</strong>这一自适应历史帧采样策略（算法1）。其核心思想是在给定的时间窗口 <code>n</code> 内，根据特征提取器 <code>ϕ</code> 计算的图像相似度，动态选择 <code>k</code> 个最具信息量的帧。算法维护一个相似度队列，确保新加入的帧与已选帧序列中最后一帧的相似度低于当前队列中的最大值，从而在有限的帧数内最大化历史信息的多样性。由于采样是非均匀的，模型为每个采样的空间视觉令牌 <code>e_i^ST</code> 额外添加一个<strong>时间编码令牌</strong> <code>e_i^T</code>，用于编码该历史帧相对于当前帧的时间偏移。最终，模型的输入令牌集合 <code>𝒳</code> 由所有采样帧的 <code>[e_i^T | e_i^ST]</code> 对以及文本指令令牌 <code>e^text</code> 构成。</p>
+<p><strong>损失函数</strong><br>模型使用一个包含两层MLP的动作头，基于VLM Transformer最后一个令牌的隐藏特征来预测动作 <code>[Δx̂, Δθ̂, ĝ]</code>。总损失函数为：<br><code>ℒ = ℒ_t + ℒ_r + ℒ_g + λ_d ℒ_d</code><br>其中，<code>ℒ_t</code> 和 <code>ℒ_r</code> 分别是平移和旋转的L2损失，<code>ℒ_g</code> 是夹爪开合状态的二元交叉熵损失。此外，本文引入了一个<strong>方向损失</strong> <code>ℒ_d</code>，用于强调平移动作中的方向感知，定义为预测平移方向与真实平移方向之间的L2损失。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：模型在真实世界数据集 <strong>DROID</strong> 上进行预训练，并在仿真数据集 <strong>LIBERO</strong> 的多个任务集以及新提出的 <strong>MV-Bench</strong> 多视角基准上进行微调和评估。主要对比基线包括OpenVLA、DiffusionPolicy、Octo等。真实世界实验使用Franka机械臂在4个定制任务上进行评估。</p>
+<p><strong>LIBERO评估结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2506.22242v2/x5.png" alt="LIBERO实验结果表"></p>
+<blockquote>
+<p><strong>表1</strong>：在LIBERO各任务集上的成功率评估。4D-VLA在所有任务上均取得最佳性能，平均成功率高达88.6%，比最强的基线OpenVLA（76.5%）高出12.1个百分点，尤其在长视距任务（LIBERO-LONG）上优势显著（79.1% vs. 53.7%）。</p>
+</blockquote>
+<p><strong>MV-Bench评估结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2506.22242v2/x6.png" alt="MV-Bench实验结果表"></p>
+<blockquote>
+<p><strong>表2</strong>：在MV-Bench上的评估结果。在“同视角”和“跨视角”两种设置下，4D-VLA均大幅领先OpenVLA，证明了其强大的空间理解和跨视角泛化能力。</p>
+</blockquote>
+<p><strong>真实世界评估结果与消融实验</strong>：</p>
+<p><img src="https://arxiv.org/html/2506.22242v2/x4.png" alt="真实世界实验设置"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界实验的四个任务设置，分别评估空间泛化、抗干扰能力、精确放置和指令跟随能力。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.22242v2/x7.png" alt="真实世界消融实验结果表"></p>
+<blockquote>
+<p><strong>表3</strong>：真实世界任务的消融实验结果。该表清晰地展示了各组件（预训练、坐标编码、历史帧）的贡献。仅使用预训练（单RGB-D帧）即可带来显著提升；坐标编码对需要精确空间对齐的任务（如Task 3）贡献巨大；历史帧信息对长视距、多步骤任务（如Task 2和4）至关重要；完整模型（预训练+坐标+历史帧）取得了最佳的综合性能，平均成功率高达85.63%。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了 <strong>4D-VLA</strong> 框架，通过生成融合3D坐标的空间视觉令牌和引入记忆库采样的多帧编码，有效缓解了预训练中的坐标系混乱和状态混乱问题。</li>
+<li>在仿真（LIBERO）和真实世界环境中验证了方法的优越性，并引入了 <strong>MV-Bench</strong> 多视角基准，用于系统评估VLA模型的空间理解和泛化能力。</li>
+<li>通过详实的消融实验，量化了预训练、空间坐标信息以及时序历史信息各自对模型性能的贡献。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，DROID数据集的深度数据可能稀疏或不完整，处理时需要对缺失区域进行特殊处理（如跳过3D特征添加，作为一种数据增强）。此外，记忆库采样的效果依赖于所使用的特征提取器 <code>ϕ</code>。</p>
+<p><strong>研究启示</strong>：本文工作表明，为VLA模型提供丰富、对齐的4D时空上下文是提升其从多样化数据中学习效率的关键。后续研究可以进一步探索更高效的4D表示方法、更优的历史信息利用策略，以及开发涵盖更复杂时空推理任务的评估基准。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人预训练中因输入信息不完整导致的“坐标系混乱”与“状态混乱”问题，提出4D-VLA模型。其关键技术包括：引入顺序RGB-D输入以融合深度与时间信息，对齐机器人与场景坐标系；并提出记忆库采样策略，从历史帧中高效提取关键信息。实验表明，该方法在模拟和真实机器人任务中显著提升了成功率，优于OpenVLA基线；在新提出的多视图基准MV-Bench上也展现出更强的空间感知与泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.22242" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MolmoAct: Action Reasoning Models that can Reason in Space - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>MolmoAct: Action Reasoning Models that can Reason in Space</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.07917" target="_blank" rel="noreferrer">2508.07917</a></span>
+        <span>作者: Lee, Jason, Duan, Jiafei, Fang, Haoquan, Deng, Yuquan, Liu, Shuo, Li, Boyang, Fang, Bohan, Zhang, Jieyu, Wang, Yi Ru, Lee, Sangho, Han, Winson, Pumacay, Wilbert, Wu, Angelica, Hendrix, Rose, Farley, Karen, VanderBilt, Eli, Farhadi, Ali, Fox, Dieter, Krishna, Ranjay</span>
+        <span>日期: 2025/08/11</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人基础模型的主流范式是视觉-语言-动作模型，它们将感知（图像）和指令（语言）直接映射到控制（动作）。然而，这种方法存在关键局限性：缺乏空间理解和深度感知能力，使得模型在需要精确三维操作的任务上表现不佳；其决策过程不透明，难以解释和干预；并且对任务、场景和机器人的泛化能力有限，通常需要海量、难以获取的机器人交互数据进行训练。</p>
+<p>本文针对机器人模型缺乏结构化、可解释的空间推理能力这一具体痛点，提出了“在空间中推理”而非“在语言中推理”的新视角。核心思路是设计一个结构化的三阶段推理流水线，让模型在生成最终动作前，先自回归地预测中间的空间表示——深度感知token和视觉推理轨迹，从而将感知、规划和控制集成在一个可解释、可操控的框架内。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>MolmoAct的整体框架是一个结构化的三阶段自回归生成过程。输入是RGB图像观测I和语言指令T，输出是机器人动作。其核心创新在于，在生成最终动作token之前，模型会先生成两个中间的空间推理表示。</p>
+<p><img src="https://arxiv.org/html/2508.07917v4/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：MolmoAct整体框架概述。给定用户语言指令，模型在空间中推理，并自回归地预测三条结构化的推理链：用于感知和重建3D环境的深度感知token、用于在场景中表示其规划轨迹的视觉推理轨迹token，以及用于生成相应机器人控制命令的动作token。</p>
+</blockquote>
+<p>整个推理过程遵循公式(4)定义的因子分解：<code>p(d, τ, a | I, T) = ∏ p(d_i | I, T, d_&lt;i) * ∏ p(τ_j | I, T, d, τ_&lt;j) * ∏ p(a_k | I, T, d, τ, a_&lt;k)</code>。即先生成深度字符串d，再生成视觉轨迹τ，最后生成动作a，后序阶段以前序阶段的输出为条件。</p>
+<p><strong>核心模块1：深度感知token</strong><br>该模块旨在为模型注入3D空间理解能力。具体技术细节是：使用一个在大量深度图上预训练的VQVAE，将输入图像的深度图量化为一个包含100个索引的序列。每个索引对应一个专门的深度token（共128个）。在训练中，模型以RGB图像为条件，学习自回归地预测这个深度token序列。这是一种从“专家”（深度估计器）到“通才”（VLA模型）的蒸馏策略，使模型能够内部化场景的深度信息，为后续轨迹规划和动作生成提供空间基础。</p>
+<p><strong>核心模块2：视觉推理轨迹</strong><br>该模块替代了传统的语言子任务分解，提供了更精确的中间运动规划表示。视觉推理轨迹τ定义为图像平面上一个包含1到5个点的折线，代表末端执行器在未来帧中的位置。第一个点<code>p1</code>是当前末端执行器位置，后续点均匀采样自未来帧。轨迹点的坐标<code>(u, v)</code>被归一化到[0, 255]并离散化。模型在深度token之后，预测这些轨迹点坐标对应的token。这些2D路径点帮助模型将动作与精确的末端执行器位置对齐，提高了动作预测的准确性。</p>
+<p><strong>核心模块3：动作token与可操控性</strong><br>最终动作被离散化为256个区间，并映射到256个动作token。本文的创新点在于初始化方式：并非随机分配词汇表尾部的token，而是根据底层BPE符号的字符相似性进行单调分配，使得相邻动作区间对应相似的token嵌入，为优化提供了更平滑的起点，显著减少了训练时间（相比GR00T N1.5的5万GPU小时，MolmoAct仅需9216小时）。</p>
+<p><img src="https://arxiv.org/html/2508.07917v4/x2.png" alt="训练流程"></p>
+<blockquote>
+<p><strong>图2</strong>：MolmoAct的训练过程。包括预训练（左）和后训练/中训练/推理（右）两个阶段。预训练阶段在多模态和机器人推理数据上训练视觉-语言骨干网络，目标多样。后训练阶段，动作推理模型消耗多视角图像和语言指令或视觉轨迹输入，生成感知token、轨迹token和动作token。</p>
+</blockquote>
+<p>与现有方法相比，MolmoAct的核心创新体现在：1) <strong>结构化推理流程</strong>：明确分离感知、规划、控制阶段，使决策过程可解释。2) <strong>空间推理</strong>：使用深度和2D轨迹作为中间表示，而非模糊的语言推理，提升了空间任务的精度。3) <strong>基于轨迹的可操控性</strong>：用户可以通过在图像上直接绘制期望的轨迹τ来引导模型动作（公式5），这比模棱两可的语言指令更精确、更可靠。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与数据集</strong>：实验在仿真环境（SimplerEnv, LIBERO）和真实世界中进行。使用了Open X-Embodiment数据集的子集（BC-Z, BridgeData V2, RT-1）以及作者自行收集的MolmoAct数据集进行训练和评估。</p>
+<p><strong>对比的基线方法</strong>：包括GR00T N1.5, π0, π0-FAST, RT-1, TraceVLA, ThinkAct等。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>仿真性能</strong>：在SimplerEnv视觉匹配任务上，MolmoAct-7B-D达到70.5%的零样本准确率，超过了闭源的π0和GR00T N1.5。在LIBERO长视野任务上，平均成功率达到86.6%，比ThinkAct高出+6.3%。</li>
+<li><strong>真实世界微调</strong>：在单臂任务上，相比π0-FAST有+10%的任务进度提升；在双臂任务上，提升达到+22.7%。</li>
+<li><strong>分布外泛化</strong>：在分布外泛化评估中，MolmoAct比基线高出+23.3%。</li>
+<li><strong>人类偏好与可操控性</strong>：在开放式指令跟随的竞技场式人类评估中，MolmoAct获得了最高的Elo评分，表明其行为更受人类偏好。通过绘制轨迹进行操控被证明比语言指令更有效。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.07917v4/x5.png" alt="仿真与真实世界结果"></p>
+<blockquote>
+<p><strong>图6</strong>：在LIBERO仿真基准上的任务成功率。MolmoAct在长视野任务（LIBERO-L）上表现最佳，展示了其结构化推理在复杂任务上的优势。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.07917v4/figures/final/fig6_1_real_eval_outdist.png" alt="真实世界评估"></p>
+<blockquote>
+<p><strong>图9</strong>：真实世界分布外泛化评估。MolmoAct在未见过的物体和场景配置上，任务进度显著优于基线模型π0-FAST。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.07917v4/figures/final/fig6_2_real_eval_molmoact_dataset.png" alt="MolmoAct数据集贡献"></p>
+<blockquote>
+<p><strong>图10</strong>：使用MolmoAct数据集进行中训练的效果。在真实世界任务中，使用该数据集微调后，模型性能相比基础模型平均提升5.5%。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：论文通过消融实验验证了各核心组件的贡献。移除深度感知token或视觉推理轨迹都会导致性能下降，尤其是深度token对需要空间理解的任务至关重要。同时，使用作者提出的动作token初始化策略比随机初始化收敛更快、性能更好。</p>
+<p><img src="https://arxiv.org/html/2508.07917v4/x8.png" alt="消融研究"></p>
+<blockquote>
+<p><strong>图11</strong>：消融研究结果。展示了移除深度token、移除轨迹token、使用不同的动作token初始化方法对LIBERO基准成功率的影响，证实了各组件的重要性。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了<strong>动作推理模型</strong>这一新类别，设计了感知-&gt;规划-&gt;控制的三阶段结构化推理流水线，使机器人决策可解释、可干预。2) 开创了“<strong>在空间中推理</strong>”的新范式，利用深度感知token和2D视觉轨迹作为中间表示，显著提升了模型的空间理解能力和动作精度。3) 首次发布了大规<strong>模、高质量的开源机器人数据集MolmoAct Dataset</strong>，以及完整的模型、代码，极大地促进了机器人开源基础模型社区的发展。</p>
+<p>论文自身提到的局限性包括：1) <strong>计算成本</strong>：虽然训练效率已大幅提升，但多阶段的自回归推理在部署时可能带来额外的延迟。2) <strong>轨迹编辑的局限性</strong>：当前的可操控性依赖于用户在图像上绘制2D轨迹，这对复杂的三维路径规划可能不够直观。</p>
+<p>对后续研究的启示：1) <strong>结构化中间表示</strong>是提升机器人模型泛化性、可解释性和可操控性的有效途径，值得在其他模态（如力觉、3D点云）上进一步探索。2) <strong>混合主动的人类引导</strong>：结合语言指令和直观的空间示教（如轨迹绘制），可能是实现高效人机协作的关键。3) <strong>开源数据集与模型</strong>的发布为社区提供了宝贵的基准和起点，有望推动机器人基础模型研究走向更加开放和可复现的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人基础模型缺乏空间推理能力，导致适应性、泛化性和语义基础受限的问题，提出MolmoAct动作推理模型。该模型采用三阶段流程：深度感知令牌编码环境信息、空间轨迹计划生成可编辑的路径痕迹、以及精确低层动作预测，实现可解释和可操控的行为。实验表明，MolmoAct-7B-D在SimplerEnv视觉匹配任务上零样本准确率达70.5%，超越闭源模型；在LIBERO上平均成功率86.6%，长视野任务比ThinkAct提升6.3%；真实世界微调中，单臂和双手任务分别比π0-FAST提升10%和22.7%；分布外泛化提升23.3%。使用MolmoAct数据集训练使性能平均提升5.5%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.07917" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

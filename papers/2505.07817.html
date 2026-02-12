@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Pixel Motion as Universal Representation for Robot Control - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Pixel Motion as Universal Representation for Robot Control</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2505.07817" target="_blank" rel="noreferrer">2505.07817</a></span>
+        <span>作者: Ranasinghe, Kanchana, Li, Xiang, Nguyen, E-Ro, Mata, Cristina, Park, Jongwoo, Ryoo, Michael S</span>
+        <span>日期: 2025/05/12</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>将开放式的自然语言指令转化为机器人动作是实现灵活机器人控制的关键。当前主流方法主要分为两类：一类是基于文本到视频生成的方法，直接预测未来的RGB图像序列，但这种方法数据效率较低；另一类是基于稀疏点轨迹预测的方法，仅关注图像中部分像素（如感兴趣物体）的运动，忽略了机械臂运动等全局信息。这些方法通常需要密集的动作轨迹标注或特定的启发式方法，限制了其可扩展性和通用性。</p>
+<p>本文针对机器人控制中需要通用、可解释且能从大量无标注视频-文本数据中学习的表示这一核心痛点，提出了一个新颖的视角：将密集像素运动（Pixel Motion）作为连接语言、视觉与动作的通用中间表示。像素运动（即连续帧间的光流）是一种与具体机器人构型、视角和任务无关的运动中心化表示，可以方便地从视频中无监督地计算获得。本文的核心思路是：首先，利用一个条件扩散模型（System 2）从单帧图像和语言指令预测未来的像素运动序列；然后，通过一个轻量级的映射函数（System 1）将这些可解释的像素运动转换为具体的机器人动作指令。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LangToMo 框架采用双系统（Dual-System）分层架构，灵感来源于认知的双过程理论。高层级的 System 2 作为稀疏时间间隔（每 k 步）调用的高级策略，负责生成与具体机器人构型无关的像素运动表示；低层级的 System 1 作为密集时间间隔（每 j 步，j&lt;k）调用的低级控制器，负责将像素运动映射为特定机器人的可执行动作向量。这种解耦允许两个系统独立训练，并平衡了推理效率与控制密度。</p>
+<p><img src="https://arxiv.org/html/2505.07817v2/figures/related_vis/ours2.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图3</strong>：LangToMo 框架总览。（左）使用可扩展的自监督训练，从视频-字幕对中学习预测作为通用运动特征的像素运动。（右）System 2 在稀疏间隔（k）预测运动，而 System 1 在更密集的间隔（j, j&lt;k）将其映射为动作向量。</p>
+</blockquote>
+<p><strong>System 2: 像素运动预测</strong><br>System 2 是一个条件图像扩散模型，其目标是从单帧图像 ( \bm{x}<em>i ) 和语言指令 ( \bm{c} ) 预测未来第 ( i+k ) 帧的像素运动 ( \hat{\bm{y}}</em>{i,i+k} )，同时以前一时刻的像素运动 ( \bm{y}_{i-k,i} ) 作为时序上下文。这是一个一对多的多模态预测问题。模型采用基于 2D 条件 U-Net 的扩散模型架构，但对输入输出通道进行了修改以适应任务需求。</p>
+<p><img src="https://arxiv.org/html/2505.07817v2/x2.png" alt="扩散模型架构"></p>
+<blockquote>
+<p><strong>图4</strong>：LangToMo 架构。（左）扩散模型以RGB图像、先验运动和字幕为条件生成像素运动。预测结果以箭头叠加显示。（右）在监督设置下，ViT-T网络将预测的运动映射到机器人动作，条件为初始/当前状态和目标运动。</p>
+</blockquote>
+<ul>
+<li><strong>输入/输出</strong>：输入是一个7通道张量，包括当前RGB图像（3通道）、先验像素运动（2通道）以及经过噪声调度的目标像素运动初始噪声（2通道）。输出是2通道的干净像素运动预测。文本嵌入通过交叉注意力注入模型。</li>
+<li><strong>训练目标</strong>：使用标准扩散去噪损失，在预测的像素运动 ( \hat{\bm{y}}<em>{i,i+k} ) 和真实像素运动 ( \bm{y}</em>{i,i+k} ) 之间进行优化。真实像素运动使用 RAFT 算法从视频帧对中无监督计算得到。</li>
+<li><strong>创新细节</strong>：与之前需要未来帧或依赖稀疏点的方法不同，本方法仅从当前观察和语言指令直接生成密集的、保留2D结构的像素运动，能够同时捕捉物体和机械臂的运动，且训练仅需视频-字幕对，无需动作标注。</li>
+</ul>
+<p><strong>System 1: 像素运动到动作的映射</strong><br>System 1 是一个与具体机器人构型（Embodiment）相关的映射函数 ( \mathcal{F} )，其作用是在 System 2 预测的长时间跨度运动 ( \hat{\bm{y}}<em>{i,i+k} ) 的指导下，为中间时刻 ( i+j ) 生成具体的动作向量 ( \hat{\bm{a}}</em>{i+j} )。论文探索了两种实现方式：</p>
+<ol>
+<li><strong>学习映射（LTM-S）</strong>：将预测的像素运动、初始状态图像和当前状态图像在通道维度拼接，输入一个轻量级视觉Transformer（ViT-T）来预测动作。该网络仅需少量专家演示数据进行监督训练。</li>
+<li><strong>手工映射（LTM-H）</strong>：利用像素运动的可解释性，根据特定环境（如模拟环境中的真实分割和深度信息，或真实世界的特定视角）设计确定性的规则将像素运动转换为动作（例如，跟踪特定物体的运动向量）。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在两个平台上进行：1) <strong>真实世界环境</strong>：基于 xArm 机械臂的桌面操作任务（4种任务风格）；2) <strong>模拟环境</strong>：MetaWorld 中的 Sawyer 机械臂操作任务（11个任务）。System 2 主要在 OpenX 数据集的一个子集上进行预训练，随后可在下游任务演示数据上微调。对比的基线方法包括 RT-2、LLaRA、AVDC、GPT-4o、UniPi、Diffusion Policy、Im2Flow2Act、ATM 以及行为克隆（BC）变体等。</p>
+<p><strong>真实世界环境结果</strong></p>
+<ul>
+<li><strong>零样本迁移（表2）</strong>：仅使用 OpenX 预训练的模型（LTM-H）在4个真实任务上平均成功率达到 **33.8%**，显著优于其他需要视频训练（AVDC, GPT-4o）或仅使用机器人数据（RT-2, LLaRA）的基线，证明了预训练模型强大的泛化能力。</li>
+<li><strong>微调结果（表3）</strong>：使用机器人演示（RD）微调后，LTM-H 平均成功率提升至 **68.8%**；同时使用人类演示（HD）和机器人演示微调后，性能进一步提升至 **71.3%**。相比之下，基于RGB预测的 AVDC 方法在混合数据上训练时性能崩溃（0%），这凸显了像素运动表示相对于RGB表示在跨构型（人 vs. 机器人）数据上的优势——人与机器人手部在像素运动空间比在RGB图像空间更相似。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2505.07817v2/x3.png" alt="人类与机器人演示"></p>
+<blockquote>
+<p><strong>图5</strong>：人类（HD）与机器人（RD）演示示例。可视化了两条使用相同指令“捡起橡皮鸭放到碗里”的演示中的中间帧及叠加的像素运动。这两种演示均可用于微调 System 2，体现了 LangToMo 的独特优势。</p>
+</blockquote>
+<p><strong>MetaWorld 模拟环境结果</strong><br>在11个任务的综合评估中，LangToMo 的两种变体（LTM-S 和 LTM-H）均取得了最具竞争力的性能。</p>
+<ul>
+<li><strong>整体性能</strong>：LTM-S（学习映射）和 LTM-H（手工映射）在平均成功率上超越了所有基线方法。</li>
+<li><strong>关键对比</strong>：与最相关的 AVDC（Flow）方法相比，LTM-H 取得了显著提升。即使 AVDC 也使用相同的 OpenX 数据进行预训练（AVDC (PT)），其性能仍不及 LTM-H，这证明了从单帧直接预测像素运动（而非未来RGB帧）的扩散模型设计以及利用过去运动作为条件的有效性。</li>
+<li><strong>数据效率</strong>：LangToMo 仅使用165个MetaWorld视频进行训练，而行为克隆基线（BC-Scratch, BC-R3M）使用了超过5倍的有标注帧-动作对数据，但性能仍不及本文方法，凸显了从视频中无监督学习运动表示的数据效率。</li>
+</ul>
+<p><strong>消融实验</strong><br>论文通过消融实验验证了核心设计选择的重要性：</p>
+<ol>
+<li><strong>过去运动条件</strong>：移除对过去像素运动 ( \bm{y}_{i-k,i} ) 的条件输入会导致性能显著下降，证明了时序上下文对于生成连贯、准确运动预测的必要性。</li>
+<li><strong>密集 vs. 稀疏运动</strong>：与仅关注物体上稀疏点轨迹的方法（如 Im2Flow2Act）进行定性对比，LangToMo 生成的密集像素运动能同时捕捉物体和机械臂的运动，提供了更全面的动作信息。<br><img src="https://arxiv.org/html/2505.07817v2/figures/related_vis/im2flow2act.jpg" alt="密集运动对比"><blockquote>
+<p><strong>图2</strong>：密集运动对比。先前工作（如 Xu et al. (2024)，左图）聚焦于杯子等感兴趣物体的像素子集运动，忽略了机械臂运动信息。LangToMo（右图）生成的密集像素运动则同时考虑了物体和机械臂的运动。</p>
+</blockquote>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：</p>
+<ol>
+<li><strong>提出像素运动作为通用动作表示</strong>：将密集、二维结构的像素运动确立为一种可学习、可解释、且以运动为中心的通用表示，用于连接语言与机器人控制。</li>
+<li><strong>设计简单且可扩展的学习框架</strong>：通过一个历史感知的条件扩散模型，仅利用视频-字幕数据即可学习从语言到运动表示的映射，无需像素级或动作轨迹标注。</li>
+<li><strong>实现灵活的分层机器人控制应用</strong>：通过双系统架构，将学习到的通用运动表示以最小监督（甚至无监督）的方式转化为具体机器人的动作策略，并能有效利用人类演示数据。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，当前方法仅处理二维平面内的像素运动，将第三维（深度）的扩展留作未来工作。此外，手工设计的 System 1 映射函数需要针对特定环境或视角进行调整。</p>
+<p><strong>启示</strong>：本工作表明，从大量无标注视频数据中学习通用的、中间层的运动表示，是构建通用机器人控制器的有效途径。其双系统架构和像素运动表示，为如何融合不同来源（如网络视频、人类演示、机器人演示）的数据进行高效学习提供了新思路。未来研究可探索三维运动表示、更强大的 System 1 学习器，以及将该框架扩展到更复杂的动态场景中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出LangToMo框架，解决将开放自然语言指令转化为机器人动作的核心问题，旨在实现通用、灵活的机器人控制。关键技术采用双系统架构：高级System 2使用图像扩散模型，从单帧图像生成文本条件的像素运动序列作为通用中间表示；低级System 1通过手工或学习得到的映射函数，将像素运动转换为具体机器人动作。该方法以像素运动作为运动中心表示，可从视频弱监督提取，使训练更高效，减少数据需求，实现分层解耦的通用控制。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2505.07817" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

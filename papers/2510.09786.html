@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Enhancing Diffusion Policy with Classifier-Free Guidance for Temporal Robotic Tasks - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Enhancing Diffusion Policy with Classifier-Free Guidance for Temporal Robotic Tasks</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.09786" target="_blank" rel="noreferrer">2510.09786</a></span>
+        <span>作者: Lu, Yuang, Wang, Song, Han, Xiao, Zhang, Xuri, Wu, Yucong, He, Zhicheng</span>
+        <span>日期: 2025/10/10</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人操作领域，基于扩散的策略（Diffusion Policy, DP）和基于Transformer的动作分块（Action Chunking with Transformers, ACT）等方法利用去噪扩散概率模型从感知输入生成动作序列，在处理多模态动作分布（如推动、倾倒）的任务中表现出色。然而，这些方法在处理具有重复周期和精确终止要求的时序顺序任务（如拧螺丝）时面临关键局限。它们通常依赖于单帧瞬时输入，缺乏对更广泛时序上下文的捕捉，无法准确判断何时终止一个任务周期，导致机器人容易陷入局部最优，产生过多的重复动作。此外，DP和ACT使用的扩散模型具有隐式的动作分布，缺乏明确的概率输出，这在周期完成状态模糊的关键决策点引入了不确定性。</p>
+<p>本文针对现有扩散策略在时序任务中终止判断能力不足这一具体痛点，提出了将无分类器引导（Classifier-Free Guidance, CFG）与显式的时序步计数建模相结合的新视角。核心思路是：将当前任务时序步作为条件输入，并利用动态调整的CFG引导因子，在任务接近预期结束时强化终止动作的生成，从而确保精确的周期完成。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的CFG-DP框架旨在增强标准扩散策略，通过整合CFG和时序步输入来改进时序机器人任务中的终止条件判断。</p>
+<p><img src="https://arxiv.org/html/2510.09786v1/model_overview.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：提出的模型架构总览。左侧：观察处理流程示意图，展示了不同输入（视觉、关节状态、时序步）如何组合与处理。右侧：在时间步t，策略处理最新的To步观察Ot，并生成Ta步动作At。</p>
+</blockquote>
+<p><strong>整体流程</strong>：在每一时间步t，策略接收一个观察序列Ot（包含最近To=2帧的数据），其中每帧观察包括RGB图像、本体感知关节状态以及一个标量的时序步计数St。策略输出一个未来Ta步的动作序列At。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>时序步条件输入</strong>：时序步计数St被显式地作为模型输入的一部分，用于跟踪任务进度。它被映射到一个高维嵌入，与其他模态的特征（由ResNet-18处理的视觉特征和线性层处理的关节状态特征）拼接，形成统一的观察表示。</li>
+<li><strong>无分类器引导机制</strong>：这是方法的核心创新。模型同时训练两个去噪网络：<ul>
+<li><strong>条件模型</strong>：预测分布 p(At | Ot, St)，其生成过程受时序步St条件引导。</li>
+<li><strong>无条件模型</strong>：预测分布 p(At | Ot)，忽略时序步，提供基础的动作分布。<br>在推理时，CFG通过一个动态引导因子λ结合两个模型的噪声预测：<br>εθ* = λ · εθ_cond(Ot, St, At^k, k) + (1-λ) · εθ_uncond(Ot, At^k, k)<br>其中，εθ_cond和εθ_uncond分别是条件模型和无条件模型在扩散步k预测的噪声。</li>
+</ul>
+</li>
+<li><strong>动态引导因子</strong>：λ并非固定值，而是根据当前时序步动态调整：λ = λ_max · 1 / (1 + e^-(St - St0))。其中St0是任务接近完成的预期时序步（从平均任务长度得出）。该sigmoid函数确保在任务初期λ缓慢增加，在周期接近结束时加速增大，从而在关键时刻增强条件模型对终止动作的引导作用。</li>
+</ol>
+<p><strong>创新点</strong>：与现有方法相比，CFG-DP的主要创新在于将CFG（原用于目标条件任务）适配到时序步条件任务中，并设计了与任务进度绑定的动态引导机制。这使得策略不仅能感知任务阶段，还能在决策点主动地、有倾向性地生成终止动作，解决了传统DP/ACT因缺乏时序感知而导致的重复循环问题。模型使用DDIM采样器将去噪步骤减少到10步，在Nvidia 3090 GPU上延迟约为0.1秒。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在一个真实世界的<strong>人形机器人拧螺丝任务</strong>上进行评估。机器人需使用灵巧手抓取棘轮扳手，执行三个拧紧循环，然后将手臂缩回到指定区域。使用两个摄像头（头部和手腕）提供RGB图像，观察空间还包括7维关节角度、灵巧手状态和时序步计数。动作空间为7维，控制频率10Hz。通过VR遥操作收集了200条演示轨迹，并标注了时序步计数。</p>
+<p><strong>对比方法</strong>：</p>
+<ul>
+<li>**Diffusion Policy (DP)**：使用ResNet-18骨干的扩散模型。</li>
+<li>**Action Chunking with Transformers (ACT)**：基于Transformer的动作分块模型。</li>
+</ul>
+<p><strong>评估指标</strong>：成功率（完成所有循环并缩回）、重复动作次数（超出所需循环的冗余旋转）、完成时间。</p>
+<p><img src="https://arxiv.org/html/2510.09786v1/cam_rep.png" alt="定性对比"></p>
+<blockquote>
+<p><strong>图2</strong>：拧螺丝任务中DP模型与CFG-DP模型的对比。(a) DP模型表现出重复的循环动作，无法正确终止。(b) CFG-DP模型成功完成任务并执行了精确的终止动作。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.09786v1/cam.png" alt="动作轨迹"></p>
+<blockquote>
+<p><strong>图3</strong>：验证集上拧螺丝任务的动作轨迹（以腕部关节状态为例）。上图：DP；中图：ACT；下图：CFG-DP。CFG-DP表现出平滑的循环和成功的缩回，而DP和ACT则陷入重复循环或产生抖动。</p>
+</blockquote>
+<p><strong>关键定量结果</strong>：</p>
+<table>
+<thead>
+<tr>
+<th align="left">方法</th>
+<th align="left">成功率 (%)</th>
+<th align="left">重复动作次数</th>
+<th align="left">完成时间 (s)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">DP</td>
+<td align="left">55.6</td>
+<td align="left">2.6</td>
+<td align="left">32.0</td>
+</tr>
+<tr>
+<td align="left">ACT</td>
+<td align="left">50.3</td>
+<td align="left">3.2</td>
+<td align="left">41.0</td>
+</tr>
+<tr>
+<td align="left">CFG-DP (Ours)</td>
+<td align="left"><strong>83.2</strong></td>
+<td align="left"><strong>0.3</strong></td>
+<td align="left"><strong>24.2</strong></td>
+</tr>
+</tbody></table>
+<p>CFG-DP在真实机器人实验的所有指标上均显著优于基线方法。</p>
+<p><img src="https://arxiv.org/html/2510.09786v1/x1.png" alt="终止步分布"></p>
+<blockquote>
+<p><strong>图4</strong>：拧螺丝任务的终止步数分布。CFG-DP的分布更集中，均值接近预期终止步，右尾被压缩，表明其终止精度高。DP和ACT的分布更分散且右尾长，说明它们经常延迟终止。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：<br><img src="https://arxiv.org/html/2510.09786v1/x2.png" alt="条件熵"></p>
+<blockquote>
+<p><strong>图5</strong>：消融实验中条件熵的演化。完整CFG-DP模型在终止步附近条件熵急剧下降，表明动作分布高度确定地收敛于终止动作。缺少CFG或时序步输入的配置则保持较高熵值或波动较大，决策确定性差。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.09786v1/lambda_max.png" alt="引导因子消融"></p>
+<blockquote>
+<p><strong>图6</strong>：最大引导因子λ_max对预测准确度（MSE）影响的消融研究。λ_max = 1.10时取得最低MSE，表明该值能最佳地平衡条件引导与动作准确性。</p>
+</blockquote>
+<p>消融实验表明：1) CFG和时序步输入对于在终止时刻实现确定性决策至关重要；2) 动态引导因子λ需要精细调节（λ_max=1.10最优），以平衡任务过程中的多模态探索和结束时的精确终止。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了CFG-DP框架，首次将无分类器引导与显式时序步建模结合，用于增强扩散策略在时序顺序任务中的终止判断能力。</li>
+<li>设计了与任务进度相关的动态引导因子，使策略能在周期结束时主动强化终止动作的生成，有效减少重复循环。</li>
+<li>在真实人形机器人拧螺丝任务上验证了框架的有效性，相比DP和ACT，成功率大幅提升至83.2%，同时几乎消除了重复动作。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到该方法对时序步计数的估计较为敏感。此外，当前工作主要集中于单一类型的循环任务（拧螺丝）。</p>
+<p><strong>后续启示</strong>：</p>
+<ol>
+<li>可以探索通过强化学习等方式优化时序步预测，减少对人工参数调谐的依赖，提升模型鲁棒性。</li>
+<li>未来工作可扩展至更复杂的多周期操作（如装配、拾放），通过分层或模块化策略将复杂任务分解为子任务。</li>
+<li>研究多任务学习，使策略能够适应多样化的操作任务而无需重新训练。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对人形机器人执行时序序列任务时，现有Diffusion Policy（DP）和ACT方法因缺乏时间上下文导致局部最优、重复动作过多及终止判断不准的问题，提出Classifier-Free Guidance-Based Diffusion Policy（CFG-DP）框架。该框架集成Classifier-Free Guidance（CFG），通过时间步输入跟踪任务进展，动态调整动作预测，以引导因子平衡时间连贯性与准确性，确保精确周期终止。真实机器人实验表明，该方法实现了高成功率和最小化重复动作，显著提升了时序任务的确定性控制与执行可靠性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.09786" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

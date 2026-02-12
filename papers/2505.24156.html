@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Towards a Generalizable Bimanual Foundation Policy via Flow-based Video Prediction - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Computer Vision and Pattern Recognition (cs.CV)</span>
+      <h1>Towards a Generalizable Bimanual Foundation Policy via Flow-based Video Prediction</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2505.24156" target="_blank" rel="noreferrer">2505.24156</a></span>
+        <span>作者: Fan, Chenyou, Yan, Fangzheng, Bai, Chenjia, Wang, Jiepeng, Zhang, Chi, Wang, Zhen, Li, Xuelong</span>
+        <span>日期: 2025/05/30</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>学习一个通用的双手机器人操作策略对具身智能体而言极具挑战性，主要源于庞大的动作空间和双臂协调运动的需求。现有方法主要依赖视觉-语言-动作模型从大规模数据中获取策略，但将单臂数据集或预训练VLA模型的知识迁移到双臂场景时往往泛化不佳。这主要是因为高质量双臂数据的稀缺，以及单臂与双臂操作在本质上的差异。构建通用的双臂VLA模型面临两大挑战：需要从聚合数据集从头开始训练，计算开销大；且双臂操作本身具有显著的多模态性，需要全面的数据覆盖。本文提出一个关键问题：能否在不直接处理异构动作的情况下，利用基础模型构建双臂策略？观察发现，尽管双臂动作复杂，但其产生的状态轨迹可以用视频统一表示。因此，本文核心思路是：利用强大的文本到视频模型预测机器人未来轨迹，再通过一个轻量级扩散策略从预测视频中生成动作，从而绕过对复杂动作的直接建模和数据需求难题。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的CogRobot框架旨在训练一个指令条件下的双臂策略π(a_{t:t+N-1}|o_t, l)。整体流程分解为两步：1）给定当前观测o_t和语言指令l，预测未来N步的观测轨迹o_{t+1:t+N}（即视频）；2）从预测的观测序列中推导出可执行的低级动作a_{t:t+N-1}。其中，观测轨迹预测被构建为一个视频生成问题。</p>
+<p><img src="https://arxiv.org/html/2505.24156v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：CogRobot概述。(a) 基于Realman机械臂和Intel RealSense相机构建的双臂机器人系统。(b) 提出的双臂轨迹预测两阶段流程。第一阶段专注于建模潜在的手臂运动，并以此作为第二阶段视频预测的额外指导。</p>
+</blockquote>
+<p>直接微调T2V模型（如CogVideoX）于有限的双臂数据上效果不佳，存在物理幻觉、任务混淆和指令模糊等问题（如图2所示）。为解决这些问题，CogRobot创新性地引入光流作为中间变量，将流程分解为两个基于CogVideoX构建的模块：文本到光流和光流到视频。</p>
+<p><strong>文本到光流生成</strong>：该模块的目标是预测从初始观测o_0到未来各时刻观测o_t的光流序列F_{0:N}。光流能捕捉机器人关节、末端执行器以及机器人与物体接触的细粒度运动细节。为克服光流（2通道）与RGB图像（3通道）的模态差异并利用预训练模型的先验，论文将光流转换为“光流视频”：计算每个光流向量(u,v)的幅度和方向角，根据方向角从色轮中映射颜色，幅度决定颜色饱和度。这样，光流序列被转换为3通道的流视频v_F。随后，基于预训练的CogVideoX模型进行微调，学习条件分布p_{θ_f}(v_F | o_0, l)。训练时冻结VAE，使用标准的扩散去噪损失函数L_flow（公式2），预测添加到潜变量z_f^k上的噪声。</p>
+<p><strong>光流到视频预测</strong>：该模块利用第一阶段预测的光流视频v_F中蕴含的运动和交互线索来指导视频合成。这些线索提供了难以仅从文本推断的动态模式。如图3的注意力图可视化所示，引入光流引导的模型能更好地将指令中的动作词与相关视觉区域对齐，并更准确地分割目标物体。模型学习分布p_{θ_v}(v | o_0, l, v_F)。为融入光流信息，在训练时将流视频v_F和真实双臂轨迹视频v分别编码为潜变量z_f和z_v^0。在去噪过程中，将带噪声的视频潜变量z_v^k与流潜变量z_f在通道维度上拼接，形成z^k = [z_v^k, z_f]作为模型输入。训练目标同样是去噪损失L_video（公式3）。</p>
+<p><strong>从视频到扩散策略</strong>：为控制机器人，需要一个控制器从预测视频中提取动作。论文将预测视频的每一帧视为机器人应达到的目标观测，并训练一个以初始观测o_0和目标观测o_n为条件的到达策略π(a_{0:n} | o_0, o_n)。该策略采用Diffusion Policy实现，其输入是初始和目标观测的图像，输出是动作序列。通过迭代应用此策略于预测视频的连续帧之间，即可生成完整的动作序列用于执行。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：使用了两个双臂数据集RDT和RoboMIND，并构建了一个由两个7自由度Realman机械臂和外部RGB相机组成的真实双臂平台收集数据。评估在模拟环境和真实世界中进行。</p>
+<p><strong>对比方法</strong>：包括直接微调不同规模CogVideoX的模型、基于统一动作空间的方法RDT和GROOT，以及基于潜在动作嵌入的方法GO-1。</p>
+<p><img src="https://arxiv.org/html/2505.24156v1/x2.png" alt="可视化对比"></p>
+<blockquote>
+<p><strong>图2</strong>：不同模型生成视频的可视化对比。展示了零样本、直接微调以及本文光流引导方法的结果，凸显了直接微调存在的物理幻觉、任务混淆等问题。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.24156v1/x3.png" alt="注意力图对比"></p>
+<blockquote>
+<p><strong>图3</strong>：不同模型的注意力图对比。本文的流引导模型能更准确地将指令词与相关动作区域和目标物体对齐。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.24156v1/x4.png" alt="模拟环境结果"></p>
+<blockquote>
+<p><strong>图4</strong>：在RDT和RoboMIND数据集上的模拟实验成功率。CogRobot在两个数据集上均显著优于所有基线方法。</p>
+</blockquote>
+<p><strong>关键结果</strong>：</p>
+<ul>
+<li>在RDT数据集上，CogRobot达到73.8%的成功率，比最佳基线（CogVideoX-5B-SFT的53.8%）高出20个百分点。</li>
+<li>在RoboMIND数据集上，CogRobot达到68.5%的成功率，比最佳基线（CogVideoX-2B-SFT的48.1%）高出超过20个百分点。</li>
+<li>在真实机器人上的6个任务中，CogRobot平均成功率为68.3%，而直接微调的CogVideoX-5B-SFT仅为31.7%。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2505.24156v1/x5.png" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>图5</strong>：真实世界机器人实验的成功率。CogRobot在大多数任务上表现优异，显著优于直接微调基线。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.24156v1/x6.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图6</strong>：消融研究结果。两阶段设计（T2F+F2V）至关重要，且将原始光流转换为流视频（Flow→RGB）带来了显著提升。</p>
+</blockquote>
+<p><strong>消融实验</strong>：验证了各个组件的贡献。移除任一阶段（仅T2V或仅T2F）性能都会大幅下降，证明了两阶段设计的必要性。此外，将原始2D光流转换为3通道流视频（Flow→RGB）比直接使用原始光流表现更好，证明了该转换策略的有效性。</p>
+<p><img src="https://arxiv.org/html/2505.24156v1/x7.png" alt="轨迹预测质量"></p>
+<blockquote>
+<p><strong>图7</strong>：预测视频与真实视频的LPIPS和FVD指标对比。CogRobot预测的轨迹视频质量更高，更接近真实情况。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.24156v1/x8.png" alt="动作生成质量"></p>
+<blockquote>
+<p><strong>图8</strong>：从预测视频中生成的动作与专家动作的误差对比。CogRobot生成的动作更接近专家动作。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.24156v1/x9.png" alt="泛化能力"></p>
+<blockquote>
+<p><strong>图9</strong>：在未见过的物体和场景上的泛化性能。CogRobot展现了较强的泛化能力。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个利用文本到视频基础模型来训练通用双臂策略的新框架，避免了从头训练VLA模型或直接建模复杂动作。</li>
+<li>创新性地引入光流作为中间表示，并设计了两阶段（文本到光流、光流到视频）微调范式，显著降低了对双臂数据的需求，并缓解了语言指令的模糊性。</li>
+<li>构建了真实双臂机器人平台并收集了高质量数据，在模拟和真实实验中验证了方法的有效性和优越的泛化能力。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，当前方法依赖于外部相机观测，在严重遮挡或需要触觉反馈的任务中可能面临挑战。</p>
+<p><strong>启示</strong>：这项工作展示了利用强大的生成式视频模型和中间物理表示（如光流）来桥接高级指令与低级机器人控制的潜力。未来的研究可以探索其他形式的中间表示，或将此框架与更多的多模态数据源（如触觉、力觉）相结合，以处理更复杂的操作任务。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对双臂机器人操作策略泛化性差的问题，提出一种基于光流视频预测的新型基础策略。核心方法采用两阶段范式：首先微调文本-光流模型，将语言指令转化为表示细微运动的光流；随后通过光流-视频模型进行精细视频预测，从而降低语言歧义并减少对机器人底层动作数据的依赖。实验在仿真和真实双臂机器人上进行，结果表明该方法能有效学习协调的双臂操作策略，并提升泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2505.24156" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

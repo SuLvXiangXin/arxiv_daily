@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Ego-Vision World Model for Humanoid Contact Planning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Ego-Vision World Model for Humanoid Contact Planning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.11682" target="_blank" rel="noreferrer">2510.11682</a></span>
+        <span>作者: Liu, Hang, Gao, Yuman, Teng, Sangli, Chi, Yufeng, Shao, Yakun Sophia, Li, Zhongyu, Ghaffari, Maani, Sreenath, Koushil</span>
+        <span>日期: 2025/10/13</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在非结构化环境中实现人形机器人自主性，关键不仅在于避免碰撞，更在于主动利用物理接触（如倚靠墙壁保持平衡、阻挡飞来的物体、弯腰穿过障碍）。然而，针对接触的规划仍具挑战性。传统基于优化的方法（如轨迹优化）受限于接触时序的组合复杂性，且对模型误差敏感，难以实时适应突发情况。基于在线策略的强化学习（RL）方法虽然取得进展，但样本效率低下（尤其涉及视觉输入时），并且多任务学习能力有限，通常一个策略只能解决一个特定任务。</p>
+<p>本文针对上述痛点，提出了一种新视角：将学习的世界模型与基于采样的模型预测控制（MPC）相结合。该方法的核心思路是：首先，利用一个无需演示、仅从随机离线数据中训练得到的可扩展视觉世界模型，在压缩的潜在空间中预测未来状态；其次，引入一个学习的替代价值函数来指导MPC规划，以应对稀疏接触奖励和传感器噪声，实现密集且鲁棒的实时规划。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文采用分层控制框架，由底层策略和高层规划器组成。底层策略基于纯本体感知（角速度、重力矢量、关节状态等），通过PPO训练，负责跟踪高层规划器发出的全身控制指令（末端执行器位置 <code>p_ee</code> 和身体高度 <code>h_body</code>）。高层规划器的观测 <code>o_t</code> 则结合了本体感知和64×48的自中心深度图像，其动作空间排除了基座速度，迫使机器人通过姿态调整而非移动来应对接触任务。</p>
+<p>高层规划器的核心是一个学习的世界模型和一个价值引导的采样MPC。整体流程分为离线的世界模型训练和在线的MPC规划两阶段。</p>
+<p><img src="https://arxiv.org/html/2510.11682v1/fig/fig_wm5.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：世界模型训练流程。(a) 离线数据收集：通过向配备底层策略的仿真人形机器人随机采样高层动作（<code>p_ee</code>, <code>h_body</code>）来生成轨迹数据集 𝒟。(b) 世界模型训练：在每一步 <code>t</code>，观测 <code>o_t</code>（深度图+本体感知）被编码为随机潜在状态 <code>z_t</code> 并解码重建为 <code>ô_t</code>；同时，循环网络根据前一状态和动作更新确定性潜在状态 <code>h_t</code>。模型基于组合潜在状态 <code>(h_t, z_t)</code> 预测：随机潜在先验 <code>ẑ_t</code>、终止概率 <code>d̂_t</code> 以及指导规划器的替代动作价值 <code>Q̂_t</code>。</p>
+</blockquote>
+<p><strong>世界模型架构与训练</strong>：模型受Dreamer和JEPA启发，旨在预测未来的抽象潜在表示，而非原始像素，以避免长时域下的误差累积。它包含以下关键组件：</p>
+<ol>
+<li>**确定性动态潜在 <code>h_t</code>**：由RNN维护，根据 <code>(h_{t-1}, z_{t-1}, a_{t-1})</code> 更新，用于总结跨时间的动态信息。</li>
+<li>**随机观测潜在 <code>z_t</code>**：由编码器 <code>q_ϕ</code> 根据当前观测 <code>o_t</code> 和 <code>h_t</code> 推断得出，迫使潜在状态编码最显著的特征。</li>
+<li>**解码器 <code>p_ϕ</code>**：根据 <code>(h_t, z_t)</code> 重建观测 <code>ô_t</code>。</li>
+<li>**先验模型 <code>p_ϕ(ẑ_t | h_t)</code>**：仅根据 <code>h_t</code> 预测 <code>z_t</code> 的近似，用于在潜在空间中进行开环推演。</li>
+<li><strong>专用预测头</strong>：为解决机器人领域特有的部分可观测性、高传感器噪声和稀疏接触奖励问题，模型直接基于潜在状态 <code>(h_t, z_t)</code> 预测终止概率 <code>d̂_t</code> 和替代价值函数 <code>Q̂_t = Q_ϕ(h_t, z_t, a_t)</code>。<code>Q̂_t</code> 以 <code>z_t</code> 为条件，使机器人能从观测中推断当前任务上下文，从而实现多任务联合训练。</li>
+</ol>
+<p>训练使用离线数据集，总损失为三项之和：重建损失 <code>ℒ_rec</code>（包含观测NLL损失和终止信号BCE损失）、联合嵌入预测损失 <code>ℒ_jep</code>（两个KL散度项，确保潜在空间一致且不坍缩）以及替代价值损失 <code>ℒ_Q̂</code>（使用蒙特卡洛估计器计算目标Q值的均方误差）。</p>
+<p><img src="https://arxiv.org/html/2510.11682v1/fig/fig_mpc5.png" alt="规划流程"></p>
+<blockquote>
+<p><strong>图3</strong>：价值引导采样MPC。展示了训练好的世界模型如何用于规划。从单个真实观测 <code>o_t</code> 开始，编码得到 <code>z_t</code>。规划器采样 <code>M=1024</code> 条长度为 <code>N=4</code> 的候选动作序列。世界模型递归应用其学习的动态模型预测未来潜在状态 <code>(h_{t+k}, ẑ_{t+k})</code>。在每一步，用 <code>Q̂_{t+k}</code> 评估动作，并用终止信号 <code>d̂_t</code> 预测失败概率（如摔倒），若超过阈值0.9，则该轨迹后续价值估计设为零。使用交叉熵方法（CEM）优化目标函数 <code>Ĵ_N</code>（公式16）以找到最优动作序列，仅执行第一个动作。</p>
+</blockquote>
+<p><strong>价值引导采样MPC</strong>：由于离线数据覆盖不完全、部分可观测性及物理非理想性，学习到的价值函数 <code>Q̂</code> 并不完美，存在方差。本文没有直接贪婪最大化 <code>Q̂</code>，而是提出了一个<code>N</code>步替代优化目标 <code>Ĵ_N = (1/N) Σ Q̂(s_t, a_t)</code>，并理论分析了在价值估计误差相关性有界 (<code>ρ&lt;1</code>) 的条件下，该平均操作能有效降低方差。规划时，将潜在状态 <code>(h_t, ẑ_t)</code> 作为机器人状态的表示，优化问题如公式(16)所示，同时利用预测的终止概率 <code>d̂_t</code> 提前剔除可能导致失败的轨迹。规划完成后执行第一步动作，并在下一个时间步重新规划，以实现闭环反馈。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与任务</strong>：实验平台为Unitree G1人形机器人，配备RealSense D435i相机。定量分析在仿真中进行，并在实物机器人上进行了实时验证。设计了三个核心接触任务：(1) <strong>倚靠墙壁</strong>：受扰动后用手支撑墙壁保持平衡；(2) <strong>阻挡球体</strong>：用手拦截飞来的物体；(3) <strong>穿过拱门</strong>：低头穿过低矮拱门避免碰撞。</p>
+<p><strong>对比基线</strong>：包括(1) <strong>PPO</strong>（在线策略RL）；(2) <strong>ARWM</strong>（自回归世界模型）；(3) <strong>Rew-MPC</strong>（将目标函数替换为预测奖励之和）；(4) <strong>TD-MPC</strong>（将目标函数替换为预测奖励之和加终端价值）。</p>
+<p><img src="https://arxiv.org/html/2510.11682v1/x1.png" alt="真实实验"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界实验验证。(a) 顺序任务执行与泛化：机器人先穿过拱门(i)，然后阻挡一个未见过的盒子(ii)。(b) 被推向墙壁时用手支撑以保持平衡。(c) 阻挡训练分布内的球和未见过的盒子。(d) 下蹲并穿过拱门。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>单任务性能与消融</strong>：如表1所示，本文方法（<code>N=4</code>）在“阻挡球体”和“穿过拱门”任务上取得了最佳或接近最佳的平均奖励（球: 0.0061，拱门: 0.0157）。消融实验表明：规划视野 <code>N=4</code> 综合性能最好；使用自回归世界模型（ARWM）在“拱门”任务上性能大幅下降（-0.0018）；使用奖励之和（Rew-MPC）或TD-MPC风格的目标函数，在“球”或“拱门”任务上表现不佳，验证了本文价值引导目标函数的有效性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.11682v1/fig/fig_data_efficient2.png" alt="样本效率"></p>
+<blockquote>
+<p><strong>图5</strong>：样本效率对比。x轴为使用的步数转移量，y轴为任务奖励。本文方法使用最多1M步的离线数据集，而PPO需要在线收集远超此量的数据才能达到可比性能，证明了本文方法极高的数据效率。</p>
+</blockquote>
+<ol start="2">
+<li><strong>样本效率</strong>：如图5所示，在三个任务上，本文方法仅使用约1M步的离线随机数据，其性能即达到或超过了PPO需要在线收集数倍甚至数十倍数据量才能达到的水平，显著提升了数据效率。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.11682v1/x2.png" alt="多任务与潜在空间"></p>
+<blockquote>
+<p><strong>图6</strong>：多任务性能与潜在空间可视化。(a) 单一模型在所有任务上联合训练，其归一化性能与专用于单任务的模型相当。(b-c) t-SNE可视化显示，潜在空间 <code>h_t</code>（动态潜在）随时间演化显著，而 <code>z_t</code>（观测潜在）则对当前环境观测提供了更压缩的、能区分不同任务的表示。</p>
+</blockquote>
+<ol start="3">
+<li><strong>多任务能力与潜在空间</strong>：如图6a所示，使用单一模型在混合多任务数据集上训练，其性能与针对每个任务单独训练的专用模型相当，证明了模型的多任务能力。图6b-c的t-SNE可视化表明，动态潜在 <code>h_t</code> 随时间变化显著，主要编码动态信息；而观测潜在 <code>z_t</code> 则形成了清晰的任务聚类，验证了其能根据观测推断任务上下文的设计初衷。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个<strong>可扩展的视觉世界模型</strong>，能够从无演示的离线随机数据中学习，捕获多种接触任务的动态，并在压缩的潜在空间中进行预测。</li>
+<li>设计了一个<strong>价值引导的采样MPC框架</strong>，通过优化多步平均替代价值来降低方差，实现了从像素到动作的鲁棒、实时规划。</li>
+<li>在<strong>真实人形机器人</strong>上成功验证了该框架，仅依靠自中心深度图像和本体感知，完成了多种需要主动利用或避免接触的敏捷、鲁棒任务。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，学习到的世界模型要完全泛化，尤其是对于从部分、有噪声的感官数据中推断和预测难以直接观测的全身接触状态，仍然是一个开放性问题。</p>
+<p><strong>启示</strong>：这项工作展示了结合学习的世界模型与经典采样规划在解决机器人接触规划问题上的巨大潜力，特别是在提升数据效率、多任务能力和现实世界部署鲁棒性方面。其价值引导的规划思想和分层架构为处理复杂、高维的机器人感知-控制问题提供了新思路。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决仿人机器人在复杂环境中进行实时、鲁棒的接触感知规划的挑战。方法上，结合了学习的世界模型与基于采样的模型预测控制（MPC）。关键技术要点包括：在无演示的离线数据集上训练世界模型，于压缩潜在空间预测未来；并引入学习的替代价值函数，为MPC提供密集、鲁棒的规划指导。实验表明，该单一模型支持多种接触任务（如借墙平衡、阻挡物体），相比在线强化学习提高了数据效率与多任务能力，并成功在实体机器人上实现了基于本体感知与视觉的实时规划。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.11682" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Grounding Multimodal LLMs to Embodied Agents that Ask for Help with Reinforcement Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Artificial Intelligence (cs.AI)</span>
+      <h1>Grounding Multimodal LLMs to Embodied Agents that Ask for Help with Reinforcement Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2504.00907" target="_blank" rel="noreferrer">2504.00907</a></span>
+        <span>作者: Ramrakhya, Ram, Chang, Matthew, Puig, Xavier, Desai, Ruta, Kira, Zsolt, Mottaghi, Roozbeh</span>
+        <span>日期: 2025/04/01</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，在具身人工智能领域，训练能够执行复杂任务的智能体主要依赖两种范式：一是收集大规模的人类演示数据并结合模仿学习；二是使用强化学习并依赖手动设计的密集奖励函数。然而，当任务涉及与人类进行自然语言交互（如询问澄清问题）时，这两种方法均面临巨大挑战。收集交织了语言交互的机器人操作数据成本高昂，而为鼓励智能体进行任务特定的演绎或常识推理而手动设计奖励函数则极其困难。现有的一些工作尝试利用大型语言模型（LLM）的零样本推理能力进行任务规划和提问，但它们通常需要复杂的提示工程，并强依赖于环境完全可观测且能无误差地转化为文本的假设，这在现实的部分可观测环境中并不成立。</p>
+<p>本文针对“如何训练能够在部分可观测的家庭环境中，通过主动询问最少的澄清问题来解析模糊、欠指定的人类指令的具身智能体”这一具体痛点，提出了一种新的训练范式。核心思路是：利用一个LLM的常识和演绎推理能力来生成奖励信号，进而通过在线强化学习（RL）微调一个多模态大语言模型（MLLM），将其适配为能够同时执行动作和生成自然语言提问的视觉-语言-动作（VLA）策略，从而端到端地学习“询问以执行”（Ask-to-Act）的能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法名为 <strong>AutoAsk</strong>，旨在将预训练的MLLM适配为VLA模型，使其在部分可观测的多模态具身决策环境中，既能执行动作，又能生成自然语言问题以消除歧义，而无需依赖人工标注或手动设计的奖励。该方法使用基于LLM生成奖励的强化学习进行训练。</p>
+<p><img src="https://arxiv.org/html/2504.00907v5/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：MLLM策略架构。策略以任务指令、过去的观测、动作以及用户对已提问的回应作为输入，输出一个高层动作或一个自然语言问题。</p>
+</blockquote>
+<p><strong>整体框架与策略架构</strong>：如<strong>图2</strong>所示，策略基于LLaVA-OneVision MLLM架构进行改造。输入包括任务指令、当前视觉观测、文本化的过去动作序列以及用户对历史提问的语言回应。为了处理部分可观测环境下所需的长序列观测历史，并避免视觉令牌数量爆炸式增长，作者引入了一个Perceiver模型，将每个观测图像的大量视觉令牌（如729个）下采样为少量令牌（本文中k=4）。这些下采样后的视觉令牌与语言指令、动作历史、用户回应等文本令牌进行交错排列，共同输入MLLM。MLLM以自回归方式预测一个语言令牌序列，该序列对应一个离散的高层技能动作（如<code>pick(apple)</code>）或一个自由形式的自然语言提问。</p>
+<p><strong>训练与LLM生成奖励</strong>：使用在线RL（具体为DD-PPO算法）对基础MLLM进行微调。关键创新在于使用另一个LLM（本文使用Llama-3）作为奖励模型来生成训练信号。在训练时，当智能体采取动作或提问时，系统会向奖励LLM提供特权环境状态（仿真器信息）、任务指令、所有目标物体的元数据、预期目标位置、已提问的问题以及当前步骤的动作/问题的文本化表示。奖励LLM被要求评估当前步骤的行为（特别是提问）是否有助于消除歧义或识别用户偏好，并生成一个二元奖励信号。</p>
+<p>奖励函数设计如下：<br><code>r_t = r1 * 𝟙_success + r2 * 𝟙_subgoal + r3 * 𝟙_useful_question - r4 * 𝟙_exceed_budget - r5</code><br>其中：</p>
+<ul>
+<li><code>𝟙_success</code>: 任务完成的稀疏奖励。</li>
+<li><code>𝟙_subgoal</code>: 实现子目标（如拾取目标物体）的奖励，可由LLM或程序化生成。</li>
+<li><code>𝟙_useful_question</code>: <strong>核心奖励项</strong>，由奖励LLM判断所提问题是否有效且有助于在消除歧义方面取得进展。</li>
+<li><code>𝟙_exceed_budget</code>: 对超出预设问题预算的惩罚。</li>
+<li><code>r5</code>: 每一步的小额惩罚，鼓励以更少步骤完成任务。</li>
+</ul>
+<p><strong>创新点</strong>：</p>
+<ol>
+<li><strong>奖励生成新范式</strong>：首次系统性地将LLM作为奖励模型，用于训练需要常识和演绎推理（如主动提问）的具身任务，避免了手动设计此类复杂奖励的难题。</li>
+<li><strong>端到端VLA策略训练</strong>：首次展示了如何利用在线RL和LLM生成的奖励，将MLLM微调为能够在部分可观测环境中同时执行物理动作和生成自然语言交互的VLA策略。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>任务与环境</strong>：在Habitat 3.0仿真器中实例化Ask-to-Act任务，使用ReplicaCAD数据集的83个室内场景（63个训练，20个评估）和Google Scanned Objects的42个物体类别。任务涉及单物体/多物体重排，包含多种歧义类型（属性、空间关系、物体大小、组合歧义等）。</li>
+<li><strong>评估维度</strong>：1) <strong>未见场景</strong>：在未见过的场景中评估已见过的任务类型；2) <strong>未见任务</strong>：在未见过的场景中评估包含新歧义组合的未见过的任务实例。</li>
+<li><strong>基线方法</strong>：包括（a）具备完全可观测文本世界图谱和ReAct提示的GPT-4o（零样本/少样本）；（b）具备部分可观测文本世界图谱的GPT-4o（少样本）；（c）结合视觉输入和Set-of-Marks提示的GPT-4o；（d）使用合成专家轨迹进行监督微调（SFT）的LLaVA-OneVision。</li>
+<li><strong>评估指标</strong>：成功率（SR）、歧义解决效率得分（ARS，同时衡量任务成功与提问效率）、问题比率（QR，总提问数/最少必需提问数）。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2504.00907v5/figures/analysis.png" alt="结果分析"></p>
+<blockquote>
+<p><strong>图3</strong>：消融分析与行为研究。左图显示，仅使用子目标奖励（无提问奖励）训练的策略（蓝线）在Ask-to-Act任务上成功率接近随机水平，而加入LLM生成的提问奖励后（橙线）性能大幅提升，证明了密集提问奖励的必要性。右图表明，随着允许提问的预算增加，策略的成功率（尤其是对未见任务）也随之提高。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2504.00907v5/figures/qualitative_example.png" alt="定性示例"></p>
+<blockquote>
+<p><strong>图4</strong>：定性结果示例。展示了AutoAsk策略（经过RL微调）与SFT基线在相同任务上的表现对比。AutoAsk策略能够提出更精准、更少的问题来消除歧义（例如，针对“红色杯子”，直接询问“你要的是厨房台面上的红色杯子吗？”），而SFT基线则可能提出冗余或无效的问题。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：<br>根据论文表1（此处为文字总结）：</p>
+<ol>
+<li><strong>上限与挑战</strong>：在完全可观测的文本设定下，使用少样本示例的GPT-4o（基线2）取得了最佳性能（未见场景SR: 46.7%，未见任务SR: 44.4%），这为任务设立了上限。但一旦切换到部分可观测设定（基线3），其性能大幅下降（SR分别降至35.5%和32.2%），凸显了在需要主动探索的环境中进行规划和推理的难度。</li>
+<li><strong>AutoAsk性能</strong>：本文提出的AutoAsk方法在部分可观测的视觉输入设定下，取得了<strong>45.9%<strong>（未见场景）和</strong>38.7%<strong>（未见任务）的成功率，显著优于所有其他在部分可观测条件下运行的基线（包括视觉GPT-4o和SFT方法），分别实现了约</strong>10.4%</strong> 和 <strong>16.5%</strong> 的绝对性能提升。</li>
+<li><strong>消融实验</strong>：<strong>图3（左）</strong> 的消融实验表明，如果仅使用程序化可写的子目标奖励进行训练（即没有<code>𝟙_useful_question</code>），策略在Ask-to-Act任务上的成功率接近随机水平。这强有力地证明了，要训练智能体进行推理和提问，<strong>密集的、针对提问质量的奖励信号是必不可少的</strong>，而LLM恰好能提供这种信号。</li>
+<li><strong>行为分析</strong>：<strong>图3（右）</strong> 显示，随着允许智能体提问的预算增加，其成功率（特别是对未见任务）也随之提升，表明训练后的策略能够有效利用额外的提问机会来改善性能。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2504.00907v5/figures/example_1.png" alt="任务示例1"></p>
+<blockquote>
+<p><strong>图5</strong>：Ask-to-Act任务示例。展示了不同类型的歧义，如属性识别（a）、空间推理（b）、组合歧义（c）等，说明了任务设置的多样性和挑战性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2504.00907v5/figures/example_2.png" alt="任务示例2"></p>
+<blockquote>
+<p><strong>图6</strong>：更多任务示例。包括物体大小歧义（e）、清洁杂物（b）和基于偏好的重排（c）等任务类型。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出新范式</strong>：首次提出并验证了利用LLM生成奖励、通过在线RL训练具备交互提问能力的具身智能体的完整范式，为在需要高层推理和自然语言交互的复杂任务上训练智能体提供了一条可扩展的路径。</li>
+<li><strong>实现首次适配</strong>：首次成功将MLLM适配为能够在部分可观测环境中同时执行动作和生成澄清提问的VLA策略，并通过大量实验证明了其优越性和泛化能力。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>训练时依赖仿真器的特权信息来构建给奖励LLM的文本化环境状态，这在真实世界中难以直接获取。</li>
+<li>由于计算资源限制，实验中使用的是相对较小的0.5B参数MLLM，更大模型可能带来进一步性能提升。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>LLM作为奖励模型</strong>：这项工作证明了LLM作为奖励模型在处理需要常识、演绎和上下文推理的具身任务上的巨大潜力，可激励更多研究探索LLM在不同复杂任务中的奖励生成能力。</li>
+<li><strong>迈向现实世界</strong>：未来的关键挑战是如何将这种方法扩展到真实物理世界，例如，如何从真实的视觉观测中可靠地提取或生成用于奖励LLM的环境状态描述。</li>
+<li><strong>扩展模型规模</strong>：探索使用更大参数规模的MLLM进行类似训练，有望进一步提升智能体的推理和交互能力。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文研究家庭环境中具身智能体如何应对模糊、不完整的人类指令。核心问题是训练智能体通过询问最少但相关的澄清问题来准确推断用户意图。提出的关键技术是：使用在线强化学习微调多模态大语言模型，并利用LLM生成奖励，从而构建无需人工演示或手工设计奖励的视觉-语言-动作策略。实验表明，该方法显著优于GPT-4o等零样本基线及监督微调模型，性能提升10.4%-16.5%，并能良好泛化至新场景和任务。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2504.00907" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

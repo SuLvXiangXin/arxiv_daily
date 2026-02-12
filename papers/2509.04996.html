@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FLOWER: Democratizing Generalist Robot Policies with Efficient Vision-Language-Action Flow Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>FLOWER: Democratizing Generalist Robot Policies with Efficient Vision-Language-Action Flow Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.04996" target="_blank" rel="noreferrer">2509.04996</a></span>
+        <span>作者: Reuss, Moritz, Zhou, Hongyi, Rühle, Marcel, Yağmurlu, Ömer Erdinç, Otto, Fabian, Lioutikov, Rudolf</span>
+        <span>日期: 2025/09/05</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，通用机器人操作策略的一个重要方向是视觉-语言-动作模型。这类模型通常采用扩散或流模型来生成动作，以建模复杂、多模态的动作分布。然而，现有方法如OpenVLA和RDT-1B包含数十亿参数，需要巨大的计算资源进行预训练、微调和部署，这构成了该领域研究和应用普及的主要障碍。本文针对VLA模型的计算效率和资源消耗过高这一具体痛点，提出了一种新的高效设计视角：通过重新分配模型容量并优化条件机制，在保持高性能的同时大幅降低模型规模和训练成本。本文的核心思路是：提出“中间模态融合”策略，剪裁预训练VLM的深层，将节省的参数量重新分配给扩散头；并设计“动作空间全局AdaLN”条件机制，进一步减少扩散头的参数，最终得到一个不足10亿参数的高效VLA模型FLOWER。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>FLOWER的目标是学习一个高效的通才策略π_θ，根据状态s_t、文本目标g_t和机器人形态元信息e_i生成动作。其整体框架包含两个核心组件：一个经过微调的视觉-语言模型和一个流预测模块。</p>
+<p><img src="https://arxiv.org/html/2509.04996v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：FLOWER架构。一个微调后的VLM处理多模态输入，并通过交叉注意力将中间层特征整合到Flow Transformer中。模型利用动作空间全局AdaLN-Zero条件机制，结合形态和时间元数据，预测速度场。</p>
+</blockquote>
+<p><strong>1. 中间模态融合</strong>：这是FLOWER的核心创新之一。现有研究表明，Transformer模型最后四分之一的层主要专注于下一词预测，而更靠前的层则捕获更广泛的语义。因此，FLOWER并非使用VLM的最终输出，而是从其<strong>中间层</strong>提取隐藏状态特征。具体操作上，对于编码器-解码器架构的VLM，移除整个解码器，保留编码器层，这减少了50%的层数；对于仅解码器架构的VLM，则丢弃最后30%的Transformer层。这种剪裁减少了20-35%的参数并降低了延迟。随后，这些经过线性层和RMSNorm投影的VLM潜在令牌，通过<strong>交叉注意力</strong>注入到Flow Transformer的每一层中。这种设计使Flow Transformer的每一层都能在语义丰富的VLM特征上进行条件生成，保留了空间和上下文结构，并实现了更快的策略收敛。</p>
+<p><strong>2. 跨动作空间Flow Transformer</strong>：为了高效处理异构动作空间，FLOWER设计了一个新颖的流Transformer，并引入了<strong>动作空间全局AdaLN-Zero</strong>条件机制。</p>
+<p><img src="https://arxiv.org/html/2509.04996v1/x3.png" alt="AdaLN对比"></p>
+<blockquote>
+<p><strong>图3</strong>：标准DiT块与我们提出的带层特定LoRA适配器的全局AdaLN对比图。</p>
+</blockquote>
+<p>标准AdaLN-Zero为每个Transformer层使用独立的缩放和移位参数，这会在扩散Transformer中增加高达30%的额外参数。而FLOWER提出的全局AdaLN-Zero<strong>在所有层之间共享</strong>一组调制权重，同时为每个动作类别生成唯一的调制信号，并以零初始化以确保训练稳定。这相比朴素的AdaLN-Zero减少了超过20%的参数，同时保留了对动作空间统计特性的适应能力。为了弥补每层表达能力的降低，FLOWER还在每个Transformer块中注入了轻量级的<strong>LoRA适配器</strong>，以极少的额外参数提供细粒度的、层特定的调制。此外，每个动作类型使用小型编码器/解码器将动作映射进出Transformer的潜在空间，从而在不牺牲权重共享的前提下，一致地处理不同维度的动作。</p>
+<p><strong>3. 用于动作生成的整流流</strong>：FLOWER使用整流流模型生成动作。该方法在噪声分布和数据分布之间使用直线速度场，在保持表达力的同时减少了推理计算量。模型通过优化公式(2)来学习速度场v_θ。推理时仅需少量去噪步骤（单臂N=4，高频双臂N=8）。</p>
+<p><strong>整合与预训练</strong>：综合上述贡献，FLOWER以Florence-2-L VLM的一半作为主干，搭配一个18层、1024潜在维度的Flow Transformer，总参数量为947M，仅需1.85GB显存。预训练在一个精心挑选的约25万条轨迹的“OXE-soup”混合数据集上进行，包含74%的末端执行器位移数据和26%的关节状态数据。仅用约200个H100 GPU小时（48小时，36万步）完成预训练，成本相比OpenVLA降低了99%。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在10个不同的基准测试中评估了FLOWER，涵盖超过190个任务，包括CALVIN、LIBERO、SIMPLER、ALOHA仿真基准以及真实世界厨房任务。</p>
+<p><strong>消融实验与设计决策分析</strong>：</p>
+<ul>
+<li><strong>融合策略</strong>：如表1所示，在CALVIN ABC和LIBERO-Long基准上，<strong>中间融合</strong>策略显著优于早期融合和晚期融合。例如，使用Florence-VLM时，中间融合在LIBERO-Long上达到93.4%的成功率，比早期融合高出60个百分点。</li>
+<li><strong>VLM主干选择</strong>：实验比较了Florence-2-L和SmolFlow-500M，发现专注于视觉基础任务的Florence-2-L在机器人操作任务上表现更优，因此被选为FLOWER的主干。</li>
+<li><strong>全局AdaLN</strong>：如表3所示，使用全局AdaLN在CALVIN ABC上取得了4.44的平均序列长度，与标准AdaLN（4.43）性能相当，同时实现了20%的参数减少。</li>
+<li><strong>其他设计</strong>：消融实验还证实了训练VLM、使用定制学习率调度器以及采用流预测（而非L1预测或离散令牌）的重要性。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2509.04996v1/x5.png" alt="仿真结果"></p>
+<blockquote>
+<p><strong>图5</strong>：FLOWER在多个仿真基准上的平均结果对比。FLOWER在CALVIN（C）、LIBERO（L，包括SGOL平均）、ALOHA和SIMPLER基准上均达到或超越了OpenVLA、π0等基线方法的性能。</p>
+</blockquote>
+<p><strong>基准测试结果</strong>：如图5所示，FLOWER在多个仿真基准上 consistently 匹配或超越了当前最先进的VLA策略。具体而言，它在CALVIN ABCD上取得了新的最高分4.53，在LIBERO-90上达到76.7%的成功率，在ALOHA模拟任务上超越π0，并在SIMPLER基准上表现出竞争力。</p>
+<p><strong>真实世界评估与泛化</strong>：</p>
+<p><img src="https://arxiv.org/html/2509.04996v1/x6.png" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>图6</strong>：(a) 在真实世界Franka Panda厨房20个任务上的多任务成功率对比，FLOWER以61%的成功率显著领先。(b) 在多种泛化场景下（新物体、手电筒照明、背景干扰、新任务组合），FLOWER的平均成功率（51.0%）远超OpenVLA（23.4%）。</p>
+</blockquote>
+<p>在真实世界厨房的20个任务上，FLOWER经过微调后取得了61%的平均成功率，是第二名OpenVLA（31%）的两倍。在更具挑战性的泛化场景测试中，FLOWER同样全面优于OpenVLA。</p>
+<p><strong>推理效率</strong>：如表4所示，FLOWER在RTX 4090 GPU上实现了311 Hz的吞吐量和仅0.052秒的延迟，其速度比π0快8%，比OpenVLA快5007%。其显存占用（1848 MB）仅为π0的27.6%，OpenVLA的12.7%，展现出极高的部署效率。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了<strong>中间模态融合</strong>策略，通过剪裁VLM深层并将中间特征注入Flow Transformer，在保持语义理解的同时显著提升了模型效率；2) 设计了<strong>动作空间全局AdaLN-Zero</strong>条件机制，通过参数共享大幅减少了扩散头的参数量而不损失表达能力；3) 基于上述技术，推出了<strong>FLOWER</strong>，一个不足10亿参数的高效VLA模型，它在仅用200 GPU小时预训练后，便在广泛基准测试中达到了与当前SOTA大模型相当甚至更优的性能，并具备出色的推理速度和低内存占用。</p>
+<p>论文自身提到的局限性包括：1) 依赖迭代采样，本质上比确定性策略的单次前向传播慢；2) 主要在三种操作动作空间上验证，泛化到移动导航或人形运动等其他形态的能力尚未探索；3) 在SIMPLER Google Robot基准上的零样本性能仍有提升空间；4) 尽管已大幅缩小，但约10亿的参数量在极低资源或超高实时性场景中仍可能存在部署挑战；5) 评估主要基于仿真（10个基准中的8个）。</p>
+<p>这项工作为机器人VLA模型的“民主化”提供了清晰路径，表明通过精心的架构设计（而非单纯扩大规模）可以同时实现高性能和高效率。其提出的中间融合思想、全局条件机制以及对VLM预训练任务与机器人任务适配性的分析，对后续开发更轻量、更易部署的通用机器人策略具有重要的启发意义。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对当前视觉-语言-动作（VLA）策略计算成本高、参数庞大的问题，提出高效VLA策略FLOWER。核心方法包括：中间模态融合（通过剪裁多达50%的LLM层，将容量重新分配给扩散头）和动作特定的全局自适应层归一化条件（通过模块化适配减少20%参数）。由此构建的950M参数模型FLOWER，仅用200 H100 GPU小时预训练，便在10个基准的190项任务中取得有竞争力性能，并在CALVIN ABC基准上达到4.53的新SOTA。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.04996" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>EO-1: Interleaved Vision-Text-Action Pretraining for General Robot Control - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>EO-1: Interleaved Vision-Text-Action Pretraining for General Robot Control</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.21112" target="_blank" rel="noreferrer">2508.21112</a></span>
+        <span>作者: Qu, Delin, Song, Haoming, Chen, Qizhi, Chen, Zhaoqing, Gao, Xianqiang, Ye, Xinyi, Lv, Qi, Shi, Modi, Ren, Guanghui, Ruan, Cheng, Yao, Maoqing, Yang, Haoran, Bao, Jiacheng, Zhao, Bin, Wang, Dong</span>
+        <span>日期: 2025/08/28</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，为实现通用机器人控制，主流方法是将大规模视觉-语言模型（VLM）扩展为视觉-语言-动作（VLA）模型，通过在机器人数据上进行训练，实现从多模态输入到动作的映射。然而，这些方法存在关键局限性：首先，若仅在机器人数据集上训练，模型会继承自VLM的通用语义知识退化，且局限于狭窄的任务领域；其次，即使结合了网络多模态数据进行协同训练，现有方法通常仅在VLA输出序列的末尾生成机器人动作，忽略了开放世界具身交互中视觉、语言和动作模态之间固有的丰富时间动态和因果依赖关系。</p>
+<p>本文针对现有VLA模型在推理与动作交互上缺乏灵活性的痛点，提出了“交错视觉-文本-动作预训练”的新视角，旨在模仿人类在开放世界中灵活交织多模态推理与物理动作的能力。本文的核心思路是：通过构建一个大规模、高质量的交错具身推理数据集，并设计一个统一的多模态架构，在一个模型中无缝实现文本推理和连续动作生成，从而学习模态间的因果依赖，提升开放世界理解和泛化能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>EO-1的整体框架是一个统一的、仅解码器的Transformer模型，它处理交错的图像、文本、机器人状态和（含噪声的）动作输入序列，并通过两个独立的输出头：一个语言建模头用于生成文本令牌，一个流匹配头用于去噪生成连续机器人动作。</p>
+<p><img src="https://arxiv.org/html/2508.21112v4/x1.png" alt="方法架构"></p>
+<blockquote>
+<p><strong>图1</strong>：EO-1模型架构。模型基于Qwen2.5-VL初始化，采用统一的仅解码器Transformer。输入（语言指令、图像观察、机器人状态、含噪声动作）被编码为交错令牌序列，由共享的Transformer主干处理。输出通过语言头（用于多模态具身推理）和流头（用于机器人动作生成）产生。模型通过结合流匹配目标和下一个令牌预测目标进行训练。</p>
+</blockquote>
+<p>核心模块与技术细节如下：</p>
+<ol>
+<li><strong>统一输入编码与架构</strong>：模型继承自预训练VLM（Qwen2.5-VL）的文本分词器和视觉编码器，将文本和图像块转换为令牌。机器人状态通过一个随机初始化的线性投影器嵌入到相同的Transformer嵌入空间。对于流匹配，含噪声的动作输入由真实动作和随机噪声线性插值得到，并通过另一个线性投影器与流匹配时间步τ一起嵌入为动作令牌。所有模态的令牌在一个共享的Transformer主干中进行处理，无需引入额外的、特定于动作的模块参数。</li>
+<li><strong>交错序列格式与注意力</strong>：训练数据分为三类格式：多模态理解数据（图像+文本）、机器人控制数据（图像+文本+状态+含噪声动作）以及混合模态生成数据（即交错视觉-文本-动作数据）。交错数据的格式为：<code>[图像] [文本] [状态] [动作] [图像] [文本] ...</code>，使用特殊的开始/结束标记（如[BOI], [EOS], [BOA]等）来分隔不同模态。训练时采用全向注意力掩码机制，在推理时缓存已生成多模态上下文的键值对以加速。</li>
+<li><strong>交错整流采样策略</strong>：在交错数据上训练时，动作生成段的去噪过程会破坏多模态令牌序列中的因果关系，因为后续的文本/图像/动作令牌本应关注干净的动作令牌，而非含噪声的输入。为解决此问题，论文提出了交错整流采样策略。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.21112v4/x2.png" alt="交错整流采样"></p>
+<blockquote>
+<p><strong>图2</strong>：交错整流采样策略。从一个包含N个动作生成段的交错序列中，采样N+1个训练子序列。对于中间包含另一个动作生成段的子序列，将该中间段的含噪声动作令牌替换为干净动作令牌。这确保了每个动作段既接受流匹配去噪训练，又能为后续的交错生成提供干净的上下文。</p>
+</blockquote>
+<ol start="4">
+<li><strong>训练目标</strong>：模型采用两个学习目标进行端到端优化。对于文本生成，使用标准的下一个令牌预测交叉熵损失 <code>ℒ_ar</code>。对于连续动作生成，使用流匹配损失 <code>ℒ_fm</code>，其目标是预测一个从含噪声动作指向干净动作的向量场。总损失为 <code>ℒ = ℒ_ar + ℒ_fm</code>。</li>
+</ol>
+<p>与现有方法相比，创新点主要体现在：1) <strong>统一架构</strong>：在一个共享的Transformer中处理所有模态并生成输出，避免了引入额外的动作专用模块，促进了跨模态知识转移。2) <strong>交错训练范式</strong>：通过精心构建的交错数据和对应的训练策略（如整流采样），显式地建模了推理与动作之间的时序因果依赖。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：论文在多个基准测试和真实机器人平台上进行了评估。使用的基准包括：ERQA（具身推理问答）、LIBERO（长视野任务）、SimEnv（模拟环境任务）以及自建的 <strong>EO-Bench</strong>（包含12个真实世界长视野、灵巧操作任务）。对比的基线方法包括现有开源的通用VLA模型，如GR-1、RT-2、RoboFlamingo、OpenVLA等。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>具身推理能力（ERQA）</strong>：EO-1在ERQA基准的所有子类别（常识、任务、空间、多视图）上均取得最佳性能，总体准确率达到74.0%，比第二名GR-1（65.6%）高出8.4个百分点。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.21112v4/x4.png" alt="ERQA结果"></p>
+<blockquote>
+<p><strong>图4</strong>：在ERQA基准上的结果。EO-1在所有子类别上均优于基线模型，尤其在“空间”和“多视图”推理任务上优势明显，展示了其强大的空间理解能力。</p>
+</blockquote>
+<ol start="2">
+<li><strong>模拟环境任务（LIBERO &amp; SimEnv）</strong>：在LIBERO的10个长视野任务中，EO-1取得了67.5%的成功率，显著优于其他模型（如GR-1的59.4%）。在SimEnv的8个任务中，EO-1也达到了最高的平均成功率（86.3%）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.21112v4/x5.png" alt="LIBERO结果"><br><img src="https://arxiv.org/html/2508.21112v4/x6.png" alt="SimEnv结果"></p>
+<blockquote>
+<p><strong>图5</strong>：在LIBERO基准上的成功率。EO-1在大多数任务上表现最佳，平均成功率领先。<br><strong>图6</strong>：在SimEnv基准上的平均成功率。EO-1取得了最高的性能。</p>
+</blockquote>
+<ol start="3">
+<li><strong>真实世界评估（EO-Bench）</strong>：这是最核心的评估。EO-1在EO-Bench的12个复杂任务中，平均成功率达到70.8%，大幅领先于其他对比模型（如GR-1为53.3%）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.21112v4/x7.png" alt="EO-Bench结果"></p>
+<blockquote>
+<p><strong>图7</strong>：在真实世界EO-Bench上的性能。柱状图显示了各模型在12个任务上的平均成功率，折线图展示了每个任务上的详细对比，EO-1在绝大多数任务上领先。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>论文进行了系统的消融研究，验证了各核心组件的贡献。</p>
+<p><img src="https://arxiv.org/html/2508.21112v4/x8.png" alt="消融实验-数据"></p>
+<blockquote>
+<p><strong>图8</strong>：训练数据消融实验。移除交错数据（<code>w/o Interleaved</code>）或网络多模态数据（<code>w/o Web</code>）都会导致性能显著下降，证明了交错数据和通用多模态知识的重要性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.21112v4/x9.png" alt="消融实验-架构"></p>
+<blockquote>
+<p><strong>图9</strong>：模型架构消融实验。使用独立的编码器-解码器（<code>Separate Enc-Dec</code>）或引入额外的动作专用Transformer层（<code>+Action Layers</code>）均不如统一的EO-1架构，验证了统一参数共享的有效性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.21112v4/x10.png" alt="消融实验-采样策略"></p>
+<blockquote>
+<p><strong>图10</strong>：交错整流采样策略消融实验。不使用该策略（<code>Naïve</code>）或使用替代策略（<code>Replace w/ Clean</code>）的性能均低于完整的EO-1，证明了所提采样策略对于保持交错序列因果关系的必要性。</p>
+</blockquote>
+<p><strong>定性结果</strong>：<br>论文展示了EO-1在真实机器人任务中执行复杂推理和灵巧操作的能力。</p>
+<p><img src="https://arxiv.org/html/2508.21112v4/x11.png" alt="定性结果-长视野任务"></p>
+<blockquote>
+<p><strong>图11</strong>：长视野“准备早餐”任务的执行过程。EO-1能够根据中间观察，动态生成下一步规划（如“打开冰箱”），并执行对应动作，展示了其在线推理与规划能力。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.21112v4/x12.png" alt="定性结果-空间推理"></p>
+<blockquote>
+<p><strong>图12</strong>：空间推理示例。模型能正确回答关于物体空间关系（“糖在搅拌碗前面”）、轨迹预测（“糖的移动轨迹”）等问题，并基于此生成正确的操作动作。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li><strong>提出并实现了一种统一的具身基础模型架构（EO-1）</strong>：该架构在共享的Transformer参数下，无缝集成了多模态具身推理与连续机器人动作生成，避免了引入瓶颈组件或动作专用参数。</li>
+<li><strong>构建了大规模高质量的交错具身数据集（EO-Data1.5M）</strong>：通过一套可扩展的数据构建流程，从机器人数据中注解出丰富的时空推理问答对，并将其与动作数据按时间顺序交错拼接，为学习模态间因果依赖提供了关键数据基础。</li>
+<li><strong>实证了交错视觉-文本-动作预训练范式的强大泛化能力</strong>：EO-1在多个具身推理与机器人控制基准上超越了现有开源模型，尤其在开放世界、长视野、灵巧操作的真实机器人任务中表现出显著更强的性能。</li>
+</ol>
+<p>论文自身提到的局限性包括：模型大小（30亿参数）和计算需求，以及构建高质量交错标注数据需要投入（利用VLM和人工）。这对后续研究的启示在于：1) <strong>交错训练范式</strong>是迈向更通用、更灵活具身智能的有效路径；2) <strong>高质量、富含因果关系的多模态具身数据</strong>的构造至关重要；3) <strong>统一的多模态建模</strong>有助于实现更好的跨模态知识对齐与迁移，是未来具身基础模型发展的一个有前景的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有视觉-语言-动作模型在开放世界交错推理与交互中灵活性不足的问题，提出了统一的具身基础模型EO-1及大规模数据集EO-Data1.5M。核心方法包括：采用统一架构处理图像、文本、视频和动作等多模态输入，并通过自回归解码与流匹配去噪的协同训练进行交错视觉-文本-动作预训练。实验在多种长视野、灵巧操作任务上验证了该方法对开放世界理解和泛化的有效性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.21112" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

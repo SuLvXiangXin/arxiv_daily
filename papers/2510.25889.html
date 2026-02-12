@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>$\pi_\texttt{RL}$: Online RL Fine-tuning for Flow-based Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Machine Learning (cs.LG)</span>
+      <h1>$\pi_\texttt{RL}$: Online RL Fine-tuning for Flow-based Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.25889" target="_blank" rel="noreferrer">2510.25889</a></span>
+        <span>作者: Chen, Kang, Liu, Zhihao, Zhang, Tonghe, Guo, Zhen, Xu, Si, Lin, Hao, Zang, Hongzhi, Li, Xiang, Zhang, Quanlu, Yu, Zhaofei, Fan, Guoliang, Huang, Tiejun, Wang, Yu, Yu, Chao</span>
+        <span>日期: 2025/10/29</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）模型遵循标准的预训练和<strong>监督微调（SFT）</strong> 范式。然而，依赖SFT带来了关键挑战：收集大规模、高质量专家轨迹既费力又昂贵，且SFT获得的模型容易对专家演示过拟合，其性能根本上受限于演示质量。近期研究开始探索使用<strong>强化学习（RL）</strong> 来扩展VLA训练流程，形成预训练、SFT和RL的三阶段范式，使VLA能够通过与环境的交互超越专家演示，发展出更具泛化能力的策略。然而，这些RL进展主要局限于<strong>自回归VLA</strong>（如OpenVLA），它们采用离散动作解码器。这与<strong>基于流的VLA</strong>（以π系列模型为代表）形成鲜明对比，后者通过流匹配中的迭代优化生成动作，具有生成高频动作块和执行高灵巧任务的优点。因此，先前的VLA-RL算法与基于流的VLA不兼容，根本挑战在于如何为执行的动作<strong>计算对数似然</strong>。</p>
+<p>本文针对上述痛点，提出了 <strong>π_RL</strong> 框架，旨在使用在线RL算法对基于流的VLA进行微调。其核心思路是：通过两种技术方案（Flow-Noise和Flow-SDE）解决流匹配中难以处理的对数似然估计问题，从而将基于流的VLA纳入标准的策略梯度优化框架。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>π_RL的整体框架包含两种解决方案：Flow-Noise和Flow-SDE。两者都旨在为基于流的策略提供可计算的动作对数似然，并引入必要的随机性以支持RL探索，随后使用近端策略优化（PPO）算法进行优化。</p>
+<p><img src="https://arxiv.org/html/2510.25889v3/imgs/fig/github-logo.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：π_RL：用于基于流VLA的在线RL框架。结合了两种解决方案，Flow-Noise和Flow-SDE。</p>
+</blockquote>
+<p><strong>核心模块一：Flow-Noise</strong><br>Flow-Noise在标准单层MDP框架内解决问题。其核心创新是<strong>注入可学习的噪声</strong>，并将去噪过程建模为离散时间MDP，从而能够精确计算整个去噪序列的联合对数似然。</p>
+<ol>
+<li><strong>随机性注入</strong>：在流匹配的去噪过程中，将每一步的转移概率建模为高斯分布 (p(\mathbf{A}^{\tau+\delta}|\mathbf{A}^{\tau}) \sim \mathcal{N}(\mu_{\tau}, \Sigma_{\tau}))。其中，均值 (\mu_{\tau}) 由原始ODE的前向欧拉更新确定（(\mu_{\tau}=\mathbf{A}^{\tau}+\mathbf{v}^{\tau}\cdot\delta)），方差 (\Sigma_{\tau}) 则由一个<strong>可学习的噪声网络</strong> (\theta&#39;) 控制（(\Sigma_{\tau}=\text{diag}(\sigma_{\theta&#39;}^{2}))）。该噪声网络以动作 (\mathbf{A}^{\tau}) 和观测 (\mathbf{o}) 为条件，与速度场网络联合训练，但在微调完成后被丢弃，推理时仍使用确定性策略。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.25889v3/imgs/fig/huggingface_logo-noborder.png" alt="噪声注入"></p>
+<blockquote>
+<p><strong>图2</strong>：π_RL中的噪声注入示意图。</p>
+</blockquote>
+<ol start="2">
+<li><strong>对数似然估计</strong>：将动作生成过程离散化为K步。给定观测 (\mathbf{o})，整个去噪序列 (\mathcal{A}=(\mathbf{A}^{0},\dots,\mathbf{A}^{1})) 的精确且易处理的<strong>对数概率</strong>为：(\log\pi(\mathcal{A}|\mathbf{o})=\log\left(\pi(\mathbf{A}^{0}|\mathbf{o})\prod_{k=0}^{K-1}\pi(\mathbf{A}^{\tau_{k+1}}|\mathbf{A}^{\tau_{k}},\mathbf{o})\right))。基于此，可以将基于流的策略优化置于标准MDP框架中，并使用策略梯度方法（公式2）进行优化。</li>
+</ol>
+<p><strong>核心模块二：Flow-SDE</strong><br>Flow-SDE通过将去噪过程从ODE转换为随机微分方程（SDE）来增强随机探索，并构建一个<strong>双层MDP</strong>来耦合去噪过程与策略-环境交互。</p>
+<ol>
+<li><strong>随机性注入</strong>：将确定性ODE（(d\mathbf{A}^{\tau}=\mathbf{v}^{\tau}d\tau)）转换为一个保持生成动作边缘分布等效的SDE。最终推导出的SDE公式为：(d\mathbf{A}^{\tau}=\left[\mathbf{v}^{\tau}+\frac{\sigma_{\tau}^{2}}{2\tau}\left(\mathbf{A}^{\tau}+(1-\tau)\mathbf{v}^{\tau}\right)\right]d\tau+\sigma_{\tau}d\mathbf{w}<em>{\tau})，其中 (\sigma</em>{\tau}) 控制噪声水平。离散化后，转移概率 (p(\mathbf{A}^{\tau+\delta}|\mathbf{A}^{\tau})) 同样是一个各向同性高斯分布。</li>
+<li><strong>MDP公式化</strong>：构建一个双层MDP，将内层的去噪MDP嵌入到外层与环境交互的MDP中。<ul>
+<li><strong>状态</strong>：(\bar{s}<em>{t}^{\tau}=(\mathbf{o}</em>{t}, \mathbf{A}<em>{t}^{\tau}))，包含环境观测 (\mathbf{o}</em>{t}) 和当前去噪动作状态 (\mathbf{A}_{t}^{\tau})。</li>
+<li><strong>动作</strong>：(\bar{a}_{t}^{\tau}) 定义为内层循环中下一个采样的去噪动作（当 (\tau&lt;1)），或是最终执行的动作（当 (\tau=1)）。</li>
+<li><strong>转移</strong>：当 (\tau&lt;1) 时，发生内层去噪转移，观测不变；当 (\tau=1) 时，最终动作与环境交互，产生新观测，同时动作状态重置为标准高斯噪声。</li>
+<li><strong>奖励</strong>：仅在完成去噪并与环境交互时（(\tau=1)）给予环境奖励 (R_{\text{ENV}})，内层去噪步骤奖励为0。</li>
+</ul>
+</li>
+<li><strong>混合ODE-SDE采样</strong>：为了缓解双层MDP导致的时间步长显著增加、训练困难的问题，采用<strong>混合ODE-SDE采样策略</strong>。在每个环境步 (t)，随机采样一个去噪时间 (\tau_t) 进行随机SDE探索，而将所有剩余的去噪步骤视为确定性ODE更新。这有效地缩短了MDP的视野，同时保持了与原始双层框架的理论一致性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.25889v3/x1.png" alt="MDP公式"></p>
+<blockquote>
+<p><strong>图3</strong>：π_RL中MDP公式的示意图。(a) Flow-Noise的单层MDP。(b) Flow-SDE的双层MDP。</p>
+</blockquote>
+<p><strong>策略优化与评论家设计</strong><br>使用PPO算法进行优化。对于π系列模型采用的<strong>基于块（chunk）</strong> 的动作生成方式（一次输出未来H个动作），将整个序列视为一个宏步，其奖励定义为各步奖励之和（块级公式化）。<br>评论家网络采用与演员共享的架构以提高内存效率。针对不同的基于流VLA结构，有两种配置：</p>
+<ul>
+<li><strong>π_0.5变体</strong>：将评论家网络直接附加到VLM的输出，以综合图像、语言和状态输入为条件进行价值估计 (V_{\text{vlm}}(\mathbf{o}_{t}))。</li>
+<li><strong>π_0变体</strong>：由于动作专家需要噪声动作 (\mathbf{A}<em>{t}^{\tau}) 和状态作为耦合输入，通过在整个去噪轨迹上平均价值估计来近似 (V</em>{\text{expert}}(\mathbf{o}<em>{t}) \approx \mathbb{E}</em>{\tau\sim U[0,1]}[V_{\text{expert}}(\mathbf{o}<em>{t}, \mathbf{A}</em>{t}^{\tau})])。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2510.25889v3/x2.png" alt="评论家设计"></p>
+<blockquote>
+<p><strong>图4</strong>：π_RL中两种评论家放置配置的示意图。(a) 与动作专家结合的评论家（以π_0为例）。(b) 与VLM结合的评论家（以π_0.5为例）。</p>
+</blockquote>
+<p><strong>与现有方法的创新点</strong></p>
+<ol>
+<li><strong>解决核心挑战</strong>：首次系统性地解决了将在线RL应用于基于流VLA的关键障碍——<strong>动作对数似然的精确计算</strong>。</li>
+<li><strong>两种新颖公式</strong>：提出了Flow-Noise（通过可学习噪声网络和离散MDP建模）和Flow-SDE（通过ODE-to-SDE转换和双层MDP）两种技术路径，为基于流模型的RL优化提供了新范式。</li>
+<li><strong>高效训练策略</strong>：在Flow-SDE中引入了混合ODE-SDE采样，在保持探索能力的同时显著提升了训练效率。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准测试</strong>：在四个广泛采用的机器人操作基准上评估：LIBERO、ManiSkill、MetaWorld和CALVIN。</li>
+<li><strong>基础模型</strong>：主要基于 π_0 和 π_0.5 模型进行实验。</li>
+<li><strong>对比方法</strong>：主要对比监督微调（SFT）基线。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>分布内（ID）性能</strong>：如表1所示，π_RL在所有评估基准上相比SFT基线都带来了显著的性能提升。π_0模型平均最大提升+29.2%，π_0.5变体平均成功率提升+31.0%。特别是在LIBERO上，对π_0.5模型进行少样本SFT后再进行RL优化，达到了98.3%的成功率，超过了全数据集SFT基线的96.9%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.25889v3/x3.png" alt="ID性能表"></p>
+<blockquote>
+<p><strong>表1</strong>：在四个基准上的综合ID性能比较。显示了SFT基线与Flow-SDE、Flow-Noise方法的平均成功率及提升幅度。</p>
+</blockquote>
+<ol start="2">
+<li><strong>分布外（OOD）泛化评估</strong>：为了判断RL是带来了真正的策略增强还是仅仅对ID环境过拟合，在OOD场景下评估了RL微调后的策略。如图5所示，在ManiSkill和CALVIN中（域偏移主要来自环境变化），ID设置中获得的性能增益有效地转移到了OOD场景。然而，在MetaWorld的OOD设置中（涉及不同的操作任务），性能波动且未显示出显著改善。这表明RL的益处主要局限于<strong>动作级改进</strong>，而非广泛的跨任务泛化能力增强。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.25889v3/x4.png" alt="OOD评估"></p>
+<blockquote>
+<p><strong>图5</strong>：在CALVIN ABC-D、ManiSkill OOD和MetaWorld ML45基准上的综合OOD评估结果。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>论文以Flow-SDE方法为主进行了消融研究，主要结论包括：</p>
+<ul>
+<li><strong>评论家设计</strong>：对于π_0.5，将评论家附加到VLM比附加到动作专家效果更好。对于π_0，采用基于动作状态的评论家（公式16）是必要的。</li>
+<li><strong>噪声注入方式</strong>：可学习的噪声注入（Flow-Noise）与固定的基于SDE的噪声（Flow-SDE）在性能上表现相当，但Flow-SDE计算效率更高。</li>
+<li><strong>混合采样策略</strong>：采用混合ODE-SDE采样相比纯SDE采样，能<strong>显著加速训练</strong>（例如在ManiSkill上快2.5倍），同时保持最终性能。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>首创性框架</strong>：提出了π_RL，这是首个用于基于流的VLA的在线RL微调框架，通过Flow-Noise和Flow-SDE两种解决方案，攻克了流匹配模型中动作对数似然难以计算的核心难题。</li>
+<li><strong>卓越的性能提升</strong>：在多个机器人操作基准上验证了π_RL的有效性，相比SFT基线取得了显著的性能提升（平均提升约30%），并证明了RL能带来真实的策略改进而非简单的过拟合。</li>
+<li><strong>全面的实证分析</strong>：提供了详细的消融研究，为未来基于流VLA的RL研究提供了实证指导，并开源了代码和模型以促进领域发展。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文自身指出，RL带来的性能增益主要体现在<strong>动作层面的优化</strong>。在需要<strong>跨任务泛化</strong>的OOD场景（如MetaWorld中的不同任务）中，RL并未显示出显著的改进能力。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>泛化能力探索</strong>：如何将RL与基于流的VLA结合，以进一步提升其跨任务、跨场景的泛化能力，是一个重要的未来方向。</li>
+<li><strong>算法扩展</strong>：π_RL的两种公式（特别是双层MDP）为将其他高级RL算法（如基于模型的RL、离线RL）应用于基于流的模型提供了基础。</li>
+<li><strong>效率优化</strong>：尽管采用了混合采样，基于流模型的RL训练计算成本仍然较高，探索更高效的训练策略具有实用价值。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出 $\pi_\texttt{RL}$ 框架，解决基于流的视觉-语言-动作模型在线强化学习微调的挑战。核心问题在于流匹配导致动作对数似然难以计算，阻碍RL应用。关键技术包括Flow-Noise，将去噪建模为离散时间MDP以精确计算对数似然；以及Flow-SDE，集成去噪与交互，通过ODE-to-SDE转换提升探索效率。实验表明，RL微调在分布内和分布外设置中均带来显著性能提升，少样本监督微调策略可达全数据集基线水平，并实现零-shot模拟到真实转移。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.25889" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

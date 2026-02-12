@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Focusing on What Matters: Object-Agent-centric Tokenization for Vision Language Action models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Focusing on What Matters: Object-Agent-centric Tokenization for Vision Language Action models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.23655" target="_blank" rel="noreferrer">2509.23655</a></span>
+        <span>作者: Bendikas, Rokas, Dijkman, Daniel, Peschl, Markus, Haresh, Sanjay, Mazzaglia, Pietro</span>
+        <span>日期: 2025/09/28</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）模型通过在大规模机器人数据集（如Open X-Embodiment）上微调预训练的视觉-语言模型（VLM），已成为学习机器人操作的重要方法。然而，训练VLA模型计算成本高昂，这限制了其在许多研究实验室的应用。本文指出，当前最先进的VLA模型（如OpenVLA）的主要瓶颈在于其视觉处理过程：通常将图像分割为数百个补丁（例如，224x224像素图像产生256个补丁），编码为视觉令牌后输入大语言模型（LLM）。这种与语义无关的令牌化方案处理了大量与任务执行无关的信息（如背景），导致计算效率低下。</p>
+<p>本文针对VLA模型训练计算成本高的痛点，提出了一种新的视角：机器人执行任务时，只需关注场景中的特定部分（如感兴趣的对象和智能体自身），而非整个图像。因此，本文提出了Oat-VLA（以对象-智能体为中心的VLA令牌化方法），其核心思路是通过提取代表场景对象的压缩令牌（对象中心令牌）和确保精确操作的高分辨率令牌（智能体中心令牌），将视觉令牌数量减少1-2个数量级，从而在不牺牲性能的前提下，显著提升训练效率。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Oat-VLA的目标是学习在给定观察图像<code>o</code>和语言指令<code>ℓ</code>下的动作分布<code>p(a|o, ℓ)</code>。其创新点在于对视觉观察<code>o</code>的令牌化过程，整体框架如图2所示。该方法首先使用视觉编码器（如DinoV2+SigLIP）提取图像所有补丁的特征令牌<code>v_k</code>。随后，并行执行两个核心模块的处理：</p>
+<p><strong>1. 对象中心令牌提取</strong>：该模块旨在将场景中的对象信息压缩为少量语义令牌。</p>
+<ul>
+<li><strong>输入</strong>：原始观察图像<code>o</code>。</li>
+<li><strong>过程</strong>：首先，使用对象提取器（本文采用FT-Dinosaur）从图像中获取N个分割掩码<code>m_1...N</code>。FT-Dinosaur是一个无监督的对象中心模型，可灵活微调并固定输出掩码数量（实验中N=7）。接着，根据每个掩码<code>m_n</code>，从视觉编码器输出的补丁特征<code>v_k</code>中，收集属于同一对象掩码的所有特征。最后，对这些特征执行池化操作，为每个对象生成一个令牌。</li>
+<li><strong>输出</strong>：N个对象中心令牌<code>t_j</code>。公式表示为：<code>t_j = pool({m_n^k ⊙ v_k})</code>，其中<code>⊙</code>表示按掩码选择。默认使用平均池化。</li>
+<li><strong>作用</strong>：总结场景中“有什么”和“在哪里”，但会丢弃部分高频细节。</li>
+</ul>
+<p><strong>2. 智能体中心令牌提取</strong>：该模块旨在为智能体提供其末端执行器（如夹爪）周围的高分辨率视觉信息，确保操作的精确性。</p>
+<ul>
+<li><strong>输入</strong>：原始观察图像<code>o</code>。</li>
+<li><strong>过程</strong>：首先，使用一个基于轻量级ResNet的Faster R-CNN夹爪检测器，在图像中定位夹爪的2D关键点。该检测器使用Open X-Embodiment和LIBERO数据集中数千个标注帧进行监督训练。然后，以检测到的夹爪位置为中心，选择一个3x3的补丁网格。</li>
+<li><strong>输出</strong>：9个来自视觉编码器的、对应于夹爪周围补丁的原始特征令牌。</li>
+<li><strong>作用</strong>：始终为智能体提供其与物体交互区域的高频细节，避免交互信息在对象令牌池化过程中被意外丢弃。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2509.23655v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：Oat-VLA的视觉令牌化流程。给定输入图像，首先通过视觉编码器提取所有图像补丁的特征。同时，对象提取器（如FT-Dinosaur）生成对象掩码，用于池化得到对象中心令牌；夹爪检测器定位末端执行器，用于选取其周围的补丁作为智能体中心令牌。这两组令牌经过MLP投影器后，与语言令牌一同输入LLM进行动作预测。</p>
+</blockquote>
+<p><strong>整体流程与创新点</strong>：将上述得到的对象中心令牌（7个）和智能体中心令牌（9个）拼接，共16个令牌，通过一个MLP投影器后，与语言指令令牌一起输入LLM（如Llama 2）进行动作预测。Oat-VLA并未改变基础VLA（如OpenVLA）的LLM和动作预测头架构，其创新性完全体现在视觉令牌化阶段。与OpenVLA处理256个令牌相比，Oat-VLA减少了<strong>93.75%</strong> 的视觉令牌数量。这种减少源于对视觉信息的语义感知压缩（对象中心）和针对性选择（智能体中心），而非简单的随机或均匀下采样，使得更少的令牌承载了更关键的任务相关信息。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>本文在仿真基准LIBERO和真实世界拾放任务上评估了Oat-VLA。</p>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：LIBERO（包含Spatial, Object, Goal, 10四个任务套件）；自建的真实世界数据集（使用UFACTORY xArm 6和RealSense D435相机采集320条轨迹）。</li>
+<li><strong>实验平台</strong>：使用8xH100节点进行训练。</li>
+<li><strong>基线方法</strong>：主要对比OpenVLA。在部分实验中，还对比了Octo和Diffusion Policy。</li>
+<li><strong>训练设置</strong>：分为<strong>全参数微调</strong>和<strong>LoRA微调</strong>两种。Oat-VLA的基 checkpoint 是在Open X-Embodiment子集上使用Oat-VLA架构微调200K步的OpenVLA模型。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><p><strong>训练效率与性能</strong>：如图1所示，在LIBERO上全参数微调时，Oat-VLA在动作令牌准确率和任务成功率上的收敛速度是OpenVLA的<strong>2倍以上</strong>。这得益于其更少的视觉令牌允许使用更大的批次大小（Oat-VLA: 512 vs. OpenVLA: 256），从而在相同时间内处理更多样本。<br>   <img src="https://arxiv.org/html/2509.23655v1/x1.png" alt="训练收敛对比"></p>
+<blockquote>
+<p><strong>图1</strong>：Oat-VLA与OpenVLA在LIBERO数据集上全参数微调的对比。左图：动作令牌准确率随训练时间的变化；右图：各任务套件平均成功率随训练步数的变化。Oat-VLA收敛速度快2倍以上。</p>
+</blockquote>
+</li>
+<li><p><strong>全参数微调性能</strong>：如图3所示，经过充分训练后，Oat-VLA在LIBERO所有任务套件上的性能均与OpenVLA相当或略优，在最具挑战性的LIBERO 10套件上优势更明显。<br>   <img src="https://arxiv.org/html/2509.23655v1/x3.png" alt="全微调性能曲线"></p>
+<blockquote>
+<p><strong>图3</strong>：全参数微调过程中，每5K步在LIBERO各套件上的评估结果（经过均值滤波）。Oat-VLA（实线）整体表现略优于OpenVLA（虚线）。</p>
+</blockquote>
+</li>
+<li><p><strong>LoRA微调性能</strong>：如表1所示，在参数高效的LoRA微调设置下，Oat-VLA在LIBERO所有套件上的平均成功率为**78.6%**，高于OpenVLA的76.5%、Octo的75.1%和Diffusion Policy的72.4%，展示了其高效微调下的竞争力。<br>   <img src="https://arxiv.org/html/2509.23655v1/x4.png" alt="LoRA结果表"></p>
+<blockquote>
+<p><strong>表1</strong>：LIBERO上LoRA微调的成功率对比。Oat-VLA在平均成功率上优于所有基线方法。</p>
+</blockquote>
+</li>
+<li><p><strong>真实世界任务性能</strong>：在真实机器人拾放任务中（任务示例如图4顶部），Oat-VLA展现出更强的鲁棒性。如图4底部表格所示，在分布内和分布外任务上，Oat-VLA的整体成功率为**59%**，显著高于OpenVLA的41%。定性观察发现，Oat-VLA的抓取和放置动作更加精确。<br>   <img src="https://arxiv.org/html/2509.23655v1/x5.png" alt="真实任务与结果"></p>
+<blockquote>
+<p><strong>图4</strong>：顶部为部分真实世界任务场景；底部表格为成功率对比。Oat-VLA在分布内、分布外及总体任务上均优于OpenVLA。</p>
+</blockquote>
+</li>
+</ol>
+<p><strong>消融实验分析</strong>：<br>表2展示了不同设计选择的消融实验结果。</p>
+<ul>
+<li><strong>仅使用单个图像令牌</strong>（将全部信息压缩为1个令牌）或<strong>仅使用对象中心令牌</strong>（7个）会导致性能大幅下降，尤其在复杂任务（LIBERO 10）上。</li>
+<li><strong>同时使用对象和智能体中心令牌</strong>（Oat-VLA）带来了主要性能提升，验证了智能体中心令牌对精细操作的必要性。</li>
+<li>在对象令牌池化方式上，<strong>平均池化</strong>优于<strong>注意力池化</strong>，可能是由于其简单性避免了过拟合。<br>   <img src="https://arxiv.org/html/2509.23655v1/x6.png" alt="消融实验表"><blockquote>
+<p><strong>表2</strong>：Oat-VLA各设计选择的消融实验结果。完整版的Oat-VLA（平均池化）性能最佳。</p>
+</blockquote>
+</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出高效的视觉令牌化方案</strong>：首次在VLA中引入对象中心和智能体中心的视觉令牌化，将视觉令牌数量减少93.75%，大幅降低了训练的内存和计算需求。</li>
+<li><strong>实现更快的收敛与兼容的性能</strong>：实验表明，Oat-VLA能达到至少2倍的训练收敛加速，同时在仿真和真实世界任务上取得与基线相当或更优的性能。</li>
+<li><strong>模块化与可扩展性</strong>：方法设计为模块化，能够复用现有VLA checkpoint，便于社区适配和应用。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li><strong>任务范围有限</strong>：目前仅在单臂机器人拾放任务上进行了测试，在双手操作或更复杂任务（如叠衣服）上的性能尚待验证。</li>
+<li><strong>系统集成度</strong>：原型由三个独立模型（FT-Dinosaur、Faster R-CNN、OpenVLA）组成，未共享视觉主干网络，存在进一步的优化空间。</li>
+<li><strong>推理速度</strong>：在单样本推理时，由于LLM权重加载是瓶颈，Oat-VLA并未带来明显的推理加速优势。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>探索更自然的归纳偏置</strong>：未来工作可以探索如何从数据中更自然地学习出类似“对象-智能体中心”的视觉关注偏置，而非依赖预定义的分割和检测模块。</li>
+<li><strong>推动高效VLA训练</strong>：本文为降低VLA训练门槛提供了有效路径，有望促使更多研究资源有限的实验室参与到基础VLA模型的研发中。</li>
+<li><strong>扩展应用场景</strong>：所提出的令牌化思想可被推广至需要高效处理视觉信息的其他端到端机器人策略模型。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作（VLA）模型在机器人操纵领域适应时计算成本高的核心问题，提出对象-代理中心标记化方法Oat-VLA。该方法基于对象中心表示学习，引入对场景对象和代理视觉信息的归纳偏置，从而大幅减少视觉标记数量。实验表明，Oat-VLA在LIBERO套件上收敛速度至少是OpenVLA的两倍，并在真实世界拾放任务中性能更优。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.23655" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

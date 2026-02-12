@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Scaling Whole-body Multi-contact Manipulation with Contact Optimization - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Scaling Whole-body Multi-contact Manipulation with Contact Optimization</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.12980" target="_blank" rel="noreferrer">2508.12980</a></span>
+        <span>作者: Levé, Victor, Moura, João, Fujita, Sachiya, Miyake, Tamon, Tonneau, Steve, Vijayakumar, Sethu</span>
+        <span>日期: 2025/08/18</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在仿人机器人领域，实现自主的全身多接触操作（WMM）是关键挑战之一，其目标是将高级指令（如物体目标位姿）自动转化为可行的接触序列和关节轨迹。现有规划方法主要依赖离散采样（如RRT）来应对接触位置和模式的组合爆炸问题。然而，机器人表面是连续的，离散采样难以有效覆盖如躯干等大表面区域，限制了方法的可扩展性。虽然基于梯度的连续优化（TO）更适合处理连续表面，但主要障碍在于缺乏一种能与TO集成的、高效的机器人表面表示方法，现有连续表示通常需要预先指定接触的身体部位。</p>
+<p>本文针对两个核心建模挑战提出新视角：(a) 寻找一种允许可微分计算机器人-物体表面接近点的表示法；(b) 设计一种能有效引导规划器、避免局部最小值、并允许使用低自由度身体部位进行接触的决策策略。本文核心思路是：提出一种适用于平面操作的、连续可微的机器人表面表示，实现接近点的封闭形式计算；并设计一种结合机器人中心和物体中心可操作性度量的成本函数，以高效引导全身接触规划。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体规划流程是一个分层管道，输入为系统和物体的初始状态与目标状态，输出为机器人的动作轨迹和系统状态轨迹。</p>
+<p><img src="https://arxiv.org/html/2508.12980v1/graphics/planning_drawing.png" alt="规划管道"></p>
+<blockquote>
+<p><strong>图4</strong>：所提出规划器的管道。全局规划器（Global Planner）基于RRT构建状态图，采样子目标；轨迹优化器（Trajectory Optimizer）接收最近状态和子目标，通过序列TO生成轨迹；最终轨迹发送给底层的机器人操作控制器。</p>
+</blockquote>
+<p><strong>核心模块1：表面表示与接近点计算</strong><br>为将接触位置优化集成到连续TO中，需要可微分地计算机器人与物体表面的最近点（接近点）。本文提出将机器人表面表示为一系列<strong>圆角段片</strong>的集合，物体则表示为圆点、圆角段或圆角凸多边形。这种表示的关键创新在于为不同几何结构对（点-段、段-段、段-多边形）提供了<strong>封闭形式、可微分的接近点计算方法</strong>。</p>
+<p><img src="https://arxiv.org/html/2508.12980v1/x3.png" alt="接触表面表示"></p>
+<blockquote>
+<p><strong>图3</strong>：机器人和物体的接触表面表示。机器人接触表面由一组圆角段片表示(d)。物体可表示为圆(a)、圆角段(b)或圆角多边形(c,d)。机器人部件间的碰撞避免由两个圆角段表示(b)。</p>
+</blockquote>
+<p>具体而言，机器人使用两套段片集合：一套（ℬ_r）用于与物体接触，需精确拟合形状；另一套（ℬ_c）用于自碰撞避免，可更保守。对于段-点接近，投影点参数h可通过向量点积公式直接计算（公式5）。对于段-段接近，通过一个包含正则化项ε的三步公式（公式8）总能找到唯一解。对于段-凸多边形接近，论文提出了算法1，通过迭代调用段-段接近算法，在固定步数内将多边形简化至单一边，从而将接触参数从N_p个减少到1个。计算得到基础几何结构的接近点(H, S)后，通过“圆角化”操作（公式6）将它们沿连线方向移动各自圆角半径的距离，得到最终表面上的点(H‘, S’)及净距离d‘。</p>
+<p><strong>核心模块2：成本设计与轨迹优化</strong><br>轨迹优化器采用序列TO，分为两个阶段：<strong>放置阶段</strong>（接触寻找）和<strong>操作阶段</strong>（接触丰富）。</p>
+<ul>
+<li><p><strong>放置阶段</strong>：这是一个接触自由的TO，目标是找到与物体接触的机器人构型，并优化接触位置以获得良好的可操作性。其成本函数是核心创新之一，定义为：<br>min_u 𝒢_p(q) + 𝒢_r(q)<br>其中：</p>
+<ul>
+<li>𝒢_p(q) 是<strong>物体中心的可操作性度量</strong>，鼓励接触力方向（由物体当前位置与目标位置之差通过雅可比矩阵映射得到）与接触点法线对齐，以有效推动物体。</li>
+<li>𝒢_r(q) 是<strong>机器人中心的可操作性度量</strong>（基于Yoshikawa可操作性指标修改），鼓励机器人在接触点处具有良好的运动能力。</li>
+<li>两项均由一个<strong>接触激活函数</strong> w_k^d(q) 加权，该函数基于距离d_k^r平滑激活接近的接触点，使优化能自动决定接触数量与位置。</li>
+</ul>
+</li>
+<li><p><strong>操作阶段</strong>：这是一个接触丰富的TO，在检测到活跃接触后，优化机器人动作以操纵物体，同时允许每一步中接触的建立与分离。它引入了一个虚拟运动变量ν来推导接触力，并通过雅可比矩阵投影来过滤不可行的运动。</p>
+</li>
+</ul>
+<p><strong>创新点总结</strong></p>
+<ol>
+<li><strong>表面表示</strong>：提出的圆角段片表示法首次实现了在连续TO中对机器人全身表面接触点的封闭形式、可微分计算，解决了表示集成难题。</li>
+<li><strong>成本设计</strong>：结合了物体中心与机器人中心可操作性度量的成本函数，能自主引导规划器选择更有效的抓握（接触），避免局部最小值，并自然支持使用单臂、双臂或静态躯干等不同策略。</li>
+<li><strong>系统集成</strong>：整个框架无需后轨迹优化、无需针对任务调参，且通过几何参数化易于适配新的机器人模型。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在平面操作假设下进行实验。使用了两个基准测试场景：Scenario 1（物体横向移动）和Scenario 2（物体移动并旋转不同角度θ）。对比的基线方法是当前最先进的基于采样的规划器[2]。规划超时设置为30分钟。</p>
+<p><img src="https://arxiv.org/html/2508.12980v1/x4.png" alt="规划性能对比"></p>
+<blockquote>
+<p><strong>图5</strong>：本文方法（OURS）与基线采样规划器（Baseline）的规划性能对比。表格展示了在不同目标角度θ下的成功率、平均、最小和最大规划时间（分钟）。本文方法在几乎所有情况下都达到了100%或接近100%的成功率，且规划时间显著更短。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>规划性能与成功率</strong>：在Scenario 1中，当目标旋转角增大时，基线方法成功率急剧下降（从70%到0%），而本文方法始终保持高成功率（93%-100%）。在Scenario 2中，本文方法成功率均为100%，基线方法则从93%降至0%。<strong>平均规划时间上，本文方法相比基线平均提升了77%。</strong></li>
+<li><strong>成本设计有效性</strong>：消融实验对比了使用完整成本函数与仅使用基线[3]中“接触成本”的情况。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.12980v1/x5.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图11</strong>：成本设计消融研究。左图显示，在复杂场景中，基线成本函数（灰色）常陷入局部最小值导致失败（0%成功率），而本文的完整成本函数（蓝色）成功引导找到解（100%成功率）。右图展示了完整成本如何促进形成双接触抓握，从而获得更好的可操作性。</p>
+</blockquote>
+<ol start="3">
+<li><strong>实物验证</strong>：方法在真实的仿人机器人硬件上进行了验证，成功规划并执行了全身推动盒子的任务，证明了表面表示的准确性足以迁移到复杂几何形状的真实机器人。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种新颖的、连续可微的机器人表面表示法（圆角段片），使接近点计算能以封闭形式集成到连续轨迹优化中。</li>
+<li>设计了一种结合机器人中心与物体中心可操作性度量及接触激活函数的成本方案，能有效引导全身接触规划，避免局部最小值，并自主决定接触策略。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>当前工作仅针对<strong>平面操作</strong>，尽管表示法已部分可推广至3D。</li>
+<li>规划速度尚不足以支持<strong>实时模型预测控制（MPC）</strong>。</li>
+</ol>
+<p><strong>后续研究启示</strong>：</p>
+<ol>
+<li>将所提出的表面表示和规划框架<strong>扩展至3D场景</strong>是直接的未来方向。</li>
+<li>研究<strong>加速规划</strong>的方法，以处理需要实时重新规划的动态任务。</li>
+<li>本文展示的基于梯度优化和针对性成本设计的路径，为处理高维连续接触空间提供了可扩展的新范式，对复杂机器人操作任务具有启发意义。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对人形机器人全身多接触操作的可扩展性问题，提出了一种基于接触优化的方法。核心挑战是缺乏高效的机器人表面表示，导致现有离散采样规划方法难以扩展。关键技术包括：一种支持闭式计算接近点的机器人表面表示法，以及一种有效指导规划的成本设计。实验表明，该框架能解决现有方法未处理的问题，规划时间比现有技术提升77%，并在真实硬件上通过人形机器人操作箱子验证了可行性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.12980" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

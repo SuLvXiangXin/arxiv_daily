@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Estimating Deformable-Rigid Contact Interactions for a Deformable Tool via Learning and Model-Based Optimization - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Estimating Deformable-Rigid Contact Interactions for a Deformable Tool via Learning and Model-Based Optimization</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2505.10884" target="_blank" rel="noreferrer">2505.10884</a></span>
+        <span>作者: Van der Merwe, Mark, Oller, Miquel, Berenson, Dmitry, Fazeli, Nima</span>
+        <span>日期: 2025/05/16</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>灵巧操作需要对物体间的外部接触进行细致的推理。在人类环境中，可变形工具（如铲子、海绵）、可变形触觉传感器以及软体机器人的日益普及，催生了对新型接触推理方法的需求，因为并非所有接触都能用经典的刚体接触模型很好地描述。现有关于外部灵巧性的研究大多假设刚体-刚体相互作用，或假设在接触界面有直接的传感。然而，当使用可变形工具操纵刚性物体时，面临两大挑战：一是工具变形与物体运动本质上相互耦合，建模难度大；二是系统仅部分可观测，必须依赖传感来推断变形和接触力。</p>
+<p>本文针对“可变形工具操纵刚性物体”这一场景，提出了一种混合学习与第一性原理的方法，旨在同时建模工具和物体的运动与力传递。其核心思路是：利用学习模块从部分观测中联合估计刚性物体的运动以及可变形工具施加的接触力；随后，基于物理先验（准静态平衡和库仑摩擦）构建一个接触二次规划问题，求解环境与物体之间的刚性接触力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文方法包含两个主要部分：一个用于预测物体运动以及工具-物体接触力的学习模块，以及一个基于模型的优化问题，用于恢复物体与环境间的摩擦接触力。</p>
+<p><img src="https://arxiv.org/html/2505.10884v1/extracted/6444278/figures/method_figure_v2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：方法整体框架。输入包括工具的部分点云、物体状态（几何、质心、质量、摩擦）和机器人动作。编码器将多模态信息编码到潜在空间，潜在动力学模块根据动作在潜在空间中展开。输出头回归物体的增量运动以及工具的概要接触点和力。最后，利用预测的物体运动确定环境接触点，并通过接触二次规划求解环境接触力。</p>
+</blockquote>
+<p><strong>学习模块架构</strong>：</p>
+<ol>
+<li><strong>网络输入</strong>：方法在机器人末端执行器坐标系下处理空间信息。输入包括：a) 工具的部分点云，使用 PointNet 编码器编码；b) 物体几何与当前姿态，通过将物体网格顶点变换到跟踪到的物体位姿，并附加每个顶点是否接触环境的二元指示符，形成点集后用另一个 PointNet 编码器编码；c) 物体质量、摩擦系数以及重力矢量（在机器人坐标系中表示）。这些信息被融合并通过一个多层感知机生成初始潜在编码。</li>
+<li><strong>潜在动力学</strong>：给定当前潜在状态和机器人动作，一个潜在动力学模型递归地预测未来的潜在状态，以捕捉变形、运动和力的演化过程。</li>
+<li><strong>输出头</strong>：两个独立的 MLP 分别从潜在状态解码出：a) 刚性物体的增量运动（采用轴角表示）；b) 工具与物体接触的概要接触点（定义为接触区域的质心）和接触力。</li>
+</ol>
+<p><strong>训练损失</strong>：采用监督学习，损失函数包括预测损失和潜在空间正则化损失。预测损失最小化物体运动、工具接触点及接触力的预测值与真实值之间的 L2 误差。潜在空间正则化鼓励递归生成的潜在状态与使用真实观测编码得到的潜在状态相匹配，并约束潜在向量的规模。</p>
+<p><strong>基于模型的接触力估计（接触二次规划 - CQP）</strong>：<br>在通过学习模块获得物体预测位姿和工具接触力后，利用已知的物体和环境几何确定当前活跃的环境接触点位置。随后，构建一个二次规划问题来求解这些点的接触力。该优化问题的目标是使接触力最小（最小化力的平方和），约束条件包括：1) <strong>准静态平衡</strong>：重力力矩、工具接触力产生的力矩以及所有环境接触力产生的力矩之和为零；2) <strong>库仑摩擦</strong>：每个环境接触点的切向力大小不超过法向力乘以摩擦系数；3) <strong>法向力非负</strong>（仅受压）。通过求解此 CQP，即可得到满足物理定律的环境接触力。</p>
+<p><strong>创新点</strong>：本文的创新在于将复杂的可变形-刚性接触建模问题分解。学习部分专注于处理高维、非线性的可变形动力学和部分观测，直接回归难以用第一性原理建模的交互（物体运动和工具接触力）。而基于模型的优化部分则利用精确的物理定律（平衡、摩擦）来处理相对结构化的刚性-刚性接触问题，避免了学习所有接触力的复杂性，提高了数据效率和物理一致性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在仿真环境中进行训练和评估，并展示了向真实世界的迁移。</p>
+<p><strong>基准与数据集</strong>：在仿真中生成交互数据，涵盖多种物体几何形状（方形、L形、T形、十字形）和物理属性（不同质量、摩擦系数），操作类型包括推动和旋转。</p>
+<p><strong>对比方法</strong>：</p>
+<ul>
+<li><strong>物体运动预测基线</strong>：与直接回归 SE(2) 位姿的模型、回归顶点运动的模型以及参数化符号距离和接触雅可比矩阵以进行物理模拟的模型（Pfrommer 等人）进行对比。</li>
+<li><strong>环境接触力预测基线</strong>：与直接从相同输入回归环境接触力的学习模型进行对比。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2505.10884v1/extracted/6444278/figures/rebuttal_results/tool_force_error_v2.png" alt="工具力误差"></p>
+<blockquote>
+<p><strong>图4</strong>：工具接触力预测的均方根误差（RMSE）。本文方法（Ours）在预测工具施加的力方面优于所有基线模型，尤其是在复杂的 L、T、十字形物体上优势明显。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.10884v1/extracted/6444278/figures/rebuttal_results/obj_pos_error.png" alt="物体位置误差"></p>
+<blockquote>
+<p><strong>图5</strong>：物体位置预测误差。本文方法在位置预测精度上与最佳基线（Pfrommer 等人）相当或更优。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.10884v1/extracted/6444278/figures/rebuttal_results/obj_rot_error.png" alt="物体旋转误差"></p>
+<blockquote>
+<p><strong>图6</strong>：物体旋转预测误差。本文方法在旋转预测上显著优于所有基线模型。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.10884v1/extracted/6444278/figures/rebuttal_results/env_force_error.png" alt="环境力误差"></p>
+<blockquote>
+<p><strong>图7</strong>：环境接触力预测的 RMSE。本文基于 CQP 的模型（Ours (CQP)）在估计环境力方面大幅优于直接学习回归的基线（Ours (Learned Env. Forces)），验证了利用物理模型进行优化的有效性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.10884v1/extracted/6444278/figures/rebuttal_results/real_setup_v2.jpg" alt="真实实验设置"></p>
+<blockquote>
+<p><strong>图8</strong>：真实机器人实验平台。使用机械臂操控泡沫海绵（可变形工具）推动刚性物体，验证仿真到真实的迁移能力。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.10884v1/extracted/6444278/figures/rebuttal_results/pivot_plan_vis.png" alt="真实旋转操作规划可视化"></p>
+<blockquote>
+<p><strong>图9</strong>：在真实系统上进行的旋转操作规划可视化。模型预测的物体运动轨迹（绿色）与真实轨迹（红色）基本吻合，展示了方法的实用性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.10884v1/extracted/6444278/figures/rebuttal_results/pivot_force_compare.png" alt="真实旋转操作力对比"></p>
+<blockquote>
+<p><strong>图10</strong>：真实旋转操作中，预测的工具接触力与通过腕部力传感器估计的接触力的对比。两者在趋势和量级上表现出合理的一致性，进一步证明了方法的有效性。</p>
+</blockquote>
+<p><strong>消融实验</strong>：论文通过将环境接触力预测从 CQP 替换为直接学习回归（见图7对比），证明了基于物理模型的优化模块对于准确估计环境力至关重要，学习模块难以直接掌握复杂的摩擦接触约束。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种混合学习与模型优化的架构，用于联合估计可变形工具操纵刚性物体过程中的物体运动、工具-物体接触力以及物体-环境接触力。</li>
+<li>设计了一个接触二次规划，利用准静态平衡和库仑摩擦约束，从预测的工具力和物体运动中求解物理一致的环境接触力。</li>
+<li>在仿真和真实机器人实验中验证了方法的有效性，在运动预测和力估计方面优于基线，并展示了良好的仿真到真实迁移能力。</li>
+</ol>
+<p><strong>局限性</strong>：论文明确指出方法基于准静态假设，可能不适用于动态高速操作场景。此外，方法需要已知刚性物体的几何形状以确定环境接触点。</p>
+<p><strong>启示</strong>：本文展示了在处理机器人操作中复杂的物理交互时，将数据驱动的学习与基于第一性原理的模型优化相结合的有效性。这种混合范式能够扬长避短：利用学习处理高维、非线性、部分可观测的子系统，同时利用物理模型保证子系统的物理一致性和数据效率。这为未来处理更复杂的多模态、多物理场交互问题提供了一个有前景的研究方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对可变形工具操纵刚性物体时的接触建模难题，提出一种结合学习与第一性原理的混合方法。核心方案包括：学习模块联合估计物体运动与工具接触力；基于准静态平衡与库仑摩擦约束的接触二次规划恢复环境接触力。实验表明，该方法在多种物体几何与物理属性下的推动、旋转操作中均优于基线模型，并能成功迁移至真实交互场景。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2505.10884" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

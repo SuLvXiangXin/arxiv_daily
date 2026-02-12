@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>UniAct: Unified Motion Generation and Action Streaming for Humanoid Robots - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Computer Vision and Pattern Recognition (cs.CV)</span>
+      <h1>UniAct: Unified Motion Generation and Action Streaming for Humanoid Robots</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2512.24321" target="_blank" rel="noreferrer">2512.24321</a></span>
+        <span>作者: Jiang, Nan, He, Zimo, Yu, Wanhe, Pang, Lexi, Li, Yunhao, Li, Hongjie, Cui, Jieming, Li, Yuhan, Wang, Yizhou, Zhu, Yixin, Huang, Siyuan</span>
+        <span>日期: 2025/12/30</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>人形机器人控制领域在低层跟踪、力控和敏捷运动方面取得了显著进展。然而，高层多模态感知与低层全身执行之间仍存在巨大鸿沟，限制了机器人将多样化指令（如语言、音乐、轨迹）无缝转化为连贯、稳定动作的能力。现有方法主要分为两类：一步式端到端映射方法（如LangWBC）虽延迟低，但难以处理复杂指令所需的长期时序依赖和跨模态推理；两步式分层方法（如OmniH2O+MDM）将运动生成与执行解耦，虽提升了指令理解能力，但引入了显著的计算开销和实时规划挑战。此外，两类方法在面对分布外观测或不完美人类演示时都很脆弱，常生成物理上不可行的运动，导致硬件不稳定或摔倒。</p>
+<p>本文针对上述“感知-控制”割裂的痛点，提出了一个统一的新视角：利用微调的多模态大语言模型（MLLM）进行高层语义理解和运动规划，并通过一个因果流式管道与鲁棒的低层运动跟踪器连接，实现低延迟、物理可行的多模态控制。本文的核心思路是：通过有限标量量化（FSQ）将异构多模态输入统一映射到共享的离散码本空间，利用MLLM的自回归预测能力生成离散运动令牌，再通过因果解码和流式传输驱动机器人实时执行。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>UniAct是一个三阶段统一框架，旨在将多样化多模态指令翻译为鲁棒的人形机器人运动。其整体流程是：首先，通过FSQ将文本、音乐、轨迹和参考运动等输入统一编码为离散令牌；其次，一个微调的MLLM根据这些条件令牌自回归地预测未来的运动令牌序列；最后，一个因果解码器将运动令牌流式解码为连续关节角度，并传输给一个鲁棒的运动跟踪控制器进行实时执行。</p>
+<p><img src="https://arxiv.org/html/2512.24321v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：UniAct统一多模态运动生成与动作流式传输框架。该架构包含三个核心组件：(a) 一个微调的MLLM，通过使用FSQ的共享码本将异构输入翻译为离散运动令牌；(b) 一个因果解码与流式管道，确保低延迟传输参考运动；(c) 一个鲁棒的运动跟踪器，执行生成的运动并保持动态平衡。</p>
+</blockquote>
+<p><strong>核心模块1：基于FSQ的统一多模态指令令牌化</strong><br>为了统一处理异构模态，将连续输入信号映射到与自回归语言模型兼容的离散隐空间。具体策略如下：</p>
+<ul>
+<li><strong>文本</strong>：直接使用Qwen2.5的原始词汇表进行令牌化。</li>
+<li><strong>音乐</strong>：以30Hz处理，提取包含包络、20个MFCC系数、12个色度特征以及节拍峰值和起始点指示器的35维特征向量，然后通过FSQ编码器-解码器对进行量化。</li>
+<li><strong>轨迹</strong>：关注航向角变化。以5 FPS分割轨迹，计算每帧在上一帧坐标系下的根部位移，将航向角差异离散化为6度一个区间，形成一个大小为60的码本。</li>
+<li><strong>运动</strong>：直接使用人形机器人自由度位置表示（如Unitree-G1的29维关节角）。同样通过FSQ进行量化。</li>
+</ul>
+<p>FSQ量化函数为：<code>FSQ(z) = round(tanh(z)·L)</code>，其中<code>z</code>是编码器输出，<code>L</code>指定每维量化级数。编码器和解码器均为具有残差连接的一维卷积网络，通过最小化重构损失<code>L_FSQ = ||X - X_hat||_2^2</code>进行训练。</p>
+<p><strong>核心模块2：基于MLLM的运动生成</strong><br>微调Qwen2.5-3B模型，使其能够以多模态输入为条件，自回归地预测运动令牌。通过早期融合统一所有模态：构建一个共享词汇表<code>V_unified = V_text ∪ V_music ∪ V_traj ∪ V_motion</code>。为避免词汇表过大，用其他模态的令牌替换最不常用的文本令牌。在训练时，每个模态的令牌序列用特殊的分隔符令牌包裹，使模型能清晰区分条件与预测目标。采用滑动窗口方法处理轨迹和音乐，以支持任意长度条件并控制序列长度。模型通过标准自回归语言建模损失<code>L_gen</code>进行优化。推理时，模型根据输入条件自回归生成运动令牌，随后通过训练好的FSQ解码器将其解码为连续的自由度位置，作为跟踪控制器的目标参考运动。</p>
+<p><img src="https://arxiv.org/html/2512.24321v1/x2.png" alt="多模态表示概述"></p>
+<blockquote>
+<p><strong>图2</strong>：UniAct及多模态表示概述。(a) 人形机器人运动表示为自由度位置的时间序列，并通过FSQ进行令牌化。(b) 轨迹特征基于分段路径的转弯角度进行独热编码。(c) 系统架构：服务器端MLLM处理多模态输入（文本、音乐、轨迹）和FSQ令牌化的运动，以自回归方式生成运动令牌；因果解码器将令牌转换为连续自由度位置，流式传输至客户端并由跟踪控制器执行，实现实时运动合成。</p>
+</blockquote>
+<p><strong>核心模块3：因果运动解码与实时流式传输</strong><br>为实现实时运动执行，采用因果解码机制，确保时刻<code>t</code>解码出的运动仅依赖于直到<code>t</code>时刻的令牌，支持在线推理。具体使用因果卷积操作。为平衡计算效率与低延迟，采用分块解码策略，仅当累积令牌达到预定块大小时才触发解码。</p>
+<p>系统采用服务器-客户端流式架构，解耦计算密集的运动生成（服务器端）与实时机器人控制（客户端）。服务器生成的运动速度可能快于实时，为解决服务器可变生成速率与客户端固定50Hz控制频率之间的不匹配，客户端维护一个运动缓存缓冲区，以精确的20ms间隔查询该缓冲区，确保持续、平滑地向跟踪控制器提供参考运动。</p>
+<p><strong>核心模块4：人形机器人运动跟踪</strong><br>解码后的运动序列被流式传输至一个经过修改的BeyondMimic跟踪器作为底层控制器。主要修改是从参考运动观测中移除全局朝向分量，使策略专注于相对关节构型而非绝对朝向。观测状态<code>o_t</code>包含参考关节位置/速度、当前关节位置/速度、重力向量、角速度和上一时刻动作。跟踪器输出目标关节位置<code>p_t</code>，驱动机器人跟踪生成的运动，同时保持动态平衡和物理可行性。</p>
+<p><strong>创新点总结</strong></p>
+<ol>
+<li><strong>统一令牌表示</strong>：通过FSQ将文本、音乐、轨迹、运动映射到共享离散空间，实现了跨模态的无缝对齐，并将运动生成约束在物理可行的流形上。</li>
+<li><strong>两阶段解耦架构</strong>：将基于MLLM的高层语义运动生成与鲁棒的低层跟踪控制分离，兼顾了复杂指令理解能力和执行鲁棒性。</li>
+<li><strong>因果流式预测</strong>：采用自回归的下一个令牌预测范式和解码流式传输，实现了低于500毫秒的端到端响应延迟。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：主要使用本文提出的<strong>UA-Net</strong>数据集进行评估。这是一个20小时的多模态人形机器人运动数据集，包含文本-运动、轨迹-运动、音乐-运动三种配对数据。文本部分覆盖了广泛的动词（见图3c），轨迹部分包含各种行走路径，音乐部分源自FineDance数据集并经过重定向。</li>
+<li><strong>实验平台</strong>：在仿真中进行超过1000次试验，并在物理人形机器人平台上进行了100+小时的实地操作验证。</li>
+<li><strong>对比方法</strong>：<ul>
+<li><strong>文本任务</strong>：LangWBC（端到端）、UH-1（端到端）、OmniH2O+MDM（两步法）、BeyondMimic+MDM（两步法）。</li>
+<li><strong>轨迹与音乐任务</strong>：OmniH2O+MDM、BeyondMimic+MDM。</li>
+</ul>
+</li>
+<li><strong>评估指标</strong>：包括FID（运动质量）、多样性、MM-dist（文本-运动对齐）、R-precision（检索精度）、轨迹根误差、音乐类型保真度以及<strong>成功率</strong>（任务完成且未摔倒）。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2512.24321v1/x3.png" alt="UA-Net数据集分析"></p>
+<blockquote>
+<p><strong>图3</strong>：UA-Net数据集分析。(a) UA-Net中人类运动的代表性文本描述。(b) 与选定描述对应的渲染运动帧。(c) 动作动词多样性对比：将1684个常见动词按字母顺序（A-Z）排列在方形网格上可视化，每个单元格代表一个动词。与HumanML3D相比，UA-Net展现出显著更广的词汇覆盖范围。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：<br>根据论文表1所示的多模态人形控制评估结果：</p>
+<ul>
+<li><strong>文本到运动</strong>：UniAct取得了最佳性能，**成功率达到83.1%**，显著高于BeyondMimic+MDM的65.3%和LangWBC的58.2%。在文本-运动对齐指标（R-precision@1）上达到41.59%，远超其他方法。</li>
+<li><strong>轨迹到运动</strong>：UniAct的**成功率高达97.3%**，轨迹跟踪误差（根误差）仅为0.151米，而基线方法误差在1.2米以上，成功率仅为23.6%-35.2%。</li>
+<li><strong>音乐到运动</strong>：UniAct的**成功率为87.4%**，音乐类型保真度为0.97，均优于基线方法（成功率57.1%，类型保真度0.77）。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2512.24321v1/x4.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图4</strong>：UniAct在不同指令模态下的定性结果。(a) 顺序文本到运动：人形机器人执行一系列复杂动作。(b) 轨迹到运动：机器人沿曲线路径（黄色虚线）以自然步态行走。(c) 音乐到运动：机器人生成与音乐节奏同步的舞蹈动作。(d) 零样本人类到人形机器人运动迁移：将网络视频中的运动重定向至人形机器人执行，无需额外训练。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：<br>论文对FSQ码本大小和下采样率进行了消融实验（见表1“Ours (0.25× codes)”和“Ours (2× downsamp.)”）。</p>
+<ul>
+<li><strong>码本大小减少至1/4</strong>：在所有三项任务中，性能均有不同程度下降。例如，文本任务成功率从83.1%降至79.6%，音乐任务成功率从87.4%降至75.6%。这表明充足的离散表示容量对性能很重要。</li>
+<li><strong>下采样率提高一倍（帧率降低）</strong>：性能也有轻微下降，但影响小于码本缩减。例如，轨迹任务成功率从97.3%降至95.8%。这体现了高时序分辨率对运动细节保真的价值。</li>
+</ul>
+<p><strong>运动跟踪鲁棒性验证</strong>：<br>如表2所示，在跟踪低质量参考运动或未见过的分布外（OOD）运动时，采用本文FSQ令牌化的方法能显著提升BeyondMimic跟踪器的鲁棒性。</p>
+<ul>
+<li><strong>跟踪低质量参考运动</strong>：使用FSQ令牌化后，**成功率从76.2%提升至95.4%**，MPJPE误差从68.34厘米降至36.10厘米。</li>
+<li><strong>跟踪未见过的OOD运动</strong>：使用FSQ令牌化后，成功率从90.5%提升至95.2%。<br>这证明了离散令牌表示能将运动约束在物理可行的流形上，从而增强了跟踪器对噪声或异常输入的容错能力。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2512.24321v1/x5.png" alt="系统时序分析"><br><img src="https://arxiv.org/html/2512.24321v1/x6.png" alt="零样本运动跟踪"><br><img src="https://arxiv.org/html/2512.24321v1/x7.png" alt="多模态指令跟随"><br><img src="https://arxiv.org/html/2512.24321v1/x8.png" alt="轨迹跟踪误差"><br><img src="https://arxiv.org/html/2512.24321v1/x9.png" alt="音乐同步舞蹈"><br><img src="https://arxiv.org/html/2512.24321v1/x10.png" alt="复杂文本指令执行"><br><img src="https://arxiv.org/html/2512.24321v1/x11.png" alt="失败案例分析"><br><img src="https://arxiv.org/html/2512.24321v1/x12.png" alt="真实机器人部署"></p>
+<blockquote>
+<p><strong>图5-图12</strong>：这些图表分别展示了UniAct系统的详细时序分析、零样本运动跟踪能力、多模态指令跟随的仿真截图、轨迹跟踪误差可视化、音乐同步舞蹈的仿真与实物对比、复杂长文本指令的逐步执行、典型失败案例（如失去平衡）以及在实际Unitree G1机器人上的部署场景，全面验证了框架的有效性和实用性。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了UniAct统一框架</strong>：首次将微调的MLLM与鲁棒全身跟踪器通过因果流式管道集成，实现了对文本、音乐、轨迹等多模态指令的低延迟（&lt;500ms）、高成功率响应。</li>
+<li><strong>引入了基于FSQ的统一运动嵌入方法</strong>：通过共享离散令牌实现跨模态对齐，并将运动生成约束在物理可行流形上，显著提升了运动跟踪的鲁棒性，在零样本跟踪不完美参考运动时**成功率提升了19%**。</li>
+<li><strong>构建并开源了UA-Net基准数据集</strong>：一个大规模、多模态、语义丰富的人形机器人运动数据集，并建立了标准化评估协议，推动了人形具身智能研究。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文自身提到，UniAct的性能依赖于高质量、离线的多模态配对数据集（UA-Net）。对于完全未知或高度抽象的新指令，其生成能力可能受限于训练数据的覆盖范围。此外，尽管实现了低延迟，但实时生成复杂的长序列运动仍然是一个挑战。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>统一表示的重要性</strong>：证明将异构模态映射到共享的离散空间是连接高层感知与低层控制的有效途径，为未来构建更通用的具身智能体提供了思路。</li>
+<li><strong>MLLM在具身控制中的潜力</strong>：展示了经过适当微调，MLLM不仅能理解多模态指令，还能直接生成可行的运动规划，预示着大模型在机器人运动控制领域更深入的应用前景。</li>
+<li><strong>仿真与实物的桥梁</strong>：通过精心设计的数据集（UA-Net）和鲁棒的低层跟踪器，论文展示了如何将基于数据驱动、在仿真中训练的高层运动生成模型，有效地迁移到复杂的物理机器人平台上执行。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出UniAct框架，旨在解决人形机器人将多模态指令（语言、音乐、轨迹等）实时转化为稳定动作的难题。其核心采用两阶段架构：首先通过微调的多模态大语言模型（MLLM）与有限标量化（FSQ）共享码本，将异构输入统一为离散运动令牌；随后通过因果解码流式管道实现低延迟动作生成。实验表明，该方法在零样本跟踪不完美参考运动时成功率提升19%，推理延迟低于500毫秒，并在自建的20小时运动基准UA-Net上验证了泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2512.24321" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

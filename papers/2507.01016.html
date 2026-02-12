@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VQ-VLA: Improving Vision-Language-Action Models via Scaling Vector-Quantized Action Tokenizers - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>VQ-VLA: Improving Vision-Language-Action Models via Scaling Vector-Quantized Action Tokenizers</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2507.01016" target="_blank" rel="noreferrer">2507.01016</a></span>
+        <span>作者: Wang, Yating, Zhu, Haoyi, Liu, Mingyu, Yang, Jiange, Fang, Hao-Shu, He, Tong</span>
+        <span>日期: 2025/07/01</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）模型通过将连续机器人动作离散化为令牌序列，以适配基于Transformer的生成式模型架构。主流方法（如OpenVLA）采用简单的“分箱”离散化策略，即将每个动作维度的连续值均匀划分为256个区间。然而，这种方法存在关键局限性：离散化过程粗糙，无法有效捕捉动作序列中复杂的时空动态和概率分布；在长视野任务中，误差容易累积；同时，训练高效、表达能力强的动作分词器缺乏可扩展的大规模数据。</p>
+<p>本文针对动作表示不精确和缺乏可扩展数据这两个具体痛点，提出了一个新视角：动作轨迹在模拟与真实世界之间的域间隙很小，因此可以大规模利用合成数据来训练一个通用的、高性能的向量量化动作分词器。本文的核心思路是：设计一个基于卷积残差VQ-VAE的动作分词器，利用超过先前方法100倍的大规模动作轨迹数据（混合真实与合成数据）进行训练，以学习更精确、更平滑的动作表示，从而提升下游VLA模型的性能、推理速度和长视野任务能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>VQ-VLA的整体流程分为两个主要阶段：1）在大规模数据集上训练一个通用的卷积残差VQ-VAE动作分词器；2）使用LoRA技术，将训练好的分词器集成到OpenVLA骨干模型中并进行微调。</p>
+<p><img src="https://arxiv.org/html/2507.01016v1/x1.png" alt="VQ-VLA pipeline"></p>
+<blockquote>
+<p><strong>图1</strong>：VQ-VLA方法整体框架。左侧为第一阶段：在Open X-Embodiment、LIBERO和ManiSkill等大规模数据集上训练卷积残差VQ-VAE动作分词器。右侧为第二阶段：将冻结的预训练VQ-VAE作为动作分词器集成到OpenVLA中，替换原有的分箱方法，并使用LoRA进行微调。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>卷积残差VQ-VAE动作分词器</strong>：该方法基于残差向量量化VQ-VAE框架。其核心创新在于编码器（ϕ_enc）和解码器（ϕ_dec）采用了<strong>2D时间卷积层</strong>，而非传统残差VQ-VAE中使用的简单多层感知机（MLP）。这种设计旨在更高效地捕获动作序列的局部关联和分层时间依赖性。给定输入动作序列 <code>a_{t:t+n} ∈ R^{n×d}</code>（n为序列长度，d为动作维度），编码器将其映射为潜在嵌入 <code>x</code>。随后，通过<strong>残差向量量化</strong>将 <code>x</code> 分解为多个量化残差的和：<code>q(x) = Σ_{i=1}^{N_q} q_i(r_i)</code>，其中 <code>r_1 = x</code>, <code>r_{i+1} = r_i - q_i(r_i)</code>，<code>N_q</code> 为量化层数。量化后的嵌入 <code>q(x)</code> 经解码器重建为动作序列 <code>â_{t:t+n}</code>。</li>
+<li><strong>训练策略与嵌入</strong>：为提升模型对时空信息的处理能力，在动作序列输入编码器前加入了两种嵌入：<strong>时间嵌入</strong>（正弦编码，用于捕获多频率时间模式）和<strong>动作类型嵌入</strong>（可学习嵌入，用于区分动作向量的不同维度，如XYZ位置、欧拉角、夹爪状态）。训练采用<strong>渐进式策略</strong>：先在包含噪声的真实世界数据集（如Open X-Embodiment）上训练，再逐步引入更干净、平滑的大规模合成数据（如LIBERO、ManiSkill）。损失函数为重建损失、VQ损失和承诺损失的加权和（<code>λ=4</code>）。</li>
+<li><strong>与VLA模型的集成</strong>：训练好的VQ-VAE被冻结，作为OpenVLA的动作分词器。它将输入的动作序列编码并量化为 <code>N_q</code> 个离散的码本索引（令牌）<code>{z_q^i}_{i=1}^{N_q}</code>。一个关键设计是，为不同VQ层产生的令牌分配<strong>非重叠的ID范围</strong>：第 <code>i</code> 层的令牌ID范围为 <code>[256×(i-1), 256×i-1]</code>。这避免了不同层级语义特征的混淆。VLM被训练直接预测这些令牌序列，损失函数为标准的下一个令牌预测交叉熵损失。通过预测更长的动作序列块（而非单步动作），显著减少了训练和推理所需的令牌数量，从而提升了效率。</li>
+</ol>
+<p><strong>创新点</strong>：</p>
+<ul>
+<li><strong>架构创新</strong>：使用2D时间卷积网络替代MLP，更好地建模动作序列的时序依赖。</li>
+<li><strong>量化策略</strong>：采用残差向量量化和分层非重叠令牌ID设计，实现更精确、无冲突的动作离散化。</li>
+<li><strong>数据利用</strong>：首次系统性地论证并利用动作轨迹的模拟-真实域间隙小的特性，通过超百倍规模的大规模合成数据扩展动作分词器，成本效益高。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与数据集</strong>：</p>
+<ul>
+<li><strong>模拟实验</strong>：使用LIBERO模拟器（包括LIBERO-10, LIBERO-GOAL, LIBERO-90等任务套件）进行评估。动作分词器训练数据包括ManiSkill和RLBench（作为域外数据）。</li>
+<li><strong>真实实验</strong>：使用Franka Research 3机械臂和RealSense D435相机，设计了6个操作任务（4个短视野、2个长视野）进行评估。</li>
+</ul>
+<p><strong>对比方法</strong>：</p>
+<ul>
+<li><strong>Baseline</strong>：原始OpenVLA模型（使用分箱动作分词器）。</li>
+<li><strong>VQ变体</strong>：使用在不同数据集组合上训练的VQ-VAE作为分词器的OpenVLA模型，包括：仅用ManiSkill数据训练的 <code>VQ_M</code>，用ManiSkill+RLBench数据训练的 <code>VQ_M+R</code>（模拟实验）；以及用Open X-Embodiment (<code>VQ_O</code>)、Open X-Embodiment+LIBERO (<code>VQ_O+L</code>)、三者混合 (<code>VQ_O+L+M</code>) 训练的模型（真实实验）。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2507.01016v1/x2.png" alt="All Evaluation environments"></p>
+<blockquote>
+<p><strong>图2</strong>：评估环境概览。模拟评估在LIBERO-90基准上进行。真实世界评估设计了六个多样化任务，涵盖从简单抓取到长视野顺序操作。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>模拟实验有效性</strong>：在LIBERO-90上，<code>VQ_M+R</code> 达到了80.98%的成功率，比OpenVLA基线（73.53%）**提升了7.45%**。仅使用ManiSkill数据的 <code>VQ_M</code> 性能（14.38%）大幅下降，凸显了足够数据规模的重要性。</li>
+<li><strong>架构消融实验</strong>：如表1所示，使用卷积残差VQ-VAE（在完整LIBERO数据上训练）在LIBERO-10和LIBERO-GOAL任务上分别达到60.0%和75.2%的成功率，显著优于MLP版本的VQ-VAE（53.4%， 72.6%），证明了卷积结构在捕获时序依赖上的优势。</li>
+<li><strong>真实世界性能</strong>：<br><img src="https://arxiv.org/html/2507.01016v1/x3.png" alt="Real-world experimental results"><blockquote>
+<p><strong>图3</strong>：真实世界实验结果。所有基于VQ的模型在平均成功率上均超越基线。性能最佳的 <code>VQ_O+L+M</code> 在短视野和长视野任务上的成功率比基线**高出23.25%**。结果显示，加入更多合成数据训练的模型（<code>VQ_O+L+M</code> &gt; <code>VQ_O+L</code> &gt; <code>VQ_O</code>）性能依次提升，验证了利用合成数据扩展的有效性。</p>
+</blockquote>
+<ul>
+<li><strong>长视野任务提升显著</strong>：在“将两个杯子放入篮子”和“将玩具放入抽屉并关闭”两个长视野任务中，<code>VQ_O+L+M</code> 相比基线取得了约<strong>30%</strong> 的成功率提升。</li>
+<li><strong>线性扩展特性</strong>：随着用于训练分词器的合成数据量增加，下游VLA模型在真实任务上的性能呈现近似线性的提升。</li>
+</ul>
+</li>
+<li><strong>其他优势</strong>：论文指出，所提方法还<strong>显著提升了VLA模型的推理速度</strong>，并<strong>生成更平滑、连贯的动作输出</strong>，有效减少了长视野任务中的累积误差。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个通用的、基于卷积残差VQ-VAE框架的动作分词器，其卷积架构能更好地建模动作序列的时空动态。</li>
+<li>系统性地论证并验证了动作分词器可以通过大规模合成动作轨迹数据进行有效扩展，且模拟与真实数据间的域间隙极小，为低成本获取训练数据提供了新途径。</li>
+<li>实验证明，该动作分词器能显著提升下游VLA模型的性能（尤其在长视野任务中）、推理速度以及动作输出的平滑度。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文提到，训练仍需从真实世界数据集（如Open X-Embodiment）开始初始化，以覆盖真实的动作分布；此外，当前工作主要聚焦于7自由度末端执行器姿态动作，未探索更复杂的动作空间（如双手、移动基座）。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li><strong>合成数据的价值</strong>：在机器人学习，特别是动作表示领域，大规模合成数据是一个极具价值且尚未被充分开发的资源。</li>
+<li><strong>分词器作为独立组件</strong>：将动作分词器作为一个独立的、可扩展的组件进行设计和优化，是提升VLA模型能力的一种高效且经济策略。</li>
+<li><strong>架构设计</strong>：针对时序连续数据的模型架构（如时间卷积）在动作表示学习中至关重要，值得进一步探索。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作（VLA）模型中动作建模的精度与效率问题，提出通过扩展向量量化（VQ）动作分词器来改进。该方法基于超大规模动作轨迹数据集训练分词器，数据量超以往百倍，关键利用合成与真实数据领域差距小的特性，使用海量合成数据提升分词器对时空动态的捕捉能力。实验表明，随着合成数据规模扩大，模型在下游任务性能显著提升，在长视野真实任务中成功率最高提升30%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2507.01016" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

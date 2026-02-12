@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LeVERB: Humanoid Whole-Body Control with Latent Vision-Language Instruction - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>LeVERB: Humanoid Whole-Body Control with Latent Vision-Language Instruction</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.13751" target="_blank" rel="noreferrer">2506.13751</a></span>
+        <span>作者: Xue, Haoru, Huang, Xiaoyu, Niu, Dantong, Liao, Qiayuan, Kragerud, Thomas, Gravdahl, Jan Tommy, Peng, Xue Bin, Shi, Guanya, Darrell, Trevor, Sreenath, Koushil, Sastry, Shankar</span>
+        <span>日期: 2025/06/16</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型在机器人语义理解和零样本泛化方面展现出强大能力。然而，现有系统大多假设存在一个准确的低级控制器，并使用手工设计的显式动作“词汇”（如末端执行器位姿或基座速度）作为VLA模型与低级控制器的接口。这种假设将先前的工作限制在准静态任务中，无法实现人形机器人全身控制所需的敏捷、全身性行为。具体而言，显式接口限制了动作的表达能力，难以集成复杂的全身运动和场景交互。</p>
+<p>本文旨在填补人形机器人视觉语言全身控制领域的空白。核心思路是提出一种分层的潜在指令跟随框架LeVERB，其通过一个学习得到的“潜在动词词汇”作为高级视觉语言理解与低级动态控制之间的接口，从而解锁更具表现力且可零样本迁移到真实世界的全身控制能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LeVERB采用一种双过程推理流程，将高级语义推理（系统2，LeVERB-VL）与低级反应式控制（系统1，LeVERB-A）解耦。整体策略在推理时表示为：πθ(at|ot) = ∫ τθA(at|zt, otprop, at-1) · ρθVL(zt|It, c) dzt。其中，ρθVL是处理视觉语言指令和闭环视觉反馈的高级策略，输出一个潜在动作向量zt；τθA是低级动作策略，以zt、本体感知otprop和上一时刻动作at-1为输入，输出关节位置动作（实际为重新参数化的扭矩级动作）。LeVERB-VL以10Hz频率运行，而LeVERB-A以50Hz频率运行，这种解耦避免了端到端训练中昂贵的光学渲染计算。</p>
+<p><img src="https://arxiv.org/html/2506.13751v3/x3.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：LeVERB的数据收集与训练流程。步骤1：在IsaacSim中收集经过动作重定向的光学真实合成数据集并用文本指令标注。步骤2：通过运动学轨迹重建任务训练LeVERB-VL，获得正则化的潜在动词词汇，并缓存数据集中每个轨迹的潜在动词zt。步骤3：使用zt条件化训练LeVERB-A。LeVERB-A通过DAgger从教师跟踪策略Tξ蒸馏而来，Tξ接收与潜在动词意图对应的未来参考指令st+1。</p>
+</blockquote>
+<p><strong>LeVERB-VL训练：视觉-语言-动作语义对齐</strong><br>该模块的目标是将视觉和语言输入映射到一个平滑、正则化的潜在词汇空间。其采用基于残差条件变分自编码器的架构：</p>
+<ol>
+<li><strong>VLA先验</strong>：使用预训练且冻结的SigLiP视觉编码器处理自我中心（头戴）和第三人称视角图像，得到图像令牌；使用同一模型的文本编码器处理语言指令。这些令牌经Transformer主干和MLP头后，输出仅基于观测的潜在分布参数（μρ, σρ）。</li>
+<li><strong>运动学编码器Eψ</strong>：一个MLP，以真实的未来状态st+1:t+M为输入，输出一个潜在分布参数（μE, σE），用于补充VLA先验未捕获的细粒度运动信息。</li>
+<li><strong>残差潜在空间</strong>：最终的后验潜在分布q(zt)的均值构造为残差连接μ = μρ + μE，方差取自运动学编码器σ = σE。这种设计让VLA先验专注于语义推理，而编码器提供细节补充。训练时通过重参数化技巧采样zt。</li>
+<li><strong>运动学解码器Dψ</strong>：一个MLP，以当前状态st和采样的潜在zt为输入，重建未来状态。</li>
+<li><strong>鉴别器fψ</strong>：为了融合LeVERB-Bench中视觉语言数据和纯语言数据（后者输入空白图像），引入一个带梯度反转层的对抗性鉴别器，鼓励LeVERB-VL产生与图像模态无关的潜在表示。<br>训练目标包含轨迹重建损失、后验分布与先验分布的KL散度对齐损失以及对抗分类损失。</li>
+</ol>
+<p><strong>LeVERB-A训练：基于学习潜在分布的动作蒸馏</strong><br>在LeVERB-VL训练完成后，冻结其潜在空间，并训练低级策略LeVERB-A：</p>
+<ol>
+<li><strong>训练教师策略Tξ</strong>：使用PPO训练多个无视视觉语言的教师策略，使其能够准确跟踪LeVERB-Bench中不同类别的重定向运动学轨迹。教师接收特权本体感知观测和参考运动指令。</li>
+<li><strong>训练学生策略LeVERB-A</strong>：这是一个Transformer网络，以本体感知otprop和从LeVERB-VL预测的分布中采样的潜在代码zt为输入。关键点在于，训练时从分布中采样zt，而非仅使用均值μρ，以捕获视觉语言语义到动作的多模态映射。通过DAgger算法，使用Huber损失向教师动作进行蒸馏学习。部署时，则使用LeVERB-VL预测的均值μρ进行条件化。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p>本文在自建的<strong>LeVERB-Bench</strong>基准上进行评估，该基准包含10个类别超过150个任务，提供了光学真实渲染和基于物理的仿真。由于缺乏可直接对比的先前工作，主要通过与多个消融变体进行比较来验证方法有效性。</p>
+<p><img src="https://arxiv.org/html/2506.13751v3/x2.png" alt="基准可视化"></p>
+<blockquote>
+<p><strong>图2</strong>：LeVERB-Bench环境可视化。顶行：数百种纹理和物体随机化选项。中行：自我中心相机视图和随机的第三人称相机视图。底行：多样化的任务类别。</p>
+</blockquote>
+<p><strong>关键定量结果</strong><br>在闭环评估中，LeVERB在简单视觉导航任务（VNF Objective）上取得了80%的成功率，在所有任务上的平均成功率为58.5%。</p>
+<p><img src="https://arxiv.org/html/2506.13751v3/x5.png" alt="结果表格"></p>
+<blockquote>
+<p><strong>表2</strong>：LeVERB与其消融版本的结果对比。评估了包括无鉴别器、无运动学编码器、无LeVERB-VL、无低级采样、无采样等多个变体在不同任务子类别上的成功率。</p>
+</blockquote>
+<p><strong>消融实验分析</strong></p>
+<ul>
+<li><strong>无鉴别器</strong>：在视觉导航任务上性能显著下降，平均成功率降至33.0%。这表明鉴别器对于对齐视觉语言数据和纯语言数据的潜在空间分布、提升泛化能力至关重要。</li>
+<li><strong>无运动学编码器</strong>：性能略降至53.0%，其潜在空间包含更多细粒度信息但语义信息较少，对未见场景更脆弱。</li>
+<li><strong>无LeVERB-VL</strong>：在几乎所有视觉语言任务上成功率极低（平均25.5%），证实了高级VLA规划能力对于处理视觉反馈的必要性。</li>
+<li><strong>无采样</strong>：在大多数任务上完全失败（平均7.5%），表明确定性的自编码器设置导致潜在空间非结构化，插值行为差，经常使动作模块处于分布外状态。</li>
+<li><strong>无低级采样</strong>：性能较差（平均6.5%），说明在训练LeVERB-A时若不从分布中采样，则无法让低级策略充分捕获潜在的分布特性。</li>
+</ul>
+<p><strong>真实世界部署与定性结果</strong><br>LeVERB在Unitree G1人形机器人上实现了零样本模拟到真实的迁移。</p>
+<p><img src="https://arxiv.org/html/2506.13751v3/x4.png" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>图4</strong>：上图：LeVERB对人类的词汇变化表现出鲁棒响应。下图：LeVERB根据椅子视觉位置执行不同的坐下策略，展示了空间推理能力。</p>
+</blockquote>
+<p>如图4所示，LeVERB能够响应未见过的动词-物体组合指令，并仅依赖视觉反馈完成走向目标椅子并调整姿态坐下的复杂空间推理任务。实验中采用开环回放LeVERB-VL生成的潜在动词，由LeVERB-A执行，成功完成了任务，证明了其动态层级的模拟到真实就绪性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>创建了首个适用于模拟到真实迁移的、光学真实的人形机器人视觉语言全身控制基准LeVERB-Bench及高效合成数据生成流程。</li>
+<li>提出了LeVERB，一种基于CVAE的双过程分层架构，首次通过学习得到的潜在动词词汇连接视觉语言理解与动态全身控制，实现了语义 grounded 的全身行为。</li>
+<li>在仿真和真实人形硬件上验证了方法的有效性，首次展示了使用潜在视觉语言接口进行全身控制的零样本模拟到真实迁移结果。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文自身指出，LeVERB的有效性受限于缺乏真正的长期历史记忆和规划能力。</p>
+<p><strong>后续研究启示</strong>：</p>
+<ol>
+<li><strong>潜在动作接口的有效性</strong>：证明了学习一个结构化的潜在动作空间作为高级语义规划与低级动态控制之间的接口，比显式接口（如位姿、速度）更具表达力和泛化能力，是解决复杂动态系统控制的有前景的方向。</li>
+<li><strong>合成数据与解耦训练</strong>：展示了通过合成光学真实数据结合解耦训练策略（先训练语义模块，再基于其输出训练控制模块），可以高效地训练需要多模态输入的复杂机器人策略，并实现零样本真实世界迁移。</li>
+<li><strong>双过程架构的优越性</strong>：受人类认知启发，将高频、低延迟的反射式控制与低频、深思熟虑的语义推理分离的层次化设计，适用于人形机器人这类高维非线性动态系统的控制。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出LeVERB，旨在解决现有视觉-语言-动作模型因依赖手工设计低维动作词汇而难以实现人形机器人敏捷全身控制的局限。方法核心为分层潜在指令跟踪框架：高层视觉-语言策略从合成运动学演示中学习潜在动作词汇；低层强化学习全身控制策略将潜在指令转化为动力学命令。在构建的包含10类150余任务的仿真到真实基准测试中，LeVERB在简单视觉导航任务上达到80%零样本成功率，总体成功率58.5%，较基线方法提升7.8倍。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.13751" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

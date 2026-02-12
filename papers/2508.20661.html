@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Traversing Narrow Paths: A Two-Stage Reinforcement Learning Framework for Robust and Safe Humanoid Walking - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Traversing Narrow Paths: A Two-Stage Reinforcement Learning Framework for Robust and Safe Humanoid Walking</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.20661" target="_blank" rel="noreferrer">2508.20661</a></span>
+        <span>作者: Huang, TianChen, Xu, Runchen, Wang, Yu, Gao, Wei, Zhang, Shiwu</span>
+        <span>日期: 2025/08/28</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>人形机器人在窄路（如横梁）上行走极具挑战，因为可行的落足区域稀疏且安全裕度极小。现有方法主要遵循两种范式。一种是基于模板模型（如线性倒立摆LIPM）的落足点规划方法，其优势在于提供了可解释的平衡规则和紧凑的落足点表示，但对建模误差、接触不确定性和控制系统延迟敏感，导致在有限支撑区域上的落足不精确。另一种是端到端的模型无关强化学习方法，它们从数据中联合学习落足点选择与运动控制，但可能过拟合仿真器假设，面临不安全的探索，且在安全关键任务中缺乏落足点的可解释性。</p>
+<p>本文针对窄路行走这一具体痛点，提出了一种结合两者优势的新视角：保留基于物理的模板作为可解释的落足点规划器，并分配一个数据驱动的学习模块作为安全相关的修正器。其核心思路是设计一个两阶段训练框架，第一阶段训练一个鲁棒的落足点跟踪器，第二阶段训练一个轻量级的、基于感知的落足点修正器，通过课程学习从平地过渡到窄路，最终实现鲁棒、安全且精确的窄路行走。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的框架旨在将“在哪里落脚”与“如何实现这一步”分离，其整体流程如图所示。</p>
+<p><img src="https://arxiv.org/html/2508.20661v4/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：所提出的人形机器人窄路行走框架。采用两阶段训练课程，分别用于低层落足点跟踪器和高层落足点修正器。不同背景颜色表示不同的运行频率。</p>
+</blockquote>
+<p><strong>整体流程</strong>：给定机器人状态，一个3D-LIPM规划器首先为摆动腿生成初始落足点目标 (u_{\text{init}})。随后，高层修正器预测一个机体坐标系下的残差 (\Delta u = (\Delta x, \Delta y, \Delta \psi))，将初始目标修正为最终目标 (u_{\text{final}} = u_{\text{init}} \oplus \Delta u)（(\oplus) 表示任务空间中的位姿合成）。最后，低层跟踪器输出期望的关节位置给比例-微分（PD）控制器，以确保实现 (u_{\text{final}})。修正器和跟踪器通过强化学习以不同的目标进行训练。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><p><strong>Stage-I: 鲁棒落足点跟踪器训练（在平地上）</strong></p>
+<ul>
+<li><strong>目标</strong>：训练一个低层策略，使其能够可靠地跟踪落足点，并在存在目标扰动的情况下实现稳定的接触切换。</li>
+<li><strong>关键设计</strong>：在训练过程中，向LIPM规划器生成的落足点目标 (u_{\text{init}}) 注入一个有界的随机扰动 (\varepsilon)（在机体坐标系下，(\delta_x = \delta_y = 0.05\ m, \delta_{\psi} = 20^\circ)），得到扰动后的目标 (\tilde{u}<em>{\mathrm{init}} = u</em>{\mathrm{init}} + \varepsilon)。策略需学习跟踪这个被扰动的目标。</li>
+<li><strong>观测与奖励</strong>：策略观测本体感知信息（IMU信号和关节状态）以及当前步态相位，输出关节位置命令。奖励函数强调精确的落足点实现和稳定的接触调度，包括：<code>step_tracking</code>（奖励正确的支撑腿交替和精确的摆动腿落足位置/朝向）、<code>tracking_lin_vel_world</code>（惩罚基座线速度跟踪误差）、<code>base_heading</code> &amp; <code>base_z_orientation</code>（稳定基座朝向）以及 <code>joint_regularization</code>（关节角度正则化）。此阶段不启用高层修正器。</li>
+</ul>
+</li>
+<li><p><strong>Stage-II: 安全落足点修正器训练（在窄路上）</strong></p>
+<ul>
+<li><strong>目标</strong>：训练一个高层策略，利用外感知信息修正模板生成的落足点，确保在狭窄支撑上的安全、精确落足。</li>
+<li><strong>轻量级感知</strong>：策略消耗一个紧凑的<strong>前向地形高度图</strong>。该图在机器人前方固定区域采样（(x \in [0.1, 1.1] m, y \in [-0.8, 0.8] m)），分辨率为 (0.1 m)，形成一个 (11 \times 17) 的网格并展平为向量。仿真和实物实验使用一致的表示。</li>
+<li><strong>残差修正</strong>：在每一步态转换时，修正器为摆动腿输出一个机体坐标系残差 (\Delta u)。最终落足点目标通过公式 (u_{\text{final}}^{(i)} = u_{\text{init}}^{(i)} \oplus \text{sat}_S(\Delta u))（若 (i) 为摆动腿）计算，其中 (\text{sat}_S) 为按分量裁剪函数，(S) 为修正边界，确保修正量有界且可解释。</li>
+<li><strong>观测与奖励</strong>：策略的观测包括：本体感知信息、步态相位特征、当前模板规划目标以及展平的地形高度图。奖励函数专为安全设计：<code>foothold_safety</code>（惩罚落足点位于“深渊”或局部不平坦区域）、<code>beam_balance</code>（使用高斯函数鼓励落足点靠近窄路中心线，如图3所示）、<code>forward_progress</code>（奖励前进）、<code>face_forward</code>（鼓励足部朝向与前进方向对齐）、<code>feet_proximity</code>（惩罚足部间距过近）以及 <code>action_magnitude</code> &amp; <code>action_smoothness</code>（保持修正量最小且平滑）。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2508.20661v4/x3.png" alt="修正演示"></p>
+<blockquote>
+<p><strong>图3</strong>：Stage-II训练中落足点修正的示意图。虚线多边形表示规划器为左腿生成的初始落足点目标 (u_{\mathrm{init}}^{(L)})，实线多边形表示修正器为双腿生成的最终落足点目标 (u_{\mathrm{final}}^{(L)})（红色）和 (u_{\mathrm{final}}^{(R)})（蓝色）。对落足点相对于梁中心线的横向偏移施加平滑的高斯惩罚，以鼓励靠近中心线行走。</p>
+</blockquote>
+<p><strong>创新点</strong>：与纯模板或纯RL方法相比，本文的创新具体体现在：1) <strong>两阶段课程学习</strong>：将困难的窄路行走任务分解，先在简单环境中学习鲁棒跟踪，再在复杂环境中学习安全修正。2) <strong>物理引导的残差学习</strong>：将学习范围限制为对物理模型输出的有界修正，既保留了模型的可解释性，又利用数据驱动提升了鲁棒性。3) <strong>轻量级一致感知</strong>：仅使用紧凑的前向高度图，简化了感知流程，利于仿真到实物的迁移。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：方法首先在仿真中评估，然后在Unitree G1人形机器人上进行实物验证。窄路设置为宽度为 ({0.15, 0.20, 0.25} m)、长度为 (3-5 m) 的直梁。实物实验使用一个 (0.2 m) 宽、(3 m) 长的木梁。每次实验进行20次独立试验。</p>
+<p><strong>基线方法</strong>：</p>
+<ol>
+<li><strong>No-Modifier</strong>：仅使用LIPM规划器和Stage-I训练得到的跟踪器（即禁用高层修正器），用于测试修正器的收益。</li>
+<li><strong>RL-Only</strong>：纯粹的端到端RL框架，策略接收与本文方法相同的观测，但直接输出关节位置命令，使用与Stage-II类似的奖励函数（去除涉及模板目标的相关项）。</li>
+</ol>
+<p><strong>消融实验</strong>：研究Stage-I训练中注入的随机扰动的作用，对比了“有扰动”和“无扰动”两种配置下训练出的策略。</p>
+<p><strong>关键实验结果</strong>：<br>在仿真中，使用成功率（%）、中心线偏差（m）和落足点均方根误差（FP-RMSE，m）三个指标进行评估。</p>
+<p><img src="https://arxiv.org/html/2508.20661v4/x4.png" alt="硬件高度图"></p>
+<blockquote>
+<p><strong>图4</strong>：基于机器人LiDAR传感器构建的前向地形高度图的俯视图。该图覆盖 (x \in [0.1, 1.1] m, y \in [-0.8, 0.8] m) 区域，分辨率统一为 (0.1 m)，为落足点修正提供实时地形表征。</p>
+</blockquote>
+<p><strong>基线对比结果（表I）</strong>：在 (0.20 m) 宽梁上，本文方法（Ours）取得了 <strong>100%</strong> 的成功率，中心线偏差为 <strong>0.01639 ± 0.00117 m</strong>。No-Modifier基线成功率仅为15%，中心线偏差更大（0.04690 m）。RL-Only基线成功率为0%，中心线偏差最大（0.18192 m）。这表明纯模板方法在窄路上性能不足，而纯RL方法未能有效学习。本文方法的FP-RMSE（0.02633 m）略高于No-Modifier（0.01962 m），这是因为本文方法的跟踪目标本身包含了修正器引入的残差，跟踪难度更大，但换来了安全性和成功率的极大提升。</p>
+<p><strong>消融实验结果（表II）</strong>：移除Stage-I扰动后，策略的成功率下降至 **50%**，中心线偏差增大至 <strong>0.09696 m</strong>，FP-RMSE也显著增加（0.05467 m）。这证实了在平地训练阶段引入目标扰动，对于提升跟踪器对后续阶段中修正器所引入的目标变化的容忍度至关重要。</p>
+<p><strong>硬件验证结果（表III）</strong>：在实物Unitree G1机器人上，本文方法在20次试验中取得了 <strong>100%</strong> 的成功率和 <strong>100%</strong> 的穿越率（完整走完3米梁）。作为对比，引用的 state-of-the-art 方法 BeamDojo 在5次试验中报告的成功率为 **80%**，穿越率为 **88.16%**。本文方法表现更优。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个<strong>物理引导的两阶段课程学习框架</strong>，用于人形机器人窄路行走。该框架将基于LIPM的可解释落足点规划、鲁棒的底层跟踪学习以及安全的顶层感知修正相结合。</li>
+<li>实现了<strong>轻量级感知与高效的仿真到实物迁移</strong>。仅使用紧凑的前向地形高度图和本体感知，并在仿真与实物中保持一致的表示，使得学习到的策略能直接部署到真实机器人，并在极具挑战的窄梁行走任务上达到100%的成功率。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，在训练过程中观察到一种主要的失败模式：当机器人航向角发生显著振荡时，局部地形高度图中可行的落足点集合会收缩，可能导致规划器的初始目标漂向路径边缘，此时即使修正器的残差达到边界，也无法将最终目标拉回窄路，从而导致失败。此外，在实物实验中，路径边界附近的高度估计偏差偶尔会被观察到。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>物理模型与数据驱动的有效结合</strong>：本文展示了保留物理模型作为“主干”，并利用学习方法来弥补模型不足和应对不确定性的有效性，这为安全关键的运动控制任务提供了一个有前景的方向。</li>
+<li><strong>课程学习与分层设计的重要性</strong>：对于复杂的具身智能任务，通过课程学习由易到难，以及通过分层设计分解问题（如本文分离“规划”、“修正”、“执行”），可以显著提升学习的稳定性和最终性能。</li>
+<li><strong>轻量、一致的感知表征</strong>：为了实现高效的sim-to-real，感知输入应尽可能轻量并与仿真保持一致，避免复杂、不鲁棒的重建管道。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对人形机器人在狭窄路径上行走时立足点稀疏、安全要求高的核心难题，提出了一种两阶段强化学习框架。方法上耦合了基于3D-LIPM的立足点规划器、第一阶段的立足点跟踪策略以及第二阶段的轻量级感知辅助立足点修正策略，融合了物理模型的可解释性与强化学习的泛化能力。实验表明，该策略在成功率和安全性上优于纯模板或纯强化学习基线，并在Unitree G1机器人上实现了对0.2米宽、3米长横梁的20次连续无失败遍历。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.20661" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

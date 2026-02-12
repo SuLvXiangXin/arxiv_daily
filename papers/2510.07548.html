@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AVO: Amortized Value Optimization for Contact Mode Switching in Multi-Finger Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>AVO: Amortized Value Optimization for Contact Mode Switching in Multi-Finger Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.07548" target="_blank" rel="noreferrer">2510.07548</a></span>
+        <span>作者: Hung, Adam, Yang, Fan, Kumar, Abhinav, Marinovic, Sergio Aguilera, Iba, Soshi, Zarrin, Rana Soltani, Berenson, Dmitry</span>
+        <span>日期: 2025/10/08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在灵巧操作任务中，机器人通常需要在不同的接触模式（如粘滞、滑动、非接触/重新抓取）之间切换。当前的主流方法是将这些长时程、高维度的任务分解为一系列具有固定接触模式的子任务，并对每个子任务独立进行轨迹优化。这种做法存在两个关键局限性：首先，独立优化每个子任务时，由于缺乏对未来子任务性能的考量，可能使系统进入一个不利于后续任务执行的状态；其次，处理高维系统和复杂约束的轨迹优化计算开销巨大。基于学习的方法虽然能降低运行时耗，但通常无法显式处理任务关键约束，在接触丰富的复杂任务中容易失败。</p>
+<p>本文针对上述“子任务优化缺乏长远考量”和“在线优化计算昂贵”这两个具体痛点，提出引入一个学习到的价值函数来为优化过程提供新视角。其核心思路是：离线训练一个价值函数来预测从当前状态开始执行完整任务的未来总成本，并将其作为辅助成本项整合到在线轨迹优化中，从而引导优化器选择有利于长远任务成功的状态，并加速优化收敛。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>AVO的整体框架分为离线的价值函数训练和在线的轨迹优化部署两个阶段。给定一个由上游规划器提供的预定义接触模式序列，方法为每个接触模式训练一个独立的价值函数。在线执行时，对于当前接触模式对应的子任务，使用轨迹优化器进行重规划优化，并将对应价值函数的预测值作为额外成本项加入优化目标，以指导优化过程。</p>
+<p><img src="https://arxiv.org/html/2510.07548v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：AVO的训练与部署流程。(a) 训练阶段：为每个接触模式 <code>c</code> 执行轨迹优化生成轨迹 <code>τ</code> 并记录最终任务成本 <code>ρ</code>，构建数据集 <code>D_c</code>，用于训练一个由 <code>M</code> 个网络组成的价值函数集成。(b) 部署阶段：在优化每个子任务轨迹时，查询对应的价值函数集成，将其预测的均值 <code>μ</code> 和方差 <code>σ</code> 作为额外成本 <code>J_V</code> 加入优化目标。</p>
+</blockquote>
+<p><strong>核心模块一：基于接触模式的轨迹优化。</strong> 该模块是执行每个子任务的基础优化器，建模自先前工作。状态 <code>s</code> 包含手指关节配置 <code>{q_i}</code> 和物体位姿 <code>o</code>；控制量 <code>u</code> 包含手指位移 <code>Δq_i</code>、接触力 <code>f_i</code> 以及环境力 <code>f_e</code>。优化问题在公式(2)中定义，其成本函数包含三项：驱动物体到达目标位姿的成本 <code>J_g</code>、使轨迹平滑的成本 <code>J_smooth</code>，以及本文新引入的、由价值函数引导的成本 <code>J_V</code>。约束条件根据接触模式向量 <code>c</code> 对不同手指（保持接触的手指 <code>c</code>、重新抓取的手指 <code>r</code>）和物体 <code>o</code> 分别施加，包括关节与控制量限位、接触几何约束、运动学约束、力平衡方程、摩擦锥约束，以及对重新抓取手指在子任务结束前需避免接触、在结束时需重新建立接触的约束。该优化问题使用约束Stein变分轨迹优化（CSVTO）求解。</p>
+<p><strong>核心模块二：价值函数的训练与集成。</strong> 这是本文的核心创新。对于每个接触模式 <code>c</code>，方法学习一个价值函数 <code>V_c(s, t, ζ)</code>，其输入为当前状态 <code>s</code>、当前时间步 <code>t</code> 以及子任务相关的辅助信息 <code>ζ</code>（例如在拧转任务中为初始偏航角 <code>ψ_0</code>），输出为从当前状态执行完整任务的预计未来总成本 <code>ρ^</code>。训练数据通过运行基础轨迹优化器（<code>J_V=0</code>）在随机初始状态上执行任务来收集，标签 <code>ρ</code> 为截断后的最终物体位姿与目标位姿的平方误差。使用均方误差损失对神经网络进行监督训练。为避免单一网络对分布外输入做出错误预测导致优化陷入不良局部极小，本文采用一个包含 <code>M=16</code> 个网络的集成来建模价值函数，以捕获认知不确定性。集成中不同网络预测的方差 <code>σ^2</code> 反映了模型对当前输入置信度的高低。</p>
+<p><strong>核心模块三：价值函数作为优化成本。</strong> 在在线部署阶段，对于待优化的轨迹 <code>τ</code>，在每个优化迭代中查询对应的价值函数集成 <code>V_c</code>，获得每个状态 <code>s_t</code> 的 <code>M</code> 个预测值。然后构造辅助成本项 <code>J_V(τ) = αμ + βσ^2</code>。其中，<code>μ</code> 是集成对所有状态预测值的均值，最小化 <code>μ</code> 会引导优化器选择价值函数认为未来总成本更低的状态；<code>σ^2</code> 是预测值的方差，最小化 <code>σ^2</code> 会驱使优化器趋向于价值函数训练数据分布内的状态，避免因分布外查询而产生误导。超参数 <code>α, β &gt; 0</code> 用于权衡两项的权重。</p>
+<p>与现有方法相比，AVO的创新点在于：1) 将学习到的价值函数作为持续指导每一步优化的辅助成本，而不仅仅是评估最终状态或用于初始化；2) 通过价值函数集成同时优化未来成本期望和不确定性，实现了长远性能优化与优化过程稳定性的平衡；3) 其摊销优化（Amortization）体现在利用离线训练的价值函数减少在线优化所需的迭代次数，而非仅通过生成初始猜测来加速。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在仿真（Isaac Gym）和真实硬件（Allegro手）上对一个螺丝刀抓握与拧转任务进行评估。该任务包含两个子任务：先执行一个重新抓取子任务（拇指和中指暂时断开并重新接触），再执行一个拧转子任务（所有手指保持接触，将螺丝刀顺时针旋转90度）。使用了10,000个样本训练每个子任务的价值函数。</p>
+<p>对比的基线方法包括：1) **T.O.**：不使用价值函数的基础轨迹优化；2) <strong>Single VF</strong>：使用单一价值函数而非集成的消融实验；3) **Diffusion+T.O.**：使用扩散模型生成高质量轨迹作为优化初始化的现有摊销方法；4) <strong>Diffusion+T.O.+Contact Cost</strong>：在上一方法基础上增加额外成本项，使优化轨迹的接触点贴近扩散模型生成的接触点；5) <strong>Hybrid</strong>：结合扩散模型初始化和AVO价值函数成本项的混合方法。</p>
+<p><img src="https://arxiv.org/html/2510.07548v1/x4.png" alt="仿真结果对比"></p>
+<blockquote>
+<p><strong>图4</strong>：仿真实验中，各方法最终状态与目标状态之间四元数角度差的箱线图。(a) 高计算预算下，AVO（中值0.025）性能最佳，显著优于其他方法。(b) 低计算预算（削减约50%）下，AVO（中值0.031）依然保持优异性能，而T.O.基线（中值0.046）性能下降更明显，体现了AVO的摊销优化能力。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.07548v1/x5.png" alt="硬件结果对比"></p>
+<blockquote>
+<p><strong>图5</strong>：硬件实验中，AVO与T.O.基线最终角度差的箱线图。AVO在高预算和低预算下（中值分别为0.035和0.040）均优于T.O.基线（中值0.065），且掉落率更低，验证了方法在真实世界的有效性。</p>
+</blockquote>
+<p><strong>关键实验结果总结：</strong></p>
+<ul>
+<li><strong>仿真-高计算预算</strong>：AVO取得了最佳的中值角度差（0.025），比次优的Diffusion+T.O.方法（中值0.044）提升了42.86%，并且与T.O.基线并列最低掉落率（4%）。这表明在充足计算资源下，AVO能优化出质量更高的轨迹。</li>
+<li><strong>仿真-低计算预算</strong>：当优化迭代次数削减约50%时，AVO（中值0.031）的性能衰减小于T.O.基线（中值0.046），且保持最低掉落率（4% vs 8%）。这证明了价值函数有效摊销了优化过程，使其在更少的迭代内收敛到良好解。</li>
+<li><strong>硬件实验</strong>：AVO在高、低两种预算下均优于T.O.基线，其中值角度差更小，且掉落率显著更低（高预算AVO: 0%，低预算AVO: 10%，T.O.: 30%）。</li>
+<li><strong>消融实验分析</strong>：使用单一价值函数（Single VF）的方法性能最差（中值角度差0.091，掉落率46%），凸显了使用集成模型来估计不确定性、避免误导性梯度的重要性。Diffusion+T.O.系列方法性能不及AVO，表明仅从高性能轨迹中学习（扩散模型）可能不如从包含不同性能轨迹的数据集中学习（价值函数）更能提供有效的优化梯度。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了摊销价值优化（AVO）框架，通过将离线学习的价值函数集成作为辅助成本项引入在线轨迹优化，实现了在优化当前接触模式子任务时对长远任务性能的考量；2) 该方法同时提升了优化轨迹的最终性能和优化过程的计算效率（摊销），在计算预算减少约50%时仍能保持优越性能；3) 在仿真和真实的灵巧操作任务（螺丝刀拧转）上验证了方法的有效性，其性能优于独立优化基线及现有的基于扩散模型的摊销优化方法。</p>
+<p>论文提到的局限性包括：需要依赖上游规划器提供预定义的接触模式序列；价值函数的训练依赖于离线收集的数据集，其质量影响最终性能。</p>
+<p>这项工作对后续研究的启示在于：将学习与基于模型的优化相结合是解决复杂灵巧操作任务的有效途径。价值函数提供了一种连接分离优化子任务的桥梁。未来方向可以探索如何自动学习或优化接触模式序列，以及如何改进价值函数的学习效率与泛化能力，例如结合在线自适应或更高效的不确定性量化方法。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出AVO（Amortized Value Optimization）方法，解决多指灵巧操作中接触模式切换时，由于子任务独立优化导致的性能限制和高计算成本问题。AVO引入一个学习的价值函数，预测未来任务总成本，并将其梯度融入轨迹优化成本中，引导优化器选择有利于后续子任务的状态，从而桥接子任务并加速优化。在螺丝刀抓取和转动任务的模拟与真实实验中，AVO在计算预算减少50%的情况下仍实现了性能提升。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.07548" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

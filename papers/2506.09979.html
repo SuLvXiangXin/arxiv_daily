@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Locomotion on Constrained Footholds via Layered Architectures and Model Predictive Control - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Locomotion on Constrained Footholds via Layered Architectures and Model Predictive Control</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.09979" target="_blank" rel="noreferrer">2506.09979</a></span>
+        <span>作者: Olkin, Zachary, Ames, Aaron D.</span>
+        <span>日期: 2025/06/11</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>足式机器人通过与环境建立和断开接触来移动。在复杂地形（如“踏脚石”）上进行动态运动极具挑战，因为这类系统是非线性、高维且混杂的。这种混杂特性引入了离散和连续变量的组合，给数值最优控制带来困难。目前主流方法包括：1）固定接触序列的模型预测控制（MPC），能生成动态运动但无法优化离散的落脚点选择；2）混合整数优化，可同时规划步态和地形，但计算量大，无法实时运行；3）依赖启发式选择地形的MPC，计算高效但需要精心设计的启发式规则，泛化性差；4）接触隐式MPC（CIMPC），试图在单一梯度优化中解决接触和运动问题，但存在数值条件差、求解速度慢的问题；5）纯采样方法（如MPPI），能自动发现接触序列，但据作者所知，尚未有能实时控制人形机器人的全阶采样方法。本文针对的核心痛点是：如何在保持MPC计算速度和动态性能的同时，实时优化如选择踏脚石之类的离散决策变量。本文提出了一个分层架构的新视角，将离散变量选择与平滑MPC解耦。其核心思路是：使用无梯度的采样方法为MPC选择离散的落脚点（地形区域），然后将这些选择作为固定约束，交由基于梯度的经典平滑MPC来优化连续的运动轨迹和力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体控制架构分为两层：一个无梯度的采样层用于选择离散变量（即落脚地形），一个平滑MPC层在固定这些离散变量后，将其作为经典非线性规划（NLP）进行求解。给定用户的速度指令，系统首先根据躯干前向传播和名义脚部位置，在运动学极限范围内对可用的地形区域（建模为多面体）进行采样。然后，为每一组采样得到的地形组合并行求解一个“固定模式”MPC问题。最终，选择成本最低的MPC解作为控制器输出。</p>
+<p><img src="https://..." alt="控制架构图"></p>
+<blockquote>
+<p><strong>图2</strong>：控制架构示意图。用户速度指令用于采样并作为MPC成本的一部分。采样得到一组接触地形（多面体约束）传入MPC。MPC为每组多面体并行计算全阶轨迹，并选择成本最低的选项输出。MPC输出前馈扭矩τ、关节配置q和关节速度v。图中MPC框内，脚部轨迹用绿-红渐变表示（绿色表示时间更近），待踩踏的多面体用黄、白、粉色高亮（与每只脚颜色对应），蓝线表示MPC计算的力。</p>
+</blockquote>
+<p><strong>固定模式MPC公式</strong>：一旦离散变量（如地形）被固定，MPC问题可表述为标准的NLP。为实现实时控制，采用实时迭代（Real Time Iterations）思想，每步只求解一个二次规划（QP），可视为序列二次规划（SQP）的一次迭代。该QP是通过在当前轨迹（̄x, ̄u）处线性化得到的LQ近似。</p>
+<p><strong>决策变量</strong>：QP的决策变量并非轨迹的绝对状态和输入，而是相对于当前轨迹的变化量（δq_k, δv_k, δτ_k, δF_k）。其中，姿态变化δq_k定义在姿态流形的切空间上，避免了欧拉角的奇异性问题。</p>
+<p><strong>动力学约束</strong>：使用逆动力学τ_k = f(q_k, v_k, a_k, F_k)，并通过有限差分近似加速度a。为了适配HPIPM求解器所需的最优控制块结构，对逆动力学方程和姿态-速度积分约束进行了线性化处理，得到了关于δv_{k+1}和δq_{k+1}的显式线性表达式（公式(4)和公式(5)）。</p>
+<p><strong>不等式约束</strong>：包括关节位置、速度、扭矩和地面反力的箱式约束。对于接触中的末端执行器，施加线性化的摩擦锥约束。此外，还包含碰撞避免约束（使用球体近似）和脚部放置约束。脚部放置约束通过多面体约束实现，确保在站立期脚部落在地形区域内：γ^l_k A^l_k r^l(̄q_k ⊕ δq_k) ≤ γ^l_k b^l_k。</p>
+<p><strong>等式约束</strong>：包括摆动腿的脚部高度约束（防止过早触地）和接触腿的无滑移约束：γ^l_k ṙ^l(̄q_k ⊕ δq_k, ̄v_k + δv_k) = 0。</p>
+<p><strong>成本函数</strong>：非线性成本包括状态跟踪/正则化、输入正则化、末端执行器跟踪和终端成本。由于包含四元数减法和运动学非线性，成本非二次。采用高斯-牛顿海森矩阵近似，利用其最小二乘形式。</p>
+<p><strong>无梯度决策的采样算法</strong>：采样算法的核心是为MPC选择落脚地形。算法基于期望速度传播躯干位置，检查名义脚点。如果名义点不在可踩踏地形上，则启动采样。为减少采样空间，如果名义点已在地形上，则直接使用该地形。算法为同一接触相位的多条腿构建“采样树”，树的分支代表一种独特的地形组合选择。采样时，根据地形在机器人运动学极限圆内的面积进行加权随机采样，优先选择面积大的地形。每个并行MPC线程分配一个采样分支。</p>
+<p><img src="https://..." alt="采样示例"></p>
+<blockquote>
+<p><strong>图3</strong>：采样结果示例。展示了在采样时刻所有可能的4条采样路径（分支）。线条显示了为每一步采样了哪些方块。圆圈的位置并不代表脚在方块内的具体位置。</p>
+</blockquote>
+<p>与现有方法相比，本文的创新点具体体现在：1）<strong>分层设计</strong>：将离散决策（落脚点选择）与连续优化（运动/力生成）解耦，结合了无梯度采样的灵活性和基于梯度MPC的效率与动态性能。2）<strong>实时性能</strong>：通过并行求解固定模式的MPC，在采样空间进行优化，速度比纯采样方法或CIMPC更快。3）<strong>切空间优化</strong>：MPC在姿态四元数的切空间上进行优化，避免了欧拉角奇异性。4）<strong>通用性</strong>：不依赖于特定任务的启发式规则，可泛化到其他涉及离散决策的任务。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与数据集</strong>：硬件实验使用Unitree Go2四足机器人（12个执行器，18自由度）。仿真实验在Mujoco中进行，使用了Go2四足机器人和Unitree G1人形机器人（优化了19个执行器，共33自由度）。仿真设置为异步运行，以贴近真实硬件通信和时序。</p>
+<p><strong>对比的Baseline方法</strong>：主要与基于Raibert启发式的脚点选择方法进行对比（该方法是固定模式MPC的单线程版本，无采样）。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>四足机器人仿真对比实验</strong>：机器人在不同高度的踏脚石地形上以0.7 m/s行走。采样方法（使用4个样本）相比Raibert启发式方法显著更优。Raibert启发式方法在80%的仿真中未能到达最终平台，而采样方法仅失败一次。即使在成功的实验中，采样方法的平均成本（0.8946）也低于启发式方法（1.0963），显示了更好的最优性。</li>
+</ol>
+<p><img src="https://..." alt="仿真对比"></p>
+<blockquote>
+<p><strong>图4</strong>：采样方法与启发式方法在踏脚石地形导航的仿真对比。启发式方法在路径末端无法稳定，而采样方法高效完成了全程。</p>
+</blockquote>
+<ol start="2">
+<li><strong>四足机器人硬件实验</strong>：成功实现了在由大型地砖和较小水泥块构成的间隙地形上的穿越，证明了控制器在存在模型失配（未建模的激光雷达重量、平台晃动）的真实世界中的鲁棒性。</li>
+</ol>
+<p><img src="https://..." alt="硬件实验"></p>
+<blockquote>
+<p><strong>图5</strong>：Unitree Go2四足机器人的硬件实验。上图左为实验快照，上图右显示了站立期脚部位置（橙色）和代表地形的多面体（蓝色），下图展示了实验过程中脚部的高度变化。</p>
+</blockquote>
+<ol start="3">
+<li><strong>人形机器人仿真实验</strong>：控制器能够实时控制人形机器人（使用2个样本）穿越具有高度变化和间隙的踏脚石地形。机器人自然地协调手臂和腰部运动以保持躯干稳定。</li>
+</ol>
+<p><img src="https://..." alt="人形仿真"></p>
+<blockquote>
+<p><strong>图6</strong>：Unitree G1人形机器人在仿真中穿越踏脚石地形的演示。</p>
+</blockquote>
+<ol start="4">
+<li><strong>时间性能</strong>：算法在Intel i9-14900K CPU上运行。MPC周期为10ms，其中反馈阶段计算时间很短。具体耗时如下表所示，表明算法足以实时控制四足和人形机器人。<table>
+<thead>
+<tr>
+<th align="left">机器人</th>
+<th align="left">平均反馈时间</th>
+<th align="left">最大反馈时间</th>
+<th align="left">平均总时间（反馈+准备）</th>
+<th align="left">样本数</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">Go2 (四足)</td>
+<td align="left">0.36 ms</td>
+<td align="left">0.60 ms</td>
+<td align="left">1.97 ms</td>
+<td align="left">4</td>
+</tr>
+<tr>
+<td align="left">G1 (人形)</td>
+<td align="left">1.29 ms</td>
+<td align="left">2.10 ms</td>
+<td align="left">5.60 ms</td>
+<td align="left">2</td>
+</tr>
+</tbody></table>
+</li>
+</ol>
+<p><strong>消融实验分析</strong>：论文虽然没有独立的“消融实验”章节，但核心的对比实验（采样 vs. 启发式）本质上验证了采样层组件的贡献。实验结果表明，与固定的启发式规则相比，通过采样在线评估多个地形选项能显著提高任务成功率和运动最优性，这直接证明了分层架构中“离散决策优化层”的有效性和必要性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种用于受限落脚点动态运动的分层控制架构，将离散落脚点选择（通过无梯度采样）与连续运动/力优化（通过固定模式MPC）有效分离。</li>
+<li>实现了在四足和人形机器人上的实时运行，在计算速度上优于纯采样和接触隐式MPC方法，同时在性能上超越了常见的启发式方法。</li>
+<li>所提方法不依赖于特定任务的启发式规则，具有更好的泛化潜力，并展示了在姿态切空间上进行MPC优化的实用性。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，采样方法的质量和计算成本受样本数量限制。虽然本文专注于落脚地形选择，但该架构同样适用于优化接触时序等其它离散决策，但这部分未在本文中深入探索。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>分层优化思路</strong>：为解决机器人控制中混杂决策问题提供了一种有效范式，即通过分层、异构的优化器（无梯度+基于梯度）来平衡最优性与实时性。</li>
+<li><strong>实时性能与最优性的权衡</strong>：展示了通过并行计算和工程优化（如单次SQP迭代、固定QP迭代次数），可以在保持实时性的前提下显著提升控制性能。</li>
+<li><strong>扩展方向</strong>：未来工作可以探索将更多类型的离散决策（如接触时序、操纵接触模式）纳入该框架，并研究更高效的采样策略或学习方法来指导离散空间搜索。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对足式机器人在复杂地形（如间隙、高度变化地面）上实时运动控制的难题，提出一种分层架构。该方法将离散变量（如落脚点选择）与连续控制解耦：上层采用无梯度采样方法确定离散决策，下层基于该决策使用平滑模型预测控制（MPC）进行实时优化。实验在四足和双足机器人上进行，结果表明该控制器能动态导航复杂地形，相比启发式方法更优、更可靠，且计算速度优于纯采样方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.09979" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

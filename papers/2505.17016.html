@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Interactive Post-Training for Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Machine Learning (cs.LG)</span>
+      <h1>Interactive Post-Training for Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2505.17016" target="_blank" rel="noreferrer">2505.17016</a></span>
+        <span>作者: Tan, Shuhan, Dou, Kairan, Zhao, Yue, Krähenbühl, Philipp</span>
+        <span>日期: 2025/05/22</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前主流的视觉-语言-动作（VLA）模型训练范式包含两个监督学习阶段：首先在大规模、多样化的离线人类演示数据集上进行预训练，以建立通用的视觉运动技能；然后在较小规模的任务特定数据集上进行监督微调（SFT），以使其适应特定环境。这种范式虽然有效，但存在两个核心局限性：第一，模型完全依赖离线数据模仿，从未在训练中观察自身动作在环境中的后果，导致在面对真实世界的复杂性（尤其是长视野任务）时容易失败；第二，任务特定的SFT严重依赖大规模、高质量的人类演示数据，这些数据收集成本高昂，且在数据量极少时性能会急剧下降。</p>
+<p>本文针对VLA模型在适应新任务和环境时对大量专家演示数据的依赖，以及离线模仿学习无法从交互反馈中学习的痛点，提出了一个新的视角：为VLA训练引入一个基于强化学习的“交互式后训练”阶段。本文核心思路是：在预训练和SFT之后，让VLA模型与环境交互，仅接收稀疏的二元成功/失败奖励，并利用一种稳定的策略优化算法直接优化模型在多任务上的成功率。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RIPT-VLA的整体流程是在传统的两阶段VLA训练（预训练 + 监督微调）之后，增加一个第三阶段：基于强化学习的交互式后训练。该阶段的输入是经过SFT的VLA模型策略π_θ、一个提供初始观测和语言目标的任务上下文数据集𝒟_context，以及环境提供的二元奖励函数R。输出是优化后性能提升的VLA策略。其核心是通过交互采样轨迹，计算优势信号，并更新策略。</p>
+<p><img src="https://arxiv.org/html/2505.17016v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：RIPT-VLA方法整体框架。左侧展示了当前VLA模型典型的两阶段监督训练流程（预训练 + 监督微调）。右侧红色部分为本文提出的第三阶段：强化交互式后训练。该阶段让模型与环境交互，仅使用稀疏的二元成功奖励，通过RIPT-VLA算法优化策略，显著提升了在多样基准测试上的性能，并在极低数据情况下表现出色。</p>
+</blockquote>
+<p>算法的核心模块是动态拒绝采样与留一法优势估计相结合的策略优化框架。具体流程如算法1所示：在每一步，首先将当前策略π_θ复制为用于采样的策略π_ψ。然后进行滚动收集：从𝒟_context中采样一个上下文𝐜（初始观测和语言目标），使用π_ψ生成K条轨迹{𝐚_k}，并从环境获得对应的二元奖励{R_k}。关键步骤是计算留一法优势估计：对于第k条轨迹，其基线b_k是同一上下文中其他K-1条轨迹奖励的平均值，优势值A_k = R_k - b_k。这一步骤完全无需学习价值函数评论家。</p>
+<p>本文的核心创新点“动态拒绝采样”体现在：在收集批次数据时，会检查当前上下文下所有K条轨迹的优势值。如果所有A_k均为0（即所有轨迹同时成功或同时失败），则丢弃这整组样本，继续采样新的上下文，直到收集到足够数量（B）的、包含非零优势样本的批次。这种均匀批次构建方式，过滤了零优势的样本组，确保了训练数据的差异性，从而显著提高了训练稳定性，尤其是在训练后期策略成功率很高时。</p>
+<p>最后，使用收集到的数据集𝒟_rollout = {(𝐜, 𝐚_k, A_k)}，通过近端策略优化（PPO）的目标函数来更新策略π_θ。PPO通过裁剪重要性权重r_k = π_θ(𝐚_k|𝐜) / π_ψ(𝐚_k|𝐜)来限制策略更新的幅度，防止训练不稳定。与现有方法（如iRe-VLA, ConRFT）相比，RIPT-VLA的创新性主要体现在：1）完全无需参数化的价值函数评论家，简化了训练架构；2）通过动态拒绝采样实现了更稳定的批次构建；3）仅依赖稀疏的二元奖励，无需精心设计的稠密奖励函数。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了多个机器人操作基准数据集：LIBERO（4个任务套件，共20个任务）、LIBERO-90（90个任务）、MetaWorld45（45个任务），以及用于低数据 regime 测试的特定任务设置。实验平台为模拟器。</p>
+<p>对比的基线方法包括：1) 纯监督学习的VLA模型，如QueST、OpenVLA-OFT；2) 结合强化学习的VLA方法，如iRe-VLA、ConRFT；3) 在低数据情况下，与仅用少量演示进行SFT的模型进行对比。</p>
+<p>关键实验结果如下：在LIBERO基准上，RIPT-VLA将轻量级模型QueST在四个任务套件上的平均绝对成功率提升了10.9%，其中在LIBERO-SP任务套件上提升了21.2%。对于已具备高性能（96.7%成功率）的大型模型OpenVLA-OFT，RIPT-VLA仍能将其失败率从3.3%降低至2.5%。在多任务基准上，RIPT-VLA在LIBERO-90上达到94.3%的成功率，在MetaWorld45上达到92.2%的成功率，展示了其在单一模型上处理多达90个任务的有效性。</p>
+<p><img src="https://arxiv.org/html/2505.17016v1/x2.png" alt="LIBERO结果"></p>
+<blockquote>
+<p><strong>图2</strong>：在LIBERO基准测试上的成功率。RIPT-VLA（QueST）在所有四个任务套件（LI， LO， S， SP）上均显著超越了基线监督方法QueST，平均提升10.9%。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.17016v1/x3.png" alt="多任务结果"></p>
+<blockquote>
+<p><strong>图3</strong>：在多任务基准LIBERO-90和MetaWorld45上的成功率。RIPT-VLA在两大基准上均取得了最佳性能（94.3%和92.2%），显著优于纯监督方法和其他RL后训练方法。</p>
+</blockquote>
+<p>最显著的结果体现在极低数据情况下。如图4所示，当每个任务仅提供1个演示进行SFT时，初始SFT模型的成功率低于4%。应用RIPT-VLA进行交互后训练后，仅经过15次迭代，成功率便跃升至97%以上，证明了其卓越的数据效率。</p>
+<p><img src="https://arxiv.org/html/2505.17016v1/x4.png" alt="低数据结果"></p>
+<blockquote>
+<p><strong>图4</strong>：极低数据情况下的训练曲线。左图：在单个任务上，仅用1个演示进行SFT的模型（SR &lt;4%）经过RIPT-VLA训练，在15次迭代内达到&gt;97%的成功率。右图：在10个任务上，RIPT-VLA使用每任务1个演示，也快速达到高成功率，远超SFT。</p>
+</blockquote>
+<p>消融实验验证了各个组件的贡献。动态拒绝采样是稳定训练的关键，移除后（即使用所有样本，包括零优势组）会导致训练后期成功率和优势估计崩溃。留一法优势估计（RLOO）相比使用全局平均基线或学习价值函数，能提供更稳定有效的优势信号。PPO的裁剪机制对于防止策略更新过大、维持训练稳定也至关重要。</p>
+<p><img src="https://arxiv.org/html/2505.17016v1/x5.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图5</strong>：消融研究（在LIBERO-SP上）。移除动态拒绝采样（“w/o Rej.”）会导致训练不稳定和后期崩溃。移除PPO裁剪（“w/o Clip”）也会损害性能。使用学习到的价值函数作为基线（“w/ Critic”）不如RLOO稳定有效。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.17016v1/x6.png" alt="泛化分析"></p>
+<blockquote>
+<p><strong>图6</strong>：跨任务和场景的泛化分析。经过RIPT-VLA训练的模型，在面对训练中未见过的语言指令变体、物体颜色/纹理变化、以及初始物体位置扰动时，均表现出比SFT基线更强的鲁棒性。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1）提出了RIPT-VLA，一个简单、可扩展且无需评论家的强化学习交互后训练范式，作为VLA模型训练的第三阶段；2）该方法具有极高的数据和计算效率，能够在仅有一个演示的极低数据情况下，将几乎无效的模型快速优化至接近完美性能；3）实验证明，RIPT-VLA能显著提升多种VLA模型在多样基准上的性能，并且优化后的策略具有良好的泛化性和对初始状态的鲁棒性。</p>
+<p>论文自身提到的局限性主要在于其依赖于环境的稀疏二元奖励信号。在任务非常复杂、成功信号极其罕见的情况下，探索可能成为瓶颈。此外，当前方法在模拟器中进行实验，将其直接迁移到存在更大不确定性和延迟的真实世界机器人平台仍需进一步验证。</p>
+<p>本文的工作对后续研究有多重启示：首先，它验证了将大语言模型训练中的“RLHF”范式成功迁移到VLA领域的可行性，即通过稀疏交互反馈来“激活”预训练模型中已存在但未充分调用的技能。其次，其提出的动态拒绝采样和免评论家架构为在稀疏奖励、长视野任务中稳定训练大模型提供了新的技术思路。未来工作可以探索如何将更复杂的探索策略与RIPT-VLA结合，以应对更艰巨的稀疏奖励挑战。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出RIPT-VLA，一种基于强化学习的交互式后训练范式，旨在解决现有视觉-语言-动作模型依赖大量离线专家演示、在低数据条件下适应新任务能力不足的核心问题。该方法采用基于动态rollout采样和留一法优势估计的稳定策略优化算法，仅需稀疏二元成功奖励进行微调。实验表明，RIPT-VLA显著提升模型性能：将轻量级QueST模型成功率提高21.2%，使7B参数的OpenVLA-OFT模型达到97.5%的成功率；在仅一次演示的低数据场景下，能在15轮迭代内将成功率从4%提升至97%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2505.17016" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

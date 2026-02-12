@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RICL: Adding In-Context Adaptability to Pre-Trained Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>RICL: Adding In-Context Adaptability to Pre-Trained Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2508.02062" target="_blank" rel="noreferrer">2508.02062</a></span>
+        <span>作者: Sridhar, Kaustubh, Dutta, Souradeep, Jayaraman, Dinesh, Lee, Insup</span>
+        <span>日期: 2025/08/04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，通过模仿学习目标在相对狭窄的演示数据集上预训练的多任务“视觉-语言-动作”模型已成为机器人领域的基础模型，能够在新的环境中执行新任务。然而，此类模型缺乏大型语言模型所具备的“情境学习”能力，即仅通过提供少量示例作为上下文，而无需调整模型参数，就能快速学习新任务。这使得最终用户难以轻松地教导和改进VLA模型。目前，改进一个预训练的VLA通常意味着需要在新演示数据集上调整其参数。本文针对VLA模型缺乏情境学习能力这一具体痛点，提出了一种名为RICL的后训练方法，旨在为预训练的VLA模型注入情境学习与检索增强生成的能力。其核心思路是：通过特定的微调方法，使VLA能够利用少量任务演示的上下文信息来提升其在新任务上的表现，而无需进行参数更新。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RICL的目标是将一个已预训练的VLA（如π0-FAST-DROID）转换为一个具备情境学习能力的VLA（称为RICL-VLA）。整体流程是：首先使用少量“引导”演示对基础VLA进行RICL微调；此后，用户只需为新任务收集少量演示（10-20个），RICL-VLA便能从中检索最相关的部分放入其上下文，利用情境学习来执行新任务。</p>
+<p><img src="https://arxiv.org/html/2508.02062v1/regentic_tuning/imgs/overview.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图30</strong>：RICL-VLA的创建与应用流程。左侧：通过RICL微调，将预训练的VLA转换为具备情境学习能力的RICL-VLA。右侧：用户为新任务提供少量演示，RICL-VLA通过检索增强生成和情境学习执行任务，无需参数更新。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>RICL微调过程</strong>：在RICL微调阶段，模型的输入由查询信息和检索到的邻居信息拼接而成。查询信息在时间步t包括三张图像（顶部、侧面、腕部）、描述任务的语言指令以及本体感知状态st。检索到的邻居信息同样包含三张图像、相同的文本指令、本体感知状态以及一个动作块（即多个时间步的动作数组）。这些信息按与查询的相似度顺序排列在上下文中，最近的邻居在左侧。微调时，仅对VLA中的大型语言模型进行全参数微调，而图像编码器保持冻结。</li>
+<li><strong>检索机制</strong>：在部署时，RICL-VLA使用一个离线的DINO-v2图像编码器，仅对查询的顶部图像和演示缓冲区中所有演示的顶部图像进行编码，然后通过计算ℓ2距离来寻找最近邻。这种设计确保了检索的效率。</li>
+<li><strong>动作预测与插值层</strong>：这是RICL的关键创新模块。模型预测的动作ât是通过一个“动作插值层”生成的，该层对最近邻检索动作a′和LLM的原始输出进行距离加权插值。具体公式为：πRICL-VLAθ = e^(-λd) · one-hot(a′) + (1 - e^(-λd)) · σ(πθ(retrieved, query))。其中d是查询顶部图像与最近邻顶部图像的DINO嵌入之间的ℓ2距离，λ是超参数，σ是Softmax函数。该设计使得当查询状态与演示状态非常相似时，模型更倾向于直接输出检索到的动作；当差异较大时，则更依赖LLM的预测进行泛化和调整。</li>
+<li><strong>训练目标</strong>：与相关方法REGENT不同，RICL在训练时仅对查询（指令，st）对应的预测动作块计算交叉熵损失并进行最小化，而不对检索到的所有动作计算损失。这使得训练更加高效，并专注于让模型学会利用上下文来回答当前查询。</li>
+</ol>
+<p><strong>创新点</strong>：<br>与现有方法相比，RICL的创新性主要体现在：1) <strong>能力注入</strong>：首次提出并实现了为预训练的机器人VLA模型注入情境学习与检索增强生成能力，而非从头开始训练一个具备此能力的智能体。2) <strong>高效接口</strong>：为用户提供了一个无需参数调优即可改进模型的简单接口（仅需提供少量演示）。3) <strong>特定设计</strong>：采用了结合检索动作与LLM预测的动作插值层，以及专注于查询预测的训练目标，以适应VLA的架构和训练数据特点。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>平台与数据</strong>：使用Franka DROID机器人平台。RICL微调使用自收集的20个拾放任务的400条演示数据。评估任务设计用于测试模型在未见过的物体、新动作、新场景以及训练数据长尾分布任务上的表现，例如移动精灵球、移动艾杜力盘、清洁刮板、操作烤面包机、打开柜门等。</li>
+<li><strong>Baselines</strong>：对比了基础模型π0-FAST-DROID、简单的“检索并执行”最近邻基线、从头训练的扩散策略，以及各模型在目标演示数据上进一步微调后的版本。</li>
+<li><strong>评估</strong>：每个任务进行10次随机初始状态的测试运行，记录完整任务成功率及关键路径点的成功率。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>RICL-π0-FAST-DROID在仅使用RAG和ICL（不进行参数更新）的情况下，显著超越了基础模型。在所有评估任务上，π0-FAST-DROID的完整任务成功率为2.5%，而RICL-π0-FAST-DROID将其大幅提升至31.25%。在路径点完成率上，RICL模型达到83.75%，而基础模型仅为21.25%。这表明RICL有效解决了基础模型在语言 grounding（如区分目标与干扰物）和对新动作的适应性问题。</p>
+<p><img src="https://arxiv.org/html/2508.02062v1/regentic_tuning/frames_dont_delete_concat/pokeball_pi0.jpg" alt="定性结果对比"></p>
+<blockquote>
+<p><strong>图1</strong>：定性对比示例（部分）。左侧为π0-FAST-DROID，右侧为RICL-π0-FAST-DROID。如图所示，在新任务中，基础模型常出现误抓干扰物、无法理解新动作而徘徊等问题，而RICL模型能成功抓取未见过的物体、执行新动作（如拖动、开门）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2508.02062v1/regentic_tuning/plots_dont_delete/pick_up_the_poke_ball_and_put_it_in_the_tray.png" alt="定量结果汇总"></p>
+<blockquote>
+<p><strong>图16-23</strong>：各任务定量结果堆叠条形图（示例为精灵球任务）。深蓝色部分代表完整任务成功率，其他颜色部分代表到达更早路径点的成功率。灰色区域代表甚至未能到达第一个路径点的运行比例。图中清晰显示RICL（橙色条）在各项任务上的成功率均显著高于基础模型π0（蓝色条）。</p>
+</blockquote>
+<p><strong>进一步微调的优势</strong>：<br>如果允许在目标任务的20条演示上进行参数微调，RICL-π0-FAST-DROID-finetuned能取得更佳性能，其聚合完整任务成功率达到61.67%。相比之下，基础模型π0-FAST-DROID在相同数据上微调后的成功率仅为31.67%。值得注意的是，仅使用RAG和ICL的RICL模型（31.25%）与经过微调的基础模型（31.67%）取得了相近的聚合性能。</p>
+<p><strong>消融实验</strong>：<br><img src="https://arxiv.org/html/2508.02062v1/regentic_tuning/plots_dont_delete/Ablations_idli_plate_task.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图24</strong>：在艾杜力盘任务上，对不同方法使用不同数量演示的效果进行消融。结果表明，RICL方法需要至少10个演示才能稳定发挥效果（5个时性能下降，出现类似基础模型的错误）。随着演示数量增加，RICL的性能持续提升，并逐渐接近甚至超越基础模型微调后的性能。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了RICL方法，首次成功地为预训练的机器人视觉-语言-动作模型注入了情境学习与检索增强生成能力，为用户提供了一个无需参数调优即可教导模型的简单接口。</li>
+<li>实验表明，经过RICL微调的模型在仅通过检索和情境学习的情况下，能显著提升在涉及新物体、新动作和新场景任务上的性能，其成功率提升了一个数量级。</li>
+<li>进一步揭示了“像预训练一样微调”的优势：在目标任务演示上继续使用RICL目标进行微调，能获得比传统微调方法更好的性能，这得益于模型学会了更高效地利用和插值演示数据，而非简单记忆。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文提到，该方法需要为每个新任务收集少量演示（10-20个），这虽然比从头训练或全参数微调所需数据少得多，但仍需一定的数据收集工作。此外，对于与提供的演示在视觉或动态上完全不同的情况，其适应能力可能存在边界。</p>
+<p><strong>后续启示</strong>：<br>RICL为机器人基础模型的“可教性”开辟了新途径。未来的工作可以探索如何进一步减少所需演示的数量，或者结合语言模型来自动生成或规划演示。此外，将RICL框架应用于其他架构的VLA模型，以及探索其在更复杂、长期任务中的应用，也是值得研究的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对预训练视觉-语言-动作（VLA）模型缺乏上下文学习（ICL）能力、难以适应新任务的问题，提出RICL方法。该方法通过特定微调配方和小型演示数据集，将ICL能力注入VLA模型，并利用检索增强生成（RAG）动态获取相关演示以执行新任务。实验在π₀-FAST VLA模型上验证，仅需20个演示即可实现大幅性能提升，例如正确操作未见物体、执行新动作等，且无需参数更新。RICL首次为机器人操作任务提供了简单的上下文学习接口。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2508.02062" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Confidence Calibration in Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Confidence Calibration in Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2507.17383" target="_blank" rel="noreferrer">2507.17383</a></span>
+        <span>作者: Zollo, Thomas P, Zemel, Richard</span>
+        <span>日期: 2025/07/23</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，机器人领域正广泛采用视觉-语言-动作基础模型。这类模型通过大规模多阶段预训练，将视觉观测和自然语言指令映射为低级别的关节空间命令，统一了多模态感知与运动控制。尽管VLA模型展现出前所未有的跨环境、任务和机器人形态的泛化能力，但一个关键问题尚未得到充分研究：置信度校准。对于一个可信赖的机器人系统，不仅需要高任务成功率，还需要能够可靠地量化其成功可能性。在安全关键场景中，如果策略能够准确表达不确定性，就可以通过细化指令或将任务移交给人类来避免代价高昂或危险的事故。然而，VLA模型缺乏对其所选动作序列的不确定性进行可靠量化的机制。尽管大型语言模型的校准研究已受到关注，但由于机器人任务需要更早地标记潜在故障以确保安全，且难以在物理世界中采样多条完整轨迹，LLM的校准方法难以直接适配到VLA场景。本文旨在填补这一空白，首次对VLA模型的置信度校准进行系统性研究，探究其校准现状、演变规律，并提出轻量级改进方法。核心思路是：为VLA模型建立置信度基线，分析任务成功与校准误差的关系以及校准随时间的演变，并引入提示词集成和动作维度普拉特缩放两种技术来纠正观察到的错误校准。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文首先形式化了VLA模型的置信度校准问题。一个完美校准的预测器满足：对于任意置信度c，给定模型输出置信度为c的条件下，任务成功的实际概率就等于c。</p>
+<p><img src="https://arxiv.org/html/2507.17383v2/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：VLA置信度校准流程概述。给定输入图像和文本指令，OpenVLA、RT-2等VLA模型为机器人的每个自由度生成离散动作令牌上的分布。每个维度预测的置信度可以使用分配给预测令牌的概率来估计；通过对各维度取平均可以产生单一估计值。给定未校准的置信度估计，普拉特缩放等重新校准方法使用小型校准数据集学习从未校准估计到校准估计的映射。校准误差可通过比较置信度估计与实际任务成功率来测量。</p>
+</blockquote>
+<p><strong>基线置信度估计</strong>：对于OpenVLA、RT-2等基于令牌的VLA模型，其动作由D个离散令牌表示，每个对应一个动作维度。在每个时间步t，模型为每个维度d输出一个在动作词汇表上的概率分布p_t^(d)。策略选择每个维度概率最高的令牌作为动作。基线置信度提取方法借鉴了LLM的启发，使用所选令牌的概率作为置信度信号，并对所有维度取平均：c_t = (1/D) * Σ_{d=1}^D max_k p_{t,k}^(d)。这种平均类似于LLM中的长度归一化，防止因机器人自由度多而不公平地降低置信度。</p>
+<p><strong>核心改进方法一：提示词集成</strong>。该方法将指令的具体措辞视为潜在随机变量，通过贝叶斯模型平均对其边缘化。具体步骤为：1）使用辅助LLM为原始指令生成r个语义等效的改写版本；2）使用每个改写后的指令运行VLA模型，通过基线方法获得对应的置信度估计c_t^(i)；3）对r个置信度估计取平均，得到最终的集成置信度c_t^ens。此方法概念上类似于模型集成或推理时dropout，但通过硬件并行批处理，可仅增加近似常数的延迟。</p>
+<p><strong>核心改进方法二：动作维度缩放</strong>。标准的后处理校准方法（如普拉特缩放）在分类模型中学习一个全局仿射变换g(c)=σ(αc+β)，将未校准置信度c映射为校准后的c̃。然而，VLA模型每个动作维度的预测分布可能差异巨大（例如，夹爪开合出现在几乎所有演示中，而“转动手腕”则较罕见），单一的全局变换可能无法同时校正所有维度。因此，本文提出为每个动作维度d独立拟合一个仿射变换参数{α_d, β_d}。校准后的置信度计算为：c̃<em>t = (1/D) * Σ</em>{d=1}^D σ( α_d * max_k p_{t,k}^(d) + β_d )。这样，α_d缩放（平坦化或锐化）特定维度的分布，β_d调整其整体乐观程度，而模型选择的动作令牌保持不变。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验使用了4种不同的VLA变体：OpenVLA、MolmoAct、UniVLA和NORA。在LIBERO基准测试的4个任务套件上进行评估：Spatial、Object、Goal和10。每个任务套件包含10个不同任务，各有50个随机初始化，总计500个试验。此外，还包含了OpenVLA在Spatial、Object和Goal上的8位和4位量化版本。共评估22种模型/任务套件组合。主要校准指标包括预期校准误差、Brier分数和负对数似然。除非另有说明，分析聚焦于执行第一个动作之前（时间步t=1）产生的置信度估计，这符合安全关键场景中早期风险评估的需求。</p>
+<p><strong>任务成功率与校准误差的关系</strong>：实验探究了跨22种组合的任务错误率与四种校准误差指标的关系。</p>
+<p><img src="https://arxiv.org/html/2507.17383v2/figures/new_main_figure_square.png" alt="任务错误率与校准误差关系"></p>
+<blockquote>
+<p><strong>图3</strong>：四种VLA变体在四个LIBERO任务套件上，任务错误率与四种校准误差度量的对比可视化。所有模型在判别性度量（Brier分数和NLL）与任务错误率之间都表现出大致单调的关系。ECE在不同模型家族间显示出差异，OpenVLA和MolmoAct在任务错误率低时往往ECE也较低，而UniVLA和NORA的趋势不那么清晰。这表明模型架构和训练目标可能是决定这种关系的重要因素。</p>
+</blockquote>
+<p><strong>提示词集成的效果</strong>：使用GPT-4o-mini为每个任务指令生成20个改写。评估了OpenVLA及其量化变体在3个任务套件上，以及UniVLA和NORA在Spatial套件上的效果。结果表明，提示词集成方法在所有模型和任务套件上，始终能降低ECE1、ECE2和NLL，且在任何指标上均未表现更差。ECE的降低最高可达40%，平均降低约20%。</p>
+<p><strong>校准随任务时间的变化</strong>：分析发现，校准并非静态，而是随任务执行过程演变。通常，模型在做出一些任务进展后（例如，执行了5-15个时间步后）的置信度最为可靠，而不是在任务开始时或接近结束时。</p>
+<p><img src="https://arxiv.org/html/2507.17383v2/figures/across_time_iclr_openvla_spatial__baseline.png" alt="校准随时间演变"></p>
+<blockquote>
+<p><strong>图4</strong>：OpenVLA在LIBERO Spatial套件上，校准误差（ECE1）随任务时间步的变化。虚线表示任务平均成功率。校准误差在任务早期较高，在中期时间步（约5-15步）降至最低，此时置信度最为可靠，随后在任务接近完成时误差再次上升。</p>
+</blockquote>
+<p><strong>动作维度的差异化校准</strong>：实验揭示了不同动作维度存在系统性的过度自信或自信不足。例如，在OpenVLA中，平移维度（x, y, z）通常校准良好，而旋转维度（roll, pitch, yaw）和夹爪维度则表现出显著的错误校准。</p>
+<p><img src="https://arxiv.org/html/2507.17383v2/figures/action_scaling_openvla_spatial__baseline_w_temp_scaling.png" alt="动作维度校准差异"></p>
+<blockquote>
+<p><strong>图9</strong>：OpenVLA在Spatial套件上，各动作维度的可靠性示意图。每个点代表一个动作维度，其x坐标是未校准的置信度（各试验中该维度预测令牌概率的均值），y坐标是该校验度对应的实际任务成功率。平移维度（x, y, z）靠近对角线，校准良好；而旋转维度（roll, pitch, yaw）和夹爪维度（gripper）则明显偏离对角线，存在系统性的错误校准。</p>
+</blockquote>
+<p><strong>动作维度缩放的效果</strong>：针对上述发现，应用动作维度普拉特缩放。结果显示，与全局温度缩放相比，动作维度缩放能更有效地校正每个维度的校准偏差，从而在整体上获得更好的校准性能。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1）首次对视觉-语言-动作基础模型的置信度校准进行了系统性基准测试和研究，揭示了任务成功率与校准误差关系的模型差异性，以及校准随时间演变的规律；2）提出了两种轻量级、实用的校准改进方法：通过指令改写的提示词集成，以及对不同动作维度进行独立校正的动作维度缩放，实验证明这两种方法能有效降低校准误差。</p>
+<p>论文自身提到的局限性包括：1）实验主要在模拟环境和有限的任务套件中进行，方法在分布外泛化或真实世界部署中的有效性有待验证；2）提示词集成方法虽然延迟增加不大，但仍需多次前向传播，带来一定的计算开销；3）对于需要极低延迟或严格实时约束的应用，所提方法的适用性可能需要进一步评估。</p>
+<p>本研究的启示在于：为构建高性能且高可信度的VLA系统，置信度校准是一个不可或缺的研究方向。未来的工作可以探索更高效的集成或不确定性估计方法，研究校准与模型架构、训练目标之间的因果关系，并将这些校准技术整合到机器人决策框架中，以实现真正的风险感知和安全的自主行为。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>这篇论文首次系统研究了视觉-语言-动作（VLA）基础模型中的置信度校准问题，旨在解决机器人任务中模型预测置信度与真实成功概率不匹配的核心挑战。作者提出了两种轻量级校准技术：提示集成和动作级普拉特缩放，以改进观察到的校准误差。研究建立了VLA的置信度基线，分析了任务成功与校准误差的关系及校准随时间演变规律，为提升VLA模型在安全关键场景中的可信度和可靠性提供了基础工具与理论框架。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2507.17383" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

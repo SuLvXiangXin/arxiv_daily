@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Dita: Scaling Diffusion Transformer for Generalist Vision-Language-Action Policy - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Dita: Scaling Diffusion Transformer for Generalist Vision-Language-Action Policy</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2503.19757" target="_blank" rel="noreferrer">2503.19757</a></span>
+        <span>作者: Hou, Zhi, Zhang, Tianyi, Xiong, Yuwen, Duan, Haonan, Pu, Hengjun, Tong, Ronglei, Zhao, Chengyang, Zhu, Xizhou, Qiao, Yu, Dai, Jifeng, Chen, Yuntao</span>
+        <span>日期: 2025/03/25</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于大规模跨具身数据集（如Open X-Embodiment）训练的视觉-语言-动作（VLA）模型展现出了有限的领域内数据下的泛化潜力。主流方法主要分为两类：一类是采用离散化动作头的机器人Transformer架构（如Robot Transformer、OpenVLA），将连续动作空间离散化后进行预测；另一类是采用扩散动作头的架构（如Octo），使用一个因果Transformer生成嵌入，再由一个浅层网络（如MLP）基于该嵌入对单个连续动作进行去噪。这些方法存在关键局限性：离散化方法会损失动作空间的连续性精度；而扩散动作头方法依赖于早期融合的、单一的嵌入向量来条件化去噪过程，这限制了模型从原始历史视觉观察中捕捉动作变化（deltas）和环境细微差别的能力，难以适应异构的机器人动作空间。</p>
+<p>本文针对“如何为通用机器人策略学习构建一个既能适应异构连续动作空间，又能实现动作生成与原始观察细粒度对齐的可扩展框架”这一痛点，提出了一个新视角：摒弃额外的、浅层的扩散动作头，直接利用Transformer架构本身作为去噪器，并通过上下文条件机制，让去噪过程直接关注历史图像标记和语言指令。本文的核心思路是：构建一个基于扩散Transformer的、可扩展的策略模型，通过上下文条件化方式直接对连续动作序列进行去噪，从而实现动作与原始多模态输入之间的精细对齐。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Dita的整体框架是一个基于Transformer的扩散架构，其输入包括语言指令、历史图像观察、时间步嵌入以及加噪的动作序列，输出是对所加噪声的预测，通过迭代去噪最终得到干净的动作序列。</p>
+<p><img src="https://arxiv.org/html/2503.19757v2/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：Dita模型框架。采用Transformer-based扩散架构。冻结的CLIP模型提取语言指令标记；DINOv2编码图像观察，再通过一个Q-Former基于指令上下文查询图像特征；指令标记、图像特征、时间步嵌入和加噪的动作被拼接成一个标记序列，输入网络进行去噪。</p>
+</blockquote>
+<p>核心模块包括：</p>
+<ol>
+<li><strong>多模态输入标记化</strong>：仅使用语言指令和第三人称相机图像作为输入。语言指令使用冻结的CLIP模型进行标记化。图像观察首先由DINOv2提取图像块特征，由于DINOv2是在网络数据上预训练的，其参数与Dita进行端到端联合优化。为了降低计算成本，引入一个带有FiLM条件的Q-Former，基于指令上下文从DINOv2的块特征中选择图像特征。</li>
+<li><strong>动作预处理</strong>：末端执行器动作用一个7D向量表示（3维平移、3维旋转、1维夹爪位置）。为了与图像和语言标记的维度对齐，将连续动作向量用零填充以形成动作表示。在去噪扩散优化过程中，噪声仅被添加到这7D动作向量中。</li>
+<li><strong>模型设计（上下文条件扩散Transformer）</strong>：这是核心创新。模型采用扩散Transformer结构，直接对包含多个动作标记的动作块进行去噪。关键在于采用了<strong>上下文条件机制</strong>：将语言标记、图像特征和时间步嵌入拼接在序列的开头，将加噪的动作与这些指令标记一起处理（如图2所示）。这样，去噪过程通过因果Transformer直接以原始图像块和指令为条件，使模型能够捕捉历史观察中动作的细微变化。模型通过预测添加到连续动作中的噪声进行监督，即在动作块空间上直接应用扩散目标，而非使用一个小的扩散动作头。</li>
+</ol>
+<p>训练目标是去噪网络 ℰ_θ，它基于因果Transformer构建，输入包括语言指令c_lang、图像观察c_obs、时间步t和加噪动作x^t。在训练时，从高斯分布中采样噪声x^t添加到真实动作a上，形成加噪动作标记â。网络的目标是预测噪声向量x^t，优化目标是最小化预测噪声x-hat^t与真实噪声x^t之间的均方误差（MSE）损失。推理时，使用DDIM采样器进行迭代去噪以得到最终动作。</p>
+<p>与现有方法相比，Dita的创新点具体体现在：1) <strong>架构上</strong>：将扩散去噪过程完全集成到可扩展的Transformer主干中，摒弃了额外的浅层扩散头，使模型容量与数据规模同步扩展。2) <strong>条件机制上</strong>：采用上下文条件，允许去噪Transformer直接关注原始的、细粒度的图像标记序列，而非一个抽象的融合嵌入，从而能更好地建模动作变化和环境细节。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了多个基准/数据集进行评测：仿真实验包括SimplerEnv（Google Robot）、LIBERO、CALVIN和ManiSkill2；真实机器人实验则在Franka Emika Panda机械臂平台上进行10样本微调测试。实验平台主要使用了32张NVIDIA A100 GPU进行预训练。</p>
+<p>对比的基线方法包括：RT-1-X、Octo-Base、OpenVLA-7B等开源通用VLA模型，以及论文自身实现的扩散动作头基线（ℰ_θ∼s^Diff，使用三层MLP作为扩散头）和离散化动作头基线（ℰ_θ∼s^Disc，将动作离散化为256个bins）。</p>
+<p>关键实验结果如下：</p>
+<ul>
+<li><p><strong>SimplerEnv上的零样本泛化</strong>：如表1所示，Dita在“pick up coke can”、“move near drawer”、“open drawer”等任务的匹配和变体场景下，取得了显著优于基线方法的成功率（例如，在“coke can match”任务上达到83.7%，而Octo-Base为17.0%，OpenVLA-7B为16.3%），展示了其对背景、纹理、物体、空间位置等多种变化的强鲁棒性。<br><img src="https://arxiv.org/html/2503.19757v2/x5.png" alt="SimplerEnv结果"></p>
+<blockquote>
+<p><strong>表1</strong>：在SimplerEnv上与基线方法的成功率对比。Dita在零样本评估下在所有任务和变体上均表现最佳。</p>
+</blockquote>
+</li>
+<li><p><strong>LIBERO上的微调性能</strong>：如表2所示，在LIBERO的四个子数据集上微调后，Dita的平均成功率达到82.4%，优于Octo（75.1%）和OpenVLA（76.5%）。在包含长视野任务的LIBERO-LONG上，Dita取得了63.8%的成功率，显示出处理复杂长序列任务的潜力。<br><img src="https://arxiv.org/html/2503.19757v2/x6.png" alt="LIBERO结果"></p>
+<blockquote>
+<p><strong>表2</strong>：在LIBERO基准上的成功率对比。Dita在多数子数据集上领先，尤其在LIBERO-LONG上提升明显。</p>
+</blockquote>
+</li>
+<li><p><strong>CALVIN上的长视野任务评估</strong>：在ABC→D设置下，仅使用静态RGB图像，Dita在连续完成1到5个子指令的成功率及平均成功长度（Avg.Len. = 3.61）上，超越了同输入模态的强基线（如SuSIE、GHIL-Glue）以及自身实现的扩散头基线（Avg.Len. = 3.16），如表3所示。这证明了其从大规模预训练数据中迁移知识并感知长视野任务中细微视觉变化的能力。<br><img src="https://arxiv.org/html/2503.19757v2/x7.png" alt="CALVIN结果"></p>
+<blockquote>
+<p><strong>表3</strong>：在CALVIN基准（ABC→D）上的对比。Dita在仅使用静态RGB输入的方法中表现优异，且显著优于无预训练版本及扩散头基线。</p>
+</blockquote>
+</li>
+<li><p><strong>ManiSkill2上的相机视角泛化</strong>：在构建的新相机视角泛化基准上，Dita的平均成功率为65.8%，优于离散化头基线（30.2%）和扩散头基线（58.6%），如表4所示。这表明Dita在大规模、多样化数据集上具有更好的可扩展性和相机视角泛化能力。<br><img src="https://arxiv.org/html/2503.19757v2/x8.png" alt="ManiSkill2结果"></p>
+<blockquote>
+<p><strong>表4</strong>：在ManiSkill2相机视角泛化基准上的成功率对比。Dita整体优于两种动作头基线。</p>
+</blockquote>
+</li>
+<li><p><strong>真实机器人10样本微调</strong>：在包含拾放、倾倒、堆叠、长视野等复杂任务的真实机器人实验中，Dita经过10样本微调后，在两步任务上的整体成功率达到63.8%，且第二阶段成功贡献了近一半（见图4）， consistently outperforms Octo和OpenVLA。定性结果（图5）显示Dita能更好地完成复杂操作序列。<br><img src="https://arxiv.org/html/2503.19757v2/x3.png" alt="真实机器人定量结果"></p>
+<blockquote>
+<p><strong>图4</strong>：真实机器人实验的定量结果。堆叠条形图中亮色部分代表第一阶段成功率，暗色部分代表第二阶段成功率对总成功率的贡献。Dita在两步任务上表现最佳。<br><img src="https://arxiv.org/html/2503.19757v2/x4.png" alt="真实机器人定性对比"><br><strong>图5</strong>：真实机器人实验的定性对比。红色圆圈标出了失败情况。Dita能成功完成更复杂的序列任务。</p>
+</blockquote>
+</li>
+</ul>
+<p><strong>消融实验</strong>（表5）总结了关键设计选择的影响：</p>
+<ol>
+<li><strong>观察长度</strong>：使用2帧历史观察在大多数情况下性能最优。当观察长度增加到3帧时，成功率急剧下降（从65.8%降至35.4%），作者认为可能是由于图像标记数量增加导致模型收敛难度加大。</li>
+<li><strong>轨迹长度</strong>：更长的轨迹长度（观察+预测动作）总体上能提升性能，尤其是对于复杂的任务（如PickClutterYCB）。当轨迹长度从2增加到32时，整体成功率从40.8%提升到65.8%。<br><img src="https://arxiv.org/html/2503.19757v2/x9.png" alt="消融实验"><blockquote>
+<p><strong>表5</strong>：在ManiSkill2上关于观察长度和轨迹长度的消融研究。2帧观察和更长的轨迹（如32）通常能带来最佳或接近最佳的性能。</p>
+</blockquote>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1) 提出了<strong>Dita</strong>，一个基于<strong>上下文条件扩散Transformer</strong>的新型通用机器人策略学习架构，它通过将扩散去噪过程直接集成到可扩展的Transformer中，实现了对连续动作序列的细粒度、直接条件化生成。2) 在广泛的仿真基准测试中取得了<strong>state-of-the-art或具有竞争力的性能</strong>，并展示了卓越的零样本和少样本泛化能力，特别是在长视野任务和未见过的相机视角下。3) 提供了一个<strong>轻量级（3.34亿参数）、开源</strong>的基线模型，其设计灵活，易于集成额外输入模态。</p>
+<p>论文自身提到的局限性主要体现在消融实验中：当历史观察图像的长度增加到3帧时，模型性能显著下降，作者归因于对应图像标记数量的增加可能加大了模型收敛的难度。</p>
+<p>本工作对后续研究的启示在于：证明了利用Transformer本身作为扩散去噪器，并采用上下文条件机制的可行性与优越性。这种架构不仅性能强劲，而且因其可扩展性和灵活性（易于融入手腕相机图像、触觉反馈等多模态输入），为构建更强大、更通用的机器人基础模型提供了一个有前景且易于扩展的基线方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出Dita框架，旨在解决现有视觉-语言-动作模型因依赖紧凑动作头而难以适应异构机器人动作空间的问题。其核心是采用扩散Transformer架构，通过统一的扩散过程直接去噪连续动作序列，并创新性地引入上下文条件化机制，实现去噪动作与历史观测原始视觉标记的细粒度对齐。该方法通过扩展扩散动作去噪器，有效整合了跨本体数据集。实验表明，Dita在模拟基准测试中达到先进性能，并在真实世界中仅通过10样本微调，即可适应环境变化并完成复杂长时程任务。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2503.19757" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

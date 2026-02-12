@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Think Twice, Act Once: Token-Aware Compression and Action Reuse for Efficient Inference in Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Computer Vision and Pattern Recognition (cs.CV)</span>
+      <h1>Think Twice, Act Once: Token-Aware Compression and Action Reuse for Efficient Inference in Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2505.21200" target="_blank" rel="noreferrer">2505.21200</a></span>
+        <span>作者: Tan, Xudong, Yang, Yaoxin, Ye, Peng, Zheng, Jialin, Bai, Bizhe, Wang, Xinyi, Hao, Jia, Chen, Tao</span>
+        <span>日期: 2025/05/27</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）模型已成为通过自然语言指令实现通用机器人控制的有力范式。然而，其高昂的推理成本——源于大规模令牌计算和自回归解码——对实时部署和边缘应用构成了重大挑战。现有工作主要集中在高效的架构优化上，例如动作分块、并行解码、低秩适应和模型量化。这些方法虽然有效，但通常需要额外的训练开销。本文从一个新颖的视角出发，识别出VLA模型中存在双重形式的冗余：1）连续动作步骤之间的高度相似性；2）视觉令牌中存在大量冗余。基于此，本文提出了首个免训练、即插即用的加速框架FlashVLA，其核心思路是采用“三思而后行”的范式，通过令牌感知的动作重用机制避免在稳定动作步骤中进行冗余解码，并结合信息引导的视觉令牌选择策略修剪低贡献令牌，从而在不重新训练的情况下显著提升推理效率。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>FlashVLA的整体框架是一个双路径决策与执行流程，其核心在于一个轻量级的“触发器思考”模块（FlashTrigger），该模块在每次推理前决定是重用上一个动作还是执行一次经过剪枝的轻量推理。</p>
+<p><img src="https://arxiv.org/html/2505.21200v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：FlashVLA框架。在每个动作步骤开始前，FlashTrigger模块（蓝色块）根据动作记忆和令牌记忆“思考”是否满足重用条件。若满足，则跳过当前推理，直接重用上一个动作；若不满足，则进入剪枝推理步骤，在预填充阶段选择重要的视觉令牌集并修剪不重要令牌。推理后，用动作和令牌信息更新记忆。</p>
+</blockquote>
+<p>框架包含两个核心模块：基于信息贡献理论的视觉令牌选择策略和令牌感知的动作重用机制。</p>
+<p><strong>1. 视觉令牌选择策略</strong><br>该策略旨在识别并保留对整体视觉特征表示贡献最大的令牌。由于现代VLA模型（如OpenVLA）使用Flash Attention，传统的基于注意力分数的选择方法不可行。因此，本文直接对注意力输出矩阵 (\hat{T}^{v} \in \mathbb{R}^{N \times d}) 进行操作，其中 (N) 是令牌数，(d) 是隐藏维度。通过奇异值分解（SVD）得到 (\hat{T}^{v} = U\Sigma V^{\top})。第 (x) 个令牌的信息贡献分数（ICS）定义为：<br>[<br>C(x) = \sum_{i=1}^{r} |u_{xi}\sigma_i|<br>]<br>其中 (r) 是矩阵的有效秩，(u_{xi}) 是左奇异向量矩阵 (U) 的元素，(\sigma_i) 是奇异值。该分数衡量了令牌在主导奇异方向上的投影幅度，分数越高表示贡献越大。选择ICS最高的 (K) 个令牌构成重要令牌集 (I)。理论分析表明，与随机采样相比，基于ICS的选择能保留更多特征空间的结构信息。</p>
+<p><img src="https://arxiv.org/html/2505.21200v1/x3.png" alt="令牌选择对比"></p>
+<blockquote>
+<p><strong>图3</strong>：视觉令牌选择策略在示例图像上的对比。左图：使用提出的ICS选择的图像块。右图：随机均匀选择的图像块。ICS选择的块倾向于集中在语义丰富和信息密集的区域。</p>
+</blockquote>
+<p><strong>2. 令牌感知的动作重用机制</strong><br>该机制用于判断当前步骤是否可以安全地重用上一个动作，从而跳过整个模型的前向传播。决策基于两个层面的稳定性：动作层面和令牌层面。</p>
+<ul>
+<li><strong>动作记忆</strong>：存储前两帧的动作向量 (\vec{A}(s-2)) 和 (\vec{A}(s-1))，并计算它们之间的方向夹角变化 (\alpha(s))（公式7）。角度小表明动作方向稳定。</li>
+<li><strong>令牌记忆</strong>：动态存储前两帧根据ICS选择出的重要视觉令牌集 (I(s-2)) 和 (I(s-1))，并计算它们的交集比例 (\phi(s))（公式8）。比例高表明从模型视角看，环境关注的视觉区域变化小。</li>
+</ul>
+<p>触发思考模块的决策逻辑如下：<br>[<br>Trigger\ Thinking = \begin{cases}<br>Reuse\ Action, &amp; if\ \alpha(s) &gt; \varepsilon_1\ and\ \phi(s) &gt; \varepsilon_2 \<br>Pruned\ Inference, &amp; else<br>\end{cases}<br>]<br>其中 (\varepsilon_1) 是动作角度变化的阈值下限，(\varepsilon_2) 是令牌集交集比例的阈值下限（与允许的最大令牌变化数 (\delta) 相关，公式9）。<strong>只有当动作变化足够小（(\alpha) 小于阈值）且视觉关注区域足够稳定（(\phi) 大于阈值）时，才触发动作重用</strong>。否则，执行剪枝推理，即仅使用重要令牌集 (I) 进行前向计算。</p>
+<p><strong>创新点</strong>：1) <strong>免训练与即插即用</strong>：无需对原始VLA模型进行任何微调或再训练。2) <strong>兼容Flash Attention</strong>：视觉令牌选择直接操作注意力输出，避开了对注意力矩阵的依赖。3) <strong>双重冗余利用</strong>：同时利用了动作输出的时间冗余和视觉令牌的空间冗余。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在LIBERO仿真基准的四个代表性任务套件（Spatial, Object, Goal, Long）上评估FlashVLA，使用在LIBERO上微调后的OpenVLA作为基线模型。实验平台为单张NVIDIA H100 GPU。评估指标包括任务成功率（SR）、推理延迟和视觉令牌相关的FLOPs。</p>
+<p><strong>主要结果</strong>：与原始OpenVLA基线相比，当视觉令牌数减少至原始输入的62.5%时，FlashVLA在几乎保持性能的同时，显著提升了效率。</p>
+<ul>
+<li><strong>成功率</strong>：平均成功率仅下降0.7%（从基线的87.3%降至86.6%）。</li>
+<li><strong>效率</strong>：视觉令牌计算的FLOPs减少55.7%，整体推理延迟降低36.0%。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2505.21200v1/x4.png" alt="效率与性能权衡"></p>
+<blockquote>
+<p><strong>图4</strong>：在不同视觉令牌保留比例下，FlashVLA与基线（虚线）的成功率对比。即使令牌数大幅减少（如降至62.5%），成功率下降非常微小。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.21200v1/x5.png" alt="延迟与FLOPs降低"></p>
+<blockquote>
+<p><strong>图5</strong>：在不同视觉令牌保留比例下，推理延迟（左）和视觉令牌FLOPs（右）的降低百分比。随着令牌减少，加速效果越明显，最高可降低约70%的FLOPs和超过35%的延迟。</p>
+</blockquote>
+<p><strong>消融实验</strong>：</p>
+<ul>
+<li><strong>组件贡献</strong>：消融实验验证了动作重用（AR）和令牌选择（TS）各自的有效性。仅使用令牌选择能在性能损失极小（SR -0.4%）的情况下带来可观的加速（延迟 -22.4%）。结合动作重用后，能进一步降低延迟至-36.0%，且成功率下降仍控制在0.7%。</li>
+<li><strong>令牌选择策略对比</strong>：与随机选择、基于注意力熵的选择等方法相比，本文提出的ICS策略在相同令牌压缩率下，能取得更高的任务成功率。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2505.21200v1/x6.png" alt="消融研究"></p>
+<blockquote>
+<p><strong>图6</strong>：消融研究结果。展示了基线、仅使用令牌选择（TS）、仅使用动作重用（AR）以及完整FlashVLA（TS+AR）在成功率和延迟上的表现。TS是效率提升的主要来源，AR能提供额外加速。</p>
+</blockquote>
+<p><strong>定性分析</strong>：<br><img src="https://arxiv.org/html/2505.21200v1/x1.png" alt="动作变化与重用决策"></p>
+<blockquote>
+<p><strong>图1</strong>：VLA模型输出向量在各时间步相对于前一步的变化。大多数动作与上一步高度一致，处于图的稳定区域，只有少数步骤发生显著变化。这直观展示了动作层面的时间冗余，是动作重用机制的基础。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.21200v1/x7.png" alt="VLA-Bench泛化"></p>
+<blockquote>
+<p><strong>图7</strong>：在VLA-Bench真实机器人任务上的泛化性能。FlashVLA在不同任务上均能保持与基线相近的高成功率，证明了其泛化能力。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>识别了VLA推理中新颖的动作级和令牌级双重冗余</strong>，为高效推理提供了新的优化视角。</li>
+<li><strong>提出了首个免训练、即插即用的VLA加速框架FlashVLA</strong>，它通过令牌感知的动作重用机制和信息贡献引导的视觉令牌选择策略，实现了显著的推理加速。</li>
+<li><strong>实验证明</strong>：在LIBERO基准上，FlashVLA能以仅0.7%的成功率下降，换取55.7%的FLOPs降低和36.0%的延迟减少，实现了效率与性能的优异权衡。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，动作重用机制依赖于动作和视觉场景的稳定性。在需要高频、精确控制或环境动态剧烈的任务中，过于激进的重用策略可能导致性能下降。</p>
+<p><strong>启示</strong>：</p>
+<ol>
+<li><strong>免训练优化潜力</strong>：表明在不修改模型权重的情况下，通过智能地跳过冗余计算和输入，可以大幅提升大型VLA模型的推理效率，这对资源受限的部署场景尤为重要。</li>
+<li><strong>跨层冗余利用</strong>：结合了时间（动作序列）和空间（视觉令牌）的冗余分析，这种多层次联合优化策略可能适用于其他序列生成模型。</li>
+<li><strong>“三思而后行”范式</strong>：为自主系统提供了一种节能决策思路，即通过轻量级的前期评估来决定是否执行耗能的完整计算，这对机器人等需要实时响应的具身智能体具有启发意义。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型推理成本高、延迟大，阻碍实时部署的问题，提出无需训练的即插即用加速框架FlashVLA。其核心技术包括：令牌感知的动作重用机制，利用连续动作步骤的高相似性避免冗余解码；信息引导的视觉令牌选择策略，修剪低贡献令牌以压缩计算。在LIBERO基准测试中，FlashVLA将FLOPs降低55.7%、延迟减少36.0%，任务成功率仅微降0.7%，显著提升推理效率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2505.21200" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

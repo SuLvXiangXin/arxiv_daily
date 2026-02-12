@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>HybridVLA: Collaborative Diffusion and Autoregression in a Unified Vision-Language-Action Model - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Computer Vision and Pattern Recognition (cs.CV)</span>
+      <h1>HybridVLA: Collaborative Diffusion and Autoregression in a Unified Vision-Language-Action Model</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2503.10631" target="_blank" rel="noreferrer">2503.10631</a></span>
+        <span>作者: Liu, Jiaming, Chen, Hao, An, Pengju, Liu, Zhuoyang, Zhang, Renrui, Gu, Chenyang, Li, Xiaoqi, Guo, Ziyu, Chen, Sixiang, Liu, Mengzhen, Hou, Chengkai, Zhao, Mengdi, Zhou, KC alex, Heng, Pheng-Ann, Zhang, Shanghang</span>
+        <span>日期: 2025/03/13</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，将视觉-语言模型（VLM）扩展为视觉-语言-动作（VLA）模型以预测机器人底层动作已成为一个重要方向。主流方法主要分为两类：自回归VLA方法和扩散VLA方法。自回归方法（如RT-2、OpenVLA）继承VLM的常识推理能力，通过预测下一个动作token来生成动作，但其将连续动作量化到离散区间，破坏了动作的连续性，不利于精确控制。扩散方法（如π₀、CogACT）则在VLM后附加一个独立的扩散头，通过去噪过程预测连续动作，但其仅将VLM作为多模态特征提取器，扩散头独立运行，未能充分利用VLM通过下一token预测所习得的、经过互联网规模预训练的推理能力。</p>
+<p>本文针对上述两种范式的局限性，提出一个核心问题：如何优雅地构建一个统一的VLA模型，无缝整合自回归与扩散策略的优势，而非简单拼接？为此，本文提出了HybridVLA，其核心思路是：在一个单一的大型语言模型（LLM）内部，同时集成扩散和自回归两种动作生成能力，通过协作训练使两者相互增强，并设计自适应集成机制以提升操控鲁棒性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>HybridVLA的整体目标是根据当前图像观测(o_t)、语言指令(l_t)和机器人状态(r_t)，预测下一时刻的末端执行器位姿动作(a_{t+1})。动作定义为7自由度（单臂）或14自由度（双臂），包括3维平移偏移、3维旋转（欧拉角）和1维夹爪状态。</p>
+<p><img src="https://arxiv.org/html/2503.10631v3/x1.png" alt="方法对比"></p>
+<blockquote>
+<p><strong>图1</strong>：(a) 现有扩散VLA方法在VLM后附加独立扩散头。(b) HybridVLA创新性地在单一LLM内部整合扩散与自回归动作预测，充分利用了扩散的连续性和自回归建模的推理能力。模型在大规模、多样化、跨具身的真实世界机器人数据集上进行预训练，并在下游自收集数据上微调。</p>
+</blockquote>
+<p>整体框架基于一个预训练的VLM（如Prismatic）。如图2所示，视觉编码器（如DINOv2和SigLIP组合）提取图像特征并投影到LLM的词嵌入空间；语言指令通过tokenizer编码；机器人状态通过一个可学习的MLP映射为嵌入。关键在于，HybridVLA将所有这些多模态输入、扩散噪声token和自回归动作token，按照设计的token序列组织起来，输入到同一个LLM中进行处理。</p>
+<p><img src="https://arxiv.org/html/2503.10631v3/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：HybridVLA框架。所有多模态输入被编码为token，并在LLM的嵌入空间中被组织成设计的token序列。对于扩散token，模型同时将去噪时间步和噪声投影为连续向量表示。推理时采用4步DDIM采样，对应的噪声样本迭代输入LLM以预测每一步的噪声。特殊标记<BOD>和<EOD>用于桥接两种生成范式。随后，自回归动作以前序token为条件，通过标准的下一个动作token预测生成。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>协作训练配方</strong>：这是整合两种生成范式的关键。首先，设计了特定的<strong>token序列组织形式</strong>（Type1，如表1所示）：<code>[视觉token, 语言token, 机器人状态token, &lt;BOD&gt;, 扩散噪声token, &lt;EOD&gt;, 自回归动作token]</code>。此设计的动机包括：a) 将机器人状态作为连续嵌入引入，避免离散化对连续动作预测的负面影响；b) 使用<code>&lt;BOD&gt;</code>和<code>&lt;EOD&gt;</code>标记明确界定扩散token范围，防止其在下一token预测中混淆；c) 将扩散token置于自回归token之前，既能显式地为后续自回归预测提供连续潜在条件，又因扩散操作基于噪声，自然避免了训练时自回归真实动作标签的信息泄露风险。</li>
+<li><strong>混合损失函数</strong>：模型通过联合优化两种损失进行训练。对于扩散部分，采用噪声预测的均方误差损失：(L_{dif} = E_{a,i,c}||\epsilon - \epsilon_{\pi}(a^{i}<em>{t}, i, c)||^{2})。对于自回归部分，采用交叉熵损失(L</em>{ce})监督离散token输出。总损失为(L_{hybrid} = L_{dif} + L_{ce})。由于两者惩罚的是共享的LLM骨干网络，梯度联合反向传播，使得模型能够有效吸收扩散动作的连续特性和自回归生成的语义推理表征，实现两种范式的相互增强。</li>
+<li><strong>结构化训练阶段</strong>：模型加载预训练VLM参数后，分两阶段训练：首先在大规模开源机器人数据（Open X-Embodiment, DROID, ROBOMIND，共76万轨迹）上进行预训练（5个epoch），然后在特定下游任务的自收集数据上进行微调。</li>
+<li><strong>协作动作集成机制</strong>：在推理时，模型并行生成扩散动作(a^{d}<em>{t+1})和自回归动作(a^{ar}</em>{t+1})。观察发现：a) 两种动作在不同任务上表现各异，扩散擅长精确操控，自回归擅长需要语义理解的任务；b) 自回归动作token的平均置信度(c^{ar}<em>{t+1})是动作质量的可靠指标（成功样本中超过80%的置信度&gt;0.96）。因此，设计自适应集成策略：若(c^{ar}</em>{t+1})超过阈值(\theta)，则采用自回归动作；否则采用扩散动作，以此提升整体鲁棒性。</li>
+<li><strong>推理加速</strong>：为加速扩散采样，在第一个采样步缓存<code>&lt;BOD&gt;</code>之前所有条件token的键值（KV Cache），后续去噪步仅需前向传播时间步和新的噪声，复用缓存的键值，减少了冗余计算。</li>
+</ol>
+<p><strong>创新点</strong>：与现有方法相比，HybridVLA的核心创新在于将扩散去噪过程“注入”到LLM的下一token预测流程中，而非附加独立模块。这使得扩散生成能充分利用LLM的上下文推理能力，同时自回归生成也能获得来自扩散的连续潜在条件，实现了在统一模型内部的深度协作与相互增强。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准与数据集</strong>：在模拟环境<strong>RLBench</strong>的10项任务上进行评估，并在<strong>真实世界</strong>的7项任务（涉及Franka单臂和Bimanual双臂机器人）上进行测试。</li>
+<li><strong>对比方法</strong>：包括自回归方法（<strong>RT-2-X</strong>， <strong>OpenVLA</strong>）、扩散方法（<strong>π₀</strong>， <strong>CogACT</strong>）以及其他基线（<strong>BC-Z</strong>， <strong>VoxPoser</strong>）。</li>
+<li><strong>评估指标</strong>：任务<strong>平均成功率</strong>。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2503.10631v3/x3.png" alt="模拟结果"></p>
+<blockquote>
+<p><strong>图3</strong>：在RLBench 10项任务上的成功率对比。HybridVLA (7B)取得了**66%<strong>的平均成功率，显著优于最佳基线OpenVLA (55%)和CogACT (51%)，相对提升达</strong>14%**。其变体HybridVLA-dif (仅用扩散推理)也达到了65%。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2503.10631v3/x4.png" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>图4</strong>：在7项真实世界任务上的成功率对比。HybridVLA (7B)的平均成功率为**71%<strong>，相比最佳基线OpenVLA (60%)和CogACT (52%)提升显著，相对提升达</strong>19%**。其2.7B版本也超越了同规模的基线。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2503.10631v3/x5.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图5</strong>：消融研究。(a) 验证协作动作集成机制的有效性。纯扩散或纯自回归性能均低于自适应集成（66%）。(b) 验证token序列设计（Type1）是最优的，其他设计（如自回归token在前会导致信息泄露）性能下降。(c) 验证在大规模数据上预训练的必要性，预训练能大幅提升模型泛化能力。</p>
+</blockquote>
+<p><strong>关键实验结果总结</strong>：</p>
+<ol>
+<li><strong>模拟与真实世界性能</strong>：HybridVLA (7B) 在RLBench上平均成功率为<strong>66%<strong>，在真实世界任务上为</strong>71%<strong>，相比之前最优方法分别提升</strong>14%</strong> 和 **19%**。</li>
+<li><strong>泛化能力</strong>：如图6所示，HybridVLA在面对未见过的物体、背景、空间位置和光照条件时，表现出稳定的操控能力。</li>
+<li><strong>组件消融分析</strong>：<ul>
+<li><strong>协作集成机制贡献显著</strong>：仅用扩散或仅用自回归动作，成功率分别为62%和64%，均低于自适应集成的66%（图5a）。</li>
+<li><strong>Token序列设计至关重要</strong>：论文提出的Type1序列设计性能最优，其他设计（Type2-Type4）会导致性能下降2-10个百分点（表1/图5b）。</li>
+<li><strong>预训练不可或缺</strong>：移除大规模预训练，性能从66%骤降至38%（图5c）。</li>
+</ul>
+</li>
+<li><strong>效率</strong>：通过KV缓存加速，HybridVLA-dif变体在仅使用扩散推理时，推理速度可达<strong>9.4 Hz</strong>。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2503.10631v3/x6.png" alt="泛化能力"></p>
+<blockquote>
+<p><strong>图6</strong>：HybridVLA在真实世界中对未见配置的泛化能力展示，包括新物体、新背景、新位置和新光照。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>HybridVLA</strong>，一个在单一LLM内无缝集成扩散与自回归动作生成的统一框架，使模型能同时吸收扩散的连续性和自回归的上下文推理能力，实现两者相互增强。</li>
+<li>设计了<strong>协作训练配方</strong>，包括特定的token序列组织形式和混合损失函数，有效解决了将两种生成范式整合到下一token预测过程中的不一致性问题。</li>
+<li>引入了<strong>协作动作集成机制</strong>，根据自回归token置信度自适应融合两种预测，提升了模型在不同类型任务上的操控鲁棒性。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，由于在推理时需要迭代调用LLM进行多步去噪（尽管已减少到4步），并与自回归生成并行，其计算开销高于仅使用单一生成范式的方法。此外，当前工作主要聚焦于7B和2.7B模型规模。</p>
+<p><strong>启示</strong>：HybridVLA的成功表明，在具身智能模型中，让不同生成范式在统一架构底层进行深度协作（而非松散耦合）是提升性能的有效途径。这为未来构建更强大的多模态基础模型提供了新思路：即探索如何让不同能力（如感知、推理、规划、控制）在共享的表示空间中更紧密地交互与协同进化。同时，其协作集成机制也启发我们，可以根据任务特性或生成不确定性，动态调整模型的行为模式，以实现更灵活、更鲁棒的系统。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出HybridVLA模型，旨在解决机器人操控中连续动作生成与语义推理难以兼顾的问题。现有自回归方法将动作离散化，损失连续性；扩散方法则未能充分利用大语言模型的推理能力。HybridVLA的关键创新在于统一框架内协同融合扩散与自回归两种生成范式，通过协同训练配方将扩散去噪嵌入下一令牌预测过程，并设计自适应集成机制融合两者预测。实验表明，该方法在模拟和现实任务上的平均成功率较之前最优方法分别提升14%和19%，且在未见场景中表现稳定。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2503.10631" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

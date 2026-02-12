@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Block-wise Adaptive Caching for Accelerating Diffusion Policy - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Artificial Intelligence (cs.AI)</span>
+      <h1>Block-wise Adaptive Caching for Accelerating Diffusion Policy</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.13456" target="_blank" rel="noreferrer">2506.13456</a></span>
+        <span>作者: Ji, Kangye, Meng, Yuan, Cui, Hanyun, Li, Ye, Hua, Shengjia, Chen, Lei, Wang, Zhi</span>
+        <span>日期: 2025/06/16</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>扩散策略（Diffusion Policy）因其通过条件去噪过程建模动作分布的能力，在机器人控制领域获得了广泛关注，并已被许多视觉-语言-动作模型采用以执行复杂的任务。然而，其在去噪过程中的巨大计算负担使得动作更新频率无法满足实时、平滑控制的需求。现有基于缓存的方法在加速图像或视频生成的扩散模型上取得了成功，但由于数据特性和模型架构的根本性差异，这些方法无法直接推广应用于扩散策略。具体而言，扩散策略通常基于Transformer架构（如DiT），而现有缓存方法多针对U-Net设计，或为Transformer模型提供的是所有块共享统一更新计划的粗粒度调度。</p>
+<p>本文针对扩散策略推理加速这一具体痛点，提出了一种新的视角：观察到在重复的去噪步骤中，特征相似性在不同时间步和不同模型块之间呈现非均匀变化。基于此，本文的核心思路是提出一种无需训练、即插即用的块级自适应缓存方法，通过为每个Transformer块自适应地更新和重用缓存的动作特征，在保证性能无损的前提下实现推理加速。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架如论文图2所示。BAC（Block-wise Adaptive Caching）方法包含两个核心模块：自适应缓存调度器（Adaptive Caching Scheduler, ACS）和冒泡联合算法（Bubbling Union Algorithm, BUA）。其工作流程是：首先，ACS为每个目标块计算一组最优的缓存更新时间步；然后，BUA通过截断块间缓存误差传播来修正这些调度计划，最终实现块级的细粒度缓存。</p>
+<p><img src="https://arxiv.org/html/2506.13456v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：块级自适应缓存（BAC）框架。BAC通过引入自适应缓存调度器实现自适应特征缓存，并通过冒泡联合算法进一步支持块级调度。</p>
+</blockquote>
+<p><strong>核心模块一：自适应缓存调度器（ACS）</strong><br>该模块的目标是为每个块确定一组缓存更新时间步集合 $\mathcal{C}$，以最大化“缓存特征”与“被跳过的真实特征”之间的全局相似性。具体地，定义相邻时间步 $k$ 的特征余弦相似度为 $s_k = \cos(\mathbf{b}<em>k, \mathbf{b}</em>{k-1})$，区间 $[i, j]$ 的相似性为 $\phi(i,j)=\sum_{k=i+1}^{j}s_k$。优化问题形式化为在总去噪步数 $K$ 中选出 $M$ 个更新步，使得各缓存区间相似性之和最大。这是一个组合优化问题，直接搜索不可行。因此，论文将其重新表述为动态规划问题：状态 $\text{DP}[m][j]$ 表示第 $m$ 次更新发生在时间步 $j$ 时可获得的最大累积相似性，状态转移方程为 $\text{DP}[m][j]=\max_{0\leq i&lt;j}\left{\text{DP}[m-1][i]+\phi(i,j)\right}$。通过动态规划求解并回溯，即可得到每个块的最优更新计划 $\mathcal{C}^*$。由于单个任务内具有较高的同质性，该调度器在推理前仅需计算一次，开销几乎可忽略。</p>
+<p><strong>核心模块二：冒泡联合算法（BUA）</strong><br>然而，直接将ACS的调度计划应用于每个独立的块会导致性能崩溃，出现误差激增现象，尤其是在前馈网络块中。</p>
+<p><img src="https://arxiv.org/html/2506.13456v1/x3.png" alt="误差分析"></p>
+<blockquote>
+<p><strong>图3</strong>：误差激增现象与分析。(a) 使用块级与统一调度时，第三个FFN块的缓存误差对比。(b) 在更新时间步14和31，第三个FFN块内各子层的缓存误差。(c) 第七和第八个FFN块缓存误差之间的相关性。(d) 在不同输入误差大小（由缩放因子β控制）下的更新诱发误差。(e) 在整个扩散过程中所有块的缓存误差热图，白点表示更新步骤。</p>
+</blockquote>
+<p>如图3所示，误差激增常发生在FFN块的更新步骤。论文分析指出，根本原因在于块间缓存误差的传播：当FFN块更新时，如果其上游块未更新且带有较大的缓存误差，该误差会通过FFN的层归一化操作被放大并传播到下游，形成误差激增。为截断这种传播，BUA算法分为两个阶段：</p>
+<ol>
+<li><strong>选择具有大缓存误差的上游块</strong>：通过计算每个块在所有去噪时间步上特征差异的 $\ell_1$ 范数平均值 $\ell_j$ 来估计其重用诱发误差的大小，并选取 $\ell_j$ 最大的前 $k$ 个块构成集合 $U$。</li>
+<li><strong>自下游向上游联合更新时间步</strong>：对于每个上游块 $u \in U$，强制要求其在所有下游FFN块 $v \in \mathrm{D}(u)$ 需要更新的时间步也进行更新。即更新其缓存计划：$C(u) = C(u) \cup \bigcup_{v \in \mathrm{D}(u)} C(v)$。</li>
+</ol>
+<p><strong>创新点</strong><br>与现有方法相比，BAC的创新点具体体现在：1) <strong>块级细粒度调度</strong>：不同于所有块共享统一更新间隔的粗粒度方法，BAC为每个Transformer块分配独立的、基于特征相似性优化的缓存计划。2) <strong>显式处理误差传播</strong>：首次在扩散策略加速中识别并理论分析了块间缓存误差传播导致的误差激增问题，并提出了针对性的BUA算法进行截断，这是实现有效块级调度的关键。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>模型与基准</strong>：在多个机器人操控基准上评估，包括CALVIN、LIBERO、ManiSkill2、RLBench和Dexterity。使用的模型包括Diffusion Policy (DP)、Diffusion Transformer Policy (DPT) 和 DexVLA。</li>
+<li><strong>对比方法</strong>：与统一缓存调度（Uniform）以及先进的扩散模型缓存方法DeepCache和TokenMerge进行对比。</li>
+<li><strong>评估指标</strong>：任务成功率（SR）和加速比（Speedup）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>BAC在保持与原始模型几乎相同性能的同时，实现了显著的推理加速。</p>
+<p><img src="https://arxiv.org/html/2506.13456v1/x4.png" alt="主要结果1"></p>
+<blockquote>
+<p><strong>图4</strong>：在CALVIN基准上的成功率与加速比。BAC在3倍加速下，成功率仍接近原始模型（99.2% vs 99.5%），显著优于Uniform缓存（95.5%）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.13456v1/x5.png" alt="主要结果2"></p>
+<blockquote>
+<p><strong>图5</strong>：在LIBERO基准上的成功率与加速比。BAC在3倍加速下成功率为87.3%，远超Uniform缓存的71.0%。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.13456v1/x6.png" alt="主要结果3"></p>
+<blockquote>
+<p><strong>图6</strong>：在ManiSkill2基准上的成功率与加速比。对于DP和DPT模型，BAC在2倍加速下性能几乎无损，在3倍加速下性能下降很小。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.13456v1/x7.png" alt="主要结果4"></p>
+<blockquote>
+<p><strong>图7</strong>：在RLBench基准上的成功率与加速比。BAC在3倍加速下成功率为93.2%，而Uniform缓存降至76.3%。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.13456v1/x8.png" alt="主要结果5"></p>
+<blockquote>
+<p><strong>图8</strong>：在Dexterity基准上对DexVLA模型的加速效果。BAC在2倍加速下成功率为87.5%，接近原始的90.0%，而Uniform缓存仅为72.5%。</p>
+</blockquote>
+<p><strong>消融实验</strong>：</p>
+<p><img src="https://arxiv.org/html/2506.13456v1/x9.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图9</strong>：BAC各组件在CALVIN基准上的消融研究。ACS（仅自适应调度）相比Uniform基线已有提升，但结合BUA后性能进一步提升，在3倍加速下成功率从95.5%（Uniform）提升至97.0%（ACS）再至99.2%（BAC）。这证明了ACS和BUA两个组件的有效性及其互补性。</p>
+</blockquote>
+<p>消融实验总结：自适应缓存调度器（ACS）通过优化更新时机贡献了主要的性能提升；冒泡联合算法（BUA）通过处理误差传播，在ACS的基础上进一步提高了性能稳定性，尤其是在高加速比下。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了BAC，一种用于基于Transformer的扩散策略的无训练加速方法，通过块级自适应更新和重用缓存特征来实现。</li>
+<li>设计了自适应缓存调度器，利用动态规划求解器通过最大化全局特征相似性来最优地确定缓存更新时间步。</li>
+<li>开发了冒泡联合算法，基于对扩散策略中误差激增现象的理论和实证分析，通过截断块间缓存误差传播，将缓存调度有效地扩展到块级别。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文提到的方法依赖于单个任务内的高同质性以进行有效的调度预计算，这在任务切换频繁的场景下可能需要重新计算调度。此外，BUA算法需要识别上游块，这增加了额外的预计算步骤。</p>
+<p><strong>后续研究启示</strong>：<br>BAC的成功表明，针对特定模型架构（如Transformer）和任务特性（如机器人控制序列）设计细粒度的缓存策略至关重要。其对于误差传播的分析和处理思路，可能启发其他基于迭代推理的序列模型（如自回归模型）的加速研究。将这种即插即用的缓存机制与现有的模型蒸馏、量化等加速技术结合，是未来一个有潜力的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对Diffusion Policy在机器人控制中计算成本高、无法实时运行的核心问题，提出了块级自适应缓存（BAC）方法。该方法基于特征相似性在时间步和网络块间非均匀变化的关键观察，包含两个核心技术：自适应缓存调度器，用于确定最佳特征更新时机以最大化全局相似性；冒泡联合算法，用于截断前馈网络块间的缓存误差传播。实验表明，BAC作为即插即用的无损加速方案，在多个机器人基准测试中实现了最高3倍的推理速度提升。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.13456" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

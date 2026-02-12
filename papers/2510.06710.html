@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RLinf-VLA: A Unified and Efficient Framework for Reinforcement Learning of Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>RLinf-VLA: A Unified and Efficient Framework for Reinforcement Learning of Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.06710" target="_blank" rel="noreferrer">2510.06710</a></span>
+        <span>作者: Zang, Hongzhi, Wei, Mingjie, Xu, Si, Wu, Yongji, Guo, Zhen, Wang, Yuanqing, Lin, Hao, Wang, Peihong, Shi, Liangzhi, Xie, Yuqing, Xu, Zhexuan, Liu, Zhihao, Chen, Kang, Tang, Wenhao, Zhang, Quanlu, Zhang, Weinan, Yu, Chao, Wang, Yu</span>
+        <span>日期: 2025/10/08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）模型通过利用互联网规模数据预训练的视觉-语言模型，并在大规模、异构的机器人演示数据集上进一步训练，已展现出强大的泛化能力。然而，部署VLA模型通常需要进行后训练，以缓解训练数据与部署环境之间的分布不匹配问题。强化学习（RL）作为一种重要的后训练范式，通过试错交互直接优化累积任务奖励，相比监督微调（SFT）能实现更强的分布外泛化，特别是在语义对齐和执行鲁棒性方面。</p>
+<p>尽管前景广阔，将RL应用于VLA模型的研究仍处于小规模或碎片化状态。现有方法缺乏一个能够在不同架构和算法之间进行公平比较的统一平台，同时也缺少针对可扩展训练的高效系统设计。虽然SimpleVLA-RL等框架借鉴了为大语言模型设计的RL代码库，但它们缺乏针对具身智能任务所需的系统级优化和接口可扩展性。在具身设置中，模拟器会与模型推理和学习争夺GPU资源，这限制了可扩展性并大幅增加了训练时间。此外，在线RL需要重复且紧密耦合的模型-环境交互，缺乏针对此模式的系统设计会导致显著的GPU空闲时间和流水线气泡，造成资源利用率低下。</p>
+<p>本文针对上述碎片化、效率低下的痛点，提出了RLinf-VLA框架，旨在为VLA模型的强化学习提供一个统一且高效的平台。其核心思路是：通过一个统一接口标准化集成多种VLA架构、RL算法和模拟器，并通过创新的混合细粒度流水线GPU分配策略，显著提升具身RL训练的资源利用率和吞吐量。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RLinf-VLA框架的设计围绕两个核心展开：一是高效灵活的资源分配策略，二是支持广泛组件的统一接口。</p>
+<p><img src="https://arxiv.org/html/2510.06710v2/figures/rollout.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图1</strong>：VLA模型强化学习流程。包含三个主要组件：生成（Generation，负责根据观测生成动作）、模拟器（Simulator，执行动作并返回新观测）和训练（Training，利用收集的数据更新策略）。GPU资源主要在“滚动”阶段（生成+模拟器）和“优化”阶段（训练）之间分配。</p>
+</blockquote>
+<p><strong>整体流程</strong>：如图1所示，VLA模型的RL流程包含生成（Generation）、模拟器（Simulator）和训练（Training）三个组件。生成模块根据当前观测推断一个动作块（chunk）；模拟器执行该块并返回最终时间步的观测；此循环持续直至轨迹收集完成，随后训练模块利用收集的数据更新策略。与基于LLM的RL关键区别在于层次化的动作表示：块（Chunk）→原子动作（Atomic Action）→令牌（Token）。每个原子动作包含多个令牌，对应机器人动作空间的特定维度。</p>
+<p><strong>核心模块1：灵活的GPU分配策略</strong>。针对模拟器类型（CPU并行 vs. GPU并行）导致的资源瓶颈差异，框架支持三种可配置的分配模式：</p>
+<ol>
+<li><strong>共置模式（Collocated）</strong>：所有组件共存于同一组GPU上。为避免模拟器与生成模块频繁交互导致的反复卸载/加载开销，修改后的策略仅在滚动阶段开始和结束时进行卸载/加载操作。但这仍会导致组件相互等待，造成GPU资源浪费。</li>
+<li><strong>分离模式（Disaggregated）</strong>：每个组件被分配到不同的（可能是多GPU）分区，组件间无重叠。这确保了每个组件能充分利用其分配的资源，但由于组件间依赖关系（如模拟器等待生成模块），可能导致GPU利用率不足。</li>
+<li><strong>混合模式（Hybrid）与细粒度流水线</strong>：这是本文的核心创新。在混合分配中，组件可灵活选择GPU，典型配置是将生成和模拟器分配到不同的GPU分区，而允许训练使用所有GPU。在此基础上，为缓解因组件依赖产生的“GPU气泡”，引入了细粒度流水线技术。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.06710v2/figures/gpu-alloc/mixed.png" alt="混合模式示意图"></p>
+<blockquote>
+<p><strong>图2</strong>：混合分配模式示意图。生成（G）、模拟器（S）和训练（T）组件被分配到不同的GPU分区。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.06710v2/figures/gpu-alloc/mixed-pipe2.png" alt="细粒度流水线示意图"></p>
+<blockquote>
+<p><strong>图3</strong>：带细粒度流水线的混合模式（k=2）。将一个GPU上的模拟器实例分割为多个子模拟器（S^(1), S^(2)），使得模拟器和生成模块能够并发运行，减少空闲时间。</p>
+</blockquote>
+<p>具体而言，将一个GPU上的模拟器实例分割为多个子模拟器（例如S^(1), S^(2)）。流水线调度允许当一个子模拟器（如S^(1)）产生的观测被生成模块处理时，另一个子模拟器（如S^(2)）可以并行生成其观测，从而实现了模拟器与生成模块的并发执行，显著减少了等待时间。</p>
+<p><strong>核心模块2：统一接口</strong>。为实现高可扩展性，RLinf-VLA提供了标准化接口：</p>
+<ol>
+<li><strong>多模拟器支持</strong>：支持ManiSkill（物理丰富的操作）、LIBERO（指令条件推理）和RoboTwin（带域随机化的双手任务）等模拟器，通过统一的Gym风格API和观测/动作接口实现无缝切换。</li>
+<li><strong>多模型支持</strong>：得益于跨模拟器的统一数据处理流程，框架可无缝集成现有VLA架构，如OpenVLA（单步动作）和OpenVLA-OFT（多步动作块），并集成了LoRA以实现高效微调。</li>
+<li><strong>多算法支持</strong>：支持PPO和GRPO等RL算法，核心优势在于仅需配置优势函数和损失函数即可实现算法，无需冗余代码。</li>
+</ol>
+<p><strong>核心模块3：算法设计选择</strong>。框架总结并实现了一系列针对VLA模型RL训练的关键设计选择：</p>
+<ul>
+<li><strong>多粒度计算支持</strong>：支持在块级（chunk-level）和动作级（action-level）进行优势估计和日志概率计算，以适应不同的算法需求。</li>
+<li><strong>PPO特定设计</strong>：包括支持部分重置（Partial Reset）模式以高效处理环境提前终止；采用演员-评论家参数共享策略，在VLA的语言模型组件上附加轻量级价值头；实证表明动作级价值估计优于块级估计。</li>
+<li><strong>GRPO特定设计</strong>：包括有效动作掩码（Valid Action Mask），在优化时屏蔽任务完成后的时间步；按轨迹长度对损失进行归一化，防止长轨迹主导梯度；引入成功率过滤器，丢弃全成功或全失败的轨迹组以加速收敛。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2510.06710v2/figures/rollout-feature/rollout-legend.png" alt="三种滚动模式"></p>
+<blockquote>
+<p><strong>图4</strong>：三种滚动模式示意图。(a) 固定长度模式：所有子环境同时重置。(b) 部分重置模式：每个子环境在终止时立即独立重置。(c) 有效动作掩码模式：在GRPO优化中，仅考虑任务完成前的有效时间步。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：评估使用了三个具身智能基准测试：ManiSkill（25个抓放任务）、LIBERO（5个任务组共130个任务）和RoboTwin（6个双手操作任务）。对比的基线包括未经RL微调的基础VLA模型（OpenVLA和OpenVLA-OFT）。评估指标主要为任务成功率，并测试了分布外（OOD）泛化能力。系统效率实验对比了不同的GPU分配策略，并与现有框架SimpleVLA-RL进行了比较。</p>
+<p><strong>关键性能结果</strong>：</p>
+<ol>
+<li><strong>策略性能大幅提升</strong>：在ManiSkill上，OpenVLA经RLinf-PPO微调后，分布外成功率从39.10%提升至81.93%；OpenVLA-OFT则从18.29%提升至77.05%。在LIBERO上，OpenVLA-OFT经RLinf-GRPO训练后，在130个任务上的平均成功率从42.09%大幅提升至98.11%。在RoboTwin上，平均成功率从24.48%提升至84.63%，实现了超过60%的平均性能改进。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.06710v2/x1.png" alt="ManiSkill训练曲线"></p>
+<blockquote>
+<p><strong>图5</strong>：OpenVLA在ManiSkill上的训练曲线。RL（PPO/GRPO）相比基础模型带来显著性能提升，且PPO表现更优、更稳定。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.06710v2/x3.png" alt="LIBERO训练曲线"></p>
+<blockquote>
+<p><strong>图6</strong>：OpenVLA-OFT在LIBERO（130个任务）上的训练曲线。GRPO算法将成功率从约73%稳定提升至98%。</p>
+</blockquote>
+<ol start="2">
+<li><strong>系统效率显著优化</strong>：在GPU并行模拟器（如ManiSkill）上，采用混合模式与细粒度流水线（2级流水线）相比基础的分离模式，实现了1.61倍至1.88倍的训练速度提升。在CPU并行模拟器（如LIBERO、RoboTwin）上，RLinf-VLA的共置模式相比现有框架SimpleVLA-RL（仅支持共置），实现了高达2.27倍的加速。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.06710v2/x7.png" alt="系统效率对比"></p>
+<blockquote>
+<p><strong>图7</strong>：不同设置下的系统吞吐量（每秒总环境帧数）对比。对于GPU并行模拟器（ManiSkill），混合流水线模式（<code>pipe</code>）随着流水线阶段增加，吞吐量显著提升。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2510.06710v2/x8.png" alt="延迟分解"></p>
+<blockquote>
+<p><strong>图8</strong>：不同配置下的延迟分解。展示了生成、模拟和训练等环节在不同分配模式下的时间占比，揭示了资源争用和优化潜力。</p>
+</blockquote>
+<p><strong>消融实验与设计选择贡献</strong>：论文通过大量实验验证了关键设计选择的有效性。例如，在GRPO中，使用有效动作掩码、按轨迹长度归一化损失以及成功率过滤器都被证明能提升策略性能和加速收敛。在PPO中，动作级价值估计被证明优于块级估计。这些实践构成了RLinf-VLA框架内可配置的高效训练方案。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了一个统一且高效的RL训练框架RLinf-VLA</strong>：通过统一接口集成多种模拟器、VLA模型和RL算法，并通过创新的混合细粒度流水线GPU分配策略，显著提升了具身RL训练的资源利用率和吞吐量（最高达2.27倍加速）。</li>
+<li><strong>实现了卓越且可泛化的策略性能</strong>：在多个主流基准测试上，使用单一统一模型实现了大幅性能提升（平均改进20-85%），特别是在大规模多任务学习（LIBERO 130个任务）和复杂双手操作（RoboTwin）上表现出色。</li>
+<li><strong>提炼并开源了一套可操作的VLA-RL训练实践</strong>：系统性地总结并实现了针对PPO和GRPO算法应用于VLA模型时的关键设计选择（如多粒度计算、部分重置、有效动作掩码等），为社区提供了实用的训练指南和可复现的基础平台。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提及的局限性主要在于当前实验集中于模拟环境，未来需要将框架扩展并验证于真实机器人硬件平台。</p>
+<p><strong>启示</strong>：RLinf-VLA的成功表明，针对具身智能任务的系统级优化（特别是资源调度）与算法创新同等重要。其统一、模块化的设计思想为后续研究提供了一个可扩展的坚实基础，有望加速VLA模型通过RL进行能力对齐与提升的研究进程，促进该领域的高效、公平比较与可复现性。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作（VLA）模型在强化学习（RL）训练中缺乏统一平台和高效系统设计的问题，提出了RLinf-VLA框架。该框架通过统一接口标准化集成多种VLA架构、RL算法和模拟器，并采用灵活资源分配架构提升效率，特别针对GPU并行化模拟器引入混合细粒度管道分配策略。实验表明，该策略带来1.61–1.88倍的训练加速，在LIBERO、ManiSkill和RoboTwin等基准测试中，模型性能一致提升约20–85%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.06710" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

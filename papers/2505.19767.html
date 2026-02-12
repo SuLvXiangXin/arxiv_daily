@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RFTF: Reinforcement Fine-tuning for Embodied Agents with Temporal Feedback - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>RFTF: Reinforcement Fine-tuning for Embodied Agents with Temporal Feedback</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2505.19767" target="_blank" rel="noreferrer">2505.19767</a></span>
+        <span>作者: Shu, Junyang, Lin, Zhiwei, Wang, Yongtao</span>
+        <span>日期: 2025/05/26</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前具身智能体主要通过行为克隆进行训练，这依赖于昂贵的人工演示数据和计算资源，且受限于演示的范围，导致智能体的操作和泛化能力不足。为了减少对数据的依赖并提升能力，许多研究转向对具身智能体进行强化学习微调。然而，现有的方法（如FLaRe、DPPO）通常依赖于稀疏的、基于任务结果的奖励。这种奖励机制无法为智能体在一个回合内的具体动作提供细粒度的反馈，当遇到部分正确或错误的决策时，会导致不当的鼓励或抑制，从而限制了模型的操作能力和泛化性能。</p>
+<p>本文针对具身智能体强化学习微调中<strong>稀疏奖励</strong>这一具体痛点，提出了一种新视角：利用一个基于<strong>时间信息</strong>训练的价值模型来生成<strong>密集奖励</strong>，从而为每个状态（动作）提供更精细的反馈信号。本文的核心思路是：首先训练一个无需机器人动作标签、仅利用成功轨迹状态序列的时间顺序来学习状态价值预测的价值模型；然后将此模型集成到基于PPO的强化学习微调框架中，通过奖励塑形等技术，利用该模型提供的密集奖励来高效微调具身智能体。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RFTF方法包含两个主要阶段：1) 训练价值模型；2) 利用价值模型指导强化学习微调。整体目标是利用价值模型为具身智能体的强化学习微调提供密集奖励，以提升其泛化和适应能力。</p>
+<p><strong>核心模块一：价值模型</strong><br>价值模型的作用是接收状态和人类指令，预测当前状态的价值。其关键创新在于训练方式：它无需任何机器人动作标签。论文假设在一条人类演示的成功任务轨迹中，状态价值随时间单调递增。基于此，采用对比学习进行训练。</p>
+<p><img src="https://arxiv.org/html/2505.19767v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：价值模型的训练流程。从无动作标签的专家演示轨迹中采样状态序列，通过对比损失函数强制要求模型对序列中靠后状态预测的价值高于靠前状态，从而学习到状态价值随时间递增的关系。</p>
+</blockquote>
+<p>具体而言，给定一条专家演示的成功轨迹 <code>(s_t, s_{t+1}, ..., s_{t+n-1} | l)</code>，训练目标是使预测的价值满足 <code>v_t &lt; v_{t+1} &lt; ... &lt; v_{t+n-1}</code>。损失函数采用对比损失：<code>loss(ϕ) = -1/C_n^2 * E[log(σ(V_ϕ(s_{t+Δt}, l) - V_ϕ(s_t, l)))]</code>，其中 <code>σ</code> 为sigmoid函数，<code>Δt</code> 为正整数。该损失鼓励模型对后续时间步的状态输出更大的价值。价值模型的结构基于VLA模型，仅将其动作令牌和解码器替换为价值令牌和价值解码器，并利用VLA模型的权重进行初始化。</p>
+<p><strong>核心模块二：RL微调流程</strong><br>在价值模型训练完成后，将其用于指导基于PPO的强化学习微调过程。</p>
+<p><img src="https://arxiv.org/html/2505.19767v1/x3.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：RL微调流程示意图。智能体与环境交互产生轨迹，价值模型为此轨迹中的每个状态预测价值，进而通过设计的奖励函数和优势函数为PPO算法提供细粒度的优化信号，从而微调智能体。</p>
+</blockquote>
+<p>首先，对价值模型输出的原始状态值在回合内进行归一化。然后，通过奖励塑形构建密集奖励函数：<code>R_t = γV(s_{t+1}, l) - V(s_t, l)</code>（非终止步），该奖励鼓励智能体采取能提升状态价值的动作。</p>
+<p>为了更有效地利用奖励信息，论文采用广义优势估计（GAE）并融合任务成功/失败反馈，构建最终的优势函数：<code>A_t = η [I(success) + Σ_{n=t}^T (γλ)^{n-t} R_t]</code>。其中，<code>η</code> 是用于平衡成功与失败样本的系数（成功时0.25，失败时1），<code>I(success)</code> 是指示函数（成功+1，失败-1），<code>λ</code> 是GAE的超参数。这种设计确保了长回合中早期决策也能获得相关反馈。</p>
+<p>为了防止强化学习微调导致性能崩溃，优化目标结合了PPO的替代目标裁剪项和自适应的KL散度项：<code>loss(θ) = -E { min[ (π_θ/π_{θ_old}) A_t, clip(π_θ/π_{θ_old}, 1-ε, 1+ε) A_t] - β D_KL[π_θ || π_{θ_ref}] }</code>。</p>
+<p>与现有方法相比，RFTF的创新点具体体现在：1) <strong>无需动作标签的密集奖励生成</strong>：通过时间对比学习训练价值模型，完全摆脱了对昂贵动作标注的依赖；2) <strong>细粒度的优化信号</strong>：将价值模型预测、奖励塑形、GAE和样本平衡技术结合，为每个时间步提供了比稀疏结果奖励更精细的反馈。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：在CALVIN模拟基准上进行实验。CALVIN包含四个不同的桌面操作环境（Env A, B, C, D），涵盖34种语言指令的长视野任务。</li>
+<li><strong>实验平台</strong>：使用四个NVIDIA A40 GPU进行RL微调，Seer-Large模型约需10小时，GR-MG约需14小时。</li>
+<li><strong>Baseline方法</strong>：在ABC-D泛化设置下，对比了3D Diffuser Actor、CLOVER、Diffusion Transformer Policy、Seer、GR-MG、Seer-Large等SOTA方法。RFTF对GR-MG和Seer-Large进行微调。</li>
+<li><strong>评估指标</strong>：智能体在D环境中执行1000个序列（每个序列连续5个任务），报告能连续完成1至5个任务的比例（L1-L5），并以平均成功长度（Avg. Len.）作为主要指标。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>泛化性能（主结果）</strong>：在ABC环境微调，D环境测试。如表1所示，RFTF微调后的GR-MG平均成功长度从4.047提升至4.081；微调后的Seer-Large从4.283提升至<strong>4.296</strong>，创造了新的SOTA性能。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.19767v1/x7.png" alt="结果图表"></p>
+<blockquote>
+<p><strong>表1</strong>：CALVIN ABC-D泛化设置下的主要结果。RFTF微调后的模型（特别是Seer-Large）取得了最高的平均成功长度。</p>
+</blockquote>
+<ol start="2">
+<li><strong>适应新环境性能</strong>：在未见过D环境上直接进行少量回合的微调。如表2所示，GR-MG在D环境微调后，性能从4.047提升至4.113；Seer-Large从4.283提升至4.301，证明了RFTF能快速帮助智能体适应新环境。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2505.19767v1/x8.png" alt="结果图表"></p>
+<blockquote>
+<p><strong>表2</strong>：适应新环境（D环境）的实验结果。直接在目标环境D上进行RFTF微调，模型性能相比其原始性能有显著提升。</p>
+</blockquote>
+<ol start="3">
+<li><p><strong>价值模型分析</strong>：<br><img src="https://arxiv.org/html/2505.19767v1/x5.png" alt="结果图表"></p>
+<blockquote>
+<p><strong>图5</strong>：价值模型的训练曲线。模型在第一轮epoch后验证准确率即超过94%，后续训练提升有限，因此选用第一轮的模型用于微调，以避免过拟合。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2505.19767v1/x6.png" alt="结果图表"></p>
+<blockquote>
+<p><strong>图6</strong>：智能体自身交互轨迹的状态价值曲线示例。曲线中途因错误抓取动作而下降，表明价值模型能识别错误决策，而非单调递增，这确保了微调不是简单强化原有行为。</p>
+</blockquote>
+</li>
+<li><p><strong>消融实验</strong>：<br><img src="https://arxiv.org/html/2505.19767v1/x9.png" alt="结果图表"></p>
+<blockquote>
+<p><strong>表3</strong>：消融研究（部分）。将RFTF的密集奖励替换为稀疏奖励（SR）后，GR-MG的泛化性能从4.081下降至3.864，验证了密集奖励的有效性。</p>
+</blockquote>
+</li>
+</ol>
+<p><strong>消融实验总结</strong>：论文通过将密集奖励替换为稀疏奖励进行了关键消融。结果显示，使用稀疏奖励会导致性能显著下降（GR-MG从4.081降至3.864），这直接证明了本文提出的密集奖励机制的核心贡献。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种用于具身智能体的<strong>无需机器人动作标签</strong>的密集奖励强化学习微调方法（RFTF），通过基于时间信息对比学习训练的价值模型生成细粒度奖励。</li>
+<li>设计了一套结合奖励塑形、广义优势估计（GAE）和样本平衡技术的强化学习微调流程，有效提升了训练稳定性和智能体性能。</li>
+<li>在CALVIN基准上取得了新的SOTA结果（平均成功长度4.296），并证明了该方法能有效提升智能体的泛化能力及快速适应新环境的能力。</li>
+</ol>
+<p><strong>局限性</strong>：论文中提到的局限性在于，所有实验均在模拟环境（CALVIN）中进行，尚未在真实物理机器人上进行验证。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>密集奖励的有效性</strong>：证明了在具身智能体的强化学习微调中，提供细粒度的、基于状态的密集奖励比稀疏结果奖励更有效，这是一个值得深入探索的方向。</li>
+<li><strong>无动作标签学习</strong>：价值模型的训练方式表明，利用任务轨迹的时间结构信息可以替代部分动作监督，为数据高效的具身智能学习提供了新思路。</li>
+<li><strong>快速适应</strong>：RFTF展示了在少量交互下使智能体适应新环境的潜力，这对实现通用的、可快速部署的具身智能体具有重要意义。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对具身智能体强化微调中稀疏奖励信号难以提供细粒度反馈的问题，提出RFTF方法。该方法利用基于时序信息训练的价值模型生成密集奖励，无需机器人动作标注，并结合GAE与样本平衡等技术提升微调效果。实验表明，经RFTF微调的智能体在CALVIN ABC-D基准上取得平均成功长度4.296的SOTA性能，并在新环境中快速适应后达到4.301。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2505.19767" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

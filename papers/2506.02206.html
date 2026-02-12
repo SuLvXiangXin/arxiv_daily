@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Reinforcement Learning with Data Bootstrapping for Dynamic Subgoal Pursuit in Humanoid Robot Navigation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Reinforcement Learning with Data Bootstrapping for Dynamic Subgoal Pursuit in Humanoid Robot Navigation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.02206" target="_blank" rel="noreferrer">2506.02206</a></span>
+        <span>作者: Peng, Chengyang, Zhang, Zhihao, Gong, Shiting, Agrawal, Sankalp, Redmill, Keith A., Hereid, Ayonga</span>
+        <span>日期: 2025/06/02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前人形机器人导航框架通常将几何路径规划与实时步态控制分离，难以适应双足机器人的非线性动力学，在复杂或拥挤环境中性能受限。基于模型的方法（如MPC）虽能整合动力学，但将高维环境信息（如占据栅格图）纳入优化问题会显著增加计算负担，且航向角、转向率等状态的非线性耦合使优化过程复杂。基于学习的方法（如模仿学习、强化学习）在处理非线性问题上展现出潜力，但模仿学习依赖高质量专家数据，而强化学习则面临样本效率低下、在连续动作空间和复杂环境中易收敛至次优解的问题，且现有RL导航框架多针对运动学更简单的轮式机器人。</p>
+<p>本文针对双足机器人导航中平衡计算效率与运动精度的核心痛点，提出了一种结合强化学习与模型预测控制的分层新框架。其核心思路是：高层使用RL规划器在机器人坐标系中动态生成可行的子目标，底层使用基于线性倒立摆模型的MPC控制器产生稳定的步行步态以跟踪这些子目标，并采用数据引导策略利用基于模型的导航方法生成离线演示数据来加速和稳定RL训练。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出一个两层分层架构。高层是一个基于强化学习（RL）的动态子目标规划器，其输入是包含局部环境感知和机器人运动状态的异构状态，输出是在机器人极坐标系中定义的动态子目标（距离和方向）。底层是一个基于线性倒立摆模型的模型预测控制（MPC）步态规划器，它接收高层生成的子目标，结合机器人动力学约束和障碍物信息，求解一个二次规划问题，输出稳定的足部落脚点和躯干运动轨迹，驱动机器人走向子目标。</p>
+<p><img src="https://arxiv.org/html/2506.02206v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：所提出的用于人形导航的分层框架整体结构。高层RL规划器使用局部地图数据持续生成可行的动态子目标，逐步引导机器人朝向全局目标；而底层基于MPC的控制器计算满足运动和障碍物约束的动态稳定步行步态以跟随这些子目标。</p>
+</blockquote>
+<p><strong>高层RL动态子目标规划器</strong>：</p>
+<ol>
+<li><strong>状态空间</strong>：包含一个以机器人为中心的64x64局部占据栅格图（前向4.5米，后向1.5米，横向6米）、机器人质心的位置/速度/航向角、支撑脚标识、到目标的欧氏距离和相对航向角、到最近障碍物的距离以及全局目标位置。</li>
+<li><strong>动作空间</strong>：定义为机器人极坐标系下的动态子目标 $(d_c, \phi_c)$，其中 $d_c$ 为到子目标的距离（范围[0,3]米），$\phi_c$ 为相对于当前机器人航向的方向（范围[$-\pi/4$, $\pi/4$]弧度）。</li>
+<li><strong>算法与网络结构</strong>：采用Soft Actor-Critic (SAC)算法。策略（行动者）网络首先通过一个CNN（三层卷积，每层后接ReLU和最大池化）处理占据栅格图，将输出的扁平化特征与其余状态信息拼接，再经过四层全连接网络，输出动作高斯分布的均值和标准差。批评家网络结构类似，但最终输出一个标量的状态-动作值。</li>
+<li><strong>奖励函数</strong>：由加权求和的多项子奖励和终止奖励构成。子奖励包括：鼓励接近目标的<strong>目标接近奖励</strong>$r_g$（基于距离减少量）；鼓励对准目标方向的<strong>航向对齐奖励</strong>$r_\theta$（使用三次函数惩罚大偏差）；鼓励平滑运动的<strong>动作平滑奖励</strong>$r_a$（含前进激励和动作变化惩罚）；鼓励保持期望前向速度并抑制侧向速度的<strong>速度奖励</strong>$r_v$；以及基于控制屏障函数思想、鼓励远离障碍物的<strong>碰撞避免奖励</strong>$r_o$。终止奖励$R_F$则在成功到达、发生碰撞/摔倒、超时等情景下给予大幅值奖励或惩罚。</li>
+</ol>
+<p><strong>底层基于LIP的线性MPC步态规划器</strong>：<br>采用线性倒立摆模型描述机器人质心动力学。MPC问题在每个控制周期求解，其优化目标是最小化预测时域内质心状态与参考轨迹（由高层子目标引导生成）的偏差，同时满足动力学约束、步长/转向角限制、以及基于局部占据地图的障碍物避免约束（转化为对足部落脚点的线性不等式约束）。求解后得到未来步态的足部位置序列和躯干运动指令，发送给全身控制器执行。</p>
+<p><strong>创新点</strong>：</p>
+<ol>
+<li><strong>动态子目标</strong>：在机器人坐标系中生成子目标，使高层决策与底层执行解耦，并直接考虑底层运动约束。</li>
+<li><strong>分层RL+MPC架构</strong>：结合了RL处理复杂环境感知和决策的灵活性，以及MPC保证运动稳定性和实时性的可靠性。</li>
+<li><strong>数据引导训练策略</strong>：使用基于模型的导航方法生成离线演示数据集，与在线经验共同填充回放缓冲区，加速RL训练并提升策略鲁棒性。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在仿真环境中使用Agility Robotics Digit人形机器人进行验证。测试场景包含随机生成的障碍物。评估指标包括导航成功率、到达目标所需步数、碰撞率等。</p>
+<p><strong>对比方法</strong>：</p>
+<ul>
+<li><strong>模型基础方法</strong>：作为基线，也是数据引导的数据来源。</li>
+<li><strong>其他学习基础方法</strong>：包括PPO、DDPG等RL算法作为高层规划器的对比。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2506.02206v1/x4.png" alt="成功率对比"></p>
+<blockquote>
+<p><strong>图4</strong>：在不同障碍物数量场景下的导航成功率对比。本文方法（RL+DB）在所有测试场景中均取得了最高的成功率，显著优于纯模型基础方法（Model-based）和其他学习基础方法（PPO， DDPG）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.02206v1/x5.png" alt="学习曲线"></p>
+<blockquote>
+<p><strong>图5</strong>：训练过程中的平均回报和成功率学习曲线。采用数据引导（Ours w/ DB）的方法比不从演示数据开始训练（Ours w/o DB）收敛更快且性能更稳定，最终达到更高的成功率。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.02206v1/x6.png" alt="轨迹可视化"></p>
+<blockquote>
+<p><strong>图6</strong>：在复杂障碍环境中的导航轨迹定性对比。本文方法（RL+DB）生成的路径更平滑、更高效，且能灵活避开障碍；而模型基础方法（Model-based）的路径则更曲折，且在某些情况下失败。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.02206v1/x7.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图7</strong>：消融实验结果。(a) 移除数据引导（w/o DB）导致成功率下降约15%；(b) 改变奖励函数权重（特别是碰撞避免奖励 $r_o$ 的权重）会显著影响碰撞率和成功率，验证了奖励设计的重要性。</p>
+</blockquote>
+<p><strong>关键结果</strong>：</p>
+<ol>
+<li>在障碍物数量为4、8、12的场景下，本文方法的导航成功率分别达到<strong>98.3%<strong>、</strong>96.7%</strong> 和 **95.0%**，均显著高于模型基础方法（85.0%， 71.7%， 63.3%）及其他RL方法（如PPO最高为81.7%）。</li>
+<li>数据引导策略使训练收敛速度加快，且最终性能提升。消融实验表明，移除数据引导会使平均成功率下降约15%。</li>
+<li>奖励函数中碰撞避免奖励的权重对性能影响显著，合适的权重能有效平衡前进欲望与安全性。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个用于双足机器人导航的分层框架，创新地将RL的动态子目标规划与MPC的稳定步态生成相结合。</li>
+<li>设计了一种数据引导策略，利用基于模型的导航方法生成演示数据，有效解决了RL在复杂动态环境中训练样本效率低下的问题。</li>
+<li>在仿真实验中验证了该方法在成功率和适应性上优于现有的模型基础和学习基础方法。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>框架依赖于一个能够实时求解的底层MPC，其计算开销仍然存在。</li>
+<li>目前工作在仿真中进行，仿真到现实的差距（Sim-to-Real）是未来需要解决的问题。</li>
+</ol>
+<p><strong>启示</strong>：</p>
+<ol>
+<li>分层设计结合学习与模型的方法，为处理具有复杂动力学机器人的高级导航任务提供了有效范式。</li>
+<li>利用传统控制方法生成高质量数据以引导强化学习训练，是提升学习效率和安全性的有前景的方向。</li>
+<li>未来的工作可以探索更轻量级的底层控制器，或将整个框架迁移到真实机器人上，并处理动态障碍物。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对人形机器人在杂乱环境中导航时，计算效率与稳定运动精度难以平衡的核心问题，提出一种分层框架。高层采用强化学习在机器人中心坐标系中动态选择子目标，低层基于模型预测控制生成稳健步态，并结合数据引导技术加速训练。在Agility Robotics Digit机器人的模拟实验中，相比传统基于模型及其他学习方法，该框架显著提高了导航成功率和环境适应性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.02206" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

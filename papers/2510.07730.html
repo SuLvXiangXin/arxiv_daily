@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DEAS: DEtached value learning with Action Sequence for Scalable Offline RL - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Machine Learning (cs.LG)</span>
+      <h1>DEAS: DEtached value learning with Action Sequence for Scalable Offline RL</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.07730" target="_blank" rel="noreferrer">2510.07730</a></span>
+        <span>作者: Kim, Changyeon, Lee, Haeone, Seo, Younggyo, Lee, Kimin, Zhu, Yuke</span>
+        <span>日期: 2025/10/09</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前离线强化学习（RL）方法主要集中于奖励密集的短视野任务，但在复杂的长视野顺序决策任务上表现不佳。近期一些工作尝试通过高n值的n步TD更新和分层策略来缩短有效规划视野，但这些方法依赖于实践中通常不可得的、由专家明确提供的目标条件。此外，直接将动作序列引入标准的行动者-评论家（actor-critic）框架会导致严重的价值高估问题，因为行动者在扩展的动作空间上最大化可能包含错误的评论家估计。而像CQN-AS这样的纯价值方法虽然避免了行动者-评论家耦合，但引入了限制复杂任务性能的离散化误差，且无法利用表达性强的策略架构。因此，本文旨在开发一种能够利用动作序列缩短规划视野，同时避免价值高估并与表达性策略架构兼容的方法。本文核心思路是提出DEAS框架，通过将动作序列建模为选项（option）来缩短规划视野，并采用分离价值学习（detached value learning）来稳定训练，避免价值高估。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>DEAS的整体框架包含两个关键组件：1) 一个评论家函数 $Q(s_t, o_t; \theta)$，用于估计从状态 $s_t$ 执行选项（即H步动作序列）$o_t := a_{t:t+H-1}$ 的期望回报；2) 一个可应用于任何输出H步动作序列的策略 $\pi(a_{t:t+H-1}; s_t, \phi)$ 的灵活策略更新机制。训练流程首先从离线数据集中采样批次数据，计算选项内的折扣回报，然后依次更新价值网络 $V$、评论家网络 $Q$ 和行动者网络 $\pi$，最后更新目标评论家网络参数。</p>
+<p><img src="https://arxiv.org/html/2510.07730v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：DEAS方法整体框架。与之前耦合行动者-评论家训练的方法不同，DEAS的核心洞见是使用动作序列单独训练评论家（分离价值学习），从而实现稳定学习并避免价值高估。</p>
+</blockquote>
+<p><strong>核心模块一：基于选项框架的动作序列RL</strong>。该方法将连续的H步动作序列 $o_t$ 视为一个选项，这自然引出了一个半马尔可夫决策过程（SMDP）。该选项定义为 $\omega^* = (\mathcal{S}, \pi(o_t | s_t), \beta^*(s_t, k))$，其中终止函数 $\beta^*(s_t, k)$ 在 $k=H$（即序列执行完毕）时为1，否则为0。这导致了类似于n步TD学习的Q学习更新规则：$Q(s_t, o_t; \theta) \leftarrow \sum_{k=0}^{H-1} \gamma_1^k R(s_t, a_{t+k}) + \gamma_2^H \max_{o&#39; \in \mathcal{O}} Q(s_{t+H}, o&#39;; \theta)$，其中 $\gamma_1$ 和 $\gamma_2$ 分别是选项内和选项间的折扣因子。这种公式聚合了H步的奖励，并在时间上扩展的转移中传播价值估计，实现了视野缩短。</p>
+<p><strong>核心模块二：用于处理动作序列的分离价值学习</strong>。动作序列扩展了动作空间，使得评论家准确估计Q值更加困难，而行动者可能利用评论家的预测误差区域，导致价值高估和不稳定学习。为了解决这个问题，DEAS采用了分离价值学习，将行动者和评论家训练解耦。它引入了一个评论家网络 $Q(s_t, o_t; \theta)$ 和一个价值网络 $V(s_t; \psi)$，其损失函数遵循IQL，但适用于动作序列：$\mathcal{L}<em>V(\psi) = \mathbb{E}</em>{(s_t, o_t) \sim \mathcal{D}} [L_2^\tau(\bar{Q}(s_t, o_t; \bar{\theta}) - V(s_t; \psi))]$ 和 $\mathcal{L}<em>Q(\theta) = \mathbb{E}</em>{(s_t, o_t) \sim \mathcal{D}} [(\hat{R}<em>{t:t+H-1} + \gamma_2^H V(s</em>{t+H}; \psi) - Q(s_t, o_t; \theta))^2]$。这种方法使评论家偏向于离线数据集中高回报的动作，而无需基于行动者输出进行更新，从而防止了价值高估。</p>
+<p><strong>核心模块三：用于增强稳定性的分布RL</strong>。即使采用了分离价值学习，当H较大时，累积奖励项 $\hat{R}<em>{t:t+H-1}$ 也可能引入显著的方差。为了增强稳定性，DEAS使用分布RL扩展了其框架，将评论家和价值网络建模为在固定支持范围 $[\mathbf{v}</em>{\min}, \mathbf{v}<em>{\max}]$ 上离散化为m个桶的分类分布。具体地，$Z(s,o;\theta) = \sum</em>{i=1}^m \hat{p}<em>i(s,o;\theta) \cdot \delta</em>{z_i}$，其中 $\hat{p}_i$ 是softmax输出的概率。价值网络 $V(s;\psi)$ 的计算方式类似，但仅以状态 $s$ 为条件。损失函数也相应地从回归改为基于分类的学习，同时保留了IQL的加权方案。</p>
+<p><strong>核心模块四：双重折扣因子</strong>。为了进一步增强价值估计的稳定性和表达能力，DEAS采用了两个独立的折扣因子：$\gamma_1$ 用于选项内奖励，$\gamma_2$ 用于选项间奖励。这种双重折扣方案使价值函数能够适当地权衡即时回报和未来回报，缓解了因回报缩放不当而引起的价值爆炸或崩溃问题。实验表明，降低 $\gamma_1$ 并提高 $\gamma_2$ 能带来更稳定的训练。</p>
+<p><strong>兼容的策略方法</strong>。对于获取最终策略 $\pi(s;\phi)$，DEAS框架兼容多种策略提取策略，例如加权行为克隆、确定性策略梯度、N选一最佳采样和流匹配方法。由于价值函数训练不需要查询策略，因此可以独立执行，策略也可以单独更新。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：1) <strong>OGBench实验</strong>：在来自OGBench的6个操作环境（共30个子任务）上评估，使用基于任务难度从1M到100M不等的转换数据集。动作序列长度H针对不同任务设置（8或4）。2) <strong>VLA实验</strong>：使用GR00T N1.5作为骨干VLA，在RoboCasa Kitchen的4个困难任务以及真实世界的Franka Emika Research 3机械臂上进行评估，旨在利用次优演示和有限的专家数据提升VLA性能。</p>
+<p><strong>对比基线</strong>：包括FQL（最先进的离线RL方法）、n-step FQL（使用n步TD更新进行视野缩短的FQL扩展）、Q-Chunking（在行动者-评论家训练中使用动作分块并保持两者交互）以及CQN-AS（使用动作序列的基于价值的RL方法）。</p>
+<p><img src="https://arxiv.org/html/2510.07730v1/figures/png/concatenated.png" alt="模拟任务示例"></p>
+<blockquote>
+<p><strong>图2</strong>：实验中使用的模拟任务示例。包括来自OGBench的30个不同任务和来自RoboCasa Kitchen的4个具有挑战性的操作任务。</p>
+</blockquote>
+<p><strong>定量结果（OGBench）</strong>：如表1所示，DEAS在所有6个任务类别和不同数据集大小下均取得了最佳或并列最佳性能。特别是在需要长视野推理的任务（如 <code>puzzle</code>）和最挑战性的任务（如 <code>cube-quadruple</code>）上，DEAS的优势最为明显。n-step FQL由于标准离线RL中的偏差，性能通常下降；QC-FQL性能次之；而CQN-AS由于在次优数据占主导时对价值函数应用了强的BC正则化，以及迭代离散化带来的累积误差，性能显著较低。</p>
+<p><strong>缩放分析</strong>：如图3所示，在三个代表性的OGBench任务上，DEAS在不同数据集大小下始终优于所有基线，实现了最高的成功率。该方法在不同数据规模下表现出稳健的缩放性。</p>
+<p><img src="https://arxiv.org/html/2510.07730v1/figures/png/rc_concatenated.png" alt="缩放分析结果"></p>
+<blockquote>
+<p><strong>图3</strong>：在三个代表性OGBench任务上，不同数据集大小下的智能体性能（成功率%）。实线表示均值，阴影区域表示超过4次独立运行的分层bootstrap置信区间。</p>
+</blockquote>
+<p><strong>VLA实验结果</strong>：在RoboCasa Kitchen的4个困难任务上，DEAS微调后的VLA策略相比仅使用专家演示训练的策略，成功率有显著提升（例如，在 <code>Microwave</code> 任务上从53%提升至80%）。在真实世界操作任务（如“打开零食包装”）中，DEAS微调的VLA也取得了比行为克隆基线更高的成功率。</p>
+<p><img src="https://arxiv.org/html/2510.07730v1/figures/png/franka_real_setup.png" alt="真实世界实验设置"></p>
+<blockquote>
+<p><strong>图11</strong>：真实世界实验设置，使用Franka Emika Research 3机械臂进行零食包装打开任务。</p>
+</blockquote>
+<p><strong>消融实验</strong>：论文进行了消融研究，验证了各个组件的贡献。结果表明：1) <strong>分离价值学习是关键</strong>：使用耦合的行动者-评论家训练（如QC-FQL）会导致性能大幅下降。2) <strong>分布RL提供稳定性</strong>：在长序列（H=8）任务中，移除分布RL会导致训练不稳定和性能降低。3) <strong>双重折扣因子很重要</strong>：使用单一的折扣因子（$\gamma_1 = \gamma_2$）会损害性能，而采用不同的 $\gamma_1$（较低）和 $\gamma_2$（较高）能带来最佳结果。4) <strong>动作序列长度的影响</strong>：增加H通常能提高复杂长视野任务的性能，但需要配合所提出的稳定技术（分离学习、分布RL、双重折扣）才能有效。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 提出了DEAS，一个简单而有效的离线RL框架，它利用动作序列进行评论家训练，并采用带有分类损失的分离价值学习以实现稳定训练。2) 在OGBench的30个复杂长视野任务上，DEAS显著且一致地优于基线方法。3) 证明了DEAS能够通过有效利用次优演示来提升大规模视觉-语言-动作模型（VLA）在模拟和真实世界复杂任务上的性能。</p>
+<p><strong>局限性</strong>：论文提到，DEAS的性能可能受到离线数据集质量的限制，因为它依赖于数据集中存在的高回报动作序列。此外，虽然方法兼容多种策略架构，但最优策略提取方法可能因任务而异。</p>
+<p><strong>后续启示</strong>：DEAS展示了将动作序列与稳定的价值学习相结合在解决长视野离线RL问题上的潜力。其分离价值学习的思路为在扩展动作空间下避免价值高估提供了通用方案。该方法与大型预训练VLA模型的兼容性，为利用丰富但可能次优的机器人数据进一步微调和提升这些模型指明了实用方向。未来的工作可以探索更灵活的选项终止条件，或将此框架扩展到在线/离线混合设置。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出DEAS框架，解决离线强化学习在复杂长时程任务中性能不足的问题。其核心方法是利用动作序列进行价值学习，通过半马尔可夫决策过程Q学习减少有效规划时程，并采用分离价值学习缓解因序列引入的价值高估。实验表明，DEAS在OGBench的复杂长时程任务上持续优于基线方法，并能显著提升大规模视觉-语言-动作模型在RoboCasa Kitchen仿真和真实机器人操作任务中的性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.07730" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

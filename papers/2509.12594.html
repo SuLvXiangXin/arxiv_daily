@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>The Better You Learn, The Smarter You Prune: Towards Efficient Vision-language-action Models via Differentiable Token Pruning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>The Better You Learn, The Smarter You Prune: Towards Efficient Vision-language-action Models via Differentiable Token Pruning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2509.12594" target="_blank" rel="noreferrer">2509.12594</a></span>
+        <span>作者: Jiang, Titong, Jiang, Xuefeng, Ma, Yuan, Wen, Xin, Li, Bailin, Zhan, Kun, Jia, Peng, Liu, Yahui, Sun, Sheng, Lang, Xianpeng</span>
+        <span>日期: 2025/09/16</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>视觉-语言-动作（VLA）模型通过整合视觉感知、语言理解和动作生成，在机器人任务中展现出强大潜力。然而，其部署面临巨大计算挑战，主要瓶颈在于大型语言模型（LLM）主干需要对数百个视觉令牌进行昂贵的基于注意力的计算。现有的VLA加速方法包括模型量化、层跳过、令牌剪枝和轻量级模型设计。其中，视觉令牌剪枝尤为关键，因为VLA模型的输入令牌绝大多数是视觉令牌，且视觉模态本身具有稀疏性，许多令牌携带冗余或噪声信息。</p>
+<p>尽管视觉令牌剪枝在视觉-语言模型（VLM）中已有较多研究，但近期工作表明，这些方法直接迁移到VLA模型时效果不佳，因为VLM侧重于全局语义理解，而专门的机器人任务更依赖于局部语义。现有VLA令牌剪枝方法（如EfficientVLA）通常将效率置于首位，以可接受的性能下降为代价，并依赖预定义的固定令牌保留数量（“魔法数字”），这引入了强归纳偏差并限制了模型对不同输入和任务的适应性。</p>
+<p>本文针对上述痛点，提出了一个全新的视角：效率与性能并非本质矛盾。视觉输入的稀疏性不仅导致计算低效，还会通过引入噪声和分散注意力来损害性能。因此，通过消除视觉令牌的稀疏性，可以同时优化效率和性能，打破VLA模型中的效率-性能权衡。本文的核心思路是提出一个名为LightVLA的性能驱动、可微分的视觉令牌剪枝框架，该框架通过动态查询评估令牌重要性，并利用Gumbel softmax实现可微分的令牌选择，在微调过程中学会保留对任务执行最有益的令牌。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LightVLA是一个通用的、无需额外参数的可微分视觉令牌剪枝框架，其优化目标纯粹是提升模型性能，在此过程中模型自发学会保留有用令牌以最大化性能，从而附带地提升了效率。</p>
+<p><img src="https://arxiv.org/html/2509.12594v2/figs/framework.jpg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：LightVLA框架示意图。灰色区域表示使用Gumbel-softmax进行可微分令牌选择。流程分为三个步骤：查询生成（Query Generation）、令牌评分（Token Scoring）和令牌选择（Token Selection）。</p>
+</blockquote>
+<p>一个典型的VLA模型可分解为视觉编码器与投影器 (f_v)、LLM主干 (f_\phi) 和动作头 (f_a)。LightVLA在视觉令牌投影后、送入LLM前，引入一个视觉令牌剪枝器 (f_p)，其目标是确定要保留的剪枝后令牌集合 (H&#39;_v = f_p(H_v) \subseteq H_v)，从而在不影响性能的前提下降低计算成本。注意，[CLS]令牌被保留以维持全局视觉信息，剪枝仅针对补丁级视觉令牌。</p>
+<p>LightVLA的核心创新在于其查询驱动的自适应剪枝策略，具体流程如下：</p>
+<ol>
+<li><strong>查询生成</strong>：为了无需引入额外参数，LightVLA利用视觉令牌 (H_v) 与语言指令令牌 (H_l) 之间的交叉注意力动态生成查询 (Q \in \mathbb{R}^{L_v \times D})。公式为 (Q = \text{softmax}(\frac{H_v H_l^T}{\sqrt{D}}) H_l)。这反映了视觉令牌的有用性取决于其视觉信息与语言指令的交互。</li>
+<li><strong>令牌评分</strong>：每个查询独立评估所有令牌的有用性。通过计算查询 (Q) 与所有视觉令牌 (H_v) 的相似度得到评分矩阵 (S \in \mathbb{R}^{L_v \times L_v})，公式为 (S = \frac{Q H_v^T}{\sqrt{D}})，其中 (s_{i,j}) 表示第 (i) 个查询给第 (j) 个令牌的评分。</li>
+<li><strong>令牌选择</strong>：理想情况下，每个查询会选择评分最高的令牌。但<code>argmax</code>操作不可微。LightVLA采用Gumbel-softmax技术使该过程可微。具体而言，向评分矩阵 (S) 注入均匀分布噪声 (\epsilon \in U(0, \alpha)) 得到 (S&#39;)，然后计算soft分数 (S_{\text{soft}} = \text{softmax}<em>j(S&#39;)) 和硬分数 (S</em>{\text{hard}} = \text{one-hot}(\text{argmax}<em>j(S&#39;)))。最终的指示矩阵 (I) 通过直通估计器（straight-through estimator）获得：(I = S</em>{\text{hard}} + S_{\text{soft}} - S_{\text{soft}}^{\text{SG}})，其中 (\text{SG}) 表示停止梯度。这样，前向传播使用硬选择，反向传播梯度则通过软分数传递，从而端到端地优化查询生成过程。剪枝后的令牌集合为 (H&#39;_v = I H_v^T)。推理时则直接使用无噪声的<code>argmax</code>操作。</li>
+</ol>
+<p>一个关键的技术细节是<strong>噪声调度策略</strong>：不同于原始Gumbel-softmax，LightVLA在训练过程中逐渐衰减噪声上限 (\alpha)。这鼓励模型在早期探索更多样化的令牌选择方案，并在后期稳定下来。此外，令牌的位置ID在剪枝过程中被保留，以供LLM理解空间关系。</p>
+<p>与现有方法相比，LightVLA的创新点体现在：1) <strong>性能驱动</strong>：优化目标仅为提升任务成功率，效率提升是附带结果；2) <strong>自适应剪枝</strong>：无需预设固定剪枝率，模型根据输入动态决定保留哪些令牌及数量；3) <strong>无额外参数</strong>：查询由交叉注意力动态生成，兼容性强；4) <strong>与推理框架兼容</strong>：不依赖LLM内部注意力分数，可在vLLM等优化推理平台上部署。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在LIBERO仿真基准上进行评估，该基准包含四个任务套件（Spatial, Object, Goal, Long），共40个任务，测试策略在不同空间布局、物体选择、任务目标和长视野规划任务上的泛化能力。报告每个套件的成功率（%）。以OpenVLA-OFT为基础模型进行微调。对比基线包括各类VLA模型（如OpenVLA, π₀, CogACT, SmolVLA等）以及应用于VLA的令牌剪枝方法（如FlashVLA, SP-VLA, VLA-Cache等，也包括从VLM迁移的方法如FastV, SparseVLM）。</p>
+<p><img src="https://arxiv.org/html/2509.12594v2/figs/visual_tokens_vs_success_rate_2.png" alt="性能对比图"></p>
+<blockquote>
+<p><strong>图1</strong>：LightVLA与常见VLA模型及加速方法的性能对比。LightVLA（红星）以更少的视觉令牌取得了最高的平均成功率，实现了效率与性能的双优。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：如表I所示，LightVLA在所有任务套件上均取得了最佳性能，平均成功率达到<strong>97.4%<strong>，显著超越了其基础模型OpenVLA-OFT（94.8%）。更重要的是，LightVLA平均仅保留</strong>78个</strong>视觉令牌（标准差约11个），而OpenVLA-OFT使用512个令牌。这表明大部分视觉令牌对任务执行并无贡献，揭示了视觉模态的稀疏性。</p>
+<p><img src="https://arxiv.org/html/2509.12594v2/figs/lightvla_layer1.jpg" alt="效率对比表"></p>
+<blockquote>
+<p><strong>图5</strong>：消融实验：操纵保留令牌对性能的影响。无论是补充随机令牌（2k）还是随机丢弃已保留令牌（0.9k），都会导致性能下降，证明了LightVLA自适应选择的有效性。</p>
+</blockquote>
+<p><strong>计算效率分析</strong>：如表II所示，与OpenVLA-OFT相比，LightVLA在将FLOPs降低<strong>59.1%<strong>、端到端延迟减少</strong>38.2%</strong> 的同时，还将成功率提升了**2.6%**。在所列的所有VLA加速方法中，LightVLA是唯一一个同时提升性能和效率的方法。</p>
+<p><strong>消融实验</strong>：</p>
+<ol>
+<li><strong>噪声调度策略的影响</strong>：如表III所示，移除噪声（w/o noise）会导致保留令牌过少（平均72个），在语义密集场景可能丢失信息；而使用恒定噪声（w/o schedule）则使模型难以学会剪枝，保留令牌过多（平均112个）。采用噪声衰减调度的LightVLA在取得最高性能（97.4%）的同时，保持了适中的令牌数（78个）。</li>
+<li><strong>自适应剪枝有效性验证</strong>：如表IV（对应图5）所示，对LightVLA选择后的令牌集进行人为干预——要么补充等量的随机令牌（2k），要么随机丢弃10%的已选令牌（0.9k）——都会导致平均成功率下降（分别降至96.8%和96.6%）。这强有力地证明了LightVLA能够精准地保留有用令牌并剔除无用令牌。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2509.12594v2/figs/vis.jpg" alt="定性可视化"></p>
+<blockquote>
+<p><strong>图3</strong>：LIBERO-Long任务“将两个摩卡壶放在炉子上”的令牌剪枝定性可视化。被保留的令牌（高亮区域）集中在任务相关物体（摩卡壶、炉子、机械臂）上，背景令牌被大量剪除。不同帧间保留的令牌数量动态变化，体现了自适应性。</p>
+</blockquote>
+<p><strong>定性可视化</strong>：如图3所示，在长视野任务的关键帧中，LightVLA保留的令牌高度集中在任务相关物体（摩卡壶、炉子、机械臂）上，而背景区域则被大量剪除。可视化还显示，模型在不同阶段会自适应地保留或剪除更多令牌，例如在物体交互密集的帧（Frame #175）保留的令牌比任务接近完成的帧（Frame #275）更多。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>实证表明，对于VLA模型，性能与效率可以作为协同目标被共同优化，打破了传统的效率-性能权衡观念。</li>
+<li>提出了LightVLA，一个性能驱动的、可微分的、无需额外参数的视觉令牌剪枝通用框架，使模型在追求最优性能的过程中自发学会高效剪枝。</li>
+<li>在LIBERO基准上的全面实验表明，LightVLA在显著降低计算开销和延迟的同时，取得了最先进的性能。此外，论文还初步探索了引入可学习查询的变体LightVLA*，以填补VLA令牌剪枝研究的空白。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，LightVLA依赖于对基础VLA模型的微调。此外，研究主要基于OpenVLA-OFT架构，尚未广泛探索在其他VLA架构上的适用性。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>性能驱动的新范式</strong>：为模型压缩和加速领域提供了新思路，即不将效率作为首要约束，而是通过优化性能来自然衍生出高效结构。</li>
+<li><strong>自适应剪枝的重要性</strong>：证明了为VLA任务设计自适应、动态令牌选择机制的必要性和优越性，固定的剪枝比率会限制模型潜力。</li>
+<li><strong>实用部署潜力</strong>：由于不依赖LLM内部注意力分数且无需额外参数，LightVLA与现有高效推理框架兼容性好，为VLA模型在资源受限边缘设备上的实时部署提供了切实可行的方案。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作（VLA）模型在资源受限平台上因大量视觉令牌导致计算负担重、延迟高的问题，提出了LightVLA可微分令牌剪枝框架。该方法通过动态查询评估视觉令牌重要性，并利用Gumbel softmax实现可微分的自适应令牌选择，在微调中保留关键令牌、剪枝冗余令牌，无需额外参数。实验在LIBERO基准上显示，LightVLA将FLOPs和延迟分别降低59.1%和38.2%，同时任务成功率提升2.6%，实现了效率与性能的同步优化。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2509.12594" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

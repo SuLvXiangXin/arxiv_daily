@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MoRE: Unlocking Scalability in Reinforcement Learning for Quadruped Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>MoRE: Unlocking Scalability in Reinforcement Learning for Quadruped Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2503.08007" target="_blank" rel="noreferrer">2503.08007</a></span>
+        <span>作者: Zhao, Han, Song, Wenxuan, Wang, Donglin, Tong, Xinyang, Ding, Pengxiang, Cheng, Xuelian, Ge, Zongyuan</span>
+        <span>日期: 2025/03/11</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，开发能够根据自然语言指令在复杂真实世界中执行多种任务的通用四足机器人是一个重要挑战。主流方法基于视觉-语言-动作（VLA）模型，通常采用在大规模多模态大语言模型（MLLM）架构上直接微调的策略，并遵循模仿学习（IL）范式。这些方法存在两个关键局限性：首先，直接沿用现有MLLM架构进行微调，并未深入探究该架构是否适合多样化的下游机器人任务；其次，基于IL的方法通常仅使用专家数据（成功轨迹）进行监督训练，无法利用更容易自动收集但包含失败或次优执行的混合质量数据，这限制了数据效率和模型性能的提升。</p>
+<p>本文针对上述两个具体痛点，提出了新的视角。一方面，为适应多样化的机器人任务，本文首次将混合专家（Mixture of Experts， MoE）架构引入大规模端到端VLA模型；另一方面，为有效利用混合质量数据，本文采用了基于强化学习（RL）的训练目标。本文的核心思路可以概括为：将多个低秩自适应（LoRA）模块作为不同专家集成到一个密集的VLA模型中，微调成一个稀疏激活的混合LoRA专家模型（MoRE），并设计一个基于RL的训练目标，使模型能够作为Q函数从包含专家和次优数据的混合数据集中有效学习。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>MoRE的整体框架旨在利用混合质量数据（包括少量专家数据和大量次优数据）训练高容量的Transformer架构。如图2所示，其pipeline包含四个关键部分：1）混合质量数据；2）MLLM主干网络；3）混合LoRA专家模块；4）RL训练目标。</p>
+<p><img src="https://arxiv.org/html/2503.08007v1/extracted/6269292/overview.jpg" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：MoRE方法总览。包含四个核心组件：(1) 广泛的次优数据与少量的专家数据结合；(2) MLLM主干网络，从图像和文本嵌入生成动作令牌；(3) 混合LoRA专家模块，微调以适应不同任务；(4) 用于训练的RL目标。</p>
+</blockquote>
+<p><strong>整体流程</strong>：模型接收RGB图像 <code>I_RGB</code> 和语言指令 <code>T_Inst</code> 作为输入。它们被分别处理为图像令牌和文本令牌，拼接后输入到MLLM主干网络（本文采用Fuyu 8B，一个支持任意分辨率和图像数量的仅解码器Transformer）。主干网络生成动作令牌，其输出概率由公式 <code>P_LM(a_t|s_t) = ∏ P_LM(a_t^i | I_RGB; T_Inst; a_t^{1:i-1})</code> 表示，即以自回归方式逐维度预测动作令牌。最终，动作令牌被反令牌化为一个12维的离散化机器人命令，包括线速度、角速度、步态参数、身体高度、俯仰角、足部参数以及终止信号。</p>
+<p><strong>核心模块——混合LoRA专家</strong>：这是方法的主要创新点。如图3所示，MoRE在微调过程中，将主干网络每个Transformer解码器层中的前馈网络（FFN）调整为MoE层。每个MoE层包含多个专家，每个专家由一个<strong>参数在所有专家间共享的FFN</strong>和一个<strong>该专家独有的LoRA适配器</strong>构成。具体而言，第k个专家的计算为 <code>E_k(x) = (W_down + W_down^{LoRA_k}) f((W_up + W_up^{LoRA_k}) x)</code>，其中 <code>W_down</code> 和 <code>W_up</code> 是共享的FFN原始参数，<code>W_{layer}^{LoRA_k}</code> 是该专家专属的LoRA参数。此外，自注意力模块也集成了一个共享的LoRA适配器。在训练时，<strong>整个主干网络的原始参数被冻结，仅微调所有LoRA适配器</strong>。输入令牌会通过一个可学习的路由层（Router）动态选择最相关的Top-K个专家进行处理，实现了稀疏激活和针对不同任务/令牌的灵活适配。</p>
+<p><img src="https://arxiv.org/html/2503.08007v1/extracted/6269292/architecture.jpg" alt="网络架构"></p>
+<blockquote>
+<p><strong>图3</strong>：MoRE的网络架构。该图展示了MoRE的架构，它使用了一个集成了混合LoRA专家的仅解码器Transformer（Fuyu 8B）。来自不同任务（如运动、导航、操作）的令牌通过一个共享的前馈网络（FFN）路由，每个专家由路由器动态选择，以提供最相关的令牌特定适配。混合专家方法允许在单个模型内进行灵活的令牌适配。</p>
+</blockquote>
+<p><strong>基于RL的训练目标</strong>：为了利用混合质量数据（包含失败轨迹），MoRE将模型视为一个Q函数进行训练。论文首先分析了机器人任务马尔可夫决策过程（MDP）的结构特性（如图4所示），包括：回报与时间步长无关、仅存在有限的“关键状态”、长序列数据以及数据收集与评估阶段存在分布偏移。这些特性使得离线RL算法能够从次优数据中提取有效策略。</p>
+<p><img src="https://arxiv.org/html/2503.08007v1/extracted/6269292/theory.jpg" alt="任务结构分析"></p>
+<blockquote>
+<p><strong>图4</strong>：任务结构分析。该图说明了任务的整体结构以及关键状态背后的直觉。回报主要由少数关键状态（如躲避障碍物、倾倒负载）的行动决定，大部分非关键状态允许策略自由探索而不影响整体性能。</p>
+</blockquote>
+<p>训练采用离散Q-learning，损失函数 <code>L_RL</code> 包含两部分：1）标准的贝尔曼误差项，在数据集分布 <code>π_β(a|s)</code> 上最小化；2）一个保守正则化项，在数据集分布补集 <code>π̃_β(a|s)</code> （即低概率动作）上强制Q值趋近于0，由系数 <code>α</code> 调节强度，以防止对分布外动作的高估。此外，为了平衡MoE层中各个专家的负载，引入了一个辅助损失 <code>L_MoE</code> 来鼓励专家间的负载均衡。模型输出的动作概率经过Sigmoid函数映射为Q值：<code>Q(s,a) = σ(P_LM(a|s))</code>。</p>
+<p><strong>创新点总结</strong>：与现有VLA方法相比，MoRE的创新具体体现在：1）<strong>架构创新</strong>：首次将MoE架构应用于大规模端到端VLA模型，通过稀疏激活的混合LoRA专家实现参数高效且任务自适应的微调；2）<strong>训练范式创新</strong>：采用基于RL的训练目标，使模型能够从自动收集的、包含成功与失败的混合质量数据中学习，突破了IL方法仅能使用专家数据的限制。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在QUARD仿真环境中进行，评估了6项具有挑战性的四足机器人技能任务，按难度分为“简单”、“中等”和“困难”三类。对比的基线方法包括：基于视觉编码器的CLIP和VC-1，以及基于大规模VLA模型的QUART。对于每个任务的最终检查点，评估25个回合并报告成功率。</p>
+<p><strong>主要结果</strong>：如表1所示，MoRE在所有6个任务上的平均成功率达到**60%**，显著优于所有基线方法（QUART: 44%， VC-1: 28%， CLIP: 25%）。特别是在较难的任务上，如“Crawl”和“Unload”，MoRE取得了49%和33%的成功率，而QUART仅为32%和12%，其他基线方法甚至为0，证明了其在复杂任务上的强大性能。</p>
+<p><img src="https://arxiv.org/html/2503.08007v1/x1.png" alt="总体性能"></p>
+<blockquote>
+<p><strong>表1</strong>：总体性能。我们在QUARD的6个挑战性任务上评估最终检查点（每个任务25回合）并报告成功率。任务根据难度分为“简单”、“中等”和“困难”。MoRE（平均60%）在所有任务上均明显优于基线。</p>
+</blockquote>
+<p><strong>消融实验</strong>：如表2所示，论文对三个关键设计进行了消融研究：1）<strong>去除RL目标（w/o RL）</strong>：仅使用专家数据进行监督学习（模仿学习），平均性能从60%下降至51%，证明了RL目标利用次优数据的重要性；2）<strong>去除MoE架构（w/o MoE）</strong>：使用密集模型（但仍使用次优数据），平均性能降至48%，表明MoE架构对于多任务适应的有效性；3）<strong>去除次优数据（w/o S-Data）</strong>：仅使用专家数据训练完整的MoRE模型，平均性能为56%，低于使用混合数据的完整模型（60%），验证了混合质量数据对性能的提升作用。</p>
+<p><img src="https://arxiv.org/html/2503.08007v1/x1.png" alt="消融研究"></p>
+<blockquote>
+<p><strong>表2</strong>：消融研究。我们消融了MoRE中的三个重要设计。结果表明，RL目标、MoE架构和次优数据三者都对最终性能有积极贡献。</p>
+</blockquote>
+<p>此外，论文还进行了分布外泛化实验，并成功将训练好的策略部署到真实四足机器人上，验证了方法的实用性和泛化能力。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li>提出了 <strong>MoRE</strong>，一个面向四足机器人的新型VLA模型。据作者所知，这是首次探索将MoE架构应用于大规模端到端VLA模型的工作，该模型在多任务设置中展现了高成功率和优越的泛化能力。</li>
+<li>通过引入<strong>基于RL的训练目标</strong>，模型能够利用自动收集的次优轨迹数据，从而有效提升了大规模VLA模型的数据效率和性能。</li>
+<li>在仿真和真实世界中进行了广泛的实验，验证了MoRE在各种设置下的性能，并确认了其实用性，为四足机器人的多任务学习研究奠定了坚实基础。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，尽管在真实世界部署中取得了有希望的结果，但仿真到现实的迁移（sim2real gap）仍然是一个需要持续应对的挑战。</p>
+<p><strong>启示</strong>：MoRE的成功表明，将MoE这类可扩展的模型架构与能够从混合质量数据中学习的训练范式（如离线RL）相结合，是开发通用、高性能机器人VLA模型的一个富有前景的方向。这为未来研究如何进一步优化专家路由机制、设计更高效的机器人任务特定RL目标，以及处理更复杂的多模态输入提供了重要启发。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对四足机器人难以在真实环境中灵活执行多种语言指令任务的问题，提出了MoRE（混合机器人专家）模型。该方法在密集多模态大语言模型中集成多个低秩适应模块作为独立专家，构建稀疏激活的专家混合架构，并结合强化学习目标进行训练，从而利用大量混合质量数据高效适应下游任务。实验表明，MoRE在六种不同技能上均超越基线方法，并在分布外场景中展现出优异的泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2503.08007" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

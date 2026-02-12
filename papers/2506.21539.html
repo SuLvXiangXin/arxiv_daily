@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>WorldVLA: Towards Autoregressive Action World Model - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>WorldVLA: Towards Autoregressive Action World Model</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2506.21539" target="_blank" rel="noreferrer">2506.21539</a></span>
+        <span>作者: Cen, Jun, Yu, Chaohui, Yuan, Hangjie, Jiang, Yuming, Huang, Siteng, Guo, Jiayan, Li, Xin, Song, Yibing, Luo, Hao, Wang, Fan, Zhao, Deli, Chen, Hao</span>
+        <span>日期: 2025/06/26</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人领域，视觉-语言-行动模型通过在大规模预训练多模态大语言模型基础上添加行动头或专家模块来生成行动，具备良好的感知与决策泛化能力，但其局限性在于仅将行动视为输出，未将其作为输入进行深度分析与理解。另一方面，世界模型能够基于当前观察和行动预测未来视觉状态，实现了对视觉信息与行为动态的双重理解，但其主要缺陷是无法直接生成行动输出，限制了其在需要显式行动规划场景中的应用。本文针对VLA模型缺乏对行动的理解、世界模型缺乏行动生成能力这一割裂问题，提出了一个统一行动和图像理解与生成的自回归行动世界模型。其核心思路是构建一个单一框架，使行动模型和世界模型相互增强：世界模型通过行动理解学习环境物理规律以提升行动生成质量，而行动模型则通过视觉理解反过来提升世界模型的视觉生成精度。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>WorldVLA是一个集成了行动模型和世界模型的自回归模型。整体上，它使用三个独立的分词器（图像、文本、行动）将不同模态数据离散化为token，并让这些token共享同一个词汇表，从而在单一LLM架构内统一跨模态的理解与生成。行动模型负责基于文本指令和图像观测生成行动，世界模型则负责基于当前图像和行动预测下一帧图像。</p>
+<p><img src="https://arxiv.org/html/2506.21539v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：WorldVLA整体架构概述。模型包含两个互补的功能组件：行动模型（根据文本和视觉数据生成行动）和世界模型（利用文本信息、当前图像和当前行动预测后续环境状态/图像）。</p>
+</blockquote>
+<p><strong>架构与分词器</strong>：模型基于Chameleon初始化。图像分词器采用VQ-GAN，压缩比为16，码本大小为8192，为256×256图像生成256个token，为512×512图像生成1024个token。行动分词器将连续的机器人行动（7维：3个相对位置、3个相对角度、1个绝对夹爪状态）的每一维度离散化为256个区间。文本分词器为BPE分词器，词汇表大小为65,536，其中包含了8192个图像token和256个行动token。</p>
+<p><strong>训练数据混合</strong>：模型通过混合行动模型数据和世界模型数据进行训练。混合训练的原因有三：1) 世界模型通过预测未来状态学习环境物理规律，有助于操作任务；2) 世界模型能够模拟和评估候选行动的结果，有助于避免不良状态；3) 世界模型需要精确解读行动输入，这反过来支持行动模型产生更有效的行动。反之，行动模型也通过提升视觉理解来增强世界模型的视觉生成能力。</p>
+<p><strong>数据格式</strong>：</p>
+<ul>
+<li><strong>行动模型数据</strong>：输入文本格式为“What action should the robot take to + 任务指令 + ?”，后接M张图像token，输出K个行动token。损失仅计算行动token部分的交叉熵ℒ_action。</li>
+<li><strong>世界模型数据</strong>：输入文本为“Generate the next frame based on the current image and the action.”，后接一张图像token和一个行动token，输出下一帧图像token。损失仅计算生成的图像token部分的交叉熵ℒ_world。</li>
+</ul>
+<p><strong>注意力掩码策略</strong>：本文发现，在自回归模型中顺序生成多个行动（行动分块）时，由于预训练MLLM在行动领域的泛化能力有限，早期行动的预测错误会传播到后续行动，导致性能下降。</p>
+<p><img src="https://arxiv.org/html/2506.21539v1/x2.png" alt="注意力掩码机制"></p>
+<blockquote>
+<p><strong>图3</strong>：注意力掩码机制。(a) 默认行动模型的因果注意力掩码；(b) 本文提出的行动模型注意力掩码，生成当前行动时屏蔽之前的行动；(c) 世界模型使用的标准因果注意力掩码。</p>
+</blockquote>
+<p>为解决此问题，论文提出了针对行动生成的注意力掩码策略（图3b）。该掩码确保当前行动的生成仅依赖于文本和视觉输入，而屏蔽之前的所有行动。这使得模型能够以并行的方式生成多个行动，同时避免了错误累积。世界模型部分仍使用标准的因果注意力掩码（图3c）。</p>
+<p><strong>训练目标</strong>：总损失函数为ℒ = ℒ_action + αℒ_world，其中α是一个平衡系数（实验设为0.04），用于平衡图像token（数量多）和行动token（数量少）对损失的贡献。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在LIBERO基准（包含Spatial, Object, Goal, Long四个子集）上进行评估。使用90%轨迹训练，10%验证。行动模型评估指标为50次rollout的成功率。世界模型评估指标包括FVD（Fréchet Video Distance）、PSNR、SSIM和LPIPS。</p>
+<p><strong>对比方法</strong>：与连续行动模型（如Diffusion Policy, Octo, DiT Policy, UVA）和离散行动模型（如OpenVLA）进行对比。</p>
+<p><img src="https://arxiv.org/html/2506.21539v1/x3.png" alt="基准结果"></p>
+<blockquote>
+<p><strong>表2</strong>：在LIBERO基准上的评估结果。WorldVLA（512*512）在未使用大规模预训练数据的情况下，平均成功率达到了81.8%，超过了同样未预训练的离散基线OpenVLA（76.5%），并且图像分辨率越高性能越好。</p>
+</blockquote>
+<p><strong>关键结果</strong>：</p>
+<ol>
+<li><strong>基准性能</strong>：未进行大规模预训练的WorldVLA（512*512）在LIBERO上取得了81.8%的平均成功率，优于同样未预训练的离散基线OpenVLA（76.5%）。更高分辨率（512 vs 256）带来了性能提升。</li>
+<li><strong>世界模型增强行动模型</strong>：消融实验（表3，第2行 vs 第1行，第5行 vs 第4行）表明，加入世界模型训练后，行动模型性能显著提升。例如，在平均成功率上，从62.8%提升至67.2%，从76.6%提升至78.1%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.21539v1/x4.png" alt="行动模型可视化"></p>
+<blockquote>
+<p><strong>图4</strong>：行动模型可视化对比。上图：纯行动模型直接移向目标但未能成功抓取物体；下图：我们的行动世界模型反复尝试抓取直到成功后再移向目标。</p>
+</blockquote>
+<ol start="3">
+<li><strong>行动模型增强世界模型</strong>：消融实验（表4）显示，联合训练了行动模型的WorldVLA，其世界模型在视频生成质量上优于纯世界模型，FVD指标降低了10%（从71.6降至64.5），PSNR、SSIM和LPIPS指标也有改善。</li>
+<li><strong>注意力掩码的有效性</strong>：在行动分块生成任务中，使用标准自回归方式（表3第3行）会导致性能严重下降（平均成功率54.0%）。采用本文提出的注意力掩码策略后（表3第4行），性能得到大幅恢复和提升（平均成功率76.6%），在Long任务上提升尤为显著（从16.9%到49.3%）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2506.21539v1/x5.png" alt="消融研究（行动模型）"></p>
+<blockquote>
+<p><strong>表3</strong>：行动模型的消融研究。结果表明：1) 加入世界模型训练（比较行2与行1，行5与行4）能提升行动模型性能；2) 行动分块生成时，标准自回归（行3）会导致性能崩溃，而本文的注意力掩码策略（行4）能有效恢复并提升性能。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2506.21539v1/x6.png" alt="消融研究（世界模型）"></p>
+<blockquote>
+<p><strong>表4</strong>：世界模型的消融研究。结果表明，联合训练了行动模型的WorldVLA（Ours (Action World Model)）其视频生成质量（FVD, PSNR, SSIM, LPIPS）优于纯世界模型（World Model Only）。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) 提出了WorldVLA，一个统一行动与图像理解与生成的自回归行动世界模型，通过联合训练实现了行动模型与世界模型的相互增强；2) 针对自回归模型在顺序生成行动分块时的错误传播问题，提出了一种创新的注意力掩码策略，显著提升了行动分块生成的性能；3) 通过系统的实验验证了统一框架的有效性，展示了其在机器人操作任务和视频预测任务上的优势。</p>
+<p>论文自身提到的局限性主要在于计算成本：由于采用离散token和自回归生成，推理速度可能较慢，且高分辨率图像（512*512）需要更多的图像token（1024个），增加了序列长度和计算开销。</p>
+<p>本文对后续研究的启示在于：为构建具备深度环境理解和自主行动生成能力的通用机器人模型提供了一个有前景的统一架构方向。同时，其提出的注意力掩码策略为解决序列生成中的错误累积问题提供了新思路，可能适用于其他存在类似误差传播问题的多模态序列生成任务。如何进一步优化这种统一模型的效率，以及探索其在更复杂、动态环境中的应用，是值得探索的未来方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出WorldVLA自回归动作世界模型，旨在解决现有视觉-语言-动作（VLA）模型缺乏动作深度理解、以及世界模型无法直接生成动作的问题。关键技术包括：统一VLA与世界模型的框架，通过多模态标记器共享词汇表实现动作与图像的理解与生成；并针对自回归动作序列生成中的误差传播问题，提出注意力掩码策略以选择性屏蔽先前动作。实验表明，WorldVLA优于独立动作和世界模型，实现了两者的相互增强，且注意力掩码策略在动作块生成任务中带来显著性能提升。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2506.21539" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

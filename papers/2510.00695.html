@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>HAMLET: Switch your Vision-Language-Action Model into a History-Aware Policy - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>HAMLET: Switch your Vision-Language-Action Model into a History-Aware Policy</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.00695" target="_blank" rel="noreferrer">2510.00695</a></span>
+        <span>作者: Koo, Myungkyu, Choi, Daewon, Kim, Taeyoung, Lee, Kyungmin, Kim, Changyeon, Seo, Younggyo, Shin, Jinwoo</span>
+        <span>日期: 2025/10/01</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型已成为机器人策略学习的主流范式。这些模型通常基于大规模预训练的视觉-语言模型，并利用多样化的机器人数据集进行微调，以预测低层动作。然而，现有VLA模型大多遵循“单帧假设”，即仅依赖当前时刻的观测来预测动作。机器人操作任务本质上是历史依赖的，许多场景（如存在遮挡、需要多步推理的长时程任务）是非马尔可夫性的，仅凭当前快照无法确定正确的后续动作。因此，忽略历史上下文严重限制了VLA的能力。</p>
+<p>尽管在预训练阶段引入历史感知是一个理想特性，但这通常被视为代价高昂的设计选择。直接简单地将多个过去观测帧附加到VLA输入中会带来显著的计算开销和内存消耗，从而影响模型的可扩展性。本文针对“如何在不进行昂贵重新预训练的前提下，将历史感知能力集成到预训练的VLA中”这一核心痛点，提出了一种新的适配视角。本文的核心思路是：通过引入可学习的“时刻令牌”来压缩每个时间步的信息，并设计一个轻量级的记忆模块来整合这些令牌，从而将预训练的VLA高效地转换为一个历史感知的策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>HAMLET是一个即插即用的微调框架，旨在使预训练的VLA能够关注历史上下文。其整体流程是：在每个时间步，向VLM的输入中附加一组可学习的“时刻令牌”，这些令牌经过VLM编码后，会生成压缩的、上下文感知的场景摘要。随后，一个轻量级的记忆模块会整合过去多个时间步的时刻令牌表示，生成一个历史增强的特征。最后，该特征与VLM的原始隐藏表示拼接，共同作为动作专家的条件输入，用于预测未来的动作序列。</p>
+<p><img src="https://arxiv.org/html/2510.00695v2/x2.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：HAMLET整体框架。基于预训练的VLA，HAMLET增加了两个关键组件：附加到VLM输入并通过时间对比学习初始化的<strong>时刻令牌</strong>，用于捕获每个时间步的任务相关表示；以及一个轻量级的<strong>记忆模块</strong>，用于跨时间步聚合这些令牌，以进行历史感知的动作预测。</p>
+</blockquote>
+<p><strong>核心模块一：时刻令牌</strong><br>为了有效利用历史上下文，首先需要解决如何存储每个时间步的信息。直接存储原始视觉观测会导致高延迟、高内存成本并包含冗余。因此，HAMLET设计在每个时间步t，向VLM的输入序列中附加一组可学习的“时刻令牌”<code>m_t</code>。这些令牌与当前视觉观测<code>o_t</code>和任务指令<code>c</code>一起输入VLM编码器<code>F_θ</code>，输出除了常规的隐藏表示<code>h_t</code>外，还包括更新后的时刻令牌表示<code>m&#39;_t</code>。由于VLM中的因果注意力机制，<code>m&#39;_t</code>能够关注当前观测和指令，从而作为该时间步场景的紧凑、上下文感知摘要。</p>
+<p>为了使时刻令牌能够编码具有时间区分性的线索，HAMLET采用<strong>时间对比学习</strong>对它们进行初始化。具体而言，对于一个轨迹，将当前观测<code>o_t</code>作为锚点，从同一观测的增强视图生成正样本<code>z_t^+</code>，从同一轨迹内不同时间步的观测生成硬负样本<code>z_t^-</code>。通过一个投影头<code>g(·)</code>将<code>m&#39;_t</code>映射为<code>z_t</code>，并优化基于余弦相似度的对比损失<code>L_TCL</code>。这一初始化鼓励时刻令牌与同一时间步的表示对齐，同时在不同时间步间保持区分性，从而使其能够捕捉独特的时间步特定线索并抑制静态背景。在此阶段，VLM主干<code>F_θ</code>被冻结。</p>
+<p><strong>核心模块二：记忆模块</strong><br>简单地拼接过去时刻令牌的表示并不能直接提升性能。因此，HAMLET引入一个轻量级的Transformer记忆模块<code>M_φ</code>，用于有选择地整合跨时间步的信息。该模块将最近T个时间步（间隔为动作块长度k）的时刻令牌表示堆叠成历史矩阵<code>M&#39;</code>，然后通过因果自注意力进行处理。记忆模块输出经过整合的表示<code>M̃&#39;</code>，取其中最后<code>n_m</code>行作为当前时间步t的历史增强时刻令牌表示<code>m̃&#39;_t</code>。</p>
+<p><strong>集成与动作预测</strong><br>最终，历史增强特征<code>m̃&#39;_t</code>与原始VLM表示<code>h_t</code>拼接，共同作为动作专家<code>A_ψ</code>的输入条件，用于预测未来k个动作：<code>[a_t, ..., a_{t+k-1}] = A_ψ([h_t; m̃&#39;_t], s_t)</code>。整个流程使用标准的VLA动作预测损失进行端到端训练。</p>
+<p><img src="https://arxiv.org/html/2510.00695v2/x4.png" alt="时刻令牌与记忆模块分析"></p>
+<blockquote>
+<p><strong>图4</strong>：记忆网络记住了什么？(a) 时刻令牌在VLM内部对输入图像的自注意力图可视化，显示其注意力高度集中于与任务相关的区域（如夹爪和物体）。(b) 记忆模块在时刻令牌序列上的归一化自注意力权重，表明其根据上下文有选择地关注不同的过去时间步。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：评估在真实世界和模拟环境上进行。真实世界设计了三个需要历史推理的长时程桌面任务：Pick-and-Place Twice, Cover-and-Stack, Swap Cubes。模拟基准使用了RoboCasa Kitchen、LIBERO和SimplerEnv-Bridge数据集。基线方法包括主流的VLA模型（如GR00T N1.5, CogACT, π0等）以及一个简单的多帧基线（直接拼接过去观测帧）。HAMLET默认使用长度为4的时刻令牌、2层Transformer的记忆模块和历史长度4。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>真实世界评估</strong>：如表1所示，在GR00T N1.5上应用HAMLET带来了巨大提升，在三个真实任务上的平均成功率从基线的29.2%提升至76.4%，相对提升达47.2%。多帧基线虽有一定提升（至45.8%），但远低于HAMLET。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.00695v2/x3.png" alt="真实世界任务结果"></p>
+<blockquote>
+<p><strong>图3</strong>：真实世界任务示例轨迹。展示了HAMLET和GR00T N1.5的执行情况。HAMLET能预测正确的后续动作，而GR00T N1.5由于缺乏历史上下文，在(a)中困惑于是该抬起还是释放方块，在(b)中无法识别哪个杯子下盖有方块。</p>
+</blockquote>
+<ol start="2">
+<li><p><strong>模拟基准测试</strong>：</p>
+<ul>
+<li><strong>RoboCasa Kitchen (100-demo)</strong>: HAMLET将GR00T N1.5的成功率从64.1%提升至66.4%，而多帧基线则下降至60.8%。</li>
+<li><strong>LIBERO</strong>: HAMLET将GR00T N1.5的成功率从95.6%进一步提升至97.7%，多帧基线则大幅下降至86.8%。</li>
+<li><strong>SimplerEnv-Bridge (CogACT)</strong>: HAMLET将CogACT的平均完全成功率从52.1%显著提升至63.5%，而多帧基线为47.9%。</li>
+</ul>
+</li>
+<li><p><strong>泛化到其他VLA</strong>：实验在CogACT模型上验证了HAMLET的普适性，成功提升了其在SimplerEnv-Bridge上的性能，证明了其作为即插即用框架的灵活性。</p>
+</li>
+</ol>
+<p><strong>消融与分析</strong>：</p>
+<ul>
+<li><strong>效率分析</strong>：如表4所示，与多帧基线相比，HAMLET在引入历史上下文时产生的计算开销极小。在历史长度为8时，多帧基线使延迟增加至2.4倍，峰值内存消耗增至7.0倍；而HAMLET仅使延迟增加1.07倍，内存消耗增加2.0倍。</li>
+<li><strong>组件消融</strong>：如表5所示，单独使用时间对比学习初始化的时刻令牌（Moment Token (TCL)）或单独使用记忆模块（Memory Module）都能带来提升，但二者结合（HAMLET）效果最佳。简单拼接时刻令牌（Moment Concat.）甚至会损害性能，这凸显了记忆模块进行选择性整合的必要性。</li>
+<li><strong>迁移学习</strong>：在RoboCasa上训练的HAMLET模型，能够零样本迁移到LIBERO数据集并取得性能提升，显示了其良好的泛化能力。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了HAMLET，一个即插即用的微调框架，首次系统性地解决了为预训练VLA高效引入历史感知能力的问题，无需昂贵的重新预训练。</li>
+<li>设计了两个关键组件：通过时间对比学习初始化的“时刻令牌”，用于压缩和区分时间步信息；以及一个轻量级Transformer“记忆模块”，用于有选择地整合历史信息。</li>
+<li>在真实世界和多个模拟基准上进行了全面验证，显著提升了多种SOTA VLA（GR00T N1.5, CogACT）在长时程和依赖历史任务上的性能，同时保持了极高的计算效率。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，HAMLET的性能提升依赖于底层预训练VLA的能力。此外，其当前设计主要关注视觉历史，未来可探索整合动作或状态历史。</p>
+<p><strong>启示</strong>：这项工作表明，通过轻量级、模块化的适配来增强预训练基础模型的能力是一条高效途径。HAMLET的设计范式——即使用可学习令牌压缩信息，并用小型专用模块处理时序依赖——可启发其他序列决策任务（如具身导航、对话决策）中历史上下文的集成。其骨干无关的特性使其易于集成到不断涌现的新VLA中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出HAMLET框架，旨在解决现有视觉-语言-动作模型因忽略历史上下文而难以处理依赖历史的机器人操作任务的核心问题。其关键技术是引入通过时间对比学习初始化的“时刻令牌”来编码每步感知信息，并采用轻量级记忆模块整合历史令牌以指导动作预测。实验表明，该方法能有效将现有VLA模型转化为历史感知策略，在GR00T N1.5的真实世界任务上取得76.4%的平均成功率，比基线大幅提升47.2%，并在多个标准测试集上持续提升性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.00695" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

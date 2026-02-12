@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning Affordances at Inference-Time for Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Robotics (cs.RO)</span>
+      <h1>Learning Affordances at Inference-Time for Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2510.19752" target="_blank" rel="noreferrer">2510.19752</a></span>
+        <span>作者: Shah, Ameesh, Chen, William, Godbole, Adwait, Mora, Federico, Seshia, Sanjit A., Levine, Sergey</span>
+        <span>日期: 2025/10/22</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于强大预训练视觉语言模型（VLM）的机器人基础模型，特别是视觉-语言-动作模型（VLA），结合了大型语言模型的语义和常识推理能力与学习策略的灵活控制能力。然而，现有VLA主要在“单次”设置下进行研究，评估其执行单个用户指令的能力。一个实用的机器人系统需要规划复杂行为，并能够根据上下文和感知到的能力调整其行为。例如，如果机器人尝试打开一个带锁扣的容器失败，它应该能够修改策略。这种上下文自适应在大型语言模型中已被观察到，但在机器人领域的VLA中难以实现。</p>
+<p>关键局限性在于，VLA虽然经过大量机器人演示数据微调，成为通用策略，但主要训练于低级任务，缺乏执行需要高级推理或常识的复杂任务的能力。同时，使用预训练基础模型作为高级规划器的零-shot方法，由于高级VLM未在机器人数据上训练，对机器人的能力和限制理解有限，导致性能欠佳。</p>
+<p>本文针对机器人VLA在复杂、长视野任务中缺乏动态、上下文感知的行为调整能力这一痛点，提出了在推理时通过与环境交互来学习机器人“可供性”的新视角。核心思路是提出一种名为LITEN的推理时学习技术，它通过一个两阶段的迭代循环（推理与评估），让高层VLM在无需额外训练的情况下，从低层VLA的执行经验中学习其能力边界，并利用这些学到的可供性来改进后续的任务规划。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LITEN的整体框架是一个包含“推理阶段”和“评估阶段”的迭代循环，旨在让高层VLM规划器（π_high）通过与物理世界的重复交互，在推理时学习低层VLA策略（π_low）的可供性，并利用这些可供性提升其规划能力。</p>
+<p><img src="https://arxiv.org/html/2510.19752v1/x2.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：LITEN方法概览。方法在（1）推理阶段与（2）评估阶段之间循环。在推理阶段，VLM对任务进行推理，将其分解为VLA低级策略可以顺序执行的子任务。在评估阶段，VLM评判推理时执行的结果。推理阶段通过将评估阶段的输出包含在VLM的上下文中，来利用这些信息，使得推理器能够迭代地学习机器人可供性并提高性能。</p>
+</blockquote>
+<p><strong>核心模块一：推理阶段（生成与执行计划）</strong><br>该阶段开始时，高层VLM（π_high）接收总体任务指令ℓ和环境的初始观测图像。它被提示生成一个解决该任务的子任务列表，并为每个步骤提供理由。为了引导π_high的输出，会提供额外的上下文：描述VLA预训练数据中具有代表性的指令语言风格，以约束子任务指令的格式；描述与任务设置相关的一般指令类别（如机械臂的抓放和移动操作）；以及通过另一个VLM调用识别出的可操纵物体列表，以使推理器对环境有基本了解。生成计划后，VLA按顺序执行每个子任务指令ℓ_i’，产生对应的轨迹片段τ_i。</p>
+<p><strong>核心模块二：评估阶段（从过往执行中学习）</strong><br>计划完全执行后，评估阶段开始。该阶段收集每个尝试子任务的序列{(ℓ_0’, τ_0), … (ℓ_n’, τ_n)}。为了从非结构化的机器人轨迹（如原始视频）中提取有意义的反馈，LITEN设计了一个结构化的评估流程，通过一系列链式提示要求一个VLM“法官”对每个子任务进行评判，模仿人类推理过程：</p>
+<ol>
+<li><strong>是否成功？</strong>：给定子任务指令ℓ_i’和轨迹τ_i的首尾观测图像，判断机器人是否成功完成了ℓ_i’。</li>
+<li><strong>实际发生了什么？</strong>：如果失败，要求法官描述机器人实际做了什么。论文发现提供视频效果不佳，仅使用首尾图像足以进行描述。</li>
+<li><strong>推理失败原因</strong>：给定预期的子任务ℓ_i’、上一步的实际描述以及初始观测图像，要求法官推理π_low为何会以这种方式失败。提示中包含关于VLA训练和推理过程的一般背景，并简要描述π_low如何处理语言（例如，关注指令中物体的颜色、形状和空间方向）。此外，还要求VLM建议对ℓ_i’或环境进行哪些最小改动可以提高成功率。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.19752v1/x3.png" alt="评估示例"></p>
+<blockquote>
+<p><strong>图3</strong>：VLM法官针对三个子任务的提示和输出示例（为长度而缩写）。这些生成内容在后续尝试该任务的迭代中被包含在VLM推理器的上下文中。</p>
+</blockquote>
+<p>对于成功的子任务，则要求VLM简要描述成功发生时的环境。完成所有子任务评估后，再要求VLM根据每个子任务的结果评估总体任务的成功或失败原因。</p>
+<p><strong>创新点与流程闭环</strong><br>与现有方法相比，LITEN的创新点主要体现在：1）专门为处理真实世界机器人非结构化轨迹数据而设计的结构化评估流程，通过链式提示逐步提取有价值的信息；2）实现了完整的“规划-执行-评估-学习”推理时闭环。在下一轮推理阶段开始时，之前所有评估阶段生成的结构化反馈都会被添加到计划生成提示的上下文中。提示中会指导VLM推理器如何利用先验经验，例如优先使用在当前环境下根据经验极可能成功的指令。这样，VLM规划器便能考虑其先验经验和指导，生成新的执行计划。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在标准的DROID机器人设置上进行，使用7自由度Franka Emika Panda机械臂和Robotiq夹爪。低层VLA策略使用π_0.5-DROID。高层VLM使用GPT-5-mini。评估了三个复杂的多阶段长视野操作任务：1) <strong>堆叠</strong>：将三个物体堆叠起来；2) <strong>清空碗</strong>：将两个碗中的内容物移到其他碗中；3) <strong>移离桌面</strong>：将桌上的物体移到其他物体上，使得只有三个物体直接接触桌面。</p>
+<p><strong>基线方法</strong>：</p>
+<ol>
+<li><strong>Reflexion</strong>：将LLM自优化方法Reflexion适配到机器人设置，对执行计划的非结构化视频进行“反思”并用于后续迭代。</li>
+<li><strong>Positive-ICL</strong>：仅存储成功的子任务尝试，并将其作为上下文示例提供给未来的计划生成。</li>
+<li><strong>No-Feedback</strong>：每次迭代都重新生成新计划，不使用任何反馈。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2510.19752v1/x4.png" alt="主要结果"></p>
+<blockquote>
+<p><strong>图4</strong>：每个多阶段任务经过五次尝试迭代后的完全成功率。结果表明，LITEN能够有效利用先前的尝试，并随着收集更多经验持续改进其计划。结果平均了10次试验。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：如图4所示，LITEN能够利用收集到的经验，成功地用高可供性子任务指令指导π_low完成总体任务。其成功率随着连续尝试而持续提高（例如在“清空碗”任务中，从约40%提升至约80%）。基线方法的效果明显较差：No-Feedback基线几乎无法完成任何任务；Positive-ICL基线由于仅依赖“幸运”地找到成功子任务，效率低下；Reflexion适配版性能虽有提升但远不如LITEN。这证实了在推理时从过去经验中学习的重要性，以及LITEN结构化评估的有效性。</p>
+<p><strong>消融实验</strong>：<br><img src="https://arxiv.org/html/2510.19752v1/x6.png" alt="消融结果"></p>
+<blockquote>
+<p><strong>图6</strong>：在消融LITEN的VLM法官的各个组件后，经过五次尝试的成功率。当评估阶段的任何部分被消融时，性能都会急剧下降，这表明先验经验只有在包含过去执行是否成功、如果不成功策略做了什么以及原因时，影响力最大。</p>
+</blockquote>
+<p>如图6所示，对评估阶段进行消融研究，验证了每个步骤的重要性。仅提供子任务成功与否（无失败推理和结果分析）的性能最差。仅移除失败推理步骤（但仍分析实际结果）性能稍好，但有时会将差异归因于指令语言而非物理解释。完整的包含“推理失败原因”的步骤能提供关于失败原因的宝贵上下文（如VLA能力限制或物体物理属性），使LITEN能够学习更复杂的可供性。</p>
+<p><strong>定性分析</strong>：LITEN特别擅长从以下两类失败中学习：1) VLA的偏差（例如，偏向操纵场景中较大的物体）；2) 导致明显控制困难的物理属性（例如，物体过大难以抓取，或需要非常精细的控制）。LITEN能够识别这些错误并得出有意义的结论（如“由于尺寸限制，夹爪无法抓取绿色海绵”），从而相应调整计划。而基线方法无法如此有效地学习。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了LITEN，一种新颖的推理时学习框架，使高层VLM能够通过与低层VLA策略在物理世界中的交互，动态地学习其“可供性”，并利用该知识改进复杂任务规划，且无需任何额外训练。</li>
+<li>设计了一个结构化的评估流程，通过链式VLM提示对非结构化的真实世界机器人轨迹进行有效反思，克服了直接将现有自优化方法应用于机器人领域的困难。</li>
+<li>在真实机器人长视野任务上的实验表明，LITEN能持续从经验中学习并提高成功率，显著优于多种基线方法。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，评估阶段依赖于VLM法官从有限图像（首尾帧）中理解和推理机器人行为的能力，这可能不如分析完整视频准确。虽然尝试提供视频但VLM难以准确理解，这构成了当前方法的一个限制。</p>
+<p><strong>后续启示</strong>：这项工作展示了在推理时通过结构化反思进行经验学习的潜力。未来的研究可以探索更鲁棒的轨迹评估方法，例如开发专门用于理解机器人动作的VLM，或结合模拟数据来增强对失败模式的认知。此外，如何高效管理和选择最相关的历史经验纳入上下文，以避免上下文过长，也是一个值得探索的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对Vision-Language-Action模型在复杂机器人控制任务中缺乏失败后动态调整行为能力的问题，提出了推理时执行学习（LITEN）方法。该方法通过高层视觉语言模型与低层VLA策略的迭代推理和评估，在推理过程中学习机器人的affordances（即能力与限制）。实验表明，LITEN能有效从过去经验中学习，生成使用高affordance指令的计划，成功完成长视野任务。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2510.19752" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据来源：<a href="https://jiangranlv.github.io/robotics_arXiv_daily/" target="_blank">Robotics arXiv Daily</a></span>
+    <span>由 GitHub Actions 自动更新 · AI 摘要仅供参考</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
