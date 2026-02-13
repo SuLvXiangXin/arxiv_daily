@@ -391,15 +391,23 @@ const main = async () => {
   }
 
   const items = [...alreadyKept, ...newlyKept];
-  console.log(`过滤完成，共 ${items.length} 篇相关论文`);
+  console.log(`过滤完成，共 ${items.length} 篇来自源页面的相关论文`);
 
   // Save filter cache immediately after filtering
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.writeFileSync(cachePath, JSON.stringify(filterCache, null, 2));
   console.log(`过滤缓存已保存到 data/filter_cache.json`);
 
+  // ── Merge back old papers not on the current source page ──
+  const currentUrls = new Set(items.map((i) => i.url));
+  const oldPapers = (existing.items || []).filter((p) => !currentUrls.has(p.url || p.id));
+  console.log(`保留 ${oldPapers.length} 篇历史论文（不在当前源页面上）`);
+
   console.log(`\n========== Phase 3: 生成摘要 ==========`);
   const payload = await buildOutput(items, existing, outputPath, pagesDir);
+
+  // Append old papers that are no longer on the source page
+  payload.items = [...payload.items, ...oldPapers];
 
   // Final save (ensure consistency)
   fs.writeFileSync(outputPath, JSON.stringify(payload, null, 2));
