@@ -3,6 +3,9 @@ const lastUpdatedEl = document.getElementById("last-updated");
 const paperCountEl = document.getElementById("paper-count");
 const searchInput = document.getElementById("search-input");
 const searchCountEl = document.getElementById("search-count");
+const dateFromInput = document.getElementById("date-from");
+const dateToInput = document.getElementById("date-to");
+const dateClearBtn = document.getElementById("date-filter-clear");
 
 let allPapers = [];
 const PAGE_SIZE = 30;
@@ -207,21 +210,67 @@ const loadPapers = async () => {
 
 const filterPapers = () => {
   const query = searchInput.value.trim().toLowerCase();
-  if (!query) {
-    renderPapers(allPapers);
-    searchCountEl.textContent = "";
-    return;
+  const dateFrom = dateFromInput.value; // "YYYY-MM-DD" or ""
+  const dateTo = dateToInput.value;
+
+  let filtered = allPapers;
+
+  // Date range filter
+  if (dateFrom || dateTo) {
+    filtered = filtered.filter((p) => {
+      const raw = (p.date || "").slice(0, 10);
+      if (!raw) return false;
+      // Normalize date separators: "2026/02/10" → "2026-02-10"
+      const d = raw.replace(/\//g, "-");
+      if (dateFrom && d < dateFrom) return false;
+      if (dateTo && d > dateTo) return false;
+      return true;
+    });
   }
-  const keywords = query.split(/\s+/);
-  const filtered = allPapers.filter((p) => {
-    const title = (p.title || "").toLowerCase();
-    return keywords.every((kw) => title.includes(kw));
-  });
+
+  // Keyword filter
+  if (query) {
+    const keywords = query.split(/\s+/);
+    filtered = filtered.filter((p) => {
+      const title = (p.title || "").toLowerCase();
+      return keywords.every((kw) => title.includes(kw));
+    });
+  }
+
   renderPapers(filtered);
-  searchCountEl.textContent = `${filtered.length} / ${allPapers.length}`;
+  if (query || dateFrom || dateTo) {
+    searchCountEl.textContent = `${filtered.length} / ${allPapers.length}`;
+  } else {
+    searchCountEl.textContent = "";
+  }
 };
 
 searchInput.addEventListener("input", filterPapers);
+dateFromInput.addEventListener("input", filterPapers);
+dateFromInput.addEventListener("change", filterPapers);
+dateToInput.addEventListener("input", filterPapers);
+dateToInput.addEventListener("change", filterPapers);
+dateClearBtn.addEventListener("click", () => {
+  dateFromInput.value = "";
+  dateToInput.value = "";
+  document.querySelectorAll(".date-quick-btn").forEach((b) => b.classList.remove("active"));
+  filterPapers();
+});
+
+/* ── quick date buttons ───────────────────────────────── */
+document.querySelectorAll(".date-quick-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const days = Number(btn.dataset.days);
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - days);
+    dateFromInput.value = from.toISOString().slice(0, 10);
+    dateToInput.value = to.toISOString().slice(0, 10);
+    document.querySelectorAll(".date-quick-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    filterPapers();
+  });
+});
 
 /* ── dynamic hero panel ────────────────────────────────── */
 
