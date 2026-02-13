@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Clutt3R-Seg: Sparse-view 3D Instance Segmentation for Language-grounded Grasping in Cluttered Scenes - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Clutt3R-Seg: Sparse-view 3D Instance Segmentation for Language-grounded Grasping in Cluttered Scenes</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.11660" target="_blank" rel="noreferrer">2602.11660</a></span>
+        <span>作者: Ayoung Kim Team</span>
+        <span>日期: 2026-02-12</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，面向语言引导抓取的可靠3D实例分割在杂乱场景下面临巨大挑战。早期基于单视角RGB-D输入的方法在视角受限或严重遮挡时表现脆弱。近期方法采用密集输入作为缓解，但计算成本高，且无法在物体被移除或位移等场景变化后进行有效更新。因此，从稀疏视角获取准确、高效的3D分割仍是一个难题。另一个关键挑战在于，杂乱场景中的语义特征往往模糊不清，使得基于语言的目标识别变得困难。现有方法将每帧特征嵌入3D场景表示以增强视角一致性，但由于其仍依赖于每帧的2D掩码，过分割和欠分割的错误会传递到3D表示中，破坏跨视角一致性。其他方法如LangSplat使用分层特征丰富语义，但计算开销大，且在严重杂乱下跨视角语义仍不稳定，导致语言引导抓取失败。</p>
+<p>本文针对上述痛点，提出了一种新视角：不是试图直接修正来自基础分割模型（如Grounded SAM）的噪声掩码，而是将它们视为信息线索加以利用。核心思路是通过构建一个基于语义线索的层次化实例树，组织这些噪声掩码候选，利用跨视角分组和条件性替换来抑制过分割和欠分割，从而产生视角一致的掩码和鲁棒的3D实例，进而支持语言引导的目标识别与多阶段抓取。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Clutt3R-Seg的流程包含三个阶段：预处理、基于层次的3D实例分割、一致性感知的场景更新，最终实现成功的多阶段抓取。</p>
+<p><img src="https://arxiv.org/html/2602.11660v1/x2.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图2</strong>：Clutt3R-Seg流程总览。(a) 从稀疏视角的RGB图像估计深度并获取带噪声的实例掩码。(b) 基于层次的分组产生视角一致的实例掩码组，实现鲁棒的3D实例分割。丰富的语义嵌入支持基于文本的目标识别。(c) 利用单张交互后图像与先前实例关联，保持分割一致性。(d) 系统检测新目标和位移物体，通过可微损失优化其刚体变换，实现可靠的多阶段抓取。</p>
+</blockquote>
+<p><strong>1. 预处理</strong>：给定位姿已知的RGB图像，首先使用通用提示词“object”调用Grounded SAM生成初始2D掩码，这些掩码包含正确分割、欠分割和过分割的结果。同时，使用深度估计模型（如MVSAnywhere）从相同图像重建3D点云，并经过体素网格下采样。随后，基于点间的欧氏距离和法向量余弦相似性（公式1）对下采样后的点云进行聚类，形成几何同质的超体素，为后续的空间相似性计算提供基础。</p>
+<p><strong>2. 基于层次的3D实例分割</strong>：该方法旨在从包含噪声的掩码中恢复出鲁棒、视角一致的实例分割。其核心创新在于构建<strong>层次化实例树</strong>并进行跨视角分组。</p>
+<p><img src="https://arxiv.org/html/2602.11660v1/x3.png" alt="层次化掩码结构"></p>
+<blockquote>
+<p><strong>图3</strong>：掩码的层次结构。Grounded SAM输出的掩码对应物体簇（欠分割）、物体（正确分割）和子物体（过分割）。这些噪声掩码被组织成层次树，如果子节点的掩码在像素级别被父节点包含，则将其分配为子节点。在此层次结构中，每条从根到叶的路径上至多存在一个正确分割，这使得可以跨帧对叶节点进行自底向上的分组以实现实例一致性。</p>
+</blockquote>
+<ul>
+<li><p><strong>实例树构建</strong>：基于掩码间的包含关系（物体簇 ⊃ 物体 ⊃ 子物体）构建每帧的层次树。关键直觉是：在每条从根到叶的路径上，<strong>至多有一个掩码对应正确的物体级分割</strong>。如果存在正确的物体级掩码，任何包含它的更大掩码反映了欠分割，而任何嵌套在它内部的更小掩码反映了过分割。通过强制执行“一路径一正确”约束，该树为区分正确实例和错误掩码提供了原则性方法。由于每条路径至多包含一个正确分割，该路径可被视为正确分割候选，而路径由其叶节点唯一确定，因此将叶节点作为正确分割候选，并以此为基础进行跨视角实例分组。</p>
+</li>
+<li><p><strong>跨视角实例分组</strong>：为所有视图的叶节点构建一个图，并采用两阶段分组策略（算法1）将它们分组为物体级实例。图中每条边编码两个节点间的<strong>空间相似性</strong>和<strong>语义相似性</strong>。</p>
+<ul>
+<li><strong>空间相似性</strong>（公式2）：基于超体素占用率的加权Jaccard指数，量化3D空间中的重叠程度。这有助于解决同类物体重复的歧义，并在外观变化的稀疏多视角输入下稳定分组。</li>
+<li><strong>语义相似性</strong>（公式3）：使用Duoduo CLIP提取掩码的嵌入特征，并计算余弦相似度。Duoduo CLIP支持多视角输入，有利于在不同视角和外观变化下建立鲁棒的跨视角对应关系。<br>分组过程迭代进行：首先基于空间相似性（阈值τ_spat）合并最相似的节点对，然后基于语义相似性（阈值τ_sem）合并剩余的节点对。每次合并后，图会被重新连接以更新相似性分数。</li>
+</ul>
+</li>
+</ul>
+<p><img src="https://arxiv.org/html/2602.11660v1/x4.png" alt="掩码分组与替换"></p>
+<blockquote>
+<p><strong>图4</strong>：掩码分组与替换示意图。最初不一致的实例掩码通过基于层次的实例掩码分组被正确组织到对应的实例组中，并通过残差节点父节点替换进行重新分组得到进一步细化，最终产生正确分割的实例。红框展示了替换前的过分割情况，绿框展示了用父节点替换残差节点后的修正分割。</p>
+</blockquote>
+<ul>
+<li><p><strong>残差节点父节点替换</strong>：分组后仍未归属的叶节点称为残差节点，通常由过分割导致（掩码仅覆盖物体一小部分，导致相似度低而分组失败）。为解决此问题，本文引入<strong>条件性叶节点到父节点的替换与重新分组</strong>过程：仅当某个父节点的所有其他后代节点也都是残差节点时，才将该残差节点替换为其父节点。这强制执行了“一路径一正确”的约束。经验上，该过程在一次迭代内收敛，使剩余的残差节点被正确分组到对应的实例中。</p>
+</li>
+<li><p><strong>超体素多数投票</strong>：掩码分组完成后，将2D掩码投影到3D超体素上，通过加权多数投票方案为每个超体素分配实例标签，投票权重由分组掩码的点覆盖范围决定，从而得到最终的3D实例分割。</p>
+</li>
+</ul>
+<p><strong>3. 语言引导的多阶段抓取</strong>：每个实例组通过多视角图像编码器（Duoduo CLIP）获得鲁棒的实例级语义嵌入。给定文本查询，计算其与所有实例嵌入的相似度以识别目标物体，并使用抓取姿态检测器估计6-DoF抓取位姿。为支持多阶段操作，在每次交互后捕获单张RGB图像。新产生的噪声掩码候选通过与现有实例进行基于层次的分组来匹配，利用存储的实例级嵌入保持分割一致性。通过计算新旧掩码投影的IoU来检测位移实例，并对位移实例使用结合Chamfer距离、光度度和正则化损失的可微目标函数（公式4,5,6）优化其刚体变换，实现选择性、高效的场景更新。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在真实世界数据集GraspClutter6D和自建的合成数据集（基于NVIDIA Isaac Sim和HouseCat6D物体）上进行评估。GraspClutter6D序列根据平均可见性分为简单、中等、困难三个子集。稀疏视角设置下，每个序列仅使用8张位姿已知的图像。使用Franka Research 3机器人搭配RealSense D435i进行真实抓取验证。评估指标包括类无关和语义实例分割的AP@25、AP@50和平均AP（mAP）。对比基线方法为GraphSeg和MaskClustering。</p>
+<p><strong>关键定量结果</strong>：<br>在GraspClutter6D数据集上，Clutt3R-Seg在所有难度级别上均显著优于基线。在最困难的场景下，其AP@25达到61.66，是基线方法（GraphSeg: 20.18, MaskClustering: 27.95）的2.2倍以上。在合成数据集上，优势更为明显，AP@25达到94.40。在计算时间方面，Clutt3R-Seg（57.2秒）介于GraphSeg（71.9秒）和MaskClustering（45.7秒）之间，但性能提升巨大。</p>
+<p><img src="https://arxiv.org/html/2602.11660v1/x6.png" alt="定量结果表"></p>
+<blockquote>
+<p><strong>表I</strong>：在GraspClutter6D和合成数据集上的类无关3D实例分割结果。Clutt3R-Seg在所有难度和指标上均优于基线方法，尤其在困难场景下优势显著。</p>
+</blockquote>
+<p><strong>稀疏输入鲁棒性</strong>：实验表明，仅使用4个输入视角时，Clutt3R-Seg的AP@25（44.59）仍显著优于使用8个视角的MaskClustering（27.95），证明了其对稀疏视角的强鲁棒性。</p>
+<p><img src="https://arxiv.org/html/2602.11660v1/x7.png" alt="稀疏视角实验"></p>
+<blockquote>
+<p><strong>图7</strong>：输入视图数量对性能的影响。即使在仅有4个视图的极端稀疏条件下，Clutt3R-Seg的性能也显著优于使用8个视图的MaskClustering，凸显了其处理稀疏数据的有效性。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>消融实验验证了各核心组件的贡献。移除层次树结构（即直接对初始掩码分组）导致性能大幅下降（AP@25从61.66降至36.82），证明了利用掩码层次关系的重要性。移除残差节点父节点替换模块导致性能中等下降（AP@25降至52.61），表明该模块对处理过分割残差至关重要。在分组过程中，同时使用空间和语义相似性优于仅使用其中一种。</p>
+<p><img src="https://arxiv.org/html/2602.11660v1/x8.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图8</strong>：在GraspClutter6D困难子集上的消融研究。完整模型（Ours）性能最佳。移除层次树（w/o Tree）导致最大性能损失，移除残差节点替换（w/o Substitution）和仅使用单一相似性度量（w/o Spatial/Semantic）均会导致性能下降。</p>
+</blockquote>
+<p><strong>定性结果</strong>：如图5所示，Clutt3R-Seg能够在杂乱场景中产生准确、一致的3D实例分割，并成功进行语言引导的目标识别（如“white tape”、“wooden block”）以及交互后的场景一致性更新与位移物体检测。</p>
+<p><img src="https://arxiv.org/html/2602.11660v1/x5.png" alt="多阶段识别与更新"></p>
+<blockquote>
+<p><strong>图5</strong>：多阶段目标识别与一致性感知更新的结果。具有丰富语义的鲁棒3D实例在动态场景变化下保持一致性，实现了在杂乱场景中准确的目标识别和场景更新。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) <strong>提出了一种新颖的基于层次化实例树的3D实例分割方法</strong>，通过组织噪声掩码候选并利用跨视角分组与条件替换，有效缓解了过分割和欠分割问题，在稀疏视角和严重杂乱场景下实现了鲁棒的分割。2) <strong>实现了基于语言的目标准确识别与抓取</strong>，通过聚合多视角证据获得鲁棒的实例级语义嵌入，使机器人能够直接根据高级语言指令识别和定位特定目标物体。3) <strong>提出了一种高效的多阶段抓取更新方法</strong>，仅需单张交互后图像即可重新识别实例、检测位移物体并优化其姿态，保持了场景表示的一致性，支持高效的多阶段操作。</p>
+<p>论文提到的局限性在于，该方法在一定程度上仍然依赖于初始2D分割掩码的质量。虽然层次化分组对噪声具有鲁棒性，但如果基础模型（如Grounded SAM）完全失败（例如，严重遮挡下无法产生任何相关掩码），则性能会受到影响。</p>
+<p>本研究为在挑战性场景（稀疏视角、严重遮挡、杂乱）下的机器人感知与操作提供了新思路。其核心启发在于，将传统上被视为有害的“噪声”（如过/欠分割掩码）转化为可利用的“结构化信息”（层次树），并通过跨视角一致性约束和迭代优化来提炼出正确结果。这种思想可推广至其他依赖不完美感知输入的机器人任务中。此外，仅依赖单帧图像进行高效场景更新的策略，为动态环境中的长期交互任务提供了可行的技术路径。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对杂乱场景中稀疏视图3D实例分割的挑战，提出Clutt3R-Seg方法。该方法构建层次实例树，利用噪声掩码作为信息线索，通过跨视图分组和条件替换抑制过分割和欠分割，生成视图一致的掩码和稳健3D实例，并支持开放词汇语义嵌入以响应语言指令。为处理场景变化，引入一致性感知更新，仅需单张交互后图像即可适应。实验表明，在重杂乱序列中AP@25达61.66，比基线高2.2倍以上；仅四视图性能超过八视图基线2倍。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.11660" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
