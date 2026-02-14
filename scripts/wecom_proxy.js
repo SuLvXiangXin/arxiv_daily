@@ -145,7 +145,7 @@ const server = http.createServer(async (req, res) => {
 
   try {
     const body = JSON.parse(await readBody(req));
-    const { corpid, corpsecret, messages } = body;
+    const { corpid, corpsecret, messages, agentid, touser, toparty, totag } = body;
 
     if (!corpid || !corpsecret || !Array.isArray(messages)) {
       return respond(res, 400, { error: "Missing corpid, corpsecret, or messages" });
@@ -154,11 +154,16 @@ const server = http.createServer(async (req, res) => {
     // 获取 access_token
     const token = await getAccessToken(corpid, corpsecret);
 
-    // 逐条发送
+    // 逐条发送（顶层 agentid/touser 作为 fallback）
     const results = [];
     for (let i = 0; i < messages.length; i++) {
+      const msg = Object.assign({}, messages[i]);
+      if (!msg.agentid && agentid) msg.agentid = agentid;
+      if (!msg.touser && !msg.toparty && !msg.totag) {
+        msg.touser = touser || "@all";
+      }
       try {
-        await sendMessage(token, messages[i]);
+        await sendMessage(token, msg);
         results.push({ index: i, ok: true });
       } catch (err) {
         results.push({ index: i, ok: false, error: err.message });
