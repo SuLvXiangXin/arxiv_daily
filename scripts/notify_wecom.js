@@ -4,8 +4,13 @@
  * 每次更新后，只通知新增的论文，每篇论文单独一条消息，
  * 包含标题和简要摘要。支持同时向多个企业微信应用发送。
  *
+ * 支持两种发送模式：
+ *   1. 直连模式 —— 直接调用企业微信 API（需 IP 白名单，适合本地测试）
+ *   2. 代理模式 —— 通过中转代理发送（适合 GitHub Actions，无需 IP 白名单）
+ *      设置 WECOM_PROXY_URL 即启用代理模式
+ *
  * 环境变量：
- *   WECOM_APPS      – JSON 数组，每个元素包含：
+ *   WECOM_APPS        – JSON 数组，每个元素包含：
  *     {
  *       "name":      "应用名称（可选，仅用于日志）",
  *       "corpid":    "企业 ID",
@@ -16,13 +21,16 @@
  *       "totag":     "接收标签（可选）"
  *     }
  *
- *   SITE_URL         – 站点地址，用于在消息中附带链接（可选）
- *   PAPERS_JSON      – papers-index.json 路径，默认 data/papers-index.json
- *   OLD_PAPERS_JSON  – 更新前的旧 papers-index.json 快照路径（用于对比新增）
+ *   SITE_URL           – 站点地址，用于在消息中附带链接（可选）
+ *   PAPERS_JSON        – papers-index.json 路径，默认 data/papers-index.json
+ *   OLD_PAPERS_JSON    – 更新前的旧 papers-index.json 快照路径（用于对比新增）
+ *   WECOM_PROXY_URL    – 中转代理地址（如 http://139.196.242.83:9000/relay）
+ *   WECOM_PROXY_TOKEN  – 中转代理鉴权 token
  */
 
 const fs = require("fs");
 const path = require("path");
+const http = require("http");
 const https = require("https");
 
 /* ── 配置 ────────────────────────────────────────────── */
@@ -35,6 +43,8 @@ const PAPERS_JSON =
 const OLD_PAPERS_JSON =
   process.env.OLD_PAPERS_JSON ||
   path.resolve(__dirname, "..", "data", "papers-index-old.json");
+const WECOM_PROXY_URL = process.env.WECOM_PROXY_URL || "";
+const WECOM_PROXY_TOKEN = process.env.WECOM_PROXY_TOKEN || "";
 
 /* ── HTTP 工具 ───────────────────────────────────────── */
 
@@ -56,20 +66,23 @@ function httpsGet(url) {
   });
 }
 
-function httpsPostJson(url, body) {
+function httpPostJson(url, body, headers = {}) {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify(body);
     const urlObj = new URL(url);
+    const transport = urlObj.protocol === "https:" ? https : http;
     const options = {
       hostname: urlObj.hostname,
+      port: urlObj.port || (urlObj.protocol === "https:" ? 443 : 80),
       path: urlObj.pathname + urlObj.search,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Content-Length": Buffer.byteLength(payload),
+        ...headers,
       },
     };
-    const req = https.request(options, (res) => {
+    const req = transport.request(options, (res) => {
       let data = "";
       res.on("data", (chunk) => (data += chunk));
       res.on("end", () => {
@@ -86,7 +99,7 @@ function httpsPostJson(url, body) {
   });
 }
 
-/* ── 企业微信 API ────────────────────────────────────── */
+/* ── 企业微信 API（直连模式）──────────────────────────── */
 
 async function getAccessToken(corpid, corpsecret) {
   const url = `https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=${encodeURIComponent(
@@ -113,7 +126,7 @@ async function sendTextMessage(accessToken, { agentid, touser, toparty, totag, c
   if (totag) body.totag = totag;
   if (!touser && !toparty && !totag) body.touser = "@all";
 
-  const res = await httpsPostJson(url, body);
+  const res = await httpPostJson(url, body);
   if (res.errcode !== 0) {
     throw new Error(
       `发送消息失败: errcode=${res.errcode}, errmsg=${res.errmsg}`
@@ -134,11 +147,31 @@ async function sendMarkdownMessage(accessToken, { agentid, touser, toparty, tota
   if (totag) body.totag = totag;
   if (!touser && !toparty && !totag) body.touser = "@all";
 
-  const res = await httpsPostJson(url, body);
+  const res = await httpPostJson(url, body);
   if (res.errcode !== 0) {
     throw new Error(
       `发送 Markdown 消息失败: errcode=${res.errcode}, errmsg=${res.errmsg}`
     );
+  }
+  return res;
+}
+
+/* ── 代理模式发送 ────────────────────────────────────── */
+
+async function sendViaProxy(app, messages) {
+  const headers = {};
+  if (WECOM_PROXY_TOKEN) {
+    headers["Authorization"] = `Bearer ${WECOM_PROXY_TOKEN}`;
+  }
+
+  const res = await httpPostJson(WECOM_PROXY_URL, {
+    corpid: app.corpid,
+    corpsecret: app.corpsecret,
+    messages,
+  }, headers);
+
+  if (res.error) {
+    throw new Error(`代理返回错误: ${res.error}`);
   }
   return res;
 }
@@ -219,17 +252,9 @@ function buildPaperMessage(paper, index, total, siteUrl) {
   return { markdown: md, text };
 }
 
-/* ── 向单个应用发送所有新论文 ─────────────────────────── */
+/* ── 向单个应用发送所有新论文（直连模式）──────────────── */
 
-async function sendToApp(app, newPapers, siteUrl) {
-  const label = app.name || `corpid:${(app.corpid || "").slice(0, 8)}...`;
-  console.log(`\n── 发送到: ${label} (${newPapers.length} 篇新论文)`);
-
-  if (!app.corpid || !app.corpsecret || !app.agentid) {
-    console.error(`   ❌ 缺少必要字段 (corpid / corpsecret / agentid)，跳过。`);
-    return { success: 0, fail: newPapers.length };
-  }
-
+async function sendToAppDirect(app, newPapers, siteUrl) {
   let token;
   try {
     token = await getAccessToken(app.corpid, app.corpsecret);
@@ -243,18 +268,12 @@ async function sendToApp(app, newPapers, siteUrl) {
     const summaryMd = buildSummaryMessage(newPapers.length, siteUrl);
     try {
       await sendMarkdownMessage(token, {
-        agentid: app.agentid,
-        touser: app.touser,
-        toparty: app.toparty,
-        totag: app.totag,
+        agentid: app.agentid, touser: app.touser, toparty: app.toparty, totag: app.totag,
         content: summaryMd.markdown,
       });
     } catch {
       await sendTextMessage(token, {
-        agentid: app.agentid,
-        touser: app.touser,
-        toparty: app.toparty,
-        totag: app.totag,
+        agentid: app.agentid, touser: app.touser, toparty: app.toparty, totag: app.totag,
         content: summaryMd.text,
       });
     }
@@ -273,21 +292,14 @@ async function sendToApp(app, newPapers, siteUrl) {
     const shortTitle = (paper.title || "").slice(0, 30);
 
     try {
-      // 优先 Markdown，失败降级纯文本
       try {
         await sendMarkdownMessage(token, {
-          agentid: app.agentid,
-          touser: app.touser,
-          toparty: app.toparty,
-          totag: app.totag,
+          agentid: app.agentid, touser: app.touser, toparty: app.toparty, totag: app.totag,
           content: markdown,
         });
       } catch {
         await sendTextMessage(token, {
-          agentid: app.agentid,
-          touser: app.touser,
-          toparty: app.toparty,
-          totag: app.totag,
+          agentid: app.agentid, touser: app.touser, toparty: app.toparty, totag: app.totag,
           content: text,
         });
       }
@@ -298,13 +310,75 @@ async function sendToApp(app, newPapers, siteUrl) {
       fail++;
     }
 
-    // 限流：每条消息间隔 200ms，避免触发企业微信频率限制
     if (i < newPapers.length - 1) {
       await new Promise((r) => setTimeout(r, 200));
     }
   }
 
   return { success, fail };
+}
+
+/* ── 向单个应用发送所有新论文（代理模式）──────────────── */
+
+async function sendToAppViaProxy(app, newPapers, siteUrl) {
+  // 构建所有消息（汇总 + 逐篇）
+  const summaryMsg = buildSummaryMessage(newPapers.length, siteUrl);
+  const messages = [
+    {
+      msgtype: "markdown",
+      agentid: app.agentid,
+      touser: app.touser || "@all",
+      toparty: app.toparty || "",
+      totag: app.totag || "",
+      content: summaryMsg.markdown,
+    },
+  ];
+
+  for (let i = 0; i < newPapers.length; i++) {
+    const { markdown } = buildPaperMessage(newPapers[i], i + 1, newPapers.length, siteUrl);
+    messages.push({
+      msgtype: "markdown",
+      agentid: app.agentid,
+      touser: app.touser || "@all",
+      toparty: app.toparty || "",
+      totag: app.totag || "",
+      content: markdown,
+    });
+  }
+
+  try {
+    const res = await sendViaProxy(app, messages);
+    console.log(`   ✅ 代理发送完成: ${res.success} 成功, ${res.fail} 失败`);
+    if (res.results) {
+      res.results.forEach((r) => {
+        if (!r.ok) console.error(`      ❌ 消息 #${r.index}: ${r.error}`);
+      });
+    }
+    return { success: res.success || 0, fail: res.fail || 0 };
+  } catch (err) {
+    console.error(`   ❌ 代理发送失败: ${err.message}`);
+    return { success: 0, fail: messages.length };
+  }
+}
+
+/* ── 发送入口（自动选择直连/代理）────────────────────── */
+
+async function sendToApp(app, newPapers, siteUrl) {
+  const label = app.name || `corpid:${(app.corpid || "").slice(0, 8)}...`;
+  console.log(`\n── 发送到: ${label} (${newPapers.length} 篇新论文)`);
+
+  if (!app.corpid || !app.corpsecret || !app.agentid) {
+    console.error(`   ❌ 缺少必要字段 (corpid / corpsecret / agentid)，跳过。`);
+    return { success: 0, fail: newPapers.length };
+  }
+
+  if (WECOM_PROXY_URL) {
+    console.log(`   📡 使用代理模式: ${WECOM_PROXY_URL}`);
+    return sendToAppViaProxy(app, newPapers, siteUrl);
+  } else {
+    console.log(`   🔗 使用直连模式`);
+    return sendToAppDirect(app, newPapers, siteUrl);
+  }
 }
 
 /* ── 主流程 ──────────────────────────────────────────── */
