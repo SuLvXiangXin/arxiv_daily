@@ -60,26 +60,55 @@ sleep 1
 if systemctl is-active --quiet ${SERVICE_NAME}; then
     echo "🟢 服务运行中"
     echo ""
-    # 获取本机 IP
+    # 获取公网 IP
+    # 优先从云厂商元数据获取 ECS 绑定的弹性公网 IP (避免 NAT 网关干扰)
     LOCAL_IP=$(hostname -I | awk '{print $1}')
+    PUBLIC_IP=""
+
+    # 阿里云 ECS 元数据
+    if [ -z "${PUBLIC_IP}" ]; then
+        PUBLIC_IP=$(curl -s --max-time 3 http://100.100.100.200/latest/meta-data/eipv4 2>/dev/null || echo "")
+    fi
+
+    # 腾讯云 CVM 元数据
+    if [ -z "${PUBLIC_IP}" ]; then
+        PUBLIC_IP=$(curl -s --max-time 3 http://metadata.tencentyun.com/latest/meta-data/public-ipv4 2>/dev/null || echo "")
+    fi
+
+    # 通用方法：通过外部服务探测 (可能返回 NAT 出口 IP)
+    if [ -z "${PUBLIC_IP}" ]; then
+        PUBLIC_IP=$(curl -s --max-time 5 https://api.ipify.org 2>/dev/null \
+                 || curl -s --max-time 5 https://ifconfig.me 2>/dev/null \
+                 || curl -s --max-time 5 https://icanhazip.com 2>/dev/null \
+                 || echo "")
+    fi
+
+    if [ -n "${PUBLIC_IP}" ]; then
+        DISPLAY_IP="${PUBLIC_IP}"
+        echo "  🌐 公网 IP: ${PUBLIC_IP}"
+        echo "  🏠 内网 IP: ${LOCAL_IP}"
+    else
+        DISPLAY_IP="${LOCAL_IP}"
+        echo "  ⚠️  未能获取公网 IP，使用内网 IP: ${LOCAL_IP}"
+    fi
     PORT=$(grep -oP 'PORT=\K\d+' ${INSTALL_DIR}/.env 2>/dev/null || echo "9000")
     echo "========================================="
     echo "  部署完成！"
     echo "========================================="
     echo ""
-    echo "  代理地址:  http://${LOCAL_IP}:${PORT}/relay"
-    echo "  健康检查:  curl http://${LOCAL_IP}:${PORT}/health"
+    echo "  代理地址:  http://${DISPLAY_IP}:${PORT}/relay"
+    echo "  健康检查:  curl http://${DISPLAY_IP}:${PORT}/health"
     echo ""
     echo "  查看日志:  journalctl -u ${SERVICE_NAME} -f"
     echo "  重启服务:  systemctl restart ${SERVICE_NAME}"
     echo "  停止服务:  systemctl stop ${SERVICE_NAME}"
     echo ""
     echo "  GitHub Secrets 需要添加:"
-    echo "    WECOM_PROXY_URL   = http://${LOCAL_IP}:${PORT}/relay"
+    echo "    WECOM_PROXY_URL   = http://${DISPLAY_IP}:${PORT}/relay"
     PROXY_TOKEN=$(grep -oP 'PROXY_TOKEN=\K.*' ${INSTALL_DIR}/.env 2>/dev/null || echo "")
     echo "    WECOM_PROXY_TOKEN = ${PROXY_TOKEN}"
     echo ""
-    echo "  企业微信可信 IP 需要添加: ${LOCAL_IP}"
+    echo "  企业微信可信 IP 需要添加: ${DISPLAY_IP}"
     echo "========================================="
 else
     echo "🔴 服务启动失败，请检查日志:"
