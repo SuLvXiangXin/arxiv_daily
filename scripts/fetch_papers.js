@@ -270,18 +270,25 @@ const buildOutput = async (items, existing, outputPath, pagesDir) => {
     const htmlLink = await fetchArxivHtmlLink(absUrl);
     let fullText = "";
     let imageUrls = [];
+    let noHtmlAvailable = false;
     if (htmlLink) {
       const content = await fetchArxivContent(htmlLink);
       fullText = content.fullText;
       imageUrls = content.imageUrls;
+    } else {
+      noHtmlAvailable = true;
     }
 
-    const summary =
-      previous?.summary ||
-      (await generateSummary({ title: item.title, fullText }));
-    const detailedSummary =
-      previous?.detailedSummary ||
-      (await generateDetailedSummary({ title: item.title, fullText, imageUrls }));
+    const NO_HTML_MSG = "目标不存在html界面，获取失败……";
+
+    const summary = noHtmlAvailable
+      ? NO_HTML_MSG
+      : (previous?.summary ||
+        (await generateSummary({ title: item.title, fullText })));
+    const detailedSummary = noHtmlAvailable
+      ? NO_HTML_MSG
+      : (previous?.detailedSummary ||
+        (await generateDetailedSummary({ title: item.title, fullText, imageUrls })));
     const tags = previous?.tags || (item.category ? [item.category] : []);
 
     const paper = {
