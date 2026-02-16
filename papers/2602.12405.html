@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Self-Refining Vision Language Model for Robotic Failure Detection and Reasoning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Self-Refining Vision Language Model for Robotic Failure Detection and Reasoning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.12405" target="_blank" rel="noreferrer">2602.12405</a></span>
+        <span>作者: Yesh Dattatreya Team</span>
+        <span>日期: 2026-02-12</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人故障检测与推理对于构建可靠系统至关重要。现有方法主要将故障推理视为封闭集分类问题（即预测预定义的故障模式），或假设可以获取充足的人工标注。然而，现实世界中的故障通常是微妙、组合且难以穷举的，而详细的推理标签获取成本高昂。先前工作如AHA在拥有完整标注的模拟环境中表现良好，但在异构监督（即大量稀疏的二元标签与少量丰富的推理标签并存）的现实场景下数据效率低下，且其评估依赖手写正则表达式，难以泛化到预定义故障模式之外。</p>
+<p>本文针对上述痛点，提出了一种新的视角：将故障检测与推理建模为一个多任务、多轮次的自精炼过程。核心思路是微调一个视觉语言模型，通过迭代地预测检测结果和自然语言推理，并利用模型自身的内部置信度信号进行选择和优化，从而在异构监督数据下实现开放式的故障理解。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>ARMOR方法将故障检测与推理定义为一个多任务马尔可夫决策过程。整体流程分为训练和推理两个阶段，旨在利用异构数据（大规模稀疏二元标签+小规模密集推理标签）训练模型，并通过迭代自精炼提升预测性能。</p>
+<p><img src="https://arxiv.org/html/2602.12405v1/x2.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：ARMOR方法总览。(a) 异构监督数据：大规模二元检测标签和稀缺的自由形式推理标签。(b) 带有双任务头的VLM：一个分类头用于检测，一个语言解码器用于推理。(c) 训练结合了离线模仿与在线精炼。(d) 推理时，模型执行迭代自精炼，生成多条轨迹并选择熵最低（最自信）的预测。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><p><strong>多任务预测头架构</strong>：与AHA等将检测与推理耦合为单一文本生成任务不同，ARMOR为视觉语言模型主干（如Qwen2.5-VL）附加了两个独立的轻量级预测头。一个分类头（接在解码器中间表示后）用于故障检测（成功/失败），使用二元交叉熵损失训练；另一个保留原有的语言模型头用于生成自然语言推理，使用下一个词预测损失训练。这种分离避免了脆弱的答案提取，并允许在混合数据下进行更有针对性的监督。</p>
+</li>
+<li><p><strong>多轮次自精炼训练</strong>：训练分为两个阶段（算法1）：</p>
+<ul>
+<li><strong>离线模仿</strong>：首先进行“热身”训练，让模型基于视频输入直接预测第一轮的检测和推理结果。随后进行“专家条件”训练，在密集数据集上，让模型基于真实标签（而非自身预测）来生成新一轮输出，这鼓励模型在给定正确先验时保持预测一致性。</li>
+<li><strong>在线精炼</strong>：为了解决专家演示与模型自身行为之间的不匹配，模型基于自身前一轮的预测进行多轮（T轮）展开。每一轮的预测都会根据可用标签计算损失（检测损失在所有数据上计算，推理损失仅在密集数据上计算）。这使模型能够在自身轨迹上进行精炼，同时利用可用的真实监督。</li>
+</ul>
+</li>
+<li><p><strong>基于熵的迭代自精炼推理</strong>：在推理时（算法2），ARMOR从空预测开始，进行多轮迭代。在每一轮，模型会基于前一轮的预测生成新的检测和推理结果。为了选择最佳预测，模型并行生成M条随机轨迹，并为每条轨迹计算一个组合熵分数：<code>C = H_det + λ * H_reason</code>，其中<code>H_det</code>是检测分类分布的熵，<code>H_reason</code>是推理生成的平均词元熵。精炼过程持续进行，直到最佳轨迹的熵分数不再显著下降（基于容忍度ε）。最终输出来自熵分数最低（即最自信）的轨迹。</p>
+</li>
+</ol>
+<p><strong>创新点</strong>：</p>
+<ul>
+<li><strong>架构创新</strong>：采用分离的多任务头，分别优化分类和生成任务，解决了单一生成任务导致的优化困难和评估脆弱性问题。</li>
+<li><strong>训练算法创新</strong>：结合离线模仿与在线精炼，有效利用了异构监督数据，并让模型学习在自身预测基础上进行迭代改进。</li>
+<li><strong>推理策略创新</strong>：提出基于多轨迹采样和组合熵的自精炼选择机制，无需外部奖励模型，仅依靠模型内部置信度即可实现预测优化。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>数据集</strong>：使用了四个涵盖家庭和工业仓库环境的故障数据集：RLBench-Fail（模拟桌面操作）、Maniskill-Fail（模拟操作）、Sparrow-Fail（真实仓库）和ARMBench（真实仓库）。数据包含稀疏（仅二元标签）和密集（二元标签+推理）两种监督形式。</li>
+<li><strong>基线方法</strong>：对比了开源VLMs（Qwen2.5-VL, Cosmos-Reasoning, LLaVA-NeXT）、专有模型Claude-3.7（零样本和少样本），以及监督微调基线（SFT-D：仅用密集数据；SFT-S+D：用稀疏和密集数据）。</li>
+<li><strong>评估指标</strong>：故障检测准确率（Binary Success Rate）、推理质量（LLM模糊匹配分数、ROUGE-L）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>如表1所示，ARMOR在四个数据集上均取得了最先进的性能。在故障检测方面，相比先前最佳方法（SFT-S+D或Claude-3.7少样本），ARMOR在RLBench上提升约19个百分点（0.726-&gt;0.917），在Sparrow上提升约8个百分点（0.650-&gt;0.733），在Maniskill上大幅提升（0.490-&gt;0.990）。在推理质量（LLM模糊匹配）上，提升同样显著，例如在RLBench上从0.550提升至0.718，在ARMBench上从0.609提升至0.698，部分数据集的提升接近或超过100%。</p>
+<p><img src="https://arxiv.org/html/2602.12405v1/x3.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图3</strong>：消融实验（对应论文表2）。展示了ARMOR各个组件的贡献。“多任务预测”（仅基础多任务头）已具备较好的检测性能（0.897），但推理质量一般（0.460）。“仅精炼推理”（无在线模仿训练）会损害检测性能。“离线模仿”加入后，检测和推理均有提升。完整的ARMOR（包含在线精炼训练和推理）实现了最佳的综合性能。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.12405v1/x4.png" alt="跨域泛化"></p>
+<blockquote>
+<p><strong>图4</strong>：跨环境稀疏数据实验。当稀疏数据来自不同环境（RLBench -&gt; Maniskill, Sparrow -&gt; ARMBench）时，ARMOR相比基线SFT-S+D展现出更强的鲁棒性和性能优势，说明其方法能更好地利用异构监督。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.12405v1/figures/entropy_split.png" alt="熵与性能关系"></p>
+<blockquote>
+<p><strong>图5</strong>：预测熵与准确率的关系。随着模型对自身预测的置信度提高（熵降低），其检测准确率相应上升，验证了使用熵作为选择标准是有效的。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.12405v1/x5.png" alt="定性结果1"></p>
+<blockquote>
+<p><strong>图6</strong>：定性结果示例1。展示了ARMOR与基线（SFT-D）在真实仓库故障上的推理对比。ARMOR能生成更细致、准确的推理（如“机械臂在放置时碰撞了箱子”），而基线可能遗漏关键细节或推理错误。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.12405v1/figures/1.png" alt="定性结果2"></p>
+<blockquote>
+<p><strong>图7</strong>：定性结果示例2。展示了ARMOR多轮精炼过程。初始预测可能不完整或有误（如“物体掉落”），经过几轮迭代后，推理变得更加精确和详细（如“机械臂未能成功夹起罐子，因为夹爪在错误的位置关闭”）。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：<br>消融实验（表2/图3）表明：1) 多任务预测头是高性能检测的基础；2) 离线模仿训练（尤其是专家条件阶段）对提升推理质量和任务间一致性至关重要；3) 在线精炼训练进一步提升了综合性能；4) 推理时的迭代自精炼选择机制是最终性能的关键。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了ARMOR，一种能够处理异构监督数据、通过开放式迭代推理执行故障检测与推理的新方法。</li>
+<li>首次将迭代推理思想与视觉语言模型结合，应用于机器人多模态（视频）故障理解任务。</li>
+<li>在多样化的真实和模拟环境中实现了最先进的性能，在检测率和推理质量上显著超越先前方法，并展现出对跨环境稀疏数据的鲁棒性。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文提到，方法依赖于一个能够产生有意义的内部置信度信号（熵）的模型。如果基础VLM的校准性很差，基于熵的选择机制可能失效。此外，多轮精炼会增加推理时间成本。</p>
+<p><strong>后续研究启示</strong>：<br>ARMOR展示了将大语言模型中的自精炼思想成功迁移到具身AI视觉推理任务的潜力。其处理异构数据（大量弱标签+少量强标签）的框架对实际机器人应用具有重要价值。未来工作可以探索更高效的精炼策略、研究模型校准性与精炼效果的关系，并将此框架扩展到更广泛的机器人感知与决策任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人故障检测与推理中故障模式复杂、标注数据异构且成本高的问题，提出了ARMOR模型。该模型采用多任务自我精炼框架，通过离线和在线模仿学习从稀疏二进制标签和少量丰富推理标注中联合优化。推理时生成多轮精炼轨迹，并基于自我置信度选择最优预测。实验显示，ARMOR在故障检测率上比先前方法提升高达30%，在基于LLM模糊匹配的推理分数上提升高达100%，实现了最先进性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.12405" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
