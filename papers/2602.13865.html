@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Enabling Option Learning in Sparse Rewards with Hindsight Experience Replay - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Enabling Option Learning in Sparse Rewards with Hindsight Experience Replay</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.13865" target="_blank" rel="noreferrer">2602.13865</a></span>
+        <span>作者: Gabriel de Oliveira Ramos Team</span>
+        <span>日期: 2026-02-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>分层强化学习（HRL）框架，如Option-Critic (OC) 和其改进版Multi-updates Option Critic (MOC)，通过端到端学习可重用的时间抽象（选项）来加速训练。然而，这些方法在多目标、稀疏奖励环境中表现不佳，因为智能体难以将当前动作与遥远的时间结果相关联。这一问题在物体操纵任务中尤为突出，其奖励信号仅取决于物体是否到达目标位置，而与智能体（如机械臂末端执行器）的直接交互无关，导致HRL代理难以发现如何与物体互动。本文针对这一具体痛点，提出将后见经验回放（HER）机制集成到MOC框架中，并进一步创新性地提出双目标后见经验回放（2HER），以在稀疏奖励下引导智能体学习与物体的交互。核心思路是：通过目标重标记为失败轨迹提供学习信号，并引入第二个奖励目标来明确鼓励智能体与物体接触，从而解决物体操纵任务中的探索难题。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文方法的核心是在MOC框架中集成一个HER缓冲区，并在需要时扩展为2HER机制。整体流程遵循MOC的原始架构，但在每个时间步后，会将状态转移存储到一个专用的HER缓冲区中，并进行目标重标记以生成额外的学习数据。对于物体操纵任务，则启动2HER组件，创建两组虚拟目标并组合其奖励。</p>
+<p><img src="https://arxiv.org/html/2602.13865v1/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图1</strong>：MOC-2HER方法整体框架。左侧展示了标准MOC与环境的交互循环，右侧虚线框内是新增的HER/2HER处理模块。该模块接收原始轨迹，通过采样策略生成新目标并重新计算奖励，最终将重标记后的经验存入缓冲区，供后续的策略评估与改进步骤使用。</p>
+</blockquote>
+<p>核心模块分为两部分：</p>
+<ol>
+<li><strong>MOC-HER（标准HER集成）</strong>：算法为每个原始轨迹中的转移 $(s_t, o_t, a_t, r_t, s_{t+1})$ 存储经验。在每轮回合结束后，使用 <code>future</code> 策略为每个转移采样 $k$ 个新目标 $g&#39;$（从该转移之后的未来状态中随机选取）。随后，根据新目标 $g&#39;$ 重新计算奖励 $r_{goal}&#39;$（稀疏奖励，成功为0，失败为-1）。重标记后的转移 $(s_t|g&#39;, o_t, a_t, r_{goal}&#39;, s_{t+1}|g&#39;)$ 被存入HER缓冲区，之后与MOC的原始经验缓冲区合并，用于后续的离策略更新。</li>
+<li><strong>2HER扩展（针对物体操纵）</strong>：这是本文的关键创新。在物体操纵环境中，除了基于物体最终位置的标准HER重标记外，2HER机制会额外创建一组虚拟目标。具体而言，它会从轨迹中采样一个未来的智能体末端执行器位置 $s_{agent_pos}&#39;$，并将其视为物体应处的位置。然后，计算一个额外的交互奖励 $r_{obj}&#39;$，该奖励鼓励智能体接近物体（即，当智能体与物体的距离小于阈值 $\epsilon$ 时奖励为0，否则为-1）。最终用于学习的组合奖励 $r&#39;$ 由任务完成奖励 $r_{goal}$ 和交互奖励 $r_{object}$ 加权求和得到，如公式1所示：<br>$r(s_t, a_t, s_{t+1}) = (1 - C_r) \cdot r_{\text{goal}}(s_{t+1}) + C_r \cdot r_{\text{object}}(s_{t+1})$<br>其中超参数 $C_r \in [0, 1]$ 用于平衡两个目标的权重。</li>
+</ol>
+<p>与现有方法相比，创新点体现在：1) 首次将HER机制与MOC框架结合，使HRL能够处理稀疏奖励的多目标环境；2) 提出了2HER，通过引入基于智能体位置的第二组虚拟目标和组合奖励函数，显式地引导智能体学习与物体的交互动力学，这是解决物体操纵任务中探索困难的关键。</p>
+<p>此外，方法引入了两项优化以提升学习效率与稳定性：</p>
+<ul>
+<li><strong>选择性轨迹过滤</strong>：仅对物体位置在回合初与回合末之间存在显著位移（大于阈值 $\delta$）的轨迹进行HER重标记，确保学习经验包含有意义的交互。</li>
+<li><strong>动态 $k$ 值衰减</strong>：重标记目标数量 $k$ 在训练初期设置较高以加速学习，随后逐渐衰减，以缓解因重标记经验比例过高可能导致的训练不稳定问题。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在Gymnasium Robotics的Fetch机器人仿真环境中进行，包括四个任务：FetchReach（无物体交互）、FetchPush、FetchSlide和FetchPickAndPlace（后三者涉及物体操纵）。实验平台使用标准稀疏奖励函数（成功时奖励为0，否则为-1）。对比的基线方法包括原始MOC、Interest Option-Critic (IOC)，以及为了公平比较而将HER/2HER集成到IOC后得到的IOC-HER和IOC-2HER。评估指标为测试阶段的平均成功率。</p>
+<p><img src="https://arxiv.org/html/2602.13865v1/x2.png" alt="训练曲线对比"></p>
+<blockquote>
+<p><strong>图2</strong>：在FetchReach环境中的训练曲线。MOC-HER（橙色）能够快速学习并达到接近100%的成功率，而原始MOC（蓝色）和IOC（绿色）在稀疏奖励下完全无法学习。这证明了HER机制对于在稀疏奖励环境中启用选项学习是有效的。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.13865v1/x3.png" alt="物体操纵任务成功率"></p>
+<blockquote>
+<p><strong>图3</strong>：在FetchPush、FetchSlide和FetchPickAndPlace三个物体操纵任务上的最终成功率对比。MOC-2HER（红色）在所有任务上均取得最高性能（最高达90%），显著优于MOC-HER（约11%）和原始MOC（约11%），凸显了2HER双目标重标记策略在解决交互难题上的必要性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.13865v1/x4.png" alt="选项数量消融"></p>
+<blockquote>
+<p><strong>图4</strong>：MOC-2HER在不同选项数量（2，4，8）下的性能。在FetchPush任务中，使用4个选项取得了最佳性能（约90%成功率），表明适中的选项数量有利于任务分解与学习。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.13865v1/x5.png" alt="奖励系数Cr消融"></p>
+<blockquote>
+<p><strong>图5</strong>：奖励平衡系数 $C_r$ 的消融研究。在FetchPush任务中，$C_r=0.5$（即任务奖励与交互奖励权重相等）时性能最佳，过低或过高都会损害学习效果，验证了双目标奖励设计的有效性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.13865v1/x6.png" alt="轨迹过滤消融"></p>
+<blockquote>
+<p><strong>图6</strong>：启用与禁用选择性轨迹过滤的对比。在FetchPush任务中，启用过滤（实线）能带来更稳定、更优的最终性能，说明过滤掉无交互的轨迹有助于聚焦学习。</p>
+</blockquote>
+<p>关键实验结果总结：在简单的FetchReach任务中，MOC-HER将成功率从MOC的0%提升至100%。在复杂的物体操纵任务中，MOC-2HER取得了突破性进展，在FetchPush上达到约90%的成功率，而MOC和MOC-HER仅约11%。消融实验表明：1) 适中的选项数量（如4个）通常表现最好；2) 组合奖励中的平衡系数 $C_r$ 对性能有显著影响，$C_r=0.5$ 是最佳设置；3) 选择性轨迹过滤能提升学习稳定性和最终性能。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献有三个方面：1) 首次将HER机制集成到MOC框架中，提出了MOC-HER，使其能够解决原本无法处理的稀疏奖励多目标环境；2) 针对物体操纵任务中奖励信号与智能体动作脱钩的难题，提出了创新的2HER机制，通过创建基于智能体位置的第二组虚拟目标和组合奖励，显式地引导交互学习，形成了MOC-2HER方法；3) 在Fetch机器人仿真套件上进行了全面实验，验证了所提方法的高效性，MOC-2HER在物体操纵任务上取得了高达90%的成功率，相比基线有数量级提升。</p>
+<p>论文自身提到的局限性包括：方法性能可能受到超参数（如 $C_r$, $k$ 衰减策略）选择的影响；选择性轨迹过滤中的阈值 $\delta$ 需要根据任务设定。这些为后续研究提供了改进方向。</p>
+<p>本文工作对后续研究的启示在于：它展示了将稠密奖励生成技术（如HER）与分层策略学习框架深度结合的有效路径。2HER中“双目标”的思想可以推广到其他需要分解复杂技能或引导特定子技能学习的HRL场景中。未来工作可以探索将类似机制与动态选项创建、技能发现等方法结合，以应对更复杂的多阶段任务。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对稀疏奖励、多目标环境中分层强化学习（如Option-Critic和MOC）表现不佳的问题，特别是在对象操作任务中代理难以学习交互。提出了MOC-HER方法，集成后见经验回放（HER）以重新标记目标；进一步提出双重目标后见经验回放（2HER），通过同时基于对象状态和代理效应器位置生成虚拟目标，奖励交互和任务完成。实验结果显示，在机器人操作环境中，MOC-2HER成功率高达90%，而MOC和MOC-HER均低于11%，验证了双重目标重新标记策略的有效性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.13865" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

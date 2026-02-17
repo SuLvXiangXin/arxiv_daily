@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>HybridFlow: A Two-Step Generative Policy for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>HybridFlow: A Two-Step Generative Policy for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.13718" target="_blank" rel="noreferrer">2602.13718</a></span>
+        <span>作者: Yide Liu Team</span>
+        <span>日期: 2026-02-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作策略需要实时推理以实现响应式闭环控制。当前基于扩散模型的方法（如Diffusion Policy）性能优异，但其依赖8-32步去噪过程导致推理速度慢。流匹配方法通过学习连续传输映射提供了加速潜力，但仍需多步积分。推理延迟成为在时间敏感机器人系统中部署生成策略的关键瓶颈。在此约束下，研究者关注采样步数最少的方案。MeanFlow作为流匹配的一步变体，通过学习平均速度场理论上支持一步推理，但其在机器人操作任务中的动作生成精度无法满足严苛要求。本文针对MeanFlow在机器人操作中精度不足、且多步推理无法改善性能的关键痛点，提出了一种新的推理范式。核心思路是：利用MeanFlow进行快速全局粗定位，然后通过一个无参数的ReNoise步骤将预测拉回训练分布，最后使用ReFlow模式进行局部精确修正，从而在仅需两次网络前向传播（2-NFE）的情况下，兼顾推理速度与生成质量。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>HybridFlow的整体框架是一个三阶段、两网络前向传播（2-NFE）的推理流程。它使用一个统一的模型，通过改变输入参数在两种模式下工作。输入是观测编码$c$和从标准高斯分布采样的噪声$z_1$，输出是最终精炼的动作轨迹$x_{\text{final}}$。</p>
+<p><img src="https://arxiv.org/html/2602.13718v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：HybridFlow推理机制示意图。展示了我们的三阶段、2-NFE方法：(1) Global Jump使用MeanFlow模式（$r=0, t=1$）进行快速粗预测，(2) ReNoise通过受控的噪声注入将预测拉回训练分布，(3) Local Refine使用ReFlow模式（$r=t$）进行精确修正。该方法仅需两次网络前向传播，ReNoise是无参数的插值阶段。</p>
+</blockquote>
+<p>核心模块包括三个阶段：</p>
+<ol>
+<li><strong>Global Jump（全局跳跃）</strong>：使用模型在MeanFlow模式下，从噪声$z_1$一步跳跃到目标附近，得到粗预测$x_{\text{coarse}} = z_1 - u_{\theta}(z_1, 0, 1, c)$。这利用了MeanFlow预测整个路径$[0,1]$上平均位移的能力，计算高效但精度有限，且$x_{\text{coarse}}$可能偏离训练分布$q_0$。</li>
+<li><strong>ReNoise（重噪声化）</strong>：为了解决粗预测的分布不匹配问题，通过线性插值将其向噪声分布拉回：$z_{\text{refine}} = \alpha z_1 + (1-\alpha)x_{\text{coarse}}$。其中$\alpha \in (0,1)$控制噪声注入强度，在实现中设置为$\alpha = t_{\text{refine}}$，以使$z_{\text{refine}}$的分布与训练边际分布$q_{t_{\text{refine}}}$对齐。此步骤无参数，不增加网络计算开销。</li>
+<li><strong>Local Refine（局部精炼）</strong>：从条件更好的状态$z_{\text{refine}}$出发，使用模型在ReFlow模式（即$r = t$）下进行一步局部修正：$x_{\text{final}} = z_{\text{refine}} - u_{\theta}(z_{\text{refine}}, t_{\text{refine}}, t_{\text{refine}}, c)$。根据MeanFlow恒等式（公式4），此时平均速度等于瞬时速度$v_{\theta}$，可实现精确的局部校正，且避免了多步推理中的误差累积。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.13718v1/x3.png" alt="系统架构"></p>
+<blockquote>
+<p><strong>图3</strong>：HybridFlow系统架构。系统通过DINOv3编码器处理鱼眼RGB观测以生成条件嵌入，该嵌入引导HybridFlow动作生成器执行三阶段、2-NFE的流程，最终动作轨迹由机器人控制器执行。</p>
+</blockquote>
+<p>与现有方法相比，HybridFlow的创新点具体体现在：</p>
+<ul>
+<li><strong>单模型双模式推理</strong>：利用MeanFlow恒等式（$u(z_t, t, t, c) = v(z_t, t, c)$），使同一个网络$u_{\theta}$既能用于MeanFlow模式（$r=0, t=1$）做全局跳跃，又能用于ReFlow模式（$r=t$）做局部精炼，无需多个模型或蒸馏。</li>
+<li><strong>ReNoise分布桥接</strong>：创新性地引入无参数的ReNoise步骤，通过混合噪声将偏离分布的粗预测重新对齐到模型熟悉的训练分布上，解决了多步MeanFlow因分布漂移导致性能无法提升甚至下降的根本问题。</li>
+<li><strong>误差传播分析</strong>：论文从理论上分析了多步MeanFlow失败的原因，指出随着采样进行，速度场的Lipschitz常数$L$增大，早期误差被指数放大$(1+L)^{K-1-k}$，同时模型在分布外区域误差$|e_k|$增加，共同导致多步精炼无效。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了RoboMimic基准中的4个模拟任务（Can, Lift, Square, Transport）和2类真实机器人任务（彩色物体抓放、眼罩折叠）。模拟平台为MuJoCo，使用ViT编码器处理多视角RGB图像。真实机器人使用7自由度机械臂，在NVIDIA Jetson AGX Thor平台上进行板端推理。</p>
+<p>对比的基线方法包括：Diffusion Policy (DDIM)、ReFlow和ShortCut Flow。</p>
+<p><img src="https://arxiv.org/html/2602.13718v1/x1.png" alt="验证损失"></p>
+<blockquote>
+<p><strong>图1</strong>：MeanFlow的验证损失无法达到可用水平。在机器人操作任务上，不同方法的验证损失对比。MeanFlow（灰色）的损失从0步到1步有所下降，但达到的量级（$\sim 10^{-3}$）仍显著高于能达到$\sim 10^{-4}$水平的多步方法（Diffusion Policy, ReFlow）。这表明MeanFlow无法达到可靠策略性能所需的精度。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.13718v1/x4.png" alt="ReNoise比例消融"></p>
+<blockquote>
+<p><strong>图4</strong>：ReNoise比例消融实验。验证损失随ReNoise比例$\alpha$（即$t_{\text{refine}}$）的变化。最优范围是$\alpha \in [0.15, 0.20]$，平衡了分布对齐和语义保留。太小（$&lt;0.10$）无法纠正分布不匹配；太大（$&gt;0.25$）会引入过多噪声。</p>
+</blockquote>
+<p>关键实验结果如下：</p>
+<ul>
+<li><strong>ReNoise参数选择</strong>：消融实验表明，ReNoise比例$\alpha$（即$t_{\text{refine}}$）的最优范围为$[0.15, 0.20]$，能实现$4\times10^{-4}$的验证损失。论文后续实验采用$\alpha=0.15$。</li>
+<li><strong>模拟性能</strong>：如图5所示，在四个RoboMimic任务上，仅需2步（2-NFE）的HybridFlow（红点）取得了与需要8-16步的基线方法（Diffusion Policy, ReFlow, ShortCut）相竞争甚至更优的成功率。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2602.13718v1/x5.png" alt="模拟结果"></p>
+<blockquote>
+<p><strong>图5</strong>：模拟实验结果。在四个RoboMimic基准任务（Lift, Can, Square, Transport）上，成功率随推理步数的变化。HybridFlow（红点，2-NFE）与多步基线（Diffusion Policy-灰色，ReFlow-蓝色，ShortCut-橙色）相比，取得了有竞争力的性能。</p>
+</blockquote>
+<ul>
+<li><strong>真实机器人性能</strong>：如表1所示，在真实机器人抓放任务中，HybridFlow在分布内任务上成功率为86.3%（69/80），在未见过的粉色物体（OOD）上成功率为70.0%（14/20），分别比16步Diffusion Policy基线（63.8%和45.0%）绝对提升了22.5%和25.0%。在更具挑战性的眼罩折叠任务上，HybridFlow成功率为66.3%（53/80），比基线（51.3%）绝对提升15.0%。</li>
+<li><strong>推理速度</strong>：HybridFlow的推理时间仅为19ms（约52Hz），相比Diffusion Policy的152ms（约6.6Hz）实现了8倍加速。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2602.13718v1/x6.png" alt="真实机器人抓放结果"></p>
+<blockquote>
+<p><strong>图6</strong>：真实机器人结果：抓放任务。三个彩色物体抓取任务的执行快照。每行显示：初始状态 → 抓取 → 转运 → 放置。在黑色和橙色物体上训练，在粉色（OOD）物体上测试。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.13718v1/x7.png" alt="真实机器人布料操作结果"></p>
+<blockquote>
+<p><strong>图7</strong>：真实机器人结果：布料操作。眼罩折叠任务展示了HybridFlow在可变形物体操作上的适用性。策略执行一个四阶段序列：(1) 眼罩平铺的初始状态，(2) 抓取左边缘，(3) 抓取右边缘同时保持左边缘，(4) 折叠并压平。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：</p>
+<ol>
+<li><strong>提出并解决了MeanFlow在机器人操作中的关键失败模式</strong>：分析了多步MeanFlow因误差放大和分布漂移而无法提升性能的原因，并提出了HybridFlow策略来应对。</li>
+<li><strong>设计了一种高效的两步生成策略</strong>：通过Global Jump（MeanFlow模式）、ReNoise（分布桥接）和Local Refine（ReFlow模式）的三阶段流程，仅用2-NFE实现了高精度动作生成，无需蒸馏或额外模型。</li>
+<li><strong>在仿真和真实环境中验证了有效性</strong>：HybridFlow在多项任务上成功率和推理速度均显著优于16步Diffusion Policy基线，证明了其提升机器人策略实时交互能力的实用性。</li>
+</ol>
+<p>论文提到的局限性包括：ReNoise比例$\alpha$需要根据任务经验选择；在可变形物体操作中，错误可能在多阶段接触式操作中传播。</p>
+<p>本文对后续研究的启示在于：为生成式机器人策略提供了一种兼顾速度与精度的新范式；揭示了利用同一模型的不同“模式”（通过改变输入时间参数）进行分阶段推理的潜力；ReNoise作为一种简单的分布对齐技术，可能适用于其他存在分布不匹配问题的生成模型加速场景。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作策略推理延迟高、缺乏实时交互能力的问题，提出HybridFlow两步骤生成策略。该方法采用三阶段设计：MeanFlow模式的全局跳跃实现快速生成，ReNoise进行分布对齐，ReFlow模式的局部精炼确保动作精度，从而平衡推理速度与生成质量。实验表明，HybridFlow相比16步扩散策略成功率提升15-25%，推理时间从152ms降至19ms（加速8倍，约52Hz），在未见颜色抓取和可变形物体折叠任务中分别达到70.0%和66.3%的成功率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.13718" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
