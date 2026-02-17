@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Imitating What Works: Simulation-Filtered Modular Policy Learning from Human Videos - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Imitating What Works: Simulation-Filtered Modular Policy Learning from Human Videos</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.13197" target="_blank" rel="noreferrer">2602.13197</a></span>
+        <span>作者: Wei-Chiu Ma Team</span>
+        <span>日期: 2026-02-13</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前从人类视频学习机器人操作技能的主流方法主要分为两类。对于具有拟人化手部的机器人，可以通过估计和重定向人类手部姿态来获取机器人动作。然而，对于使用非拟人化末端执行器（如平行二指夹爪）的机器人，这种重定向效果不佳。现有尝试联合学习抓取与抓取后运动的方法，通常需要依赖昂贵的机器人演示数据来克服抓取环节的具身鸿沟。另一种有前景的模块化策略方法，将抓取任务卸载给外部的抓取生成器，并专注于从人类视频中学习抓取后运动，这降低了对机器人数据的依赖。然而，现有模块化方法忽略了两个子任务之间的依赖关系，无法确保生成的稳定抓取是任务兼容的，即抓取姿态可能阻碍后续所需的下游运动，导致任务失败。</p>
+<p>本文针对“仅从人类视频学习时，如何为模块化策略获取任务兼容的抓取技能”这一具体痛点，提出了利用仿真进行过滤和增强的新视角。核心思路是：从人类视频中提取物体运动轨迹后，在仿真中将其与多个候选抓取姿态配对执行，以此过滤不可行的轨迹并为抓取姿态生成任务兼容性标签，从而监督学习一个既能预测抓取后运动又能评估抓取任务兼容性的策略模型。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的框架名为 Perceive-Simulate-Imitate (PSI)，包含三个核心阶段。</p>
+<p><img src="https://arxiv.org/html/2602.13197v1/x3.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图3</strong>：PSI框架概览。包含三个步骤：Perceive（感知）阶段从人类RGB-D视频中跟踪物体的6D位姿轨迹；Simulate（仿真）阶段利用仿真过滤轨迹并为抓取生成标签；Imitate（模仿）阶段通过行为克隆训练一个开环视觉运动策略。</p>
+</blockquote>
+<p><strong>1. Perceive（感知）：提取物体6-DoF位姿轨迹</strong><br>输入是RGB-D人类演示视频。目标是提取被操作物体在相机坐标系下的6-DoF位姿序列 $\mathcal{T}=(\mathbf{T}^{c}<em>{0},\mathbf{T}^{c}</em>{1},\dots,\mathbf{T}^{c}_{L})$。本文采用了基于模型和无模型两种方法。基于模型方法在已知物体3D模型时使用FoundationPose进行跟踪。无模型方法在无3D模型时，首先利用Grounding SAM获取初始物体掩码，然后用Cutie进行掩码传播，再对物体点云应用迭代最近点算法跟踪相对变换，最后通过位姿图优化确保轨迹全局一致性。选择6D位姿而非光流作为运动表示，是因为其可直接通过刚体变换转换为末端执行器动作，避免了基于深度的转换可能引入的误差。</p>
+<p><strong>2. Simulate（仿真）：通过仿真进行轨迹与抓取过滤</strong><br>此阶段的输入是上一步提取的位姿轨迹 $\mathcal{T}$。核心目的是：a) 过滤掉因位姿估计错误或机器人运动学不可行而有害的轨迹；b) 为抓取行为生成监督信号。对于每条轨迹，首先基于第一帧物体点云的3D包围框计算物体初始中心 $\mathbf{u}$。然后，围绕该中心采样一组预定义的锚点抓取 $\hat{\mathcal{G}}={\mathbf{G}<em>{k}}</em>{k=0}^{K}$（覆盖相对于机器人基座的不同方向和仰角）。在仿真器中，依次执行每个抓取 $\mathbf{G}_{k}$ 及其对应的轨迹 $\mathcal{T}$（假设抓取成功后物体与末端执行器刚性连接），并使用路径点控制器验证其可行性。每个抓取-轨迹对被赋予一个二元成功标签。如果一条轨迹对应的所有 $K$ 个抓取都失败，则丢弃整条轨迹。此过程产生了经过过滤的高质量抓取-轨迹对数据，其中包含抓取成功标签。</p>
+<p><strong>3. Imitate（模仿）：策略学习</strong><br>基于仿真过滤后的数据，通过行为克隆训练一个开环策略模型。模型输入包括：初始RGB图像、目标物体的二值掩码、以及一个用于指定任务信息（如目标位置）的2D目标点像素坐标。网络使用ResNet18提取RGB和掩码的特征，拼接后通过MLP与目标点特征融合。最后使用两个独立的MLP头分别预测抓取后轨迹（16个路径点的6D位姿）和 $K$ 个锚点抓取的成功概率。训练使用两个损失：轨迹损失 $L_{\text{traj}}$ 是预测位姿与真实位姿之间的MSE损失；抓取损失 $L_{\text{grasp}}$ 是锚点抓取成功概率的二元交叉熵损失。采用两阶段训练策略：先仅用 $L_{\text{traj}}$ 训练，然后根据数据量大小，要么联合训练两个损失，要么冻结除抓取头外的所有层仅训练 $L_{\text{grasp}}$，以防止对可能带噪声的抓取标签过拟合。</p>
+<p><strong>4. 策略执行与模块化任务导向抓取</strong><br>训练好的策略模型在推理时，与外部任务无关的稳定抓取生成器模块化结合，实现任务导向抓取。</p>
+<p><img src="https://arxiv.org/html/2602.13197v1/x4.png" alt="模块化任务导向抓取"></p>
+<blockquote>
+<p><strong>图4</strong>：模块化任务导向抓取。PSI利用现有模型保证抓取稳定性，并通过在仿真数据上训练的评分模型实现任务兼容性。首先对一组规范锚点抓取进行评分，然后将任何抓取生成器提出的候选抓取分配给最近的锚点抓取，并继承其得分，最终选择得分最高的候选抓取执行。</p>
+</blockquote>
+<p>具体而言，抓取生成器首先生成一组候选6D抓取 ${\mathbf{C}<em>{j}}$。每个候选抓取根据其旋转差异的大小被分配给最近的锚点抓取 $\mathbf{G}</em>{k}$，并继承模型为 $\mathbf{G}_{k}$ 预测的成功概率。最终选择得分最高的候选抓取执行。该方法利用了现有模型保证抓取稳定性，同时通过学习的评分模型确保任务兼容性。</p>
+<p>与现有方法相比，PSI的核心创新点在于引入了<strong>仿真过滤</strong>步骤，它不仅清洗了用于模仿学习的运动轨迹数据，更重要的是为抓取姿态生成了<strong>任务兼容性监督信号</strong>，从而在模块化框架内首次实现了从纯人类视频中学习任务导向的抓取能力。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在四个真实世界操作任务上评估：拾放、倾倒、搅拌、绘画。使用UFACTORY xArm7机械臂与二指夹爪。每个任务收集50个人类视频演示（35训练，15验证）。使用Intel Realsense D455 RGB-D相机。对比基线包括General-Flow等仅从人类视频学习的方法。评估指标为任务成功率。</p>
+<p><strong>6D位姿跟踪质量</strong>：定性评估表明，无论是基于模型的FoundationPose还是无模型的ICP+优化流程，都能为大多数视频提供合理的位姿轨迹，足以支持成功的策略学习。</p>
+<p><img src="https://arxiv.org/html/2602.13197v1/figs/qual_pose/fp_pp5.jpg" alt="定性位姿跟踪结果"></p>
+<blockquote>
+<p><strong>图5</strong>：定性6D位姿跟踪结果。展示了基于模型方法（FoundationPose）和无模型方法（ICP+优化）的跟踪效果。将跟踪到的8个时间点的物体包围框叠加在RGB图像上，两种方法均表现良好。</p>
+</blockquote>
+<p><strong>真实世界策略执行</strong>：训练好的策略仅用35个人类演示就能学习相对复杂的运动，如用勺子搅拌锅。</p>
+<p><strong>与基线方法的定量对比</strong>：在拾放任务上，PSI达到了90%的成功率，显著高于General-Flow的40%和AVDC的50%。在倾倒任务上，PSI成功率为80%，而General-Flow为30%，AVDC为20%。这证明了PSI框架的有效性。</p>
+<p><strong>消融实验</strong>：关键组件的贡献如下：</p>
+<ol>
+<li><strong>仿真过滤</strong>：在拾放任务中，移除仿真过滤（即使用所有原始轨迹）会使成功率从90%降至50%。在倾倒任务中，从80%降至30%。这凸显了过滤错误或不可行轨迹对性能提升至关重要。</li>
+<li><strong>抓取得分模型</strong>：在拾放任务中，不使用抓取得分模型（即从抓取生成器中随机选择稳定抓取）会使成功率从90%降至70%。在倾倒任务中，从80%降至50%。这证明了学习任务兼容性抓取评分的重要性。</li>
+<li><strong>运动表示</strong>：与使用光流作为中间表示的General-Flow相比，直接使用6D位姿的PSI在拾放和倾倒任务上分别带来了50%和50%的绝对性能提升。</li>
+</ol>
+<p><strong>在HOI4D上的预训练</strong>：使用PSI框架在HOI4D数据集上进行预训练，可以显著提升下游任务（如拾放）的样本效率。经过预训练的模型仅需10个机器人演示就能达到约75%的成功率，而未预训练的模型需要50个演示才能达到类似性能。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了PSI框架，首次在仅使用人类视频、无需任何机器人数据的情况下，为模块化操作策略实现了<strong>任务兼容的抓取</strong>。</li>
+<li>引入<strong>仿真过滤</strong>机制，有效清洗了从视频中提取的、可能包含错误或机器人不可行的运动轨迹数据，并生成了抓取任务兼容性的监督信号。</li>
+<li>通过实验验证了使用<strong>6D物体位姿</strong>作为与具身无关的运动表示，比使用光流更直接有效，并能与仿真过滤流程自然结合。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，仿真中假设抓取成功后物体与末端执行器刚性连接，这回避了对抓取稳定性的精确模拟，因为从野外视频中获取详细的物体信息以进行稳定性仿真目前仍不可行。因此，抓取稳定性仍需依赖外部模型。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>仿真作为数据清洗与标注工具</strong>：展示了利用仿真验证从非结构化观察（如视频）中提取的行为计划的可行性，为利用海量网络视频数据提供了一条途径。</li>
+<li><strong>解耦与模块化设计</strong>：将抓取稳定性（通过外部模型保证）与任务兼容性（通过仿真监督学习）解耦的思路，可以扩展到操作任务的其他子问题上。</li>
+<li><strong>跨具身模仿学习</strong>：强化了“物体运动”作为跨具身模仿核心中间表示的有效性，未来可探索更鲁棒、更通用的物体状态提取与表示方法。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对从人类视频学习机器人抓取操作时，抓取与后续任务不兼容的核心问题，提出了PSI（Perceive-Simulate-Imitate）框架。该方法通过模拟过滤人类视频中的抓取-轨迹数据，生成抓取适合性标签，以监督学习任务导向的抓取策略。实验表明，该框架无需机器人数据即可高效学习精确操作技能，比直接使用抓取生成器显著提升鲁棒性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.13197" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
