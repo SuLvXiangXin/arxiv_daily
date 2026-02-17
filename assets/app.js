@@ -57,12 +57,14 @@ const buildCard = (paper) => {
 
   card.addEventListener("click", (e) => {
     if (e.target.tagName === "A") return;
-    window.location.href = detailFile;
+    window.open(detailFile, "_blank", "noopener,noreferrer");
   });
 
   const title = document.createElement("h3");
   const link = document.createElement("a");
   link.href = detailFile;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
   link.textContent = paper.title || "未命名论文";
   title.appendChild(link);
 
