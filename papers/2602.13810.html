@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Mean Flow Policy with Instantaneous Velocity Constraint for One-step Action Generation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Mean Flow Policy with Instantaneous Velocity Constraint for One-step Action Generation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.13810" target="_blank" rel="noreferrer">2602.13810</a></span>
+        <span>作者: Shengbo Eben Li Team</span>
+        <span>日期: 2026-02-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>强化学习领域的一个前沿方向是开发表达能力强大且高效的策略函数，尤其是在动作分布可能为多模态的复杂控制环境中。近年来，以扩散模型和流匹配为代表的生成式策略，通过可学习的变换将简单的基础分布转化为灵活的动作分布，成为高斯或混合策略的有力替代。然而，现有生成式策略的一个关键局限在于其依赖于从噪声到动作的迭代多步优化过程。这种计算依赖带来了显著的开销，阻碍了训练速度，尤其对于需要每步采样的在线强化学习而言。此外，这种开销也转化为可观的推理延迟，是实现实时控制系统高性能闭环的主要障碍。</p>
+<p>本文针对生成式策略的表达能力与一步生成效率之间的矛盾，提出了一种新的视角：能否将生成式策略的表达能力与一步动作生成的效率统一起来？为此，本文提出了平均速度策略（MVP）。与现有流策略学习瞬时速度场并需要多步迭代采样不同，MVP转而学习平均速度场。这一设计实现了从基础高斯噪声到多模态动作分布的直接、单步映射，从而在保持基于流的模型表达能力的同时，大幅提升了训练和推理效率。</p>
+<p>本文核心思路是：通过建模平均速度场实现最快的一步动作生成，并引入瞬时速度约束作为关键的边界条件，以解决平均速度场学习不准确的问题，从而保障策略的表达能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>MVP的整体框架是一个集成到离线到在线强化学习范式中的生成式策略。其核心是利用平均速度场模型，在给定状态$s$下，将噪声$\epsilon \sim \mathcal{N}(0, I)$通过一步计算映射为候选动作：$a = \epsilon + u_{\theta}(\epsilon, 0, 1, s)$。为了从多个候选动作中选出最优动作，MVP采用了“生成-选择”机制：并行生成$N$个候选动作，并使用评论家网络$Q_{\phi}$选择Q值最高的动作作为最终输出，即$a^{\star} = \arg \max_{a^i} Q_{\phi}(s, a^i)$。这个组合过程被视作一个统一的策略$\pi_{\theta}$。</p>
+<p><img src="https://arxiv.org/html/2602.13810v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：速度场示意图。蓝色箭头表示时间区间上的平均速度，红色箭头表示时间点上的瞬时速度。标准流策略学习瞬时速度场$v(a(t), t, s)$，而MVP学习平均速度场$u(a(t), t, r, s)$，定义为$u(a(t), t, r, s) \triangleq \frac{1}{r-t} \int_t^r v(a(\tau), \tau, s) d\tau$。</p>
+</blockquote>
+<p>核心模块是<strong>平均速度模型</strong> $u_{\theta}(a(t), t, r, s)$，其目标是学习从任意起始时间$t$到终止时间$r$（$t &lt; r$）的平均速度。给定一个目标最优动作$a^*$（在训练中由“生成-选择”机制提供），以及线性插值定义的中间点$a(t) = t \cdot a^* + (1-t) \cdot a(0)$，其中$a(0)$为噪声，瞬时速度$v = a^* - a(0)$。通过对平均速度定义式进行微分，可以得到平均流恒等式：$-u + (r-t)\frac{d}{dt}u = -v$。基于此，平均流匹配损失函数定义为：<br>$$<br>\mathcal{L}<em>{\text{MF}}(\theta) = \mathbb{E}</em>{t,r&lt;t,a(t)} | u_{\theta}(a(t), t, r, s) - \text{sg}(v - (t-r)\frac{d}{dt}u_{\theta}(a(t), t, r, s)) |_2^2<br>$$<br>其中$\text{sg}$表示停止梯度操作以稳定训练，总时间导数$\frac{d}{dt}u$通过链式法则和雅可比向量积高效计算。</p>
+<p>然而，仅凭$\mathcal{L}<em>{\text{MF}}$训练平均速度模型存在理论缺陷。平均流恒等式是一个关于$u$的一阶常微分方程（ODE），缺乏明确的边界条件会导致解不唯一（如定理2所证明），从而影响学习精度和策略表达能力。为此，本文引入了第二个核心模块：<strong>瞬时速度约束</strong>。IVC通过强制模型在边界点$t=r$（即时间间隔为零）时，其输出等于已知的瞬时速度$v$，为ODE提供了关键的边界条件。其损失函数为：<br>$$<br>\mathcal{L}</em>{\text{IVC}}(\theta) = \mathbb{E}<em>{t, a(t)} | u</em>{\theta}(a(t), t, t) - v |_2^2<br>$$<br>定理3从理论上证明，最小化IVC损失可以迫使ODE解中的积分常数为零，从而消除累积误差，确保学习到唯一的正确平均速度场$u^*$。</p>
+<p>最终的策略训练损失是两者的加权和：$\mathcal{L}<em>{\text{policy}}(\theta) = \mathcal{L}</em>{\text{MF}}(\theta) + \lambda \mathcal{L}<em>{\text{IVC}}(\theta)$，其中$\lambda$为IVC系数（默认1.0）。评论家网络$Q</em>{\phi}$则通过标准的时序差分误差进行训练。</p>
+<p>与现有方法相比，MVP的主要创新点在于：1) <strong>建模对象不同</strong>：从学习瞬时速度场转向学习平均速度场，这是实现一步生成的关键理论转变。2) <strong>引入IVC</strong>：作为一个轻量化的辅助损失，IVC解决了平均速度场学习中的边界条件缺失问题，这是保障该方法表达能力和学习精度的核心技术创新。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在两个具有挑战性的机器人操作基准上进行：<strong>Robomimic</strong>（包含Lift, Can, Square任务）和<strong>OGBench</strong>（包含cube-double-task 2/3/4和cube-triple-task 2/3/4任务），共计9个稀疏奖励任务。使用了多人类演示数据集（Robomimic）和默认游戏风格数据集（OGBench）。</p>
+<p>对比的基线方法是三个最新的离线到在线RL方法：<strong>FQL</strong>（先训练多步流策略，再模仿训练一步策略）、<strong>BFN</strong>（结合多步流策略与best-of-$N$选择）、<strong>QC</strong>（在BFN基础上应用动作分块以提升探索效率）。MVP也采用了分块技巧，但核心是更高效的平均速度策略。</p>
+<p><img src="https://arxiv.org/html/2602.13810v1/x1.png" alt="性能与效率对比"></p>
+<blockquote>
+<p><strong>图1</strong>：在9个机器人操作任务上的性能和效率对比。左图显示MVP（红色）在大多数任务上取得了最高的成功率。右图显示，与多步流基线（BFN, QC）相比，MVP在训练速度和每步推理速度上均有显著提升。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.13810v1/x3.png" alt="训练曲线"></p>
+<blockquote>
+<p><strong>图3</strong>：在基准任务上的训练曲线。阴影区域表示离线预训练阶段，白色背景表示在线微调阶段。MVP（红色实线）在多个复杂任务（如Square， cube-triple系列）上展现出更快的学习速度和更高的最终性能。</p>
+</blockquote>
+<p>关键定量结果总结如下表（数据来自论文表1）：</p>
+<ul>
+<li><strong>Robomimic-lift</strong>: 所有方法均接近完美（MVP: 1.00 ± 0.00）。</li>
+<li><strong>Robomimic-can</strong>: MVP (0.92 ± 0.07) 略次于最佳基线QC (0.94 ± 0.06)。</li>
+<li><strong>Robomimic-square</strong>: MVP (0.93 ± 0.01) 显著优于其他基线（最佳基线QC: 0.92 ± 0.01，但MVP标准差更优）。</li>
+<li><strong>OGBench任务</strong>: 在6个任务中，MVP在5个上取得最佳成功率，尤其是在最难的cube-triple-task4上，MVP达到0.52 ± 0.11，显著优于QC的0.46 ± 0.13、BFN的0.02 ± 0.02和FQL的0.00 ± 0.00。</li>
+<li><strong>平均成功率</strong>: MVP以0.88 ± 0.05排名第一，优于QC的0.86 ± 0.05、BFN的0.52 ± 0.06和FQL的0.44 ± 0.05。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2602.13810v1/x4.png" alt="IVC消融实验"></p>
+<blockquote>
+<p><strong>图4</strong>：瞬时速度约束（IVC）的消融研究训练曲线。在挑战性任务上，IVC系数$\lambda$越大（红色，$\lambda=1.0$），性能越好。不使用IVC（蓝色，$\lambda=0.0$）会导致性能显著下降，验证了IVC作为边界条件的必要性。</p>
+</blockquote>
+<p>消融实验表明，IVC组件对性能提升至关重要。在Cube-triple-task4任务上，无IVC($\lambda=0.0$)的成功率为0.30 ± 0.21，部分IVC($\lambda=0.5$)提升至0.45 ± 0.15，完整IVC($\lambda=1.0$)达到最佳0.52 ± 0.11。这从实证上支持了IVC通过提供边界条件来提高学习精度的理论主张。</p>
+<p>此外，补充实验对比了MVP与基线方法的一步生成变体（FQL-Onestep, BFN-Onestep, QC-Onestep）。结果显示，这些基线的一步变体在复杂任务上性能接近零，而MVP凭借其专门设计，在保持一步生成效率的同时，成功解决了这些任务，凸显了其架构优势。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献有三点：第一，提出了<strong>平均速度策略</strong>，通过建模平均速度场而非瞬时速度场，首次实现了生成式策略的<strong>最快一步动作生成</strong>，在保持表达力的同时消除了多步采样开销。第二，设计了<strong>瞬时速度约束</strong>，从理论上论证了其作为边界条件的作用，解决了平均速度场学习中的解不唯一问题，显著提升了学习精度和策略表达能力。第三，在<strong>Robomimic和OGBench</strong>两个具有挑战性的机器人操作基准上取得了最先进的成功率，同时在训练和推理速度上相比现有流策略基线有大幅提升，证明了其在实际应用中的高效性。</p>
+<p>论文自身提到的局限性在于，MVP的学习难度高于标准流策略，因为它需要建模由两个时间点指定的任意时间间隔的平均速度，且其学习过程受一个一阶ODE支配。</p>
+<p>本文的启发在于，为生成式策略的效率瓶颈提供了一个新颖的解决方案。将建模目标从“路径”（瞬时速度）转向“整体位移”（平均速度）的思路，可能启发其他生成模型（如扩散模型）探索一步采样的新范式。同时，IVC所体现的<strong>利用边界条件约束解空间以提升学习稳定性</strong>的思想，对解决其他具有类似结构（如积分或微分关系）的模型学习问题具有普适的参考价值。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对强化学习中生成策略表达能力强但需多步迭代采样、效率低的问题，提出**平均速度策略（MVP）**。该方法通过直接学习**平均速度场**，配合训练时引入的**瞬时速度约束（IVC）**，实现从噪声到动作的**一步确定性映射**，在保持高表达能力的同时极大提升效率。实验表明，MVP在多个机器人操作任务上取得了最先进的成功率，并显著超越了现有流策略基线的训练和推理速度。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.13810" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
