@@ -4,6 +4,7 @@ const { marked } = require("marked");
 const pdfParse = require("pdf-parse");
 const { SOURCE_URL, OUTPUT_PATH, MAX_ITEMS } = require("./config");
 const { runConcurrent, filterByRelevance, generateSummary, generateDetailedSummary } = require("./llm");
+const { normalizeArxivId, normalizeArxivInput } = require("./arxiv");
 
 /* ── helpers ─────────────────────────────────────────── */
 
@@ -19,11 +20,6 @@ const stripTags = (value) =>
     .replace(/&#39;/g, "'")
     .replace(/\s+/g, " ")
     .trim();
-
-const extractArxivId = (url) => {
-  const match = url.match(/arxiv\.org\/abs\/([^?#]+)/i);
-  return match ? match[1] : "";
-};
 
 const readExisting = (filePath) => {
   if (!fs.existsSync(filePath)) return { items: [] };
@@ -147,6 +143,30 @@ const fetchArxivContent = async (htmlUrl) => {
   }
 };
 
+const fetchAbsPageMeta = async (absUrl) => {
+  try {
+    const r = await fetch(absUrl, { redirect: "follow" });
+    if (!r.ok) return null;
+    const html = await r.text();
+
+    const titleM = html.match(/<meta\s+name=["']citation_title["']\s+content=["']([^"']+)["']/i);
+    const title = titleM ? titleM[1] : "arXiv Paper";
+
+    const authorMs = [...html.matchAll(/<meta\s+name=["']citation_author["']\s+content=["']([^"']+)["']/gi)];
+    const authors = authorMs.map((m) => m[1]).join(", ");
+
+    const dateM = html.match(/<meta\s+name=["']citation_date["']\s+content=["']([^"']+)["']/i);
+    const date = dateM ? dateM[1] : "";
+
+    const catM = html.match(/primary-subject[^>]*>([^<]+)</i);
+    const category = catM ? catM[1].trim() : "Robotics";
+
+    return { title, authors, date, category };
+  } catch {
+    return null;
+  }
+};
+
 /* ── build detail HTML page for a paper ──────────────── */
 
 const buildDetailPage = (paper) => {
@@ -263,7 +283,7 @@ const buildOutput = async (items, existing, outputPath, pagesDir) => {
   const total = toProcess.length;
 
   const tasks = toProcess.map(({ item, previous }) => async () => {
-    const arxivId = extractArxivId(item.url);
+    const arxivId = normalizeArxivId(item.url);
 
     // Fetch full text from arXiv HTML page
     const absUrl = item.url.replace("http://", "https://");
@@ -328,11 +348,90 @@ const buildOutput = async (items, existing, outputPath, pagesDir) => {
   return { generatedAt, source: SOURCE_URL, items: allDone };
 };
 
+const saveIndex = (payload) => {
+  const indexItems = payload.items.map((p) => ({
+    id: p.id,
+    title: p.title,
+    arxivId: p.arxivId,
+    date: p.date,
+    authors: p.authors,
+    category: p.category,
+    summary: p.summary,
+    tags: p.tags,
+    updatedAt: p.updatedAt,
+  }));
+  const indexPath = path.resolve(__dirname, "..", "data", "papers-index.json");
+  fs.writeFileSync(
+    indexPath,
+    JSON.stringify({ generatedAt: payload.generatedAt, source: payload.source, items: indexItems })
+  );
+  console.log(`Index file saved to data/papers-index.json (${(Buffer.byteLength(JSON.stringify({generatedAt: payload.generatedAt, source: payload.source, items: indexItems})) / 1024).toFixed(0)} KB)`);
+};
+
 /* ── main ────────────────────────────────────────────── */
 
 const main = async () => {
   const outputPath = path.resolve(__dirname, "..", OUTPUT_PATH);
   const pagesDir = path.resolve(__dirname, "..", "papers");
+  const forceArxivInput = (process.env.FORCE_ARXIV_INPUT || "").trim();
+  const forceAddSingle = /^(1|true|yes)$/i.test(String(process.env.FORCE_ADD_SINGLE || ""));
+
+  if (forceArxivInput && forceAddSingle) {
+    console.log(`\n========== Force Add 模式 ==========`);
+
+    const normalized = normalizeArxivInput(forceArxivInput);
+    if (!normalized) {
+      throw new Error(`Invalid FORCE_ARXIV_INPUT: ${forceArxivInput}`);
+    }
+
+    const existing = readExisting(outputPath);
+    const existingById = new Map(
+      (existing.items || [])
+        .map((item) => {
+          const id = normalizeArxivId(item.arxivId || item.url || item.id || "");
+          return id ? [id, item] : null;
+        })
+        .filter(Boolean)
+    );
+
+    if (existingById.has(normalized.arxivId)) {
+      console.log(`论文已存在: ${normalized.arxivId}，跳过新增。`);
+      return;
+    }
+
+    const meta = await fetchAbsPageMeta(normalized.absUrl);
+    if (!meta) {
+      throw new Error(`Failed to fetch metadata from ${normalized.absUrl}`);
+    }
+
+    const forcedItem = {
+      url: normalized.absUrl,
+      title: meta.title,
+      date: meta.date,
+      authors: meta.authors,
+      category: meta.category,
+    };
+
+    console.log(`准备强制新增论文: ${forcedItem.title}`);
+
+    const payload = await buildOutput([forcedItem], existing, outputPath, pagesDir);
+    const oldPapers = (existing.items || []).filter((paper) => {
+      const id = normalizeArxivId(paper.arxivId || paper.url || paper.id || "");
+      return id !== normalized.arxivId;
+    });
+
+    payload.items = [...payload.items, ...oldPapers];
+    fs.writeFileSync(outputPath, JSON.stringify(payload, null, 2));
+    saveIndex(payload);
+
+    console.log(`\n========== 完成 ==========`);
+    console.log(`Force add 完成: ${normalized.arxivId}`);
+    return;
+  }
+
+  if (forceArxivInput && !forceAddSingle) {
+    console.log("FORCE_ARXIV_INPUT 已提供，但 FORCE_ADD_SINGLE 未开启，忽略单篇强制入库参数。");
+  }
 
   const response = await fetch(SOURCE_URL);
   if (!response.ok) {
@@ -420,23 +519,7 @@ const main = async () => {
   fs.writeFileSync(outputPath, JSON.stringify(payload, null, 2));
 
   // Generate lightweight index for fast main-page loading
-  const indexItems = payload.items.map((p) => ({
-    id: p.id,
-    title: p.title,
-    arxivId: p.arxivId,
-    date: p.date,
-    authors: p.authors,
-    category: p.category,
-    summary: p.summary,
-    tags: p.tags,
-    updatedAt: p.updatedAt,
-  }));
-  const indexPath = path.resolve(__dirname, "..", "data", "papers-index.json");
-  fs.writeFileSync(
-    indexPath,
-    JSON.stringify({ generatedAt: payload.generatedAt, source: payload.source, items: indexItems })
-  );
-  console.log(`Index file saved to data/papers-index.json (${(Buffer.byteLength(JSON.stringify({generatedAt: payload.generatedAt, source: payload.source, items: indexItems})) / 1024).toFixed(0)} KB)`);
+  saveIndex(payload);
 
   console.log(`\n========== 完成 ==========`);
   console.log(

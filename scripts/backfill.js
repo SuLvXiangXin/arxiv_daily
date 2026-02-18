@@ -18,13 +18,9 @@ const { marked } = require("marked");
 const pdfParse = require("pdf-parse");
 const { OUTPUT_PATH } = require("./config");
 const { runConcurrent, generateSummary, generateDetailedSummary } = require("./llm");
+const { normalizeArxivId } = require("./arxiv");
 
 /* ── helpers (copied from fetch_papers.js) ────────────── */
-
-const extractArxivId = (url) => {
-  const match = url.match(/arxiv\.org\/abs\/([^?#]+)/i);
-  return match ? match[1] : "";
-};
 
 const fetchArxivHtmlLink = async (absUrl) => {
   try {
@@ -233,7 +229,7 @@ const main = async () => {
   const total = todo.length;
 
   const tasks = todo.map((url) => async () => {
-    const arxivId = extractArxivId(url);
+    const arxivId = normalizeArxivId(url);
     const absUrl = url.replace("http://", "https://");
 
     // Fetch metadata from abs page

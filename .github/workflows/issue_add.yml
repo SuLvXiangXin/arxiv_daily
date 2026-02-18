@@ -1,0 +1,94 @@
+name: Add Paper From Issue
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+    inputs:
+      arxiv_input:
+        description: "arXiv URL/ID to force add"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  add-paper:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.issue.title, '[add-paper]') || contains(github.event.issue.body, 'arxiv.org/') || contains(github.event.issue.body, 'arXiv') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve arXiv input
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          DISPATCH_INPUT: ${{ github.event.inputs.arxiv_input || '' }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            RAW="$DISPATCH_INPUT"
+          else
+            RAW="$(printf "%s\n%s" "$ISSUE_TITLE" "$ISSUE_BODY" | grep -Eo 'https?://arxiv\.org/(abs|pdf|html)/[^[:space:])]+|[0-9]{4}\.[0-9]{4,5}(v[0-9]+)?' | head -n1 || true)"
+          fi
+
+          if [[ -z "$RAW" ]]; then
+            echo "No valid arXiv input found"
+            echo "arxiv_input=" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          echo "Resolved arXiv input: $RAW"
+          echo "arxiv_input=$RAW" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch and force add paper
+        run: node scripts/fetch_papers.js
+        env:
+          LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_ENABLE: ${{ secrets.LLM_ENABLE }}
+          FORCE_ARXIV_INPUT: ${{ steps.resolve.outputs.arxiv_input }}
+          FORCE_ADD_SINGLE: "true"
+
+      - name: Commit updates
+        id: commit
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data/papers.json data/papers-index.json papers/
+            git commit -m "chore: add paper from issue"
+            git push
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No changes"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment result
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const hasChanges = `${{ steps.commit.outputs.has_changes }}` === 'true';
+            const input = `${{ steps.resolve.outputs.arxiv_input }}`;
+            const body = hasChanges
+              ? `已接收入库请求：${input}\n\n已触发抓取并提交数据，稍后刷新页面可见。`
+              : `该论文可能已存在或未产生新变更：${input}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });

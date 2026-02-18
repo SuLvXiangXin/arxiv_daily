@@ -18,11 +18,7 @@ const { marked } = require("marked");
 const pdfParse = require("pdf-parse");
 const { OUTPUT_PATH } = require("./config");
 const { runConcurrent, generateSummary, generateDetailedSummary } = require("./llm");
-
-const extractArxivId = (url) => {
-  const match = url.match(/arxiv\.org\/abs\/([^?#]+)/i);
-  return match ? match[1] : "";
-};
+const { normalizeArxivId } = require("./arxiv");
 
 const fetchArxivPdfText = async (absUrl) => {
   try {
@@ -158,7 +154,7 @@ const main = async () => {
 
   const tasks = todo.map(({ index, paper }) => async () => {
     const absUrl = (paper.url || paper.id || "").replace("http://", "https://");
-    const arxivId = extractArxivId(absUrl);
+    const arxivId = normalizeArxivId(absUrl);
 
     // Fetch full text from PDF
     const fullText = await fetchArxivPdfText(absUrl);

@@ -6,12 +6,97 @@ const searchCountEl = document.getElementById("search-count");
 const dateFromInput = document.getElementById("date-from");
 const dateToInput = document.getElementById("date-to");
 const dateClearBtn = document.getElementById("date-filter-clear");
+const arxivInput = document.getElementById("arxiv-input");
+const arxivCheckBtn = document.getElementById("arxiv-check-btn");
+const arxivSubmitBtn = document.getElementById("arxiv-submit-btn");
+const arxivStatusEl = document.getElementById("arxiv-status");
 
 let allPapers = [];
+let existingArxivIds = new Set();
 const PAGE_SIZE = 30;
 let displayedCount = 0;
 let currentList = []; // filtered or full list currently being viewed
 let loading = false;
+
+const normalizeArxivId = (value) => {
+  if (!value) return "";
+  const input = String(value).trim();
+  const direct = input.match(/^(\d{4}\.\d{4,5})(?:v\d+)?$/i);
+  if (direct) return direct[1];
+
+  const urlMatch = input.match(/arxiv\.org\/(abs|pdf|html)\/([^?#]+)/i);
+  if (!urlMatch) return "";
+  const raw = decodeURIComponent(urlMatch[2]).replace(/\.pdf$/i, "").replace(/\/$/, "");
+  const idMatch = raw.match(/^(\d{4}\.\d{4,5})(?:v\d+)?$/i);
+  if (!idMatch) return "";
+  return idMatch[1];
+};
+
+const getRepoFromPage = () => {
+  const host = window.location.hostname || "";
+  if (!host.endsWith(".github.io")) return null;
+
+  const owner = host.split(".")[0] || "";
+  const segments = window.location.pathname.split("/").filter(Boolean);
+  const repo = segments[0] || "";
+  if (!owner || !repo) return null;
+
+  return { owner, repo };
+};
+
+const setArxivStatus = (message, level = "info") => {
+  if (!arxivStatusEl) return;
+  arxivStatusEl.className = `arxiv-status ${level}`;
+  arxivStatusEl.textContent = message;
+};
+
+const buildIssueUrl = (rawInput, normalizedId) => {
+  const repo = getRepoFromPage();
+  if (!repo) return "";
+
+  const title = `[add-paper] ${normalizedId}`;
+  const body = [
+    "请添加以下 arXiv 论文到库中：",
+    "",
+    `- arXiv ID: ${normalizedId}`,
+    `- 原始输入: ${rawInput}`,
+    "",
+    "（由网页端自动生成）",
+  ].join("\n");
+
+  const params = new URLSearchParams({
+    title,
+    body,
+    labels: "add-paper",
+  });
+  return `https://github.com/${repo.owner}/${repo.repo}/issues/new?${params.toString()}`;
+};
+
+const checkArxivInput = () => {
+  const raw = arxivInput?.value?.trim() || "";
+  if (!raw) {
+    if (arxivSubmitBtn) arxivSubmitBtn.disabled = true;
+    setArxivStatus("请输入 arXiv 链接或 ID。", "info");
+    return null;
+  }
+
+  const normalizedId = normalizeArxivId(raw);
+  if (!normalizedId) {
+    if (arxivSubmitBtn) arxivSubmitBtn.disabled = true;
+    setArxivStatus("无法识别链接，请输入 arXiv abs/pdf/html 链接或新 ID。", "error");
+    return null;
+  }
+
+  if (existingArxivIds.has(normalizedId)) {
+    if (arxivSubmitBtn) arxivSubmitBtn.disabled = true;
+    setArxivStatus(`已存在：${normalizedId}`, "success");
+    return { raw, normalizedId, exists: true };
+  }
+
+  if (arxivSubmitBtn) arxivSubmitBtn.disabled = false;
+  setArxivStatus(`库中不存在：${normalizedId}，可提交入库请求。`, "warning");
+  return { raw, normalizedId, exists: false };
+};
 
 const formatDate = (value) => {
   if (!value) return "--";
@@ -187,6 +272,12 @@ const loadPapers = async () => {
       .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
     allPapers = sorted;
+    existingArxivIds = new Set(
+      sorted
+        .map((item) => normalizeArxivId(item.arxivId || item.url || item.id || ""))
+        .filter(Boolean)
+    );
+
     renderPapers(allPapers);
     paperCountEl.textContent = String(sorted.length);
     lastUpdatedEl.textContent = formatDate(data.generatedAt);
@@ -207,6 +298,7 @@ const loadPapers = async () => {
   } catch (error) {
     console.error(error);
     renderEmpty();
+    setArxivStatus("论文数据加载失败，暂时无法检查是否已存在。", "error");
   }
 };
 
@@ -258,6 +350,36 @@ dateClearBtn.addEventListener("click", () => {
   document.querySelectorAll(".date-quick-btn").forEach((b) => b.classList.remove("active"));
   filterPapers();
 });
+
+if (arxivInput) {
+  arxivInput.addEventListener("input", () => {
+    if (arxivSubmitBtn) arxivSubmitBtn.disabled = true;
+    checkArxivInput();
+  });
+}
+
+if (arxivCheckBtn) {
+  arxivCheckBtn.addEventListener("click", () => {
+    checkArxivInput();
+  });
+}
+
+if (arxivSubmitBtn) {
+  arxivSubmitBtn.addEventListener("click", () => {
+    const result = checkArxivInput();
+    if (!result || result.exists) return;
+
+    const issueUrl = buildIssueUrl(result.raw, result.normalizedId);
+    if (!issueUrl) {
+      setArxivStatus("无法自动定位 GitHub 仓库，请手动到仓库新建 Issue。", "error");
+      return;
+    }
+
+    window.open(issueUrl, "_blank", "noopener,noreferrer");
+    setArxivStatus("已打开提交页面。创建 Issue 后，系统将异步入库，稍后刷新可见。", "success");
+    arxivSubmitBtn.disabled = true;
+  });
+}
 
 /* ── quick date buttons ───────────────────────────────── */
 document.querySelectorAll(".date-quick-btn").forEach((btn) => {
