@@ -7,7 +7,6 @@ const dateFromInput = document.getElementById("date-from");
 const dateToInput = document.getElementById("date-to");
 const dateClearBtn = document.getElementById("date-filter-clear");
 const arxivInput = document.getElementById("arxiv-input");
-const arxivCheckBtn = document.getElementById("arxiv-check-btn");
 const arxivSubmitBtn = document.getElementById("arxiv-submit-btn");
 const arxivStatusEl = document.getElementById("arxiv-status");
 
@@ -76,7 +75,7 @@ const checkArxivInput = () => {
   const raw = arxivInput?.value?.trim() || "";
   if (!raw) {
     if (arxivSubmitBtn) arxivSubmitBtn.disabled = true;
-    setArxivStatus("请输入 arXiv 链接或 ID。", "info");
+    setArxivStatus("请输入 arXiv 链接或 ID。提交入库申请后约两分钟内完成分析", "info");
     return null;
   }
 
@@ -354,12 +353,6 @@ dateClearBtn.addEventListener("click", () => {
 if (arxivInput) {
   arxivInput.addEventListener("input", () => {
     if (arxivSubmitBtn) arxivSubmitBtn.disabled = true;
-    checkArxivInput();
-  });
-}
-
-if (arxivCheckBtn) {
-  arxivCheckBtn.addEventListener("click", () => {
     checkArxivInput();
   });
 }

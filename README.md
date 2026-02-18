@@ -33,7 +33,7 @@ Enable GitHub Pages for the repository (root folder). The workflow will keep `da
 
 - On homepage, use “手动补充论文” and paste arXiv `abs/pdf/html` link (or new ID like `2503.01078`).
 - The page checks whether the paper already exists by normalized arXiv ID.
-- If missing, click “不存在，提交入库” to open a prefilled GitHub Issue.
+- If missing, click “提交入库” to open a prefilled GitHub Issue.
 - `Add Paper From Issue` workflow will force-fetch and add the paper, then commit generated artifacts.
 - The site updates asynchronously; refresh after workflow completion.
 
