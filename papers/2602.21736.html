@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Joint-Aligned Latent Action: Towards Scalable VLA Pretraining in the Wild - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Joint-Aligned Latent Action: Towards Scalable VLA Pretraining in the Wild</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.21736" target="_blank" rel="noreferrer">2602.21736</a></span>
+        <span>作者: Zongqing Lu Team</span>
+        <span>日期: 2026-02-25</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型（VLAs）的发展受到大规模、多样化机器人数据稀缺的严重制约。人类操作视频为此提供了一个丰富且成本效益高的替代数据源。然而，现有方法面临一个质量与多样性之间的权衡：实验室收集的数据集（如带精确3D手部跟踪标注的数据）规模小、场景受限（多为受控桌面环境）；而海量的野外视频（如Ego4D）虽提供了丰富的自然行为和场景多样性，但缺乏可靠的动作标签。这导致一个核心问题：如何有效结合这两种互补的人类数据源，以实现VLA预训练的规模化？</p>
+<p>现有利用人类视频的方法主要分为两类。一类是间接学习，通过辅助视觉表征学习或世界模型来捕获运动动态，但其与具体动作的关联较弱。另一类则利用逆动力学建模，通过前向动力学模型重建未来帧来约束潜在动作的学习。然而，对于精细的人类手部操作，这种基于重建的范式效率低下，因为潜在动作的质量严重依赖于前向动力学模型对复杂多变的手部运动进行精确像素级重建的能力，这通常引入噪声而非稳定的动作基础。</p>
+<p>本文提出了一种新的视角，受人类通过可迁移的动作模式（而非记忆每个视觉细节）来学习操作的启发，旨在绕过完整的视觉动态重建。其核心思路是：学习一个<strong>联合对齐的潜在动作</strong>空间，该空间通过将VLA上下文产生的预测性嵌入，与从逆动力学推断出的潜在动作进行对齐来构建，从而形成一个对上下文可预测且对视觉动态信息丰富的统一表征，以支持从异构人类数据中进行规模化学习。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>JALA框架旨在通过联合对齐，利用标注数据和未标注的野外视频进行VLA预训练。其整体流程分为预训练和下游任务迁移两个阶段。</p>
+<p><img src="https://arxiv.org/html/2602.21736v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：JALA框架概览。<strong>左（预训练）</strong>：被掩码的运动分块的隐藏状态作为预测性嵌入，与由边界帧通过潜在动作感知器（LAP）生成的潜在动作进行对齐。潜在状态感知器（LSP）注入初始帧上下文，两者通过解耦的EMA更新链接。<strong>右（后训练）</strong>：预训练好的预测性嵌入被输入到一个流匹配头中，用于机器人任务迁移。</p>
+</blockquote>
+<p><strong>整体流程与输入输出</strong>：预训练阶段，模型接收文本指令、视频首帧以及被分词为离散令牌的运动序列（对于有标注数据）或掩码令牌（对于未标注数据）。模型基于Transformer的VLA架构处理这些多模态输入。核心创新在于，模型不仅预测被掩码的运动令牌（当标签可用时），更重要的是将其中间层（选定注意力层）的隐藏状态作为<strong>预测性嵌入</strong> <code>h</code> 提取出来。同时，一个独立的<strong>潜在动作感知器</strong>模块接收当前运动分块的起止帧，通过逆动力学推断出<strong>潜在动作</strong> <code>z</code>。训练目标是通过对齐损失使 <code>h</code> 与 <code>z</code> 接近，从而将动作语义与视觉动态信息共同注入到预测性嵌入中。后训练阶段，将预训练好的VLA骨干冻结，将其输出的预测性嵌入作为条件，输入到一个基于扩散Transformer的流匹配头中，生成连续的机器人动作。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>掩码分块预测</strong>：对于有手部姿态标注的数据，采用分块级别的掩码令牌建模目标。随机选择一个运动分块作为主要预测目标，对其内部令牌按随机比例进行掩码，而之前的块保持完整，之后的块以低概率（5%）掩码。这种混合掩码策略缓解了训练与推理的差距。模型通过双向注意力学习恢复被掩码的令牌，其对应的隐藏状态 <code>h</code> 从而承载了分块级别的运动模式。</li>
+<li><strong>潜在动作感知器与联合对齐</strong>：LAP是一个Perceiver模块，作为逆动力学模型。它以运动分块的起止帧特征（来自预训练的视觉编码器，如DINOv3）为输入，通过一组可学习的查询向量，输出K个潜在动作向量 <code>z</code>，捕获分块级别的视觉动态变化。核心的<strong>联合对齐损失</strong>是计算预测性嵌入 <code>h</code> 与潜在动作 <code>z</code> 之间的L1距离：<code>ℒ_Align = Σ||h - z||_1</code>。当有标注时，<code>h</code> 同时受MCP损失监督；当无标注时，<code>h</code> 仅受对齐损失约束。这使得预测性嵌入成为一个连接真实动作（若有）和视觉动态的桥梁。</li>
+<li><strong>联合感知器与解耦更新</strong>：为了解决视觉编码器特征空间与VLA嵌入空间可能存在的错位问题，引入了与LAP结构相同、参数共享的<strong>潜在状态感知器</strong>。LSP接收重复的初始帧<code>(v0, v0)</code>，其输出用于与LAP的潜在动作在同一个空间中进行对齐，以减轻预测负担。关键设计是<strong>解耦的EMA更新</strong>：LSP的主干参数通过其自身的梯度进行优化，以确保视觉特征被映射到由MCP和对齐损失塑造的预测性嵌入空间；LAP的查询参数通过其自身的梯度进行优化，以使潜在动作锚定在明确的动作线索上。然后，通过指数移动平均，将LSP的主干参数传播给LAP，将LAP的查询参数传播给LSP。这种不对称设计确保了潜在动作既可从上下文中预测，又保有动作基础。</li>
+<li><strong>两阶段训练与流匹配迁移</strong>：预训练使用混合目标 <code>ℒ = 𝟏_labeled ⋅ ℒ_MCP + λ ℒ_Align</code>，在混合数据集 <code>UniHand-Mix</code> 上进行。后训练阶段，使用流匹配目标，将预训练VLA提取的预测性嵌入 <code>{h_i,k}</code> 作为条件，指导扩散Transformer去噪以生成机器人动作。</li>
+</ol>
+<p><strong>创新点</strong>：与现有方法相比，JALA的核心创新在于：1) <strong>范式转变</strong>：从依赖像素重建来约束潜在动作，转变为直接对齐预测性嵌入与潜在动作，避免了复杂动态建模的噪声。2) <strong>联合对齐机制</strong>：通过一个统一的损失，使同一个嵌入空间同时吸收来自标注数据的动作语义和来自未标注数据的视觉动态信息。3) <strong>解耦的感知器设计</strong>：通过LSP和LAP的联合使用及不对称更新策略，稳定了跨异构特征空间的对齐过程。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>数据集</strong>：使用自建的<code>UniHand-Mix</code>数据集（7.5M样本，&gt;2000小时）进行预训练，该数据集混合了500万带精确手部跟踪的实验室视频和250万野外操作视频。</li>
+<li><strong>基准测试</strong>：<ul>
+<li><strong>手部运动生成</strong>：在实验室（UniHand测试集）和野外（Ego4D子集）场景下评估生成手部运动的逼真度（使用FID、KID指标）和对指令的跟随能力（CLIP-Score）。</li>
+<li><strong>机器人操作</strong>：在模拟环境（Libero, RoboCasa）和真实世界任务（4个任务，包括分布内和分布外）中评估下游任务性能，使用任务成功率作为指标。</li>
+</ul>
+</li>
+<li><strong>对比方法</strong>：包括直接在大规模机器人数据上训练的VLAs（如RT-2、OpenVLA）、利用人类视频的方法（如LAPA、GR-1）以及一些强基线（如Being-H0）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>手部运动生成</strong>：在野外场景下，JALA生成的视频在FID（18.21 vs. 21.85）和KID（1.21 vs. 1.62）指标上均显著优于最强的对比方法LAPA，表明其能生成更逼真、更符合动力学规律的手部运动。在实验室场景下，JALA也保持了有竞争力的性能。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.21736v1/x4.png" alt="手部运动生成定性对比"></p>
+<blockquote>
+<p><strong>图4</strong>：野外场景下手部运动生成的定性对比。JALA生成的动作（右列）比基线方法LAPA（中列）更接近真实视频（左列），例如在“拧开瓶盖”任务中手部旋转和抓握的姿态更合理。</p>
+</blockquote>
+<ol start="2">
+<li><strong>模拟机器人操作</strong>：在Libero和RoboCasa基准测试中，JALA在相同模型规模下取得了最优性能。例如，在Libero上，JALA的成功率为85.3%，显著高于LAPA（79.5%）和GR-1（78.0%）。即使在对比更大规模的模型（如参数量多7倍的OpenVLA）时，JALA也展现了竞争力。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.21736v1/x5.png" alt="模拟任务成功率对比"></p>
+<blockquote>
+<p><strong>图5</strong>：在Libero和RoboCasa模拟任务上的成功率对比。JALA在相同规模模型中表现最佳，并与更大规模的模型（OpenVLA）性能相当。</p>
+</blockquote>
+<ol start="3">
+<li><strong>真实世界机器人操作</strong>：在4个真实任务中，JALA的平均成功率达到77.5%，高于所有基线。特别是在更具挑战性的“分布外”任务（如操作未见过的物体）上，JALA的优势更为明显（成功率70.0% vs. LAPA的57.5%），证明了其更好的泛化能力。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.21736v1/x7.png" alt="真实世界任务性能"></p>
+<blockquote>
+<p><strong>图7</strong>：真实世界机器人操作任务的成功率。JALA在总体和分布外任务上均领先于基线方法。</p>
+</blockquote>
+<ol start="4">
+<li><strong>消融实验</strong>：<ul>
+<li><strong>对齐与数据的作用</strong>：移除联合对齐损失（<code>w/o Align</code>）或仅使用实验室数据（<code>Lab-only</code>）都会导致性能显著下降，尤其是在野外手部运动生成和机器人操作任务上，验证了联合对齐机制和混合数据集的必要性。</li>
+<li><strong>解耦更新的作用</strong>：将解耦的EMA更新替换为简单的共享参数或直接对齐（<code>w/o Decouple</code>）会导致训练不稳定和性能下降，证明了该设计对于稳定联合对齐的重要性。</li>
+<li><strong>流匹配迁移的作用</strong>：与直接微调VLA输出令牌相比，使用流匹配头进行迁移（<code>Ours</code>）能带来显著的性能提升。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2602.21736v1/x8.png" alt="消融实验结果"></p>
+<blockquote>
+<p><strong>图8</strong>：消融实验结果。移除联合对齐（Align）、仅用实验室数据（Lab-only）或移除解耦更新（Decouple）均导致性能下降，证明了各核心组件的有效性。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了联合对齐的潜在动作范式</strong>：通过将VLA的预测性嵌入与逆动力学推断的潜在动作直接对齐，绕过了对像素级重建的依赖，为从大规模异构人类视频中学习可转移的动作模式提供了一条可扩展的新途径。</li>
+<li><strong>构建了大规模混合人类操作数据集UniHand-Mix</strong>：整合了500万带精确标注的实验室视频和250万野外视频，为VLA预训练提供了兼具高质量监督和丰富多样性的数据源。</li>
+<li><strong>取得了卓越的实证性能</strong>：在野外手部运动生成、模拟及真实机器人操作任务上，JALA均实现了领先或具有竞争力的性能，特别是在分布外泛化方面表现突出，验证了所提方法的有效性。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，对野外视频的利用依赖于外部模型（如WiLoR、HaWoR）进行手部区域检测和姿态估计以进行过滤和伪标注，这可能会引入误差并限制数据规模进一步扩大。未来的工作可以探索更端到端或无弱监督的方式利用更原始的野外视频。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>范式启发性</strong>：JALA证明，通过设计合适的对齐目标，可以有效地从缺乏精确动作标签但富含视觉动态的数据中学习有用的动作表征，这为利用互联网规模的视频进行机器人学习打开了新思路。</li>
+<li><strong>架构设计启发性</strong>：解耦的感知器更新机制为解决异构模态（如预训练视觉特征与VLA嵌入）间的稳定对齐提供了可借鉴的方案。</li>
+<li><strong>数据策略启发性</strong>：高质量标注数据与大规模未标注数据的混合使用策略，是平衡学习效果与可扩展性的有效实践，值得在其他需要大规模行为数据的领域推广。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型缺乏大规模机器人数据的瓶颈，提出JALA预训练框架。该方法通过联合对齐的潜在动作学习，避免完整的视觉动态重建，直接学习与逆动力学和真实动作对齐的预测性动作嵌入。基于构建的UniHand-Mix大规模数据集实验表明，JALA能在多种场景下生成更真实的手部动作，显著提升了仿真和真实机器人操作任务的性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.21736" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
