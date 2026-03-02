@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>ABPolicy: Asynchronous B-Spline Flow Policy for Real-Time and Smooth Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>ABPolicy: Asynchronous B-Spline Flow Policy for Real-Time and Smooth Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.23901" target="_blank" rel="noreferrer">2602.23901</a></span>
+        <span>作者: Yuting Su Team</span>
+        <span>日期: 2026-02-27</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作策略需要平滑且能响应环境变化的动作。当前主流方法基于模仿学习框架，采用动作分块技术和扩散模型在原始动作空间进行同步推理。这些方法存在三个关键局限性：1) 动作块内部的抖动，破坏了轨迹平滑性；2) 动作块之间的不连续性，在分块边界处产生冲击并导致后续观测的分布偏移；3) 同步推理导致的“停-走”式执行，削弱了对动态环境变化的响应能力。</p>
+<p>本文针对上述痛点，提出寻找一种既能保证轨迹平滑性，又易于集成到异步推理中的动作空间或表示。核心思路是采用B样条控制点空间来表示动作，并结合流匹配模型进行预测，通过双向动作预测和连续性约束重拟合确保块间连续性，最终通过异步推理实现实时、平滑的机器人操作。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>ABPolicy的整体目标是在B样条控制点空间学习一个连续分布，并在推理时异步更新部分控制点，以确保新生成的轨迹与已执行动作平滑衔接。</p>
+<p><img src="https://arxiv.org/html/2602.23901v1/2602.23901v1/x1.png" alt="方法框架图"></p>
+<blockquote>
+<p><strong>图2</strong>：ABPolicy整体框架。策略网络经过双向动作预测训练，在推理时异步生成未来的B样条控制点。随后，连续性约束重拟合模块对这些控制点进行优化，以确保与已执行轨迹的平滑连续性。</p>
+</blockquote>
+<p><strong>整体流程</strong>：给定观测，策略网络预测未来动作块对应的B样条控制点。在异步推理延迟期间，机器人持续执行上一个周期的动作。新控制点生成后，经过连续性约束重拟合模块进行局部调整，以无缝衔接已执行的动作历史，形成平滑的新轨迹并执行。</p>
+<p><strong>核心模块1：B样条轨迹参数化</strong>。该方法使用三次B样条（度p=3）独立参数化动作向量的每个维度。给定离散动作序列，通过求解线性最小二乘问题拟合出一组最优控制点。B样条表示本身保证了C2连续性，即轨迹的速度和加速度连续，从而在块内消除了抖动。</p>
+<p><strong>核心模块2：基于流匹配的双向动作预测</strong>。策略网络学习一个条件模型πθ(Ct*|ot)，预测与观测ot对应的B样条控制点Ct<em>。为增强时序连贯性，模型采用双向动作预测：每个时间步t的目标是一个包含过去P步和未来H步的动作块At，并拟合其对应的控制点Ct</em>作为回归目标。采用流匹配框架进行训练，损失函数如论文公式(4)所示，使网络学习一个将先验噪声分布转换为目标控制点分布的条件向量场，能够建模动作的多模态分布。</p>
+<p><strong>核心模块3：连续性约束重拟合</strong>。为解决异步推理引入的延迟导致的动作不连续问题，该方法对新预测的轨迹起点进行局部调整。设策略预测的控制点为{c_pred,i}，已执行的P个动作为{a_exec_t}。CCR机制仅优化前N_free个控制点，而固定后续控制点（来自策略预测）。通过求解公式(5)和(6)定义的最小二乘问题，得到新的初始控制点{c_new,i}，使新轨迹s_new(u)的起始部分与已执行动作历史最佳匹配，从而保证连续性。</p>
+<p><strong>核心模块4：异步推理框架</strong>。如图3所示，系统在并行线程中运行模型推理和机器人控制。当模型在后台计算下一个动作序列时，机器人持续执行上一个周期的轨迹，从而隐藏了推理延迟。新序列一经推断，立即应用重拟合方法更新动作队列，确保平滑过渡，并立即触发下一个推理周期。</p>
+<p><img src="https://arxiv.org/html/2602.23901v1/2602.23901v1/x2.png" alt="异步推理示意图"></p>
+<blockquote>
+<p><strong>图3</strong>：异步推理概述。在推理延迟期间，机器人执行前一个周期的动作。灰色阴影区域表示推理延迟窗口，橙色阴影区域表示正在执行的动作。</p>
+</blockquote>
+<p><strong>创新点</strong>：1) 使用连续的B样条控制点作为动作表示，保证了块内平滑性并降低了拟合误差；2) 提出双向动作预测与基于优化的连续性约束重拟合相结合，以简单有效的方式强制块间连续性；3) 采用异步推理架构，实现了真正的实时响应。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在7个机器人操作任务上评估，包括3个动态任务（物体在旋转平台上）和4个静态任务。使用配备平行夹爪和两个固定RGB相机的6自由度机械臂，控制频率为30 Hz。基线方法包括Diffusion Policy (DP)以及本文方法在同步和异步模式下的变体。</p>
+<p><strong>关键结果1：同步与异步推理对比</strong>。如表I所示，在动态任务上，异步推理相比同步推理平均成功率提升了18.3%。在静态任务上，异步推理主要提升了效率，平均完成任务时间减少了14.2%（推理延迟约90毫秒）。</p>
+<p><strong>关键结果2：动作表示精度分析</strong>。如表II所示，比较了四种动作表示方法在重建40步长动作块时的精度。本文使用的连续B样条表示取得了最低的平均误差（0.00031）和最高的信噪比（50.7 dB），显著优于离散分桶、DCT系数和离散化B样条方法，证明了其高保真度。</p>
+<p><img src="https://arxiv.org/html/2602.23901v1/2602.23901v1/x3.png" alt="任务示意图"></p>
+<blockquote>
+<p><strong>图4</strong>：静态和动态环境下的操作任务。动态任务涉及物体在匀速旋转的平台上（大约每10秒一转）。</p>
+</blockquote>
+<p><strong>关键结果3：动作平滑性分析</strong>。如表III所示，与原始动作表示相比，B样条方法将速度的过零率平均降低了29.2%，将加速度的95百分位数平均降低了57.1%，表明运动更平滑、抖动更少。图5和图6直观展示了B样条表示及重拟合方法能有效消除动作块边界处原始动作产生的高加速度尖峰，生成更平滑的加速度曲线。</p>
+<p><img src="https://arxiv.org/html/2602.23901v1/2602.23901v1/x4.png" alt="加速度对比图"></p>
+<blockquote>
+<p><strong>图5</strong>：原始动作表示与本文方法的加速度对比。原始动作在动作块边界处产生大的加速度峰值导致抖动，而本文的B样条表示结合重拟合减少了边界尖峰，提高了平滑性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2602.23901v1/2602.23901v1/x5.png" alt="边界平滑方法对比"></p>
+<blockquote>
+<p><strong>图6</strong>：动作块边界平滑方法对比：本文的B样条重拟合与加权融合方法。y轴为加速度大小，x轴为平滑时间窗口。</p>
+</blockquote>
+<p><strong>消融实验</strong>：在静态叠块任务上，如表IV所示，移除双向动作预测模块会使成功率从85%降至60%。BiAP将初始动作块间抖动降低了近23%，并使重拟合后的最终抖动相比基线降低了46%（0.0097 vs. 0.018），证明了其对生成平滑、连续轨迹的重要性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 提出了ABPolicy，一个在B样条控制点空间生成动作轨迹的流匹配策略，保证了固有的平滑性；2) 引入了一种简单有效的连续性优化机制，结合双向预测和连续性约束重拟合，无缝拼接异步生成的轨迹；3) 异步推理设计实现了对动态环境的实时响应。</p>
+<p><strong>局限性</strong>：论文未明确讨论，但重拟合优化步骤在每次推理周期均需执行，可能引入额外的计算负担，尽管其规模较小。</p>
+<p><strong>后续启示</strong>：1) B样条为机器人动作表示提供了一个兼具平滑性、紧凑性和连续性的有效参数化方式；2) 将轨迹生成（控制点预测）与轨迹执行（重拟合优化）解耦的思路，为处理系统延迟和保证实时性提供了新范式；3) 异步推理与保证连续性的后处理机制相结合，是未来实现高响应性机器人系统的重要方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中同步策略导致的动作轨迹抖动、块间不连续及响应延迟问题，提出ABPolicy方法。其核心是采用B样条控制点作为动作空间，结合流匹配模型进行异步推理。关键技术包括：利用B样条保证块内平滑性；通过双向动作预测与重拟合优化确保块间连续性；异步推理实现实时连续更新。实验在七项任务中验证，该方法显著降低了轨迹急动度，使运动更平滑并提升了操作性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.23901" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

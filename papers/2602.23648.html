@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FAVLA: A Force-Adaptive Fast-Slow VLA model for Contact-Rich Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>FAVLA: A Force-Adaptive Fast-Slow VLA model for Contact-Rich Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2602.23648" target="_blank" rel="noreferrer">2602.23648</a></span>
+        <span>作者: Yanyong Zhang Team</span>
+        <span>日期: 2026-02-27</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）模型通过结合大型视觉语言模型（VLM）的语义泛化能力与连续控制策略（动作专家，AE），已成为实现通用机器人操作的有力范式。然而，在插入、紧密公差装配等接触丰富的操作任务中，成功不仅依赖于视觉对齐，更需要对接触状态变化（如冲击、粘滑、卡阻）做出快速运动修正。虽然已有工作尝试将力/力矩反馈融入VLA模型以提升性能，但主流方法通常将所有模态（视觉、语言、力）在单一操作频率下融合为单一令牌流。这种设计存在两个关键局限性：第一，模态令牌化不平衡，稀疏的力信号在注意力机制中易被视觉令牌淹没；第二，忽略了真实机器人传感器采样率不匹配的问题（例如15 Hz相机 vs. 100-1000 Hz力传感器），导致高频接触信号被下采样丢弃，无法用于实时纠正。此外，主流的VLM-AE控制范式采用低频VLM推理和开环动作块执行策略，难以在执行过程中根据状态/力的变化进行反应式动作调整。这在需要高精度力控的工业场景中尤为关键，延迟调整可能导致过大的操作力并损坏组件。</p>
+<p>本文针对上述痛点，提出了一种新的视角：接触丰富的VLA控制应明确区分“快”与“慢”的感知与控制。语义场景理解本质上是“慢”的，而接触反馈与纠正控制应该是“快”的。基于此，本文提出了FAVLA模型，其核心思路是：设计一个力自适应的快慢VLA架构，将慢速的语义推理与快速的力反应式执行解耦，并通过预测未来力的变化自适应地调度快速模块的执行频率，从而实现更安全、更反应式的闭环控制。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>FAVLA的整体框架是一个力自适应的快慢VLA模型，基于π0框架构建，包含一个大型的慢速VLM主干和一个小型的快速动作专家。</p>
+<p><img src="https://arxiv.org/html/2602.23648v1/2602.23648v1/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：FAVLA整体框架概览。模型包含一个用于语义推理的慢速VLM主干和一个用于反应式动作控制的快速动作专家。模型以不同频率处理多模态输入，并通过条件流匹配生成动作轨迹。动作专家的推理频率由力自适应快慢推理策略动态调整，以确保操作过程中接触力较小。</p>
+</blockquote>
+<p><strong>整体流程</strong>：在时间步t，系统接收多模态观测，包括来自外部和腕部相机的RGB图像、机器人的本体感知状态（7维，包括6自由度TCP位姿和夹爪宽度）、一段历史力数据序列以及一段最新的高频率力数据序列。慢速VLM主干以固定低频运行，处理视觉、语言和历史力数据，生成潜在上下文表示（VLF令牌）并缓存其键值状态（KV Cache），同时预测未来的力变化方差。快速动作专家则以可变高频运行，它基于缓存的KV Cache、最新的本体状态和最新的高频率力序列，通过流匹配生成反应式的动作块。动作专家的执行频率由VLM预测的力方差动态调度。</p>
+<p><strong>核心模块一：慢速VLM主干</strong>。这是一个VLM Transformer，用于集成视觉、语言和历史力数据。视觉图像通过SigLIP图像编码器编码为图像块令牌，语言指令通过Gemma分词器嵌入。历史力数据序列通过一个轻量级时序卷积网络（TCN）编码器进行处理：首先使用1x1时序卷积将每个时间步的力向量投影到df维特征，然后通过一系列具有残差连接的因果膨胀时序块，最后对得到的序列进行下采样，生成Nf个历史力令牌。这些令牌与视觉、语言令牌拼接后，输入VLM主干进行全模态自注意力计算，输出最终的VLF令牌，并缓存每一层前缀令牌的键值状态供快速模块重用。</p>
+<p><strong>核心模块二：快速力注入动作专家</strong>。这是一个小型Transformer，负责利用高频反馈细化动作块。其关键创新在于<strong>力适配器</strong>的设计。与简单地将力序列作为额外输入令牌不同，力适配器将最新的力数据序列通过相同的TCN编码器得到最新力令牌，然后在动作专家的每个Transformer层中，在完成与KV Cache的自注意力计算后，让噪声动作令牌与这些最新力令牌进行交叉注意力计算，并将得到的力条件更新以加性方式注入到动作令牌中。这使得动作专家能够基于高频接触信号直接调整动作块。</p>
+<p><strong>核心模块三：力方差预测头</strong>。这是一个附加在慢速VLM上的辅助头，用于预测操作过程中未来接触力的波动性，以指导自适应推理频率的调整。它从VLF令牌中选择一个对应的可学习输入令牌，通过一个MLP头输出一个标量预测值。监督标签是基于未来一个短时间窗口内6维力/力矩信号的加权方差，经过指数移动平均（EMA）平滑和tanh归一化后得到。</p>
+<p><strong>训练目标</strong>：采用动作生成损失与辅助方差预测损失的加权和进行联合优化，权重λ设为0.1。</p>
+<p><strong>创新点：力自适应快慢推理策略</strong>。该策略旨在实现动作块内的高频闭环控制，并解决两个关键问题：（1）固定频率无法适应任务阶段（自由运动 vs. 接触阶段）；（2）由于模型的随机性，同一动作块内的多次独立AE推理可能导致动作不一致，产生抖动。</p>
+<p><img src="https://arxiv.org/html/2602.23648v1/2602.23648v1/x2.png" alt="推理策略"></p>
+<blockquote>
+<p><strong>图3</strong>：力自适应快慢推理策略。快速AE在每个动作块内基于实时力条件运行多次。在每个周期中，固定采样的噪声和机器人状态，并对重叠的动作块执行时序集成。AE的执行频率根据VLM预测的力方差自适应设置。</p>
+</blockquote>
+<ol>
+<li><strong>自适应推理频率</strong>：使用VLM预测的归一化力方差ν<del>t ∈ [0,1]来衡量下一周期接触动态的活跃程度。给定最大频率比Nmax，调度AE的执行次数为：nt = max(1, ⌈ν</del>t · Nmax⌉)。当预测力变化平缓时，低频运行（nt=1）；当预测接触活跃时，提高运行频率以实现更快响应。</li>
+<li><strong>一致动作集成</strong>：为确保同一视觉周期内多次AE推理的一致性，首先固定所有AE调用中使用的采样噪声ε。其次，如图3所示，应用时序集成来聚合跨视觉周期的重叠块预测，从而在周期之间产生更平滑的动作执行。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在Monte双臂机器人上进行，每个机械臂配备腕部RGB-D相机和末端执行器上的6轴力/力矩传感器。使用了四个真实的接触丰富操作任务进行评估（如图4所示）：USB插入、齿轮装配、翻箱子和擦板子。前两个是高精度任务，需要毫米级精度；后两个是动态接触任务，需要实时力调整。收集了80条（高精度任务）和50条（接触丰富任务）人类示教轨迹进行微调。</p>
+<p><img src="https://arxiv.org/html/2602.23648v1/2602.23648v1/x3.png" alt="任务场景"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界任务场景及执行阶段。任务包括（1）USB插入，（2）齿轮装配，（3）翻箱子，（4）擦板子。任务1和2需要毫米级精度以实现成功对齐，而任务3和4需要实时力调整以处理不断变化的接触动态。</p>
+</blockquote>
+<p><strong>对比基线</strong>：包括：π0（仅视觉基线）、π0+Force（将力数据转换为令牌后与输入序列拼接）、TA-VLA（引入未来力预测辅助目标以增强模型对力信息的关注）、ForceVLA（采用混合专家（MoE）架构从力和图像模态中学习特征）。所有方法均使用LoRA在相同数据集上进行微调以公平比较。</p>
+<p><strong>评估指标</strong>：主要使用任务成功率。对于齿轮装配和翻箱子任务，额外评估了平均峰值接触力（N），以衡量操作安全性。</p>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2602.23648v1/2602.23648v1/figures/setup.png" alt="成功率对比"></p>
+<blockquote>
+<p><strong>图6</strong>：在四个真实世界任务上，本文提出的方法与基线方法的成功率对比。我们的方法在四个接触丰富的任务上显著优于所有基线方法。</p>
+</blockquote>
+<p>如图6所示，FAVLA在所有任务上取得了最佳性能，平均成功率达到<strong>80.8%<strong>，比仅视觉的π0基线高出</strong>38.0</strong>个百分点，比最佳基线ForceVLA高出<strong>13.8</strong>个百分点。在齿轮装配（93.3%）和擦板子（70.0%）任务上提升尤为显著。</p>
+<p>在力控制能力方面，如表1所示，FAVLA在齿轮装配和翻箱子任务上分别实现了<strong>7.7 N</strong>和<strong>9.9 N</strong>的平均峰值接触力，相比仅视觉基线分别降低了<strong>4.3 N</strong>和<strong>2.3 N</strong>。这表明其自适应快慢推理策略能够通过高频闭环动作控制实现精确的力调节。</p>
+<p><strong>消融实验</strong>：如表2所示，逐步添加各个组件到仅视觉基线上进行验证。仅添加力注入AE，翻箱子和擦板子任务的成功率分别从50%和10%提升至65%和60%。进一步添加力方差预测，翻箱子任务成功率提升至70%。最后，引入力自适应推理策略后，两个任务的最终成功率分别达到**80%<strong>和</strong>70%**，充分验证了每个组件的有效性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：第一，提出了一个力自适应的快慢VLA框架（FAVLA），将慢速语义模态与快速交互信号分离，实现了用于接触丰富操作的闭环控制。第二，设计了一种带有力适配器的力注入动作专家，能够将高频力反馈直接集成到AE的多层中，实现基于力条件的动作块修正。第三，引入了一种力自适应快慢推理策略，利用慢速VLM预测的未来力变化来动态调度快速AE的执行频率，从而在接触期间以更小的操作力提高响应速度。</p>
+<p>论文自身提到的局限性主要在于，为了获得高频反应能力，需要更频繁地运行快速动作专家，这可能会增加一定的计算开销。然而，这种开销换来了更安全、更精确的力控制性能。</p>
+<p>本文的研究对后续工作具有重要启示：它表明在机器人多模态学习中，尊重不同传感器和任务需求的内在时间尺度差异是至关重要的。这种“快-慢”分离的设计思想不仅适用于力反馈，也可能扩展到其他高频模态（如触觉、听觉）与低频语义理解的融合中，为构建更反应式、更安全的机器人系统提供了新的架构范式。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对接触丰富的机器人操作任务中，现有视觉-语言-动作模型因采用单一处理频率而无法及时响应高频力反馈的问题，提出了FAVLA模型。其核心是快-慢双频解耦架构：慢速视觉语言模型进行感知与预测，快速动作专家则基于最新的力序列数据生成闭环动作。关键技术包括将高频力特征注入动作专家的力适配器，以及根据预测力变化自适应调度执行频率。实验表明，FAVLA显著优于基线方法，实现了更高的成功率和反应速度，尤其在操作中能使用更小的接触力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2602.23648" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
