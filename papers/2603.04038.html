@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Force-Aware Residual DAgger via Trajectory Editing for Precision Insertion with Impedance Control - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Force-Aware Residual DAgger via Trajectory Editing for Precision Insertion with Impedance Control</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.04038" target="_blank" rel="noreferrer">2603.04038</a></span>
+        <span>作者: Yaran Chen Team</span>
+        <span>日期: 2026-03-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>模仿学习（IL）在接触密集的精密插入任务中展现出巨大潜力，但实际部署常受限于协变量偏移以及执行过程中需要专家持续监控以从失败中恢复的问题。现有主流方法如ACT、Diffusion Policy和VLA模型主要依赖视觉和本体感知，并通过基于位置的控制执行策略，限制了物理接触过程中的顺应性。虽然DAgger和HG-DAgger等人机协同方法通过引入专家反馈来应对分布偏移，但它们需要持续的人类监控，扩展性差。后续方法通过预测干预时机来减轻专家负担，但增加了模型复杂性，且自主执行与人类控制之间的突然切换会引入显著的分布偏移。近期工作通过从人类纠正中学习残差策略来缓解此问题，但仍需持续监控。</p>
+<p>本文针对<strong>协变量偏移</strong>和<strong>对持续专家监控的依赖</strong>这两个具体痛点，提出了一种新的视角：通过基于优化的轨迹编辑来融合策略执行轨迹与人类纠正轨迹，从而为残差策略学习提供一致且稳定的监督；同时，引入一种力感知的错误检测机制，仅在预测末端执行器力与实测力出现差异时触发人工干预。核心思路是：通过轨迹编辑平滑地桥接策略执行与人类纠正，并利用力预测误差作为分布外状态的可靠指示器，从而在减少人类监控需求的同时有效缓解协变量偏移。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架（Pipeline）是一个四组件系统：一个力感知的基础策略、一个误差检测器、一个残差策略和一个笛卡尔阻抗控制器。执行时，基础策略（1 Hz）根据视觉观察和当前状态预测未来末端执行器位姿和交互力；误差检测器（50 Hz）比较预测力与测量力，以检测接触异常并触发人工干预；残差策略（50 Hz）接收相同输入及基础策略的下一动作，输出位姿残差；最终执行命令是基础动作与残差修正之和，由笛卡尔阻抗控制器（1 kHz）跟踪以实现顺应交互。</p>
+<p><img src="https://arxiv.org/html/2603.04038v1/2603.04038v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1（右）</strong>：TER-DAgger框架概览。基础策略（1 Hz）从图像观测、当前末端位姿和力预测未来位姿和力。误差检测器（50 Hz）比较预测力与测量力以检测失败。残差策略（50 Hz）以图像观测、当前末端位姿和基础策略预测的下一动作为输入，预测位姿修正。修正后的动作通过笛卡尔阻抗控制器（1 kHz）执行。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>力感知基础策略</strong>：采用基于CVAE Transformer的架构（类似ACT）。编码器输入当前笛卡尔末端位姿 $x_t$、动作序列 $A_{t:t+n}$ 和末端力序列 $F_{t:t+n}$，输出捕捉任务特定运动模式和接触动态的潜在风格变量 $z$ 的均值和方差。解码器以 $z$、当前位姿 $x_t$、当前末端力 $F_t$ 以及来自前部和腕部摄像头的RGB图像 $I_t^f, I_t^w$（经ResNet-18编码）为条件，联合预测未来动作序列 $\hat{A}<em>{t+1:t+n}$ 和未来末端力序列 $\hat{F}</em>{t+1:t+n}$。该策略以1 Hz频率运行，采用滚动时域执行，每次预测100步（2秒），但只执行前50步。</li>
+<li><strong>误差检测</strong>：利用基础策略预测的末端力 $\hat{F}_t$ 与实际测量力 $F_t$ 之间的差异。使用 $\ell_1$ 范数计算力预测误差 $e_t = |\hat{F}_t - F_t|_1$。当 $e_t$ 超过预设阈值 $c$ 时，触发错误，认为当前状态为分布外（OOD）。这本质上是将力预测差异作为接触动态偏离训练分布的隐式不确定性估计器。</li>
+<li><strong>轨迹编辑残差DAgger (TER-DAgger)<strong>：当检测到失败时，执行暂停，收集一段简短的人类纠正演示 $X_h$。核心创新在于通过轨迹编辑生成平滑过渡，而非直接拼接。首先进行</strong>最近点对齐</strong>：在基础策略预测的轨迹 $X_b$ 上找到与人类纠正起始点 $x_0^h$ 最接近的点 $k^*$。接着进行<strong>局部轨迹优化</strong>：提取基础轨迹中 $k^*-N$ 到 $k^*$ 的片段 $X_b^{\text{seg}}$，通过优化目标函数（包含保真度项 $\mathcal{L}<em>{\text{fid}}$、平滑度项 $\mathcal{L}</em>{\text{smooth}}$ 和端点一致性项 $\mathcal{L}<em>{\text{end}}$）生成平滑过渡轨迹 $\tilde{X}$，并约束 $\tilde{x}</em>{k^*} = x_0^h$。最终修正轨迹 $X_{\text{correct}}$ 由优化前的基础轨迹、优化过渡段和剩余的人类纠正轨迹拼接而成。</li>
+<li><strong>残差训练数据生成</strong>：基于 $X_{\text{correct}}$，根据轨迹结构划分四个区域生成监督数据 $(x_t, I_t^f, I_t^w, \hat{A}<em>{t+1}, \Delta A</em>{t+1})$：<strong>编辑前</strong>（$\Delta A_{t+1}=0$，教导策略在分布内状态保持非活跃）、<strong>过渡段</strong>（$\Delta A_{t+1} = \tilde{x}<em>{t+1} - \hat{A}</em>{t+1}$，学习平滑变形）、<strong>人类演示段</strong>（$\Delta A_{t+1} = x_{t+1}^h - \hat{A}<em>{t+1}^{\text{base}}$，学习人类纠正行为）和<strong>编辑后</strong>（$\Delta A</em>{t+1} = \tilde{A}<em>{t+1} - \hat{A}</em>{t+1}$，鼓励与纠正意图一致）。残差策略是一个轻量级的两层Transformer编码器，输入当前位姿 $x_t$、基础策略预测的下一动作 $\hat{A}<em>{t+1}$ 和两张RGB图像，输出修正动作 $\Delta A</em>{t+1}$。</li>
+<li><strong>笛卡尔阻抗控制器</strong>：作为底层控制器，以1 kHz频率运行，通过虚拟质量-弹簧-阻尼系统模型实现顺应交互。指令关节扭矩由 $\hat{\tau}=J(\theta)^{T}\left(K(x_d-x)+D(\dot{x}_d-\dot{x})\right)+g(\theta)$ 计算，其中 $x_d$ 和 $\dot{x}_d$ 为策略输出的期望位姿和速度。</li>
+</ol>
+<p><strong>与现有方法相比的创新点</strong>：</p>
+<ol>
+<li><strong>基于优化的轨迹编辑</strong>：通过局部优化生成平滑过渡，将人类纠正自然地融合到策略执行轨迹中，避免了HG-DAgger等方法中直接切换导致的控制突变和分布偏移。</li>
+<li><strong>力感知的错误检测</strong>：利用基础策略内在的力预测能力作为分布外检测器，无需训练额外的干预预测模型，简化了系统并实现了按需触发干预。</li>
+<li><strong>分区域残差数据构造</strong>：根据轨迹编辑的不同阶段（编辑前、过渡、人类演示、编辑后）精心设计残差标签，使残差策略能学习到从“不干预”到“执行纠正”再到“保持纠正后状态”的完整行为模式。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在MuJoCo仿真和真实Franka Research 3机械臂上进行了评估。任务包括仿真中的USB插入、两针插头插入，以及真实世界中的USB、两针插头、三针插头插入。基础策略使用100条规则生成的轨迹训练，残差策略使用50条人工纠正演示训练。</p>
+<p><strong>对比的Baseline方法</strong>：</p>
+<ul>
+<li><strong>ACT</strong>：作为基础策略架构。</li>
+<li><strong>FILIC</strong>：一种融合视觉、位姿和力的多模态模仿学习框架。</li>
+<li><strong>HG-DAgger</strong>：人类引导的DAgger变体，专家在预期失败时干预。</li>
+<li><strong>Retrain</strong>：使用基础轨迹和纠正轨迹的合并数据集从头训练基础策略。</li>
+<li><strong>Finetune</strong>：仅使用纠正轨迹对预训练的基础策略进行微调。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>TER-DAgger在仿真和真实世界的所有任务中 consistently 优于所有基线方法，平均成功率达到 **77.2%**，比最强的基线（Finetune，40.0%）高出 **超过37%**。</p>
+<p><img src="https://arxiv.org/html/2603.04038v1/2603.04038v1/x3.png" alt="实验结果表"></p>
+<blockquote>
+<p><strong>表I</strong>：不同方法的成功率（%）。TER-DAgger在仿真任务（USB 90%，两针插头 96%）和真实任务（两针插头 96%，三针插头 82%）上均取得最高成功率，平均成功率77.2%显著优于所有基线。</p>
+</blockquote>
+<p><strong>结果分析</strong>：<br>标准模仿学习方法（ACT, FILIC）在部署中性能严重下降，证实了协变量偏移在接触式操作中导致快速失败积累。HG-DAgger在仿真中有所改善，但在真实任务中泛化性差，表明直接的人类接管引入了分布不连续性。Retrain和Finetune性能提升不一致且有限，说明简单地聚合或微调纠正轨迹不足以解决执行中遇到的状态-动作分布不匹配问题。TER-DAgger通过轨迹编辑对齐了训练数据与策略执行分布，从而有效缓解了协变量偏移。</p>
+<p><strong>错误检测机制对比</strong>：<br>将提出的<strong>力预测误差</strong>与KL散度损失、重建损失、位置预测误差等基线检测策略进行比较。</p>
+<p><img src="https://arxiv.org/html/2603.04038v1/2603.04038v1/x4.png" alt="错误检测结果"></p>
+<blockquote>
+<p><strong>表II</strong>：不同错误检测方法的性能比较（精度%与召回率%）。力预测误差（Ours）在所有任务中在保持100%召回率的同时实现了最高的检测精度，而其他方法（如KL损失、重建损失）精度显著较低，误报率高。</p>
+</blockquote>
+<p>力预测误差在保证100%召回率（检测所有失败）的同时，达到了最高的检测精度，尤其在真实世界任务中优势明显。其他基于不确定性或位置预测的方法虽然也能达到高召回，但精度很低，会导致大量不必要的干预。</p>
+<p><strong>消融实验</strong>：论文虽未以独立章节呈现系统的消融实验，但通过与其他基线（如不使用轨迹编辑的HG-DAgger、不专门学习残差策略的Retrain/Finetune）的对比，间接验证了<strong>轨迹编辑</strong>和<strong>残差策略学习</strong>这两个核心组件的贡献。TER-DAgger的显著性能优势证明了其整体框架的有效性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了 <strong>TER-DAgger</strong> 框架，通过基于优化的轨迹编辑和残差策略学习，有效缓解了接触式精密插入任务中的协变量偏移问题。</li>
+<li>设计了一种<strong>力感知的错误检测机制</strong>，利用策略自身的力预测误差触发干预，无需额外的干预预测模型，实现了可扩展的人类监督。</li>
+<li>将整个学习框架与<strong>笛卡尔阻抗控制</strong>集成，确保了在接触式交互过程中的顺应性和安全性。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文提到的方法仍依赖于在检测到失败时由人类提供纠正演示。此外，错误检测阈值 $c$ 需要针对特定任务进行调整。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>自动化纠正生成</strong>：可以探索如何利用物理仿真或模型预测来自动生成纠正轨迹，进一步减少对人类专家的依赖。</li>
+<li><strong>自适应阈值</strong>：研究自适应或基于学习的阈值调整方法，使错误检测机制能适应不同的任务和环境动态。</li>
+<li><strong>泛化性</strong>：该方法在多种插入任务上验证有效，未来可探索其在更广泛的接触式操作任务（如装配、打磨）中的适用性。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对模仿学习在接触密集型精密插入任务中面临的协变量偏移和需持续专家监控的核心问题，提出力感知残差DAgger框架TER-DAgger。该方法通过基于优化的轨迹编辑学习残差策略，平滑融合策略执行与人类校正轨迹；引入力感知失败预测机制，仅在预测与实测末端力出现差异时触发干预，大幅降低监控需求；所有策略在笛卡尔阻抗控制框架下执行以确保安全合规。实验表明，TER-DAgger相比行为克隆、人类引导校正等基线方法，平均成功率提升超过37%，有效缓解分布偏移并实现可扩展部署。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.04038" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

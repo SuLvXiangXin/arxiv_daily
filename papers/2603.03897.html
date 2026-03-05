@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>IROSA: Interactive Robot Skill Adaptation using Natural Language - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>IROSA: Interactive Robot Skill Adaptation using Natural Language</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.03897" target="_blank" rel="noreferrer">2603.03897</a></span>
+        <span>作者: João Silvério Team</span>
+        <span>日期: 2026-03-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人技能适应领域，主流方法可分为两类。一是端到端语言条件控制方法（如LaTTe、OpenVLA、RoboPoint），将自然语言指令直接映射到轨迹修改或控制策略。这类方法虽能快速推理，但通常需要大量训练数据，缺乏可解释性，且难以满足工业应用对安全性、可验证性和可预测性的严格要求。二是模块化语言-机器人接口方法（如OLAF、Sharma等人、Merlo等人、Yu等人、OVITA），将语言理解与底层运动生成解耦。然而，这些方法存在各自局限：OLAF和Sharma的方法需要策略重训练或离线学习；Merlo的方法在符号动作层面操作，而非连续轨迹；Yu的方法依赖仿真中的优化循环；OVITA采用代码生成，存在可靠性问题且需要云端LLM API和迭代用户反馈。</p>
+<p>本文针对工业部署场景下，如何安全、可解释、无需训练地利用大型语言模型（LLM）实现机器人技能自然语言适应这一具体痛点，提出了基于工具调用的新视角。其核心思路是构建一个工具化的架构，在LLM与机器人硬件之间保持一个保护性的抽象层，LLM仅负责根据自然语言指令选择和参数化预定义的、经过验证的工具函数，由这些工具函数确定性地修改底层的核化运动基元（KMP）模型，从而实现零样本、开放词汇的技能适应。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>IROSA框架的整体工作流程是一个五步循环，如论文图1所示。输入为从示教数据中学习得到的KMP模型、用户自然语言指令、环境观察（物体位置、尺寸、语义标签）及可选的环境描述。输出为适应后的机器人技能执行。</p>
+<p><img src="https://arxiv.org/html/2603.03897v1/2603.03897v1/graphical_abstract.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：IROSA方法整体框架。展示了基于用户查询，由LLM交互式选择和参数化工具，进而通过执行模型实现技能适应的流程。图中展示了部分提供的工具，其中“响应用户”是通用工具，而“排斥点”、“路径点插入”和“速度调制”是用于适应KMP的特定工具。</p>
+</blockquote>
+<p><strong>核心模块与工作流</strong>：</p>
+<ol>
+<li><strong>用户查询</strong>：机器人执行初始技能，用户观察后通过语音或文本输入自然语言指令。</li>
+<li><strong>工具选择</strong>：LLM根据用户指令和环境观察，从一个预定义的工具集 <code>𝒯</code> 中选择合适的工具 <code>T*</code>。所有工具均以包含名称、描述和参数类型注释的JSON模式序列化提供给LLM，LLM利用其内部语义理解能力，在单次推理中返回选定的工具及实例化参数。</li>
+<li><strong>工具参数化</strong>：LLM根据指令、环境信息和工具描述，为选定的工具提取参数 <code>θ*</code>。系统将语义理解（识别空间参照物，如“盒子”）与数值计算（在轨迹上查找最近时间点）分离，后者由工具内部的确定性算法完成。参数会经过类型和范围验证，确保操作安全。</li>
+<li><strong>工具执行</strong>：验证通过后，工具函数 <code>T*(D, θ*)</code> 执行，修改KMP的内部参考轨迹分布 <code>D</code>。这是方法的核心，基于KMP的灵活性实现了三种主要适应机制：<ul>
+<li><strong>速度调制</strong>：调整轨迹段执行速度。工具参数为轨迹段起止点（归一化时间输入） <code>s_start, s_end</code> 和百分比速度变化 <code>γ</code>。通过缩放指定段内连续轨迹点间的时间间隔 <code>δ_t</code> 来实现（公式3,4）。<code>γ&gt;0</code> 减速，<code>γ&lt;0</code> 加速。</li>
+<li><strong>路径点插入</strong>：利用KMP的属性，通过添加路径点三元组 <code>{s̄, μ̄, Σ̄}</code> 来引导轨迹穿过期望区域。工具参数指定路径点位置、时间输入和协方差缩放。这用于实现“向左移动”等空间修正。</li>
+<li><strong>排斥点生成</strong>：实现基于障碍物感知的避碰。工具参数包括障碍物中心 <code>c</code>、半径 <code>r_obs</code> 和安全裕度 <code>δ_safe</code>。系统使用符号距离场（SDF）检测预测轨迹与障碍物的潜在碰撞（公式5），并通过计算修正位置将轨迹点推出障碍物区域（公式6），然后将这些修正位置作为路径点插入KMP，从而生成无碰撞轨迹。</li>
+</ul>
+</li>
+<li><strong>反馈与迭代细化</strong>：机器人执行修改后的技能，系统向用户提供反馈，等待进一步指令，从而支持基于观察的迭代细化。</li>
+</ol>
+<p><strong>创新点</strong>：与现有方法相比，IROSA的创新具体体现在：1) <strong>工具调用架构</strong>：严格分离语言理解与机器人控制，LLM仅操作经过验证的工具，提供了安全性和可解释性保障，实现了零样本、开放词汇适应。2) <strong>对KMP的扩展</strong>：首次将KMP与自然语言驱动适应相结合，并新颖地扩展了KMP的能力，支持基于自然语言的<strong>速度调制</strong>和通过排斥场实现的<strong>避障</strong>，超越了传统的路径点约束。3) <strong>综合优势</strong>：如表I所示，该方法无需训练、支持开放词汇、零样本（无需迭代用户反馈验证）、可解释，且支持本地LLM部署，克服了相关工作的多项局限。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在7自由度扭矩控制的DLR SARA机器人上进行，核心任务是工业轴承环插入。使用了三个基准方法进行对比：基于代码生成的OVITA、基于策略重训练的OLAF，以及基于奖励合成与仿真的Yu等人的方法。</p>
+<p><img src="https://arxiv.org/html/2603.03897v1/2603.03897v1/evaluation_demonstrations.png" alt="评估演示"></p>
+<blockquote>
+<p><strong>图2</strong>：技能学习与适应实验设置。左侧展示了用于学习插入技能的初始人类演示。右侧展示了适应场景：一个障碍物（蓝色盒子）被放置在初始轨迹路径上，需要通过自然语言指令进行避障。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.03897v1/2603.03897v1/kmp_full_analysis.png" alt="KMP分析"></p>
+<blockquote>
+<p><strong>图3</strong>：KMP对演示数据的编码与预测。展示了从少量演示（3条轨迹）中学习到的概率轨迹分布（灰色椭圆），以及KMP预测的期望轨迹（蓝色线）和协方差（蓝色阴影）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.03897v1/2603.03897v1/kmp_time_plot.png" alt="时间图"></p>
+<blockquote>
+<p><strong>图4</strong>：速度调制工具的时序效果。上图：修改前后末端执行器位置随时间的变化。下图：速度调制函数 <code>f(γ)</code> 对时间间隔的缩放效果，在指定时间段内改变了执行速度。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：<br>在轴承环插入任务中，IROSA实现了**100%<strong>（10/10次尝试）的成功率。相比之下，OVITA的成功率为</strong>60%<strong>，且需要平均2.5次迭代反馈；OLAF和Yu的方法成功率分别为</strong>20%<strong>和</strong>0%**。这表明IROSA在零样本适应性、成功率和可靠性上显著优于基线方法。</p>
+<p><img src="https://arxiv.org/html/2603.03897v1/2603.03897v1/evaluation_via_point.png" alt="路径点评估"></p>
+<blockquote>
+<p><strong>图5</strong>：路径点插入的定量评估。展示了在“向左移动10厘米”指令下，实际轨迹与期望修正位置（红色星星）的偏差。IROSA能够准确地将轨迹引导至目标区域。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.03897v1/2603.03897v1/kmp_adaptation_plot.png" alt="适应图"></p>
+<blockquote>
+<p><strong>图6</strong>：路径点插入的轨迹对比。蓝色为原始轨迹，橙色为通过插入路径点（红色星星）适应后的轨迹，展示了KMP平滑地使轨迹穿过指定点。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.03897v1/2603.03897v1/evaluation_repulsion_point.png" alt="排斥点评估"></p>
+<blockquote>
+<p><strong>图7</strong>：排斥点生成的定量评估。展示了在“避开蓝色盒子”指令下，适应前后的轨迹与障碍物的距离。适应后轨迹（橙色）与障碍物（蓝色球体）保持了安全距离。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.03897v1/2603.03897v1/kmp_repulsion_point_plot.png" alt="排斥点图"></p>
+<blockquote>
+<p><strong>图8</strong>：排斥点生成的轨迹对比。蓝色为原始碰撞轨迹，橙色为通过排斥点生成工具适应后的无碰撞轨迹，绿色箭头示意了排斥场对轨迹点的修正方向。</p>
+</blockquote>
+<p><strong>消融实验与分析</strong>：<br>论文通过消融实验验证了工具调用架构的有效性。与让LLM直接生成修改轨迹的Python代码（类似OVITA）相比，IROSA的工具调用方法在指令遵循的可靠性上表现更优。此外，定量评估了IROSA处理三种类型指令（速度调制、路径点插入、避障）的成功率，均接近或达到100%。对KMP适应能力的分析（图3,4,6,8）也直观展示了其在融入新约束（路径点、速度变化、排斥场）时，能保持平滑且符合演示技能结构的轨迹。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了一种基于工具调用的架构，实现了机器人技能的<strong>零样本、自然语言驱动适应</strong>，同时在LLM与机器人控制之间保持了严格分离，确保了安全性、可解释性和透明度。2) 提出了对<strong>核化运动基元（KMP）的新扩展</strong>，使其能够支持通过自然语言指令进行速度调制和基于排斥场的避障，丰富了技能适应的维度。3) 在真实的7自由度扭矩控制机器人上进行了全面的<strong>实验验证</strong>，证明了该方法在工业操作任务中的有效性、可靠性和优于现有基准方法的性能。</p>
+<p>论文自身提到的局限性主要在于：当前实现中的环境观察（物体位置、尺寸、标签）是手动提供的。然而，作者指出这与结构化工业环境的常见做法相符，并且可以<strong>直接集成自动感知系统</strong>（如位姿估计）。</p>
+<p>这项工作对后续研究的启示包括：1) <strong>架构的普适性</strong>：这种工具调用范式可以扩展到其他可解释的运动表示或控制框架。2) <strong>工具集的扩展</strong>：可以定义更丰富的工具集来处理更复杂的技能适应需求，如力控交互或多技能组合。3) <strong>感知集成</strong>：未来工作可以无缝集成视觉或其他传感器模块，实现完全自主的环境理解与技能适应闭环。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出IROSA框架，旨在解决工业机器人技能调整依赖专家编程、不够灵活的问题。其核心方法是构建一个工具化架构，将预训练大语言模型与机器人控制层隔离，让LLM根据自然语言指令，从预定义工具箱中（如排斥点、路径点插入、速度调节等）选择和参数化特定工具，从而实现对核运动基元技能的调整，无需微调模型。实验在7自由度机器人上进行轴承环插入任务，通过自然语言指令成功实现了对速度、轨迹和避障的调整，同时保证了系统的安全性与可解释性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.03897" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
