@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Altered Thoughts, Altered Actions: Probing Chain-of-Thought Vulnerabilities in VLA Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Altered Thoughts, Altered Actions: Probing Chain-of-Thought Vulnerabilities in VLA Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.12717" target="_blank" rel="noreferrer">2603.12717</a></span>
+        <span>作者: Basim Azam Team</span>
+        <span>日期: 2026-03-13</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>近年来，视觉-语言-动作（VLA）模型在机器人操作领域取得了快速进展，RT-2、OpenVLA、π₀ 和 DexVLA 等系统仅凭视觉和语言输入就能完成拾取放置、工具使用和多步骤组装。一个重要的趋势是为这些模型增加了显式的思维链（CoT）推理能力，例如 DeepThinkVLA、ECoT 和 Fast-in-Slow。这些模型在执行物理动作之前，会首先生成一个自然语言计划（如“我需要拿起酒瓶并将其放在架子上”），然后以此计划为条件解码电机命令。这种“先思考后行动”的模式在工业级系统（如 NVIDIA 的 GR00T N1 和 Cosmos Reason）中也得到了部署，形成了模块化架构，其中自然语言计划在各个组件间流动。</p>
+<p>从安全角度来看，这种架构模式引入了一个在非推理 VLA 中不存在的新攻击面。在模块化推理流程中，思维链文本作为推理模块和动作解码器之间的可解释接口流动。攻击者可以在不接触模型权重、梯度或训练数据的情况下，拦截此文本通道并替换为被破坏的推理，从而改变机器人的物理行为。与针对感知的经典对抗性攻击不同，这种威胁针对的是模型自身的内部计划，而非其输入。其后果是物理性的：机器人可能抓错物体、向错误方向移动或完全无法完成多步骤任务。</p>
+<p>尽管思维链漏洞在大型语言模型（LLM）中已被广泛研究，但所有先前工作都只针对语言输出（如安全绕过、错误答案）。尚无工作研究被破坏的推理痕迹是否会降低机器人的物理任务性能——这是一个根本不同且安全攸关的故障模式。</p>
+<p>本文的核心思路是：通过设计一个分层的文本破坏分类法，系统性地探测 VLA 模型中思维链的脆弱性，并发现动作解码器主要依赖于实体指称的完整性，而非推理质量或顺序结构。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文的核心是设计并实施一套针对 VLA 模型内部推理痕迹（CoT）的攻击方法，以诊断动作解码器究竟依赖于推理文本的哪些属性。</p>
+<p><strong>整体框架与威胁模型</strong><br>攻击框架基于一个文本通道拦截威胁模型。攻击者可以读取并替换在推理模块（系统2）和动作解码器（系统1）之间流动的思维链文本，但无法访问模型权重、梯度、训练数据或视觉/指令输入。这比经典的白盒对抗攻击条件更弱，无需梯度计算或模型内部信息。这种威胁在模块化 VLA 部署中是现实的，例如推理和动作生成可能分布在不同的组件、进程甚至设备上。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="攻击流程概览"></p>
+<blockquote>
+<p><strong>图1</strong>：对机器人操作 VLA 进行推理痕迹攻击的概述。(a) 攻击者拦截推理模块和动作解码器之间的思维链文本——所有视觉输入和任务指令保持干净。破坏方法根据攻击者能力分为三个层级：第1层（噪声）= 随机令牌、填充；第2层（机械-语义）= 重排、实体替换、否定翻转；第3层（LLM-自适应）= LLM对抗性改写。(b) 关键发现：在40个LIBERO桌面操作任务中评估的七种破坏条件下，只有实体引用替换导致性能显著下降（整体 -8.3 pp），而其他所有条件——包括LLM对抗性改写——的影响均可忽略。</p>
+</blockquote>
+<p>具体而言，给定模型针对视觉输入 <code>v</code> 和指令 <code>l</code> 生成的干净推理痕迹 <code>c</code>，攻击者应用一个破坏函数 <code>φ_k</code> 产生 <code>ĉ = φ_k(c)</code>，将 <code>ĉ</code> 注入以替代 <code>c</code>，并测量任务成功率的变化 <code>ΔSR = SR(ĉ) - SR(c)</code>。每个破坏函数 <code>φ_k</code> 针对特定的语言属性，从而可以将观察到的故障归因于推理内容的特定方面。</p>
+<p><strong>CoT注入机制</strong><br>以 DeepThinkVLA 为主要目标。该模型首先生成带有特殊标记（<code>think_start</code>, <code>think_end</code>, <code>action_start</code>）的推理痕迹，然后通过双向注意力机制解码动作。本文的注入机制在 CoT 生成和动作解码之间进行拦截。具体步骤为：1) 运行正常推理生成干净的 CoT <code>c</code>；2) 应用破坏函数得到 <code>ĉ</code>；3) 对 <code>ĉ</code> 进行分词并用特殊标记包裹；4) 将原始提示词标记与包裹后的被破坏 CoT 标记连接；5) 调用动作解码函数，基于注入的上下文生成动作。这确保了视觉输入和任务指令完全保持不变，只有推理文本被修改。</p>
+<p><strong>破坏分类法</strong><br>本文设计了七种破坏条件，分为三个攻击者能力层级：</p>
+<ul>
+<li><strong>第1层：噪声（无需了解CoT内容）</strong><ul>
+<li><em>随机令牌</em>：将 CoT 中 50% 的令牌替换为从完整词汇表中均匀随机采样的令牌。</li>
+<li><em>填充</em>：将整个 CoT 替换为长度匹配的重复填充令牌（从一组常见令牌中随机抽取）。这产生了一个语义为空的序列。</li>
+</ul>
+</li>
+<li><strong>第2层：机械-语义（需要了解CoT的语言结构）</strong><ul>
+<li><em>重排</em>：随机打乱 CoT 中的句子顺序。</li>
+<li><em>实体替换</em>：将 CoT 中提到的每个物体名称替换为来自 LIBERO 特定物体池（29个物体）中的另一个不同物体（例如，“ramekin” → “salad dressing”）。句子结构、空间术语和动作动词保持不变。</li>
+<li><em>否定翻转</em>：将所有空间方向术语替换为其反义词（左↔右，上↔下，前↔后等）。</li>
+<li><em>分级破坏</em>：为了测试破坏强度的影响，额外测试了随机令牌替换在四个比例下的情况：0%（干净基线）、25%、50%（等同于随机令牌条件）、75%、100%。</li>
+</ul>
+</li>
+<li><strong>第3层：LLM-自适应（需要辅助语言模型）</strong><ul>
+<li><em>LLM对抗性</em>：使用一个冻结的 LLM（Llama-3.1-70B-Instruct）将干净的 CoT 重写为看似合理但错误的推理。LLM 被提示去交换空间方向、引用错误的目标物体并提出错误的策略，同时保持语法结构和合理性。</li>
+</ul>
+</li>
+</ul>
+<p><strong>推理特异性控制</strong><br>为了区分观察到的性能下降是推理机制特有的漏洞，还是模型对任何注入文本的普遍敏感性，本文还将相同的文本注入应用于一个非推理 VLA 模型 OpenVLA-OFT。如果被破坏的文本注入仅影响推理模型而不影响非推理模型，则证明该漏洞是推理特有的。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong></p>
+<ul>
+<li><strong>模型</strong>：主要评估三个模型：作为主要攻击目标的推理模型 DeepThinkVLA（在LIBERO上微调，成功率95.4%）；作为推理特异性控制的非推理模型 OpenVLA-OFT（成功率52.2%）；以及作为零样本非推理控制的 OpenVLA（成功率0%）。</li>
+<li><strong>基准与协议</strong>：在 LIBERO 基准上进行评估，该基准包含四个复杂度递增的任务套件：物体（简单拾放）、空间（空间推理）、目标（多样化目标规范）和长时程（多步骤长时程）。每个任务在3个随机种子下评估20次，每个套件共600次试验，每个条件共2400次试验。主要指标是任务成功率（SR）。</li>
+<li><strong>评估</strong>：报告平均 SR 及标准误。性能下降以百分点（pp）衡量，<code>ΔSR = SR_corrupt - SR_clean</code>。将效果在干净基线 ±4 pp 内视为可忽略。</li>
+</ul>
+<p><strong>关键实验结果</strong><br><img src="https://arxiv.org/html/2603.12717v1/2603.12717v1/x1.png" alt="破坏-失败矩阵"></p>
+<blockquote>
+<p><strong>图2</strong>：DeepThinkVLA 上的破坏-失败热图。每个单元格显示绝对成功率和相对于95.4%干净基线的下降。只有实体替换（红色行）造成实质性损害；所有其他条件，包括LLM-对抗性（第3层），影响均可忽略。</p>
+</blockquote>
+<p>结果显示 <strong>选择性因果敏感性</strong>：在七种破坏条件中，只有 <code>entity_swap</code>（实体替换）导致了显著的性能下降。整体平均成功率从 95.4% 降至 87.0%（下降 8.3 pp，p &lt; 0.0001）。其中，LIBERO-Goal 套件受影响最大，下降 19.3 pp，个别任务成功率下降高达 45 pp。相比之下，句子重排、空间方向翻转、令牌噪声甚至 LLM 精心制作的对抗性推理，其影响均在 ±4 pp 以内，可忽略不计。</p>
+<p><img src="https://arxiv.org/html/2603.12717v1/2603.12717v1/x2.png" alt="分级破坏剂量反应曲线"></p>
+<blockquote>
+<p><strong>图3</strong>：分级随机令牌替换的剂量反应曲线。LIBERO-Goal 显示出清晰的单调下降趋势（100%替换时下降 16.5 pp，Spearman ρ = -0.95，p &lt; 0.0001）；其他套件基本保持鲁棒。</p>
+</blockquote>
+<p><strong>剂量反应分析</strong>表明，性能下降与破坏强度并非在所有任务上线性相关，但在复杂的 LIBERO-Goal 任务上观察到清晰的单调下降趋势（从0%到100%随机令牌替换，成功率从96.7%降至80.2%，下降16.5 pp）。</p>
+<p><strong>LLM对抗性攻击分析</strong> 一个关键发现是，最复杂的攻击者（第3层，使用LLM进行对抗性改写）造成的损害（-0.5 pp）反而小于简单的第2层机械攻击（实体替换，-8.3 pp）。这揭示了一种 <strong>能力反转</strong>：因为LLM为了保持推理的合理性，无意中保留了原始的实体指称结构，而这正是解码器所依赖的关键。这一结果进一步证实，漏洞的关键在于实体引用的完整性，而非推理质量。</p>
+<p><img src="https://arxiv.org/html/2603.12717v1/2603.12717v1/x3.png" alt="跨表面比较"></p>
+<blockquote>
+<p><strong>图4</strong>：DeepThinkVLA上的跨表面比较：CoT破坏（蓝色）与指令攻击（红色）。条形图显示了相对于干净基线的成功率变化（pp）。指令级实体替换的破坏力强得多（Goal套件上 -85 pp），但CoT攻击使所有输入保持干净——这使其对输入验证防御不可见。</p>
+</blockquote>
+<p><strong>跨表面比较</strong> 显示，在指令级别进行相同的实体替换攻击，其破坏力远大于在CoT级别进行：在Goal套件上，指令攻击导致成功率下降85.2 pp，而CoT攻击仅下降19.3 pp。然而，CoT攻击具有根本不同的威胁属性：<strong>隐蔽性</strong>。在CoT破坏下，所有输入（视觉和指令）都保持干净，这使得攻击对输入验证防御不可见。</p>
+<p><strong>推理特异性控制</strong><br><img src="https://arxiv.org/html/2603.12717v1/2603.12717v1/x4.png" alt="双重分离控制"></p>
+<blockquote>
+<p><strong>图5</strong>：推理特异性双重分离：指令实体替换会降低两个模型的性能，而CoT攻击仅影响DeepThinkVLA。这证明了CoT通道是推理增强模型特有的漏洞向量。</p>
+</blockquote>
+<p>实验结果建立了清晰的 <strong>双重分离</strong>。指令级攻击（如实体替换）会显著降低 DeepThinkVLA 和 OpenVLA-OFT 两个模型的性能。然而，CoT 级别的破坏（本文主要研究的攻击面）仅影响具备推理能力的 DeepThinkVLA，而对非推理的 OpenVLA-OFT 没有显著影响。这证明 CoT 通道是推理增强模型特有的漏洞向量。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong></p>
+<ol>
+<li><strong>首次系统性研究</strong>：首次系统性地研究了针对机器人操作 VLA 模型的推理痕迹攻击，将 CoT 攻击文献从语言模型安全扩展到了具有物理后果的具身 AI 领域。</li>
+<li><strong>揭示选择性因果敏感性</strong>：发现 DeepThinkVLA 的动作解码器因果性地依赖于 CoT 中的实体指称完整性，而对句子顺序、空间方向术语和令牌级噪声不敏感。一个关键的反直觉发现是，LLM 制作的对抗性推理因其保留了实体指称结构，其破坏力反而低于简单的机械实体替换。</li>
+<li><strong>界定隐蔽的威胁向量</strong>：通过跨表面比较，证明了指令级攻击虽然破坏力更强，但 CoT 攻击因其所有输入保持干净而具有隐蔽性，能够绕过输入验证防御。结合双重分离实验，确立了推理痕迹是一个独特且隐蔽的攻击面。</li>
+</ol>
+<p><strong>局限性</strong><br>论文自身提到，本研究主要诊断性地针对单一先进的推理 VLA 模型（DeepThinkVLA）进行评估。虽然威胁模型和发现的原则可能推广到其他具有类似“先思考后行动”文本接口的架构，但不同模型（如 ECoT、Fast-in-Slow）对 CoT 属性的依赖程度可能有所不同，其普遍性有待进一步验证。</p>
+<p><strong>对后续研究的启示</strong></p>
+<ol>
+<li><strong>防御机制设计</strong>：研究需要开发新的防御机制来保护内部推理通道，例如对推理文本进行完整性验证、异常检测或引入冗余校验，而不仅仅是防护外部输入。</li>
+<li><strong>模型架构反思</strong>：研究结果促使我们重新思考 VLA 中集成推理的最佳方式。如果动作解码器主要依赖实体指称，那么更精简、更结构化的中间表示（如对象中心的关系图）可能比自由形式的自然语言计划更鲁棒且高效。</li>
+<li><strong>安全评估标准</strong>：未来的 VLA 模型，特别是那些用于安全关键场景的模型，应将内部推理通道的对抗鲁棒性纳入标准评估框架。安全分析不能只关注感知和指令，还必须涵盖模型内部生成的内容。</li>
+<li><strong>攻击与防御的博弈</strong>：发现了“能力反转”现象，表明最复杂的攻击（保持合理性）未必最有效，这为防御方提供了新的视角：破坏特定关键属性（如实体一致性）可能比生成看似合理的错误推理更容易检测和防御。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>这篇论文研究了视觉-语言-动作模型中思维链推理通道的安全漏洞。核心问题是：仅破坏模型内部的推理文本，而不改变输入，能否损害机器人的物理任务性能？作者设计了三类七种文本破坏方法，在40个桌面操作任务上测试。关键技术发现是：动作解码器主要依赖推理文本中实体名称的完整性，而非逻辑质量或顺序结构。核心实验结论表明，仅替换物体名称就使整体成功率下降8.3个百分点（特定任务下降45点），而打乱顺序、方向反转甚至用大模型生成错误计划等方法影响微乎其微。这证实了内部推理链是一个独特且隐蔽的攻击面。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.12717" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
