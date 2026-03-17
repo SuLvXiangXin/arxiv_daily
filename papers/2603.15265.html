@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MoE-ACT: Scaling Multi-Task Bimanual Manipulation with Sparse Language-Conditioned Mixture-of-Experts Transformers - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>MoE-ACT: Scaling Multi-Task Bimanual Manipulation with Sparse Language-Conditioned Mixture-of-Experts Transformers</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.15265" target="_blank" rel="noreferrer">2603.15265</a></span>
+        <span>作者: Jun Ma Team</span>
+        <span>日期: 2026-03-16</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人模仿学习领域的主流方法，如基于Transformer的动作分块（ACT）和扩散策略（Diffusion Policy），在单任务操作中表现出色，但在多任务场景下面临挑战。当在一个统一策略中联合学习多个任务时，不同任务目标间的冲突和动作分布的相互纠缠会导致严重的“任务纠缠”和负迁移问题，显著降低策略性能。另一方面，大规模视觉-语言-动作（VLA）模型虽能提升泛化能力，但其庞大的参数量和计算需求难以满足机器人对实时推理效率的要求。</p>
+<p>本文针对多任务模仿学习中任务干扰与模型效率难以兼得的痛点，提出将稀疏混合专家（Mixture-of-Experts, MoE）机制集成到ACT框架中的新视角。核心思路是：在Transformer编码器中引入MoE层，通过自适应路由机制将统一的任务策略分解为独立调用的专家组件，从而在潜在空间解耦多任务动作分布；同时在解码器中利用语言条件化的特征调制和多尺度视觉特征融合，确保动作生成与任务指令的一致性并提升对细节的感知能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>MoE-ACT的整体框架基于ACT，是一个用于机器人多任务操作的统一策略。其输入为时间步t的观测$\mathcal{O}<em>t$（包括关节位置$q_t$和来自多视角的RGB图像$I_t$）以及语言指令$l$，输出为未来k步的动作序列$\mathbf{a}</em>{t:t+k}$。整体流程为：观测信息经视觉编码器（如ResNet-18）和投影层处理后，与语言指令嵌入、本体感知嵌入等拼接成序列，送入MoE增强的Transformer编码器；编码后的特征再由任务条件化的Transformer解码器处理，最终预测动作序列。一个条件变分自编码器（CVAE）用于对动作序列的潜在分布进行建模。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：MoE-ACT架构总览。左侧为集成了MoE模块的Transformer编码器，右侧为包含FiLM机制的Transformer解码器。MoE模块实现任务特定的特征解耦，而FiLM确保动作生成与任务指令一致。多尺度交叉注意力使模型能同时捕获高层语义和低层视觉细节以进行操控。</p>
+</blockquote>
+<p><strong>核心模块一：MoE增强的编码器</strong>。为解决标准Transformer参数共享导致的多任务梯度冲突，作者在编码器的前馈网络（FFN）中集成了MoE模块。该模块包含一个路由网络和N个专家网络（FFN）。路由输入由本体感知特征$x_{prop}$、任务嵌入$x_{task}$和所有图像token的全局平均拼接而成（公式1）。路由逻辑值$H(x)$通过一个可学习的权重矩阵$W_g$计算，并添加高斯噪声$\epsilon$以鼓励探索（公式2）。路由器根据逻辑值选择top-k（本文k=2）个专家激活，并通过Softmax计算门控权重（公式3）。最终，图像token的输出是所选专家输出的概率加权和（公式4），而非图像token（如$x_{prop}$, $x_{task}$）则绕过MoE模块由共享FFN处理以保持控制信号的稳定性。这种稀疏激活机制以可忽略的计算开销显著增加了模型容量。</p>
+<p><strong>核心模块二：任务条件化的Transformer解码器</strong>。解码器负责将编码特征转化为精确动作序列，并通过两个机制增强：1) <strong>基于FiLM的任务条件化</strong>：语言指令被分类器处理后获得任务嵌入$z_{task}$。FiLM模块根据该嵌入生成任务特定的缩放因子$\gamma$和偏移量$\beta$（公式5），用于调制每一解码层的动作查询$Q$：$Q‘ = (1+\gamma) \odot Q + \beta$（公式6），从而将模型行为严格对齐到特定任务上下文。2) <strong>多尺度交叉注意力</strong>：每个解码层包含两个交叉注意力块。第一个块（公式7）让调制后的查询$Q‘$关注来自CNN骨干网或较低编码器层的中间层低级视觉特征$F_{low}$；第二个块（公式8）则关注MoE编码器最终输出的高级特征$F_{enc}$。这种设计为动作推理提供了丰富且互补的视觉信息。</p>
+<p><strong>训练目标</strong>：模型采用端到端训练，总损失函数为$\mathcal{L}<em>{total} = \mathcal{L}</em>{rec} + \lambda_{kl}\mathcal{L}<em>{kl} + \lambda</em>{MoE}\mathcal{L}<em>{MoE}$（公式9）。其中$\mathcal{L}</em>{rec}$为动作重建的L1损失，$\mathcal{L}<em>{kl}$为CVAE潜在空间的KL散度正则项。$\mathcal{L}</em>{MoE}$为MoE辅助损失（公式11），包含鼓励探索所有专家的熵损失$\mathcal{L}<em>{entropy}$、平衡各专家负载的负载平衡损失$\mathcal{L}</em>{balance}$，以及促使专家学习不同特征的正交损失$\mathcal{L}_{ortho}$。</p>
+<p>与现有方法相比，创新点在于：1）首次将稀疏MoE机制引入ACT的编码器，以动态、稀疏激活的方式解耦多任务表征；2）在解码器中结合了语言条件化的FiLM调制和多尺度特征融合，增强了任务对齐与视觉感知。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在仿真环境RoboTwin 2.0基准和真实世界AIRBOT MMK2双机械臂平台上进行评估。仿真中，在六个代表性的双手操作任务（Bottle H/O, Pot, Fries, Skillet, Cabinet）上联合训练一个统一策略。训练集共300条轨迹（每任务50条），使用Adam优化器训练4000轮。Baseline包括Diffusion Policy (DP)、ACT、Robotics Diffusion Transformer (RDT) 和 BAKU。</p>
+<p><strong>关键结果</strong>：<br>如表I所示，在RoboTwin 2.0的六任务平均成功率上，MoE-ACT达到55%，显著优于ACT (22%)、DP (19%)、BAKU (31%)和RDT (49%)。具体而言，MoE-ACT比原始ACT平均提升了33个百分点（相对提升150%）。</p>
+<p><img src="https://arxiv.org/html/2603.15265v1/2603.15265v1/Multitask_learning_experiments.png" alt="多任务学习实验"></p>
+<blockquote>
+<p><strong>图2</strong>：RoboTwin 2.0上的多任务学习实验结果。折线图展示了不同专家随时间演化的选择权重分布，表明MoE-ACT针对不同任务激活了不同的专家子集。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>如表II所示，移除FiLM条件化（w/o FiLM）使平均成功率从55%降至46%，在“Bottle H/O”任务上更是下降了26%。移除多尺度交叉注意力（w/o Multi-Scale Cross-Attention）使平均成功率降至47%。</p>
+<p><img src="https://arxiv.org/html/2603.15265v1/2603.15265v1/Attention_heatmap.png" alt="注意力热力图"></p>
+<blockquote>
+<p><strong>图3</strong>：MoE-ACT在RoboTwin 2.0上的注意力热力图。上行显示对中间层（低级）视觉特征的注意力，下行显示对最终层（高级）上下文特征的注意力，横跨五个解码层（L1-L5）。颜色越亮表示注意力值越高。可见，关注低级特征时注意力更分散（全局场景），关注高级特征时注意力更集中于机械臂和目标物体。</p>
+</blockquote>
+<p><strong>真实世界实验</strong>：<br>在“递送瓶子”和“将立方体放入盒子”两个双手任务上进行测试。如表III所示，MoE-ACT平均成功率达到60%，优于ACT (35%)和BAKU (47%)。在“递送瓶子”任务上成功率为68%，在“将立方体放入盒子”任务上成功率为52%，相对ACT分别提升了24%和100%。</p>
+<p><img src="https://arxiv.org/html/2603.15265v1/2603.15265v1/Real_world_task_setup_a.png" alt="真实世界任务设置"></p>
+<blockquote>
+<p>**图4 (a)**：真实世界双机械臂递送瓶子任务设置。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.15265v1/2603.15265v1/Real_world_task_setup_b.png" alt="真实世界任务设置"></p>
+<blockquote>
+<p>**图4 (b)**：真实世界将立方体放入盒子任务设置。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.15265v1/2603.15265v1/Real_world_task_definitions_a.png" alt="真实世界任务定义"></p>
+<blockquote>
+<p>**图5 (a)**：“将立方体放入盒子”任务定义，要求机器人拾取立方体并放入盒中。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.15265v1/2603.15265v1/Real_world_task_definitions_b.png" alt="真实世界任务定义"></p>
+<blockquote>
+<p>**图5 (b)**：“递送瓶子”任务定义，要求机器人抓取瓶子并递交给人类。</p>
+</blockquote>
+<p><strong>失败分析</strong>：论文指出，“将立方体放入盒子”任务的成功率相对较低，失败多发生在抓取小立方体阶段，或当物体初始位置有较大偏移时。原因可能是数据集规模有限且物体摆放多样性不足，限制了模型对复杂场景变化的鲁棒性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了MoE-ACT，一个将稀疏MoE集成到ACT中以高效解耦多任务表征的轻量级模仿学习框架；2）在解码器中引入了语言条件化的FiLM调制和多尺度交叉注意力机制，增强了任务对齐与对低级视觉细节的利用；3）在仿真和真实世界双手操作任务上的实验表明，该方法能有效提升多任务性能（平均成功率比ACT提升33%），且保持了较高的推理效率。</p>
+<p>论文提到的局限性包括：数据集多样性不足影响了在物体位置大幅变化下的泛化能力；模型规模和专家数量仍有扩展空间，最优架构和超参数仍需经验性调整。</p>
+<p>对后续研究的启示：MoE机制为在紧凑模型中实现高效的多任务分解提供了可行路径。未来工作可探索更大规模的MoE模型以实现更通用的操作，或在MoE路由空间中进行无监督技能发现。同时，如何更好地结合大规模预训练视觉语言模型的语义先验，并进一步提升对复杂场景变化的鲁棒性，是值得探索的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对多任务机器人操作中任务干扰和负迁移的核心问题，提出MoE-ACT框架。关键技术包括：集成稀疏Mixture-of-Experts模块到Transformer编码器，通过MoE层解耦多任务动作分布；解码器使用FiLM动态调制动作以对齐语言指令；多尺度交叉注意力融合视觉语义特征。实验表明，MoE-ACT在双臂操作任务中比基准方法ACT平均提升33%的成功率，展现出更强的鲁棒性和泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.15265" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

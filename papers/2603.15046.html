@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AnoleVLA: Lightweight Vision-Language-Action Model with Deep State Space Models for Mobile Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>AnoleVLA: Lightweight Vision-Language-Action Model with Deep State Space Models for Mobile Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.15046" target="_blank" rel="noreferrer">2603.15046</a></span>
+        <span>作者: Komei Sugiura Team</span>
+        <span>日期: 2026-03-16</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于自然语言指令的机器人操作任务主要依赖于视觉-语言-动作模型。这些模型通常以预训练的多模态大语言模型为骨干网络，并在机器人演示数据上进行微调。然而，主流VLA模型（如基于Llama-2 7B的OpenVLA或参数规模达3B的π0.5）依赖于Transformer架构，其自注意力机制的计算复杂度随序列长度呈二次方增长。当VLA模型将视觉、语言和机器人状态令牌拼接成单一长序列进行处理时，这种二次方成本成为在计算资源受限的物理机器人平台上实时部署的关键瓶颈。</p>
+<p>本文针对VLA模型在资源受限环境下部署时面临的高计算成本和内存消耗问题，提出采用深度状态空间模型作为高效的多模态序列建模骨干。核心思路是：利用深度SSM（特别是Mamba）的线性计算复杂度替代Transformer的二次方复杂度，构建一个轻量、高速的VLA模型，并通过两阶段训练策略直接生成平滑的连续动作轨迹。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>AnoleVLA的整体架构旨在高效处理多模态输入并生成机器人动作序列。其核心是利用Mamba深度SSM作为骨干网络，以线性复杂度处理序列，并采用两阶段训练策略优化轨迹的平滑性。</p>
+<p><img src="https://arxiv.org/html/2603.15046v1/2603.15046v1/figs/eyecatch/task.png" alt="模型架构"></p>
+<blockquote>
+<p><strong>图3</strong>：AnoleVLA的模型架构。多模态令牌（本体感知、状态变化、视觉和语言）被拼接并由Mamba骨干网络处理，最终的令牌预测一个H步的动作块。两阶段训练同时监督速度和其时间差分（加速度），以提升执行平滑性。</p>
+</blockquote>
+<p><strong>整体流程</strong>：在时间步t，模型接收四部分输入：机器人状态𝒔^(𝑡)、状态变化Δ𝒔^(𝑡)（即𝒔^(𝑡)-𝒔^(𝑡-1)）、视觉观测𝒙_𝑣^(𝑡)（RGB图像）和自然语言指令𝒙_𝑙。这些输入经过嵌入模块被投影到共享的D维潜空间，形成令牌序列𝑯_0。该序列经过K层堆叠的Mamba块处理后，取最后一个块的最终令牌嵌入，通过一个线性投影动作头，直接输出未来H步的连续动作块𝒚 ^(1:𝐻) ∈ ℝ^(𝑑_𝑎×𝐻)，其中𝑑_𝑎是动作空间维度。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>输入嵌入模块</strong>：机器人状态𝒔^(𝑡)和状态变化Δ𝒔^(𝑡)分别通过线性投影映射为单个令牌𝒉_𝑠^(𝑡)和𝒉_Δ𝑠^(𝑡)。视觉观测𝒙_𝑣^(𝑡)使用SigLIP视觉编码器进行编码，并进行微调，然后通过线性投影得到𝑁_𝑣个视觉令牌𝒉_𝑣^(𝑡) ∈ ℝ^(𝑁_𝑣×𝐷)。语言指令𝒙_𝑙通过词嵌入层和线性投影得到𝑁_𝑙个语言令牌𝒉_𝑙。所有令牌按[𝒉_𝑠^(𝑡), 𝒉_Δ𝑠^(𝑡), 𝒉_𝑣^(𝑡), 𝒉_𝑙]的顺序拼接，构成总长度为L的输入序列𝑯_0。将本体感知令牌置于序列开头，使得在Mamba的因果递归处理中，隐藏状态首先以机器人状态为条件，然后再整合视觉和语言信息。</li>
+<li><strong>Mamba骨干网络</strong>：该骨干由K个Mamba块堆叠而成。每个块包含一个选择性深度SSM层、一个SiLU门控线性单元、层归一化和残差连接。选择性SSM的核心是递归状态更新：𝒛_(𝑛,𝑖)=𝑨_(𝑛,𝑖) 𝒛_(𝑛,𝑖-1)+𝑩_(𝑛,𝑖) 𝒉_(𝑛-1,𝑖)，输出为𝒉 ~<em>(𝑛,𝑖)=𝑪</em>(𝑛,𝑖) 𝒛_(𝑛,𝑖)。其中𝒛_(𝑛,𝑖)是第n块第i个令牌位置的潜状态，系统矩阵𝑨、𝑩、𝑪是输入依赖的，实现了动态信息传播。由于Mamba以因果方式处理序列，令牌i只能聚合前缀{𝒉_(𝑛-1,𝑗)}_(𝑗≤𝑖)的信息，这使得模型能够像滤波过程一样，随着新令牌的到来逐步整合任务相关信息，适合于需要增量整合视觉观测以决定动作的机器人操作场景。</li>
+<li><strong>动作头与训练策略</strong>：动作头是一个简单的线性投影𝑓_head。模型采用两阶段训练策略。第一阶段，使用速度损失ℒ_vel（L1损失）监督预测的动作序列（即末端执行器速度）。第二阶段，在ℒ_vel基础上增加加速度损失ℒ_acc，该损失监督动作序列的时间差分（即加速度），整体目标为ℒ_vel+𝜆_acc ℒ_acc。这种分阶段训练使模型首先学习重建参考轨迹，然后通过加速度项细化其时间一致性，从而生成更平滑、更适合真实硬件执行的轨迹。</li>
+</ol>
+<p><strong>创新点</strong>：</p>
+<ol>
+<li><strong>骨干网络创新</strong>：首次将具有线性计算复杂度的深度SSM（Mamba）作为骨干网络引入VLA，替代了计算昂贵的Transformer，显著降低了长序列多模态输入的处理开销。</li>
+<li><strong>动作生成方式</strong>：不同于许多将连续动作离散化为令牌以利用语言模型自回归解码的现有VLA，AnoleVLA直接从骨干网络的最终隐藏状态通过线性头生成连续动作块，实现了单次前向传播的高效推理。</li>
+<li><strong>训练目标设计</strong>：提出了专门的两阶段训练策略，引入加速度损失来提升生成轨迹的时间平滑性，这对真实的机器人控制至关重要。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在模拟环境（Meta-World基准）和真实物理机器人（丰田HSR）上验证AnoleVLA的有效性。</p>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：使用Meta-World模拟基准，包含50种不同的桌面物体操作任务，共2500条示教轨迹。在物理实验中，使用丰田HSR移动机械臂，在复现World Robot Summit 2020 Partner Robot Challenge/Real Space标准环境的基础上，操作包括YCB物体在内的多种日常物品。</li>
+<li><strong>对比方法</strong>：与参数规模相近的轻量化VLA基线对比，包括SmolVLA (0.45B)、VLA-Adapter (0.5B)、TinyVLA (0.42B)，同时与代表性的大规模VLA π0.5 (3.0B)进行对比。</li>
+<li><strong>评估指标</strong>：任务成功率和推理速度（每动作块的推理时间，单位ms）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>在Meta-World基准测试中，AnoleVLA（0.47B参数）在Easy、Medium、Hard、Very Hard四个难度套件上的成功率分别为89.29%、45.45%、66.67%和70.00%，平均成功率达67.85%。这显著超越了所有基线：比最强的轻量化基线SmolVLA（57.33%）高出10.52个百分点，比大规模基线π0.5（43.80%）高出24.05个百分点。</p>
+<p>在物理实验中，AnoleVLA在Move、Pick、Open、Close、Push五个任务上的平均成功率为63%，同样优于所有基线（π0.5为42%，SmolVLA为52%等）。更重要的是，其实时推理速度达到每块216毫秒，比π0.5（578毫秒）快约2.7倍，比SmolVLA（309毫秒）更快，实现了性能与效率的双重优势。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="概述与性能"></p>
+<blockquote>
+<p><strong>图1</strong>：AnoleVLA概述与真实世界性能。（左）我们的深度SSM骨干处理语言指令和机器人观测以生成轨迹，利用带有加速度损失的两阶段训练策略实现平滑控制。（右）物理实验结果。横轴和纵轴分别代表推理速度和平均成功率。AnoleVLA取得了最高的总体成功率。 Notably, compared with π0.5, AnoleVLA not only yielded superior task performance but also demonstrated an inference speed approximately three times faster.</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.15046v1/2603.15046v1/x2.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图4</strong>：AnoleVLA与基线方法的定性结果对比。展示了三个任务实例：(a) “将冰球放到架子上”，(b) “用锤子敲击墙上的螺丝”，(c) “将冰球推到目标点”。AnoleVLA在(a)(b)中成功执行了复杂任务，而基线方法失败；在(c)中两者均失败，显示了在精确定位和接触轨迹生成上的挑战。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.15046v1/2603.15046v1/figs/eyecatch/setting.png" alt="物理实验设置"></p>
+<blockquote>
+<p><strong>图5</strong>：(a) 物理实验中使用的机器人平台（丰田HSR）和实验环境。(b) 实验中使用的日常物体，包括标准YCB物体集。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.15046v1/2603.15046v1/figs/eyecatch/qualitative_hsr.png" alt="物理实验成功案例"></p>
+<blockquote>
+<p><strong>图6</strong>：物理实验中AnoleVLA的成功执行示例。指令分别为：(a) “打开抽屉。” (b) “把柠檬放进杯子里。” (c) “把苹果从托盘里拿出来。”</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>论文通过消融实验验证了两阶段训练策略中加速度损失的有效性。如表III所示，移除第二阶段加速度损失训练的模型(i)平均成功率为63.12%，而完整的两阶段训练模型(ii)成功率为67.85%。这表明引入加速度损失监督动作序列的时间差分，有助于生成更平滑稳定的轨迹，从而将性能提升了4.73个百分点。</p>
+<p><strong>错误分析</strong>：<br>论文对20个失败案例进行了手动分析，将失败模式归为三类：(i) 位置识别错误（10例）：机械臂移动到非指令指定物体的位置；(ii) 抓取点预测错误（6例）：夹爪到达目标物体，但尝试抓取的位置不当导致失败；(iii) 动作执行不完整（4例）：轨迹开始正确，但未完成操作即终止。位置识别错误是最主要的失败原因，表明模型从视觉观察中精确定位目标物体的能力仍有局限。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li><strong>提出了一种轻量高效的VLA架构</strong>：通过采用深度状态空间模型（Mamba）作为骨干网络，解决了传统Transformer-based VLA在长序列多模态输入上推理延迟高、内存消耗大的问题，实现了线性计算复杂度的序列建模。</li>
+<li><strong>实现了高性能与高推理速度的平衡</strong>：在参数规模（~0.47B）远小于大型VLA（如3B的π0.5）的情况下，在模拟和物理实验中的任务成功率均显著超越基线，同时推理速度快约3倍。</li>
+<li><strong>设计了两阶段训练策略</strong>：通过引入加速度损失对动作序列的时间差分进行监督，有效提升了生成轨迹的平滑性，从而改善了在真实机器人上的执行性能。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身指出，模型最主要的失败模式是位置识别错误，即无法从视觉输入中精确地定位语言指令所指的物体。这反映了当前模型在从图像中提取精确空间信息方面存在不足。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>架构方向</strong>：证明了深度SSM作为VLA骨干网络的巨大潜力，为在资源受限的边缘设备上部署强大的多模态机器人策略模型开辟了新路径。</li>
+<li><strong>性能提升方向</strong>：针对精确定位难题，论文建议未来可探索引入显式的空间关系推理模块，或在训练目标中增加针对物体定位的特定损失函数，以更好地对齐语言指令与视觉观测。</li>
+<li><strong>训练策略</strong>：两阶段训练策略（速度+加速度损失）为生成更符合物理规律、更平滑的机器人轨迹提供了有效的监督范式，可被其他连续动作生成模型借鉴。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对语言引导机器人操作任务中，现有视觉-语言-动作模型因Transformer骨干计算成本高、难以在资源受限环境部署的问题，提出轻量级AnoleVLA模型。其核心技术是采用深度状态空间模型高效处理多模态序列，通过轻量快速的序列状态建模整合视觉与文本输入以生成轨迹。真实实验表明，AnoleVLA相比代表性大规模VLA任务成功率提升21个百分点，且推理速度加快约三倍。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.15046" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
