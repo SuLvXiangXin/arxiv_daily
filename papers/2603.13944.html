@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>ToMPC: Task-oriented Model Predictive Control via ADMM for Safe Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>ToMPC: Task-oriented Model Predictive Control via ADMM for Safe Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.13944" target="_blank" rel="noreferrer">2603.13944</a></span>
+        <span>作者: Haoyong Yu Team</span>
+        <span>日期: 2026-03-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在开放式工作空间中，机器人操作需要兼顾安全（如避障）与任务执行（如运动与力交互）。现有方法中，基于随机采样的运动规划方法虽能快速生成无碰撞路径，但常忽略任务执行需求，且难以处理物理交互。基于优化的方法，特别是模型预测控制（MPC），能方便地纳入多种目标和复杂约束，并支持在线重规划。然而，将全系统动力学、避障约束与任务执行（尤其是力交互）统一在一个MPC框架内，会形成一个复杂的约束非线性优化问题，对实时求解构成挑战。现有研究或侧重于基于运动学的避障，或侧重于基于动力学的交互，少有工作同时高效处理两者。本文针对这一痛点，提出了一种任务导向的模型预测控制（ToMPC）框架，旨在实现安全、高效的机器人操作。其核心思路是利用交替方向乘子法（ADMM）将复杂的优化问题分解为两个子问题，分别由微分动态规划（DDP）和二次规划（QP）高效求解，并引入任务导向的避障策略，利用运动学冗余在避障的同时最大化末端执行器的操作范围。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>ToMPC的整体框架是一个基于ADMM的分布式优化求解器。它将原优化问题分解为两个交替求解的子问题：一个专注于任务执行（处理非线性动力学和成本函数），另一个专注于安全约束（处理状态、输入和避障不等式约束）。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：提出的ToMPC规划器示意图，其中ADMM以分布式方式解决优化问题。左侧为任务执行子问题（由DDP求解），右侧为安全约束子问题（由QP求解），通过ADMM迭代实现耦合求解。</p>
+</blockquote>
+<p><strong>系统建模</strong>：系统状态为关节位置与速度 $\bm{x}=(\bm{q}, \dot{\bm{q}})$，控制输入为关节扭矩 $\bm{u}=\bm{\tau}$。动力学模型基于刚体动力学方程，并集成了一个基于阻抗模型的交互力模型 $\bm{\mathcal{F}}(\bm{q},\dot{\bm{q}})=\bm{K}<em>{env}(\bm{\mathcal{X}}^{ref}\ominus\bm{\mathcal{X}})+\bm{D}</em>{env}\bm{\mathcal{V}}$，该模型将环境作用力视为状态而非扰动，从而能够描述接触时的系统行为。前向动力学 $\text{FD}(\bm{q},\dot{\bm{q}},\bm{\tau})$ 由此导出，并通过离散化得到状态转移方程 $\bm{x}<em>{t+1}=\bm{f}(\bm{x}</em>{t},\bm{u}_{t})$。</p>
+<p><strong>安全约束</strong>：安全约束分为硬约束和软约束。硬约束包括关节位置、速度、扭矩的物理限幅，以及最重要的避障约束 $\bm{d}(\bm{q}<em>{t})\geq \bm{d}</em>{th_{1}}$，该约束定义了障碍物周围不可侵入的区域。距离 $d^{i}(\bm{q})$ 通过快速碰撞检测库计算，并在MPC周期内使用其一阶近似以加速优化。</p>
+<p><strong>成本函数设计</strong>：成本函数 $\ell_t$ 包含四个部分：</p>
+<ol>
+<li>**运动跟踪项 $\ell_m$**：跟踪末端执行器参考位姿 $\bm{\mathcal{X}}^{ref}$，并惩罚关节速度以保证平滑性。</li>
+<li>**力跟踪项 $\ell_f$**：跟踪末端执行器参考力/力矩 $\bm{\mathcal{F}}^{ref}$。</li>
+<li>**任务导向避障项 $\ell_{rep}$**：这是核心创新之一。当机器人连杆进入障碍物周围的“排斥区域”（距离阈值 $d_{th_2} &gt; d_{th_1}$）时，会沿远离障碍物的方向产生一个虚拟排斥速度 $\bm{v}<em>{rep}$。关键之处在于，该排斥运动被投影到任务雅可比 $\bm{J}</em>{task}$ 的零空间 $\bm{N}<em>{task}$ 中执行，如公式 $\ell</em>{rep} = |\bm{N}<em>{task}(\dot{\bm{q}}</em>{t}-\bar{\bm{J}}^{i}<em>{A}\bm{v}^{i+})|^{2}</em>{\bm{Q}_{rep}}$ 所示。这意味着避障运动将尽量不影响高优先级的主任务（运动或力跟踪）执行。</li>
+<li>**控制正则项 $\ell_u$**：惩罚控制输入与重力补偿扭矩的偏差。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2603.13944v1/2603.13944v1/x1.png" alt="交互与避障示意图"></p>
+<blockquote>
+<p><strong>图2</strong>：左图：基于阻抗的交互模型示意图。右图：任务导向避障策略示意图，显示了不可侵入区域 ($d_{th_1}$)、排斥区域 ($d_{th_2}$) 以及排斥速度 $\bm{v}_{rep}$ 的方向。</p>
+</blockquote>
+<p><strong>分布式优化实现</strong>：完整的ToMPC问题（公式25）是一个带非线性动力学等式约束和多种不等式约束的优化问题。通过引入指示函数和辅助变量 $\bm{z}$，将其转化为ADMM标准形式（公式27）。对应的增广拉格朗日函数如公式（28）所示。ADMM的迭代步骤如下：</p>
+<ol>
+<li><strong>任务执行子问题（$\bm{y}$-更新）</strong>：固定 $\bm{z}$ 和乘子 $\bm{\lambda}$，求解一个包含非线性动力学等式约束但<strong>不含不等式约束</strong>的优化问题（公式30）。该问题使用<strong>DDP算法</strong>高效求解。</li>
+<li><strong>安全约束子问题（$\bm{z}$-更新）</strong>：固定 $\bm{y}$ 和 $\bm{\lambda}$，求解一个<strong>投影问题</strong>（公式31），其目标是找到满足所有不等式约束（关节限位、避障）的 $\bm{z}$，使其尽可能接近 $\bm{y}$。这是一个<strong>二次规划（QP）</strong>问题，可快速求解。</li>
+<li><strong>乘子更新</strong>：根据 $\bm{y}$ 和 $\bm{z}$ 的一致性误差更新乘子 $\bm{\lambda}$。</li>
+</ol>
+<p>与现有方法相比，创新点体现在：1) <strong>统一框架</strong>：将无碰撞运动与环境交互任务统一在一个MPC框架内。2) <strong>任务导向避障</strong>：利用零空间投影，使避障运动尽可能少干扰主任务，并通过目标松弛因子 $\xi(d^{i})$ 动态调整任务权重，进一步提升操作范围。3) <strong>高效求解</strong>：通过ADMM将复杂的非凸约束问题分解为DDP和QP两个更易求解的子问题，实现了硬约束的严格满足与实时求解。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在仿真和真实的Franka Panda 7自由度机械臂上进行。基准方法包括：1) <strong>OAMPC</strong>：一种将障碍物距离作为惩罚项（软约束）而非硬约束的优化方法。2) <strong>纯运动控制</strong>：仅执行运动跟踪任务，作为基线。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>避障能力验证</strong>：在存在障碍物的场景中，ToMPC能成功规划无碰撞路径，而OAMPC由于仅使用软约束，会发生碰撞。<br><img src="https://arxiv.org/html/2603.13944v1/2603.13944v1/figures/results/1_sim1.jpg" alt="仿真避障对比"><blockquote>
+<p><strong>图4</strong>：仿真中，ToMPC（右）与OAMPC（左）在障碍物附近执行拾放任务的轨迹对比。OAMPC的轨迹（红色）与障碍物相交。</p>
+</blockquote>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2603.13944v1/2603.13944v1/x3.png" alt="距离曲线对比"></p>
+<blockquote>
+<p><strong>图7</strong>：对应图4场景中，最近障碍物距离随时间变化曲线。ToMPC（蓝色）始终保持在安全阈值 $d_{th1}=0.02m$ 以上，而OAMPC（红色）违反了该约束。</p>
+</blockquote>
+<ol start="2">
+<li><p><strong>任务导向避障效果</strong>：与仅使用硬约束的MPC相比，引入任务导向避障（软约束）的ToMPC能显著增大末端执行器在障碍物附近的可操作工作空间。在一个受限通道任务中，ToMPC的末端执行器运动范围比仅用硬约束的方法增大了约 **69.2%**。<br><img src="https://arxiv.org/html/2603.13944v1/2603.13944v1/figures/results/2_oampc.jpg" alt="工作空间扩展对比"><br><img src="https://arxiv.org/html/2603.13944v1/2603.13944v1/figures/results/2_tompc.jpg" alt="工作空间扩展对比"></p>
+<blockquote>
+<p><strong>图9与图10</strong>：在受限通道任务中，仅用硬约束的方法（图9）末端轨迹（绿色）范围受限；而ToMPC（图10）通过零空间调整连杆姿态，使末端轨迹范围显著扩大。</p>
+</blockquote>
+</li>
+<li><p><strong>力交互任务</strong>：在需要同时避障并施加接触力的任务中，ToMPC能够成功跟踪期望的接触力（5N），同时避免与障碍物碰撞。接触力跟踪的均方根误差（RMSE）为 <strong>0.51 N</strong>。<br><img src="https://arxiv.org/html/2603.13944v1/2603.13944v1/figures/results/3_track.jpg" alt="力跟踪结果"></p>
+<blockquote>
+<p><strong>图14</strong>：在存在障碍物的接触任务中，ToMPC实际施加的接触力（蓝色）与参考力（红色）的跟踪情况。</p>
+</blockquote>
+</li>
+<li><p><strong>实时性能</strong>：在Franka Panda机器人上的实验表明，ToMPC的平均单步规划时间为 <strong>24.6 ms</strong>，满足了实时控制的需求（控制频率100Hz）。</p>
+</li>
+</ol>
+<p><strong>消融实验</strong>：论文通过消融实验分析了任务导向避障策略中两个关键组件的作用：1) <strong>排斥速度项</strong>：移除后，末端操作范围缩小。2) <strong>零空间投影</strong>：移除后（即排斥速度直接影响所有关节），末端执行器的轨迹跟踪误差增大了 **46.7%**，表明零空间投影有效降低了避障运动对主任务的干扰。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了一个<strong>统一的MPC框架</strong>，能够在线规划满足硬安全约束的运动和/或力轨迹，适用于存在障碍物环境中的机器人操作。2) 设计了一种<strong>任务导向的避障策略</strong>，通过零空间投影和目标松弛，在保证安全的前提下显著提升了末端执行器的操作灵活性。3) 采用<strong>ADMM分布式优化</strong>，将原问题分解为由DDP和QP求解的子问题，实现了复杂约束非线性优化问题的实时求解。</p>
+<p>论文提到的局限性包括：计算复杂度随机器人连杆与障碍物之间碰撞对数量的增加而增加；当前的交互模型假设环境刚度已知，未来可结合学习方法来估计未知环境参数。</p>
+<p>这项工作对后续研究的启示在于：ADMM框架为统一处理机器人控制中复杂的等式与不等式约束提供了高效途径；任务导向避障中利用零空间协调多任务的思想，可扩展至更复杂的多任务优先级场景；该方法为在动态、不确定环境中实现安全、柔顺的机器人操作奠定了基础。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对开放工作空间中机器人操作的安全与效率问题，提出任务导向模型预测控制（ToMPC）框架，以统一无碰撞运动与环境交互，并利用运动学冗余实现面向任务的避障。关键技术采用交替方向乘子法（ADMM），将优化问题分解为微分动态规划（DDP）和二次规划（QP）子问题求解。在Franka Panda机器人上的仿真与硬件实验表明，该框架能实时规划运动/力轨迹，最大化操作范围的同时避免障碍，并严格遵循安全硬约束。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.13944" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
