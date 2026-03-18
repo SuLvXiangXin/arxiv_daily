@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Large Reward Models: Generalizable Online Robot Reward Generation with Vision-Language Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Large Reward Models: Generalizable Online Robot Reward Generation with Vision-Language Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.16065" target="_blank" rel="noreferrer">2603.16065</a></span>
+        <span>作者: Yue Wang Team</span>
+        <span>日期: 2026-03-17</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人强化学习（RL）的性能提升严重受限于通用化奖励函数的设计难度。当前利用视觉语言模型（VLM）生成奖励的方法主要分为两类：一类是事后（post-hoc）的轨迹级评估（如RoboReward、Robometer），这类方法提供的反馈信号延迟，缺乏指导实时策略优化所需的时间分辨率；另一类是交互式方法（如RL-VLM-F），利用VLM提供偏好来学习代理奖励函数，但尚未充分利用VLM的规模能力来生成即时、多维的在线反馈。本文针对在线策略优化需要密集、实时奖励信号的痛点，提出将基础VLM适配为密集的帧级奖励生成器的新视角。核心思路是：通过在大规模、多源数据集上微调基础VLM，得到一个大型奖励模型（LRM），该模型能够从当前视觉观察中即时生成包含对比、进度和完成度的多维度奖励信号，从而以闭环方式高效优化模仿学习得到的初始策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架分为两个阶段：首先，利用来自24个不同来源的无标签视频轨迹构建结构化数据集，并基于此将基础VLM（Qwen3-VL-8B-Instruct）微调为专门的Large Reward Models（LRMs）。其次，在在线策略优化阶段，冻结的LRM作为奖励引擎，将当前视觉观察和任务描述映射为密集奖励信号，用于通过PPO算法优化初始策略。</p>
+<p><img src="https://arxiv.org/html/2603.16065v1/2603.16065v1/images/method.jpg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：方法整体框架。左侧为LRM训练阶段，利用多源视频数据通过LoRA微调基础VLM，生成三种独立的奖励模态。右侧为在线策略优化阶段，LRM根据当前观察生成密集奖励流，引导策略进行闭环精炼。</p>
+</blockquote>
+<p>核心模块是三个具有特定功能的LRM，它们共同构成了一个三方面的奖励公式：</p>
+<ol>
+<li><strong>时间对比奖励（Temporal Contrastive Reward, r_cont）</strong>：用于提供相对进展梯度。该模型接收一对时序图像帧（当前帧 I_t 和前一帧 I_{t-Δt}）及任务描述 d，判断哪个状态更接近任务目标，输出离散奖励值（+1.0, -1.0, 0.0）。这种相对比较机制能提供密集反馈，并缓解绝对评分的校准问题。该模型使用直接偏好优化（DPO）目标进行训练，并在输出最终奖励前引入思维链（CoT）推理步骤，确保奖励基于可验证的物理交互。</li>
+<li><strong>绝对进度奖励（Absolute Progress Reward, r_prog）</strong>：用于提供连续进度估计。该模型接收当前观察 I_t（可选地锚定初始状态 I_0）和任务描述 d，回归一个归一化的完成度分数，取值范围为 {0.0, 0.1, ..., 1.0} 共11个离散等级。这为策略提供了基于物理意义视觉变化的细粒度进度反馈。该模型通过监督微调（SFT）进行训练，采用“推理优先”的方法，即模型在输出奖励 r_prog 前必须阐述物理线索，以确保数值与场景一致。</li>
+<li><strong>任务完成奖励（Task Completion Reward, r_comp）</strong>：用于提供确定性的二元目标达成判断。该模型接收当前观察 I_t 和任务描述 d，判断语义目标是否已完全满足，输出二进制信号（1或0）。该模型也通过SFT训练，直接预测成功信号，为策略识别目标达成状态提供明确的强化信号。</li>
+</ol>
+<p>为了确保LRM的零样本泛化能力，训练数据来自三大领域：真实机器人轨迹（Open X-Embodiment）、人-物交互数据（HOI4D, EgoDex）以及模拟环境（LIBERO, RoboCasa）。从每个视频轨迹中，按归一化时间进度 p ∈ {0.0, 0.1, ..., 1.0} 采样11个关键帧，构建数据集 D = {(I_t, d, p_t)}。</p>
+<p>在在线策略优化阶段，初始策略 π_φ 由模仿学习得到。策略与环境交互时，采用间隔保持（Interval-Hold）策略：每 K 步查询一次LRM，计算奖励 r_m = LRM_m(I, d)（m为激活的奖励模态），并将该奖励缓存并保持 K 步，形成一个连续的密集监督流。策略使用PPO算法进行更新，优势函数 A^_t 通过广义优势估计（GAE）计算，其中时序差分误差 δ_t 使用了LRM生成的奖励 r_t。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验评估主要在ManiSkill3模拟环境中进行，该环境对训练好的LRM是零样本的。同时，也在真实机器人部署中进行了验证。</p>
+<p><strong>基准与对比方法</strong>：在ManiSkill3上，对比了三种LRM奖励模态（r_cont, r_prog, r_comp）与当前最先进的生成式奖励模型RoboReward-8B和Robometer-4B。同时，以环境提供的特权奖励（Env Reward）作为性能上界，以初始模仿学习策略（π_SFT）作为基线。</p>
+<p><strong>LRM奖励质量评估</strong>：<br>首先在保留测试集上评估了LRM生成奖励信号的内在质量。</p>
+<ul>
+<li><strong>对比判别模型</strong>：如表I所示，微调后的LRM在Kendall&#39;s τ和Spearman&#39;s ρ排名相关性指标上比零样本基础模型提升了15.3%，表明其产生稳定时序排序的能力更强。</li>
+<li><strong>进度估计模型</strong>：如表II和图2所示，LRM在平均绝对误差（MAE）上降低了20.0%，均方根误差（RMSE）降低了19.3%。在±0.2的高精度容忍度下，准确率提升了8.63个百分点。</li>
+<li><strong>任务完成模型</strong>：LRM准确率为69.38%，与基础模型的69.23%相近，表明基础VLM在零样本语义目标识别上已具备较强能力。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2603.16065v1/2603.16065v1/images/progress.jpg" alt="累积准确率曲线"></p>
+<blockquote>
+<p><strong>图2</strong>：进度估计模型在不同容忍度阈值（±Δ）下的累积准确率。微调后的LRM在所有阈值下均优于基线，在±0.2的高精度区间提升最为显著。</p>
+</blockquote>
+<p><strong>闭环策略优化结果</strong>：<br>在ManiSkill3上进行30轮RL迭代后，各方法的成功率如表III和表IV所示。</p>
+<ul>
+<li>所有LRM奖励模态均显著超越了初始π_SFT基线（56.88%）。任务完成奖励 r_comp 取得了最高成功率（60.93%），时间对比奖励 r_cont（60.31%）和绝对进度奖励 r_prog（60.00%）也带来了大幅提升。</li>
+<li>所有三种LRM奖励模态均优于对比的SOTA生成式奖励模型RoboReward-8B（59.06%）和Robometer-4B（56.56%）。</li>
+<li>虽然环境特权奖励（66.87%）性能最高，但LRM驱动的优化显著缩小了模仿基线与此上界之间的差距。</li>
+</ul>
+<p><strong>定性分析</strong>：<br><img src="https://arxiv.org/html/2603.16065v1/2603.16065v1/images/rollout_comparison.jpg" alt="进度奖励定性示例"></p>
+<blockquote>
+<p><strong>图3</strong>：绝对进度奖励（r_prog）的定性示例。LRM能够根据任务“将杯子放在架子上”的视觉观察，输出与物理进展相符的离散进度值（如0.3, 0.7, 1.0）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.16065v1/2603.16065v1/images/Yanru_LRM_setup.jpg" alt="策略优化前后对比"></p>
+<blockquote>
+<p><strong>图4</strong>：策略优化前后轨迹对比示例。左图为优化前策略在“打开抽屉”任务中失败（抽屉未完全打开），右图为经LRM奖励优化后的策略成功完成任务。</p>
+</blockquote>
+<p><strong>真实世界部署</strong>：<br><img src="https://arxiv.org/html/2603.16065v1/2603.16065v1/images/Yanru_LRM_setup.jpg" alt="真实机器人设置"></p>
+<blockquote>
+<p><strong>图5</strong>：真实机器人实验设置。利用LRM的任务完成奖励（r_comp）作为自动判断器，从硬件 rollout 中筛选成功轨迹，用于迭代策略微调。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) 提出了Large Reward Models框架，将基础VLM规模化适配为密集的帧级在线奖励生成器，实现了高效的闭环策略精炼；2) 设计了一个包含时间对比、绝对进度和任务完成信号的三方面奖励公式，提供了多维度、鲁棒的监督；3) 通过在大规模多域数据集（24个来源）上的训练，确保了奖励模型在未见环境中的零样本泛化能力，并在复杂的长视野操作任务中验证了其有效性，仅用30轮RL迭代即显著提升了策略成功率。</p>
+<p>论文提到的局限性包括：尽管采用了间隔保持策略，大型VLM的前向推理仍然会产生显著的计算开销；此外，奖励信号可能并非完美，存在错误估计的风险。</p>
+<p>这项工作对后续研究的启示在于：证明了大规模预训练的VLMs经过针对性微调后，可以作为通用、可靠的在线奖励信号源，从而摆脱对手动奖励工程的依赖。未来方向可能包括进一步优化奖励模型的效率、探索多模态奖励的融合策略，以及研究如何将此类框架更无缝地整合到从仿真到真实世界的机器人学习流程中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人强化学习中奖励函数设计通用性差、依赖人工标注的核心问题，提出大型奖励模型框架。该方法基于视觉语言模型生成在线奖励，通过LoRA微调VLM骨干，融合时间对比奖励、绝对进展奖励和任务完成奖励三种模态，以闭环方式优化模仿学习初始策略。实验在长视野操作基准上以零样本进行，仅需30次RL迭代即显著提升策略成功率，展现了高效的样本利用能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.16065" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
