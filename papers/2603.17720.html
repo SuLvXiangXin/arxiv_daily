@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VolumeDP: Modeling Volumetric Representation for Manipulation Policy Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>VolumeDP: Modeling Volumetric Representation for Manipulation Policy Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.17720" target="_blank" rel="noreferrer">2603.17720</a></span>
+        <span>作者: Tao Jiang Team</span>
+        <span>日期: 2026-03-18</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>模仿学习是机器人操作领域的主流范式。近年来，基于扩散模型的策略（如Diffusion Policy）因其在建模复杂、高维、多模态动作分布方面的强大能力而备受关注。然而，现有方法大多依赖2D视觉表示（如通过ResNet或ViT编码的2D特征图）作为去噪解码器的条件输入。这种设计存在根本性的2D-3D不匹配问题：策略需要从2D观测中推断出3D空间信息以生成3D动作，这阻碍了空间推理能力，并导致模型对特定视角过拟合，难以有效融合多视角几何信息。一些近期工作试图通过引入显式的3D输入（如点云）来缓解此问题，但这通常需要昂贵且不总是可用的深度传感器。</p>
+<p>本文针对上述RGB-only模仿学习中存在的2D-3D表征不匹配这一具体痛点，提出了一种新视角：在动作解码之前，显式地构建一个3D体积表示，以恢复空间对齐，从而增强空间推理能力。本文的核心思路是：首先通过跨注意力机制将2D图像特征提升为3D体积特征，然后通过一个可学习的空间令牌生成模块提炼出任务相关的紧凑空间令牌集，最后利用一个多令牌解码器基于整个令牌集预测动作，避免将多个空间令牌压缩为单一描述符造成的信息损失。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>VolumeDP的整体流程包含三个核心模块：体积表示构建、空间令牌生成和多令牌解码器。</p>
+<p><img src="https://arxiv.org/html/2603.17720v1/2603.17720v1/figures/performance_comparison.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：VolumeDP整体架构。包含三个核心组件：(1) <strong>体积表示</strong>：通过体积-图像跨注意力从图像构建体积表示。(2) <strong>空间令牌生成</strong>：提取重要特征形成空间令牌。(3) <strong>多令牌解码器</strong>：利用空间令牌作为条件进行多令牌去噪解码。</p>
+</blockquote>
+<p><strong>1. 体积表示模块</strong><br>该模块的目标是从RGB图像输入构建一个结构化的3D体积特征。首先，使用共享的骨干网络将当前帧及过去T帧的RGB图像序列编码为2D图像特征 <code>F_2d</code>。同时，预定义一个与世界坐标系对齐的长方体体积空间 <code>Q</code>，其边界 <code>r</code> 根据任务的工作空间确定，并被离散化为 <code>X × Y × Z</code> 个体素。每个体素 <code>v</code> 通过公式 <code>x = i × s + x_min</code> 等映射到世界坐标 <code>p</code>。随后，利用相机外参 <code>P</code> 和内参 <code>K</code> 将每个体素的3D坐标投影到2D图像平面上，得到参考点 <code>P(v)</code>。为了高效地将图像特征关联到体积空间，采用了<strong>可变形注意力（Deformable Attention）</strong>机制。每个体素查询 <code>Q_v</code> 以其投影点 <code>P(v)</code> 为中心，采样图像特征 <code>F_2d</code> 周围一组可学习的偏移点特征并进行聚合，最终生成密集的3D体积特征 <code>F_3d</code>。这个过程避免了全局注意力带来的巨大计算开销，同时捕获了细粒度的空间上下文。</p>
+<p><strong>2. 空间令牌生成模块</strong><br>由于体积中大部分体素是空或与任务无关的，该模块旨在将高维体积特征 <code>F_3d</code> 蒸馏为一组紧凑的、任务相关的空间令牌，以聚焦关键区域并提升计算效率。模块输入包括体积特征 <code>F_3d</code> 和经过文本编码器编码的语言指令令牌 <code>F_text</code>。首先将语言令牌广播并与体积特征拼接，形成目标感知的体积特征 <code>F_3d^g</code>。受TokenLearner启发，该特征经过卷积层处理，并通过softmax归一化产生一组权重 <code>W</code>，其值在[0,1]范围内，维度为 <code>N × X × Y × Z</code>。<code>N</code> 是预定义的空间令牌数量。这些权重与原始体积特征 <code>F_3d</code> 进行矩阵乘，得到最终的空间令牌集 <code>F_s</code>，每个令牌都是体积特征的加权和。<strong>创新点</strong>在于引入了来自本体感知的辅助监督以加速收敛：在末端执行器位置以及夹爪状态（开/合）发生变化的区域构建稀疏监督掩码，并采用二元交叉熵损失鼓励权重在这些区域升高。这利用了现有的本体感知信号，无需额外标注。</p>
+<p><strong>3. 多令牌解码器</strong><br>为了充分利用空间令牌中保留的丰富3D信息，本文设计了一个基于Transformer的多令牌解码器。它采用条件去噪扩散概率模型（DDPM）的框架来生成动作序列。解码器的条件输入包括空间令牌 <code>F_s</code>、由MLP编码的本体感知令牌 <code>z</code> 以及语言令牌 <code>F_text</code>。与将多令牌条件压缩为单一向量的朴素方法不同，该解码器<strong>保留完整的令牌集</strong>。具体采用与DiT-Block Policy类似的adaLN-Zero注意力块设计：扩散时间步和条件令牌通过学习的缩放和移位参数来调制Transformer块，从而实现稳定且富有表现力的多令牌条件处理。这种设计避免了信息损失，并允许空间令牌之间进行交互，从而更好地利用几何信息进行动作预测。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在三个仿真基准上评估：LIBERO（包含Spatial, Object, Goal, Long四个任务套件，共40个任务）、ManiSkill（选取Poke Cube, Place Sphere, Hook Cube, Stack Pyramid, Insert Peg五个任务）以及用于评估分布外泛化能力的LIBERO-Plus。所有实验使用RGB相机，策略输入为连续两帧图像、语言指令和8维本体状态，输出7维动作序列。体积空间被离散化为 <code>40×40×40</code> 个体素，空间令牌数量 <code>N=200</code>。</p>
+<p><strong>对比方法</strong>：与经典行为克隆（BC）、Diffusion Policy (DP) 以及DiT-Block Policy进行对比。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>LIBERO基准</strong>：如表I所示，VolumeDP取得了88.8%的平均成功率，显著优于DP（72.4%）和DiT-Block Policy（74.0%），分别提升了16.4%和14.8%。在需要长视野和复杂空间推理的LIBERO-Goal和LIBERO-Long套件上提升尤为显著。</li>
+<li><strong>ManiSkill基准</strong>：如表II所示，VolumeDP平均成功率达68.9%，比最佳基线（DP，49.6%）高出19.3%。在需要高精度空间对齐的任务（如Insert Peg, Poke Cube）上优势明显。</li>
+<li><strong>LIBERO-Plus基准（OOD泛化）</strong>：如表III所示，在相机视角、机器人初始状态、语言、光照、背景、噪声、物体布局等多种扰动下，VolumeDP平均成功率为53.0%，远超DP（31.7%）和DiT-Block Policy（31.1%），显示出卓越的鲁棒性。特别是在相机视角（+21.5%）、光照（+31.5%）和布局（+24.4%）变化上提升巨大。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2603.17720v1/2603.17720v1/x4.png" alt="权重可视化"></p>
+<blockquote>
+<p><strong>图4</strong>：空间令牌生成模块学习到的权重可视化。激活的3D体素被投影到图像平面上；越亮的红色表示激活程度越高。可见学习到的权重集中关注末端执行器和目标物体，显示出任务相关的空间感知能力。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>在LIBERO-Spatial套件上进行了详尽的消融研究（表IV），验证了各核心组件的必要性：</p>
+<ol>
+<li><strong>体积表示</strong>：用2D图像特征图替代体积表示（行b），性能下降12.5%，证明了3D体积表示对于空间推理至关重要。</li>
+<li><strong>空间令牌生成</strong>：对比了多种替代方案：(c)随机采样令牌（62.8%）、(d)使用所有体素（粗化网格，68.4%）、(e)使用真实深度图选择体素（75.8%）、(f)移除辅助监督（82.2%）。结果表明，学习的、目标感知的令牌生成机制（90.7%）效果最佳，简单的启发式方法或缺乏监督都会导致性能下降。</li>
+<li><strong>多令牌解码器</strong>：将多令牌拼接后使用单令牌解码器（行g，76.4%）或用卷积层压缩体积特征为单令牌（行h，80.0%）均导致性能显著劣于完整模型，证明了保留多令牌交互对于充分利用3D信息的重要性。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) 提出了VolumeDP，一种仅使用RGB的模仿学习策略框架，通过构建体积表示解决了2D-3D表征不匹配问题，显著增强了空间推理能力。2) 设计了由体积表示、空间令牌生成和多令牌解码器组成的创新架构，能够高效地从图像中提取、蒸馏并利用任务相关的3D几何信息。3) 在多个仿真基准和真实世界实验中验证了方法的优越性，特别是在分布外泛化性上展现出巨大优势，凸显了空间对齐的体积表示的价值。</p>
+<p>论文自身提到的局限性包括：1) 构建体积表示和可变形注意力操作会带来额外的计算开销。2) 体积空间的范围需要根据任务预先定义，这可能限制了其在未知或动态变化的大规模场景中的适用性。</p>
+<p>对后续研究的启示：VolumeDP证明了在策略学习前端进行显式3D空间建模的有效性。未来工作可以探索更高效或动态的体积构建方法，或将此思想与其他感知模态（如触觉）或多模态指令相结合。此外，如何使体积表示的学习更加端到端和自适应，以应对更复杂的开放世界场景，是一个值得深入的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉模仿学习中2D图像观测直接映射到3D动作导致的2D-3D空间不匹配问题，提出VolumeDP架构。该方法通过体积表示模块将图像特征提升为3D体积特征，再经空间令牌生成模块蒸馏为关键空间令牌，最后用多令牌解码器预测动作，避免信息损失。实验表明，在LIBERO基准上平均成功率达88.8%，比基线提升14.8%，并在其他基准和真实任务中表现优异。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.17720" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
