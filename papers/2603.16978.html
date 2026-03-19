@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Rewarding DINO: Predicting Dense Rewards with Vision Foundation Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Rewarding DINO: Predicting Dense Rewards with Vision Foundation Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.16978" target="_blank" rel="noreferrer">2603.16978</a></span>
+        <span>作者: Florian Walter Team</span>
+        <span>日期: 2026-03-17</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人操作任务中，设计密集奖励函数通常依赖于仿真中才可用的特权状态信息，这限制了其在真实世界中的应用。一种常见的替代方案是从专家演示中预测奖励，例如通过视觉相似性或视频帧的顺序关系。然而，这类方法存在关键局限性：它们将奖励函数与特定的解决方案（即演示轨迹）紧密绑定，导致奖励模型仅在演示覆盖的状态空间内有定义。当使用强化学习从零开始训练策略时，早期训练阶段的轨迹可能与专家演示大相径庭，使得基于演示的奖励函数失效。</p>
+<p>本文针对上述痛点，提出了一种新的视角：不依赖于特定轨迹，而是直接从预训练的视觉和语言基础模型编码中学习可解析计算的密集奖励函数。该方法旨在回答一个核心问题：视觉基础模型能否且应否作为奖励预测的主干网络？其核心思路是，利用强大的、预训练的视觉（DINOv3）和语言（allMiniLM-L6-v2）模型编码观测与任务描述，通过一个轻量级的、基于成对排序损失的头部网络，学习预测与任务语义对齐的密集奖励信号。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Rewarding DINO 的目标是，根据自然语言任务描述，将机器人操作任务的视觉观测映射为一个数值分数。其整体框架遵循一个简单的函数：给定一个由两个图像嵌入 $I_1, I_2$ 组成的观测 $o_t$ 和一个文本目标描述嵌入 $g$，模型学习一个函数 $f(o_t, g)$，输出一个标量分数 $s$，该分数诱导出的状态排序应与真实奖励 $r_t$ 一致。</p>
+<p><img src="https://arxiv.org/html/2603.16978v1/2603.16978v1/x1.png" alt="模型架构"></p>
+<blockquote>
+<p><strong>图2</strong>：模型架构概览。文本和图像编码器被冻结。仅训练小型头部网络，该网络通过 FiLM 融合语言和图像特征。输入是两个 512×512 图像和一个文本目标描述；输出是单个标量。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>编码器</strong>：图像编码器采用 DINOv3 ViT-S/16，这是一个拥有2100万参数、强调密集特征的视觉Transformer。为了保留空间信息，模型使用完整的图像块（patch）嵌入矩阵（一个包含位置信息的token网格），而非单一的类别（class）token。文本编码器使用 allMiniLM-L6-v2，这是一个基于 BERT 架构、经过蒸馏和 SBERT 方法微调的句子嵌入模型。这两个编码器在训练过程中均被冻结。</li>
+<li><strong>特征投影与融合</strong>：每个384维的图像token通过四个独立的1×1卷积核（相当于四个线性层）投影为4维向量，然后拼接起来输入奖励头部。奖励头部是一个包含四层（4096, 512, 64, 8维）的 MLP，每层后接层归一化和 LeakyReLU 激活。前三个层使用 FiLM 进行语言条件化。FiLM 生成器是一个小型 MLP，以目标嵌入 $g$ 为输入，为奖励头部的前三层输出仿射变换参数 $\gamma$ 和 $\beta$，对特征进行缩放和偏移：$\gamma \odot x + \beta$。</li>
+<li><strong>损失函数</strong>：模型使用成对排序损失（Pairwise Ranking Loss）进行训练，而非回归绝对奖励值。这反映了奖励函数的本质：其诱导的排序比绝对值更重要。给定一对样本及其真实奖励 $r_0, r_1$，定义标签 $y = 1$（若 $r_0 &gt; r_1$）或 $y = -1$（若 $r_1 &gt; r_0$）。损失函数为 $\ell(\Delta s) = \log(1 + \exp(\frac{-y \Delta s}{\tau}))$，其中 $\Delta s = s_0 - s_1$ 是模型对两个样本预测分数的差，$\tau$ 是温度参数。奖励相等的样本对不参与训练。</li>
+<li><strong>数据生成与采样</strong>：为了获得覆盖广泛状态空间的数据集，作者结合了随机策略和专家策略（任务解决后切换为随机策略，任务未解决时切换回专家策略）来收集轨迹。为避免数据不平衡（大量初始状态和任务完成状态），他们提出了一种基于奖励和笛卡尔坐标的“分箱去重”策略：将数据集按奖励和坐标划分为不同的箱（bin），然后从每个箱中采样一个元素。如图3所示，这有效减少了冗余样本。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2603.16978v1/2603.16978v1/x2.png" alt="数据分布"></p>
+<blockquote>
+<p><strong>图3</strong>：门打开（door-open）任务训练数据集中 TCP 笛卡尔坐标与奖励的分箱分布图。右侧直方图显示了样本中奖励的分布。</p>
+</blockquote>
+<p><strong>创新点</strong>：</p>
+<ul>
+<li><strong>直接学习奖励函数</strong>：与从演示中推断奖励的方法不同，该方法直接学习一个可解析计算的密集奖励函数，不依赖于特定轨迹，从而能泛化到演示未覆盖的状态。</li>
+<li><strong>成对排序损失</strong>：采用排序损失而非回归损失，更符合奖励函数的数学特性（正仿射变换下的策略不变性），并专注于学习正确的相对顺序。</li>
+<li><strong>高效的数据利用</strong>：结合专家与随机策略收集数据，并采用基于任务进度（奖励）和状态空间的去重采样策略，提高了数据集的多样性和效率。</li>
+<li><strong>轻量级设计</strong>：仅微调一个参数很少的头部网络，计算开销低，可作为分析式奖励函数的直接替代品部署。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>数据集与平台</strong>：在 24 个 Meta-World+ 任务和一个模拟的抓取立方体（pick-cube）任务上收集数据。使用 MuJoCo 模拟器和 Robot Control Stack。真实世界实验使用 Franka Research 3 机器人和多个 RealSense 相机。</li>
+<li><strong>Baseline</strong>：由于该方法旨在预测分析式奖励的真值，因此主要评估指标是模型预测与地面真实奖励之间的一致性，而非与其他奖励学习方法直接对比。实验评估了预测精度、校准、泛化能力，并最终使用预测的奖励通过 PPO 算法从零训练策略。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><p><strong>奖励质量评估</strong>：</p>
+<ul>
+<li><strong>成对准确率</strong>：如图5所示，模型在奖励差异较小（0.06 到 0.7）的样本对上准确率超过 80%。对于奖励差异很大的样本对，准确率下降，原因在于专家策略在任务解决后会切换为随机策略，导致视觉相似但奖励迥异的状态出现。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2603.16978v1/2603.16978v1/ds_all.png" alt="成对准确率"></p>
+<blockquote>
+<p><strong>图5</strong>：在所有训练任务的新收集轨迹上，按奖励差异分层的成对准确率。当奖励差异在 0.06 到 0.7 之间时，准确率超过 80%。</p>
+</blockquote>
+<ul>
+<li><strong>等级相关性（Kendall‘s tau）</strong>：如图6所示，模型在专家轨迹上表现良好（tau 值较高），但在随机轨迹上表现较差。这是因为随机轨迹的奖励值普遍很低，其排序依赖于更细微的奖励差异，预测难度更大，而这对于从零开始的强化学习至关重要。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2603.16978v1/2603.16978v1/x3.png" alt="Kendall‘s tau"></p>
+<blockquote>
+<p><strong>图6</strong>：每个环境中专家策略和随机策略轨迹的 Kendall‘s tau 分布。模型在随机轨迹上的排序预测明显更具挑战性。</p>
+</blockquote>
+</li>
+<li><p><strong>概率解释与校准</strong>：模型输出的分数差可以解释为状态优劣的概率。经过等渗回归（Isotonic Regression）校准后，模型的预期校准误差（ECE）仅为 0.001，表明其概率预测非常准确。</p>
+<p><img src="https://arxiv.org/html/2603.16978v1/2603.16978v1/x4.png" alt="校准图"></p>
+<blockquote>
+<p><strong>图7</strong>：经过温度缩放后模型概率解释的可靠性图。对角线代表完美校准的模型。经过校准，模型预测的概率非常可靠。</p>
+</blockquote>
+</li>
+<li><p><strong>泛化能力</strong>：</p>
+<ul>
+<li><strong>任务泛化</strong>：在训练中只见过“抽屉打开”（drawer-open）任务，测试“抽屉关闭”（drawer-close）任务时，由于后者地面真实奖励几乎是二值的，而模型预测是密集的，导致在随机轨迹上指标下降（Kendall‘s tau 从 0.82 降至 0.47）。但在专家轨迹上，泛化能力尚可（tau 从 0.94 降至 0.72）。</li>
+<li><strong>仿真到真实</strong>：如图8所示，在真实机器人抓取立方体的任务上，模型预测出了合理的密集奖励曲线，表明其未过拟合到仿真图像像素，而是学习了图像嵌入中语义特征间的关系。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2603.16978v1/2603.16978v1/x5.png" alt="Sim-to-Real"></p>
+<blockquote>
+<p><strong>图8</strong>：仿真到真实奖励预测的定性评估。图像对应模型看到的两个相机视角。模型在真实数据上预测出了形状合理的奖励信号。</p>
+</blockquote>
+</li>
+<li><p><strong>强化学习实验</strong>：使用训练好的奖励模型替代分析式奖励，在8个任务上从零开始训练 PPO 策略。如图9所示，在大多数任务上，使用 Rewarding DINO 预测的密集奖励训练出的策略，其最终成功率和学习速度与使用地面真实密集奖励相当，并显著优于稀疏奖励。</p>
+<p><img src="https://arxiv.org/html/2603.16978v1/2603.16978v1/x6.png" alt="RL结果"></p>
+<blockquote>
+<p><strong>图9</strong>：使用不同奖励函数（真实密集奖励、模型预测奖励、稀疏奖励）训练 PPO 策略时，各任务在100万训练步内的解决率。阴影区域为95%自举置信区间。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.16978v1/2603.16978v1/x7.png" alt="奖励预测曲线"></p>
+<blockquote>
+<p><strong>图10</strong>：在已知任务（按钮按压，左图）和未知任务变体（关门，右图）上，模型预测奖励（橙色）与地面真实奖励（蓝色）的对比。右图显示，尽管关门任务的真实奖励是二值的，模型仍预测出了具有语义意义的密集奖励信号。</p>
+</blockquote>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了一种监督学习的奖励预测新范式</strong>：将密集奖励预测形式化为一个基于预训练基础模型嵌入的成对排序学习问题，能够学习不依赖于特定轨迹的、可解析计算的奖励函数。</li>
+<li><strong>设计了一个轻量级且高效的架构</strong>：冻结强大的视觉和语言基础模型，仅训练一个参数极少的小型头部网络（通过 FiLM 融合多模态信息），实现了低计算开销的实时奖励预测。</li>
+<li><strong>进行了全面的评估</strong>：不仅在预测精度、校准和泛化（包括仿真到真实）方面系统评估了奖励模型的质量，还验证了其能够作为替代品，驱动标准强化学习算法从零成功解决多项任务。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文明确指出，其数据收集策略（结合专家和随机策略）仍然可能无法充分覆盖所有可能的失败或次优轨迹，这限制了奖励模型在那些状态下的定义。此外，在奖励差异极大或视觉相似但语义不同的状态对上，模型的预测精度会下降。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>基础模型作为奖励 backbone 的潜力</strong>：这项工作证实了预训练的视觉-语言基础模型编码中蕴含了足以推断任务进度和奖励的丰富语义信息，为构建通用、可迁移的奖励函数提供了新路径。</li>
+<li><strong>排序损失的有效性</strong>：成对排序损失相较于回归损失，更适用于奖励学习问题，未来可以探索更先进的排序或对比学习目标。</li>
+<li><strong>从“模仿轨迹”到“学习任务”</strong>：该方法展示了脱离对专家演示轨迹的过度依赖、直接学习任务本身奖励函数的可行性，有助于开发更通用、更鲁棒的视觉奖励模型，推动强化学习在更复杂、真实场景中的应用。数据集的构建和采样策略是影响模型性能的关键，如何更高效、全面地覆盖任务状态空间是未来重要方向。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中密集奖励函数设计依赖仿真特权状态、且基于专家演示的方法易偏向特定轨迹的问题，提出Rewarding DINO方法。该方法利用视觉基础模型的嵌入，通过语言条件奖励建模学习通用奖励函数（而非特定轨迹），采用基于排名的损失进行训练，模型紧凑且计算开销低。在24个Meta-World+任务上的实验表明，Rewarding DINO在训练任务中表现竞争性，并能泛化到仿真和真实世界的新场景，验证了其学习任务语义的能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.16978" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
