@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Sparse Autoencoders Reveal Interpretable and Steerable Features in VLA Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Sparse Autoencoders Reveal Interpretable and Steerable Features in VLA Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.19183" target="_blank" rel="noreferrer">2603.19183</a></span>
+        <span>作者: Mac Schwager Team</span>
+        <span>日期: 2026-03-19</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）模型通过结合预训练的视觉语言模型（VLM）主干和动作解码头，已成为通用机器人操作的一种有前景的方法。然而，其泛化能力并不稳定：尽管在某些场景下表现优异，但经过有监督微调（SFT）的模型在面对新物体、场景和指令时常常失败。现有研究（如LIBERO-PRO）表明，即使在原始基准上成功率超过90%的模型，在系统性扰动下也可能崩溃至接近零，暗示这些策略可能依赖于对动作序列和环境布局的死记硬背，而非真正的泛化。为了理解并改善VLA模型，需要超越行为层面的观察，深入其内部工作机制。受大语言模型（LLM）领域启发，机制可解释性（Mechanistic Interpretability）提供了一套工具来理解学习模型的内部运作。其中，稀疏自编码器（SAE）已被证明能在LLM中发现高度可解释的特征。本文旨在将SAE应用于VLA模型的残差流激活中，以揭示其内部可解释、可泛化且可操控的特征，从而为VLA模型的泛化能力提供机制性证据，并区分通用技能与特定记忆。</p>
+<p>本文的核心思路是：在VLA模型的隐藏层激活上训练稀疏自编码器，将其叠加的表示分解为一个稀疏的、可解释的特征字典；然后提出量化指标来自动分类这些特征（通用特征 vs. 记忆特征），并通过在推理时操控（steering）单个特征来验证其因果影响。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体方法流程包含四个主要部分：SAE训练、特征泛化性量化、特征分类和特征操控。</p>
+<p><img src="https://arxiv.org/html/2603.19183v1/2603.19183v1/figures/splash_main.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：VLA模型机制可解释性流程总览。从左至右：从VLA模型收集内部激活；训练稀疏自编码器（SAE），获得稀疏特征；这些特征既包含记忆的片段，也包含通用的语义概念、运动基元和任务结构。右侧展示了DROID数据集上三个与抓取相关的特征，通过每个特征激活值最高的四个片段可视化。记忆特征在高度相似的场景中激活，而通用特征则在多样化的场景、任务和抓取类型中激活。</p>
+</blockquote>
+<p><strong>SAE训练</strong>：采用带AuxK辅助损失的TopK架构SAE。输入激活 x ∈ R^d 首先进行逐样本归一化：减去一个学习的预偏置 b_pre（初始化为训练激活的几何中位数），再减去标量均值 μ 并进行 L2 归一化，得到 x̃。编码过程为 z = ReLU(TopK(W_enc(x̃)))，其中TopK函数保留前k个最大的预激活值，其余置零，ReLU确保特征系数非负。解码重构为 x̃̂ = W_dec z，然后通过恢复保存的L2范数、均值和预偏置进行反归一化得到最终重构 x̂。解码器列被约束为单位范数。总损失结合了归一化重构误差和AuxK辅助损失：L = ||x - x̂||₂² / C_MSE + α * ||ẽ - ẽ̂_aux||₂² / C_MSE，其中 C_MSE 是初始化时计算的中心化激活方差，α=1/32。本研究在 π_0.5 模型的PaliGemma层（维度d=2048，k=100）和动作专家层（d=1024，k=64）上训练了扩展比为1的SAE。</p>
+<p><strong>泛化性量化指标</strong>：为了自动处理大量特征，定义了四个基于激活统计的指标来区分通用特征和记忆特征。</p>
+<ol>
+<li><strong>片段覆盖率（c_j）</strong>：特征j至少在激活一次的片段占所有片段的比例。值越高表示特征在多样任务中更通用。</li>
+<li><strong>平均起始计数（ō_j）</strong>：在特征激活的片段内，其状态从“非激活”（激活值≤阈值τ_on=0.1）切换到“激活”（&gt;τ_on）的平均次数。通用特征通常ō_j &gt;&gt; 1，表示突发性、事件驱动的激活。</li>
+<li><strong>平均激活幅度（ā_j）</strong>：在特征激活的片段内，其最大激活值的平均值。</li>
+<li><strong>相对运行长度（ℓ̄_r,j）</strong>：在特征激活的片段内，每次起始对应的平均连续激活时间步长占片段总时长的比例。接近0表示短暂激活，接近1表示持续激活。通用特征倾向于低ℓ̄_r（突发性），而记忆特征倾向于高ℓ̄_r（持续性）。</li>
+</ol>
+<p><strong>特征分类</strong>：首先手动标注一个特征子集（通用或记忆）。通用特征需在多样片段中激活，且与语义连贯的事件（如抓取物体）对齐，表现为高起始计数、高片段覆盖率和高平均激活比例。记忆特征则局限于特定片段或场景，表现为低起始计数、低片段覆盖率以及最高激活片段与后续片段间激活幅度的陡降。基于30个手动标注的特征（15个通用，15个记忆），使用上述四个指标训练一个逻辑回归分类器，以实现大规模自动分类。</p>
+<p><strong>特征操控</strong>：为验证特征解释，可直接操控特征以观察模型输出变化。给定训练好的SAE，特征i的操控向量 v_i 是其解码器权重矩阵的第i列（单位归一化）。在推理时，将缩放后的操控向量 α·v_i 加到残差流激活 y 上：y‘ = y + α·v。该向量在序列维度上广播，对每个去噪步骤的每个标记位置施加相同的扰动。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在LIBERO和DROID机器人操作数据集上进行，主要分析模型包括 π_0.5 和OpenVLA。基线对比涉及不同训练数据集（LIBERO vs. DROID）和不同模型。</p>
+<p><strong>可解释特征比例</strong>：通过随机采样估计，在 π_0.5 LIBERO 的PG5和PG11层、π_0.5 DROID 的PG5和PG11层以及OpenVLA的第8和24层中，绝大多数SAE特征（约80-90%）表现出很强的可解释性。</p>
+<p><strong>通用与记忆特征分类结果</strong>：自动分类器应用于所有模型和层。关键发现是，<strong>大多数提取的特征对应于记忆</strong>。例如，在 π_0.5 模型上，LIBERO微调产生的特征中，超过90%被分类为记忆特征；而在更大、更多样化的DROID数据集上微调，能将通用特征的比例从约5%显著提升至约30%。这为“小数据集微调会不成比例地放大记忆”提供了机制性证据。</p>
+<p><img src="https://arxiv.org/html/2603.19183v1/2603.19183v1/figures/general_features.png" alt="通用特征示例"></p>
+<blockquote>
+<p><strong>图4</strong>：在LIBERO上，π_0.5 模型PaliGemma第5层中两个通用抓取相关特征的激活情况。这些特征在整个数据集的抓取和搬运行为中普遍激活，展示了跨任务的泛化性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.19183v1/2603.19183v1/figures/droid_general.png" alt="DROID通用特征"></p>
+<blockquote>
+<p><strong>图5</strong>：在DROID数据集上发现的通用特征示例。特征DROID F322主要记忆特定办公室场景中的国际象棋棋子抓取，但也以较低的幅度在与无关场景的国际象棋棋盘上激活，显示了记忆与泛化之间的光谱。</p>
+</blockquote>
+<p><strong>特征操控验证</strong>：通过在LIBERO基准上进行闭环操控实验，验证了单个SAE特征对机器人行为的因果影响。例如，正向操控一个“抓取”特征会导致机器人更早、更用力地抓握；负向操控则会导致抓握失败或延迟。操控一个“放置”特征能成功将物体移向目标位置，成功率从基线的40%提升至80%。操控一个“避免碰撞”特征能使机器人在靠近障碍物时提前停止。</p>
+<p><img src="https://arxiv.org/html/2603.19183v1/2603.19183v1/figures/libero_general_steering_small.png" alt="操控实验结果"></p>
+<blockquote>
+<p><strong>图6</strong>：在LIBERO上对通用特征进行闭环操控的结果。操控“放置”特征（F1683）能可靠地将物体移向目标位置（成功率从40%提升至80%）；操控“避免碰撞”特征（F1399）能使机器人在障碍物前提前停止。</p>
+</blockquote>
+<p><strong>消融实验</strong>：论文探讨了SAE扩展比率的影响，发现更大的扩展比（如4倍）会导致“死亡”特征比例大幅增加，而可解释性并未显著提升，因此主实验采用了1倍的扩展比。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出并验证了使用稀疏自编码器从VLA模型中提取可解释、可泛化、可操控特征的技术流程；2）提出了一套基于激活统计的量化指标，能够自动区分通用特征和记忆特征，为评估VLA模型的泛化潜力提供了新工具；3）通过操控实验，首次为“VLA模型能够学习跨任务和场景的通用特征”提供了机制性因果证据，并发现数据集多样性（如使用DROID而非LIBERO进行微调）能显著促进通用特征的学习。</p>
+<p>论文提到的局限性包括：特征分类存在模糊地带，部分特征处于记忆与泛化的光谱中；自动分类器基于少量手动标注样本训练，可能无法捕捉所有特征类别；当前操控是在所有标记位置上均匀施加的，未来可探索更精细的时空操控策略。</p>
+<p>本研究对后续工作的启示包括：为理解和改善VLA的泛化提供了新的分析框架和实证依据；表明促进通用特征学习的关键在于训练数据的规模和多样性，这为数据集构建和训练策略设计提供了指导；开源的工具包（Dr. VLA）为社区进一步研究VLA的机制可解释性奠定了基础。未来的工作可以探索如何主动抑制记忆特征、增强通用特征，或利用这些特征进行模型编辑和可控策略生成。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作（VLA）模型在新对象、场景和指令上泛化能力不一致的问题，应用稀疏自编码器（SAE）分析模型隐藏层激活，提取稀疏可解释特征。SAE学习稀疏字典，特征分为泛化运动原语与特定记忆，并提出分类度量。在LIBERO基准实验中，SAE特征能因果影响机器人行为，引导泛化特征可跨任务和场景应用。实验表明，监督微调会加剧记忆，而使用大规模多样数据集（如DROID）则能促进泛化特征学习。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.19183" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
