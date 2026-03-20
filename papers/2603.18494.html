@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MemoAct: Atkinson-Shiffrin-Inspired Memory-Augmented Visuomotor Policy for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>MemoAct: Atkinson-Shiffrin-Inspired Memory-Augmented Visuomotor Policy for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.18494" target="_blank" rel="noreferrer">2603.18494</a></span>
+        <span>作者: Gangshan Jing Team</span>
+        <span>日期: 2026-03-19</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作策略中，遵循马尔可夫假设的方法（如RT-2, ACT, Diffusion Policy）取得了显著进展。然而，此类策略仅依赖当前观测进行决策，在处理依赖记忆的任务时存在根本性缺陷。当任务中出现感知混淆（即不同任务状态下观测相同）或需要回忆物体初始状态时，缺乏历史感知能力的马尔可夫策略会以一定概率失败。</p>
+<p>现有赋予机器人历史感知能力的方法主要采用固定大小的观测窗口扩展。其中，基于先进先出（FIFO）机制的简单记忆库（如SAM2Act）虽然能有效跟踪近期已完成子任务，但其有限的窗口容量导致早期信息被快速覆盖，从而丧失了长时程记忆能力。另一种方法（如MemoryVLA）通过合并相似相邻帧来扩展记忆时长，但合并过程会丢失对任务状态跟踪至关重要的细粒度细节。因此，现有方法难以同时实现精确的任务状态跟踪和鲁棒的长时程记忆保持。</p>
+<p>本文针对这一关键痛点，受认知科学中Atkinson-Shiffrin记忆模型（将人类记忆分为感觉记忆、短时记忆和长时记忆三个层次）的启发，提出了一种新的视角：构建分层的记忆系统。核心思路是设计一个包含无损短时记忆库和压缩长时记忆库的分层记忆策略（MemoAct），以协同解决任务状态跟踪和长时程记忆保持这两个瓶颈问题。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>MemoAct的整体框架由三个核心模块构成：感觉蒸馏模块（提取感觉记忆）、长短时记忆模块（维护和检索分层记忆）以及基于条件扩散的动作解码器（生成动作）。其输入为当前时间步的RGB图像和机器人本体感觉状态，输出为未来一段时间内的动作序列。</p>
+<p><img src="https://arxiv.org/html/2603.18494v1/2603.18494v1/figures/overview.jpg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：MemoAct架构总览。感觉蒸馏模块将RGB图像和本体感觉状态编码为感觉记忆。该记忆作为查询，从长短时记忆库中检索相关历史上下文，并通过时序Transformer编码器处理。随后，一个门控网络自适应地融合检索到的历史与当前感觉记忆，产生条件令牌。在此令牌的指导下，动作解码器通过去噪生成历史感知的动作轨迹。前向传播后，巩固模块会更新记忆库。</p>
+</blockquote>
+<p><strong>感觉蒸馏模块</strong>：首先，使用冻结的DINOv2骨干网络将RGB图像编码为块级特征图。为了减少信息冗余，引入一个带有单个可学习读出令牌的Transformer层，对块级特征进行查询，生成压缩的视觉表示。同时，机器人的本体感觉状态通过一个多层感知机（MLP）投影到与视觉令牌相同维度的潜在嵌入。最后，通过一个特征融合模块（公式1），以压缩视觉令牌为查询，以投影的状态特征为键和值，执行注意力机制，生成最终的感觉记忆。</p>
+<p><strong>长短时记忆模块</strong>：这是方法的核心创新点，包含一个无损的短时记忆库（STMB，容量$T_s=6$）和一个压缩的长时记忆库（LTMB，容量$T_k=8$）。其运作包含巩固、检索与融合两个关键过程。</p>
+<p><img src="https://arxiv.org/html/2603.18494v1/2603.18494v1/figures/memory_consolidation.jpg" alt="记忆巩固"></p>
+<blockquote>
+<p><strong>图3</strong>：长短时记忆巩固模块示意图。新生成的感觉记忆首先被追加到STMB。当STMB达到容量上限时，最早的$N_{sc}=3$个条目与一个可学习的摘要令牌一起送入时序Transformer编码器进行压缩，生成的摘要令牌被迁移到LTMB，同时原始条目被丢弃。当LTMB达到容量上限时，则合并其中最相似的一对相邻令牌。</p>
+</blockquote>
+<p><em>记忆巩固</em>：当STMB满时，系统取出最早的$N_{sc}=3$个令牌，与一个可学习的摘要令牌一同输入一个因果Transformer编码器。通过交互，摘要令牌从这些令牌中提炼出关键的时空特征，随后被转移到LTMB，而原始的$N_{sc}$个令牌则从STMB中移除以释放空间。当LTMB满时，采用基于相似性的合并策略（而非FIFO）：计算相邻令牌的成对相似度，并合并最相似的两个条目，从而在有限容量下显著延长保留的历史时间范围。</p>
+<p><em>记忆检索与门控融合</em>：所有记忆令牌（来自STMB和LTMB）首先通过添加可学习的位置嵌入来保留顺序，并由一个时序Transformer编码器处理以建模长期依赖。然后，以当前感觉记忆为查询，通过交叉注意力机制从编码后的历史上下文中检索相关信息。最后，检索到的特征和原始感觉记忆被送入一个门控网络，该网络自适应地融合两者，产生最终用于指导动作生成的条件令牌。</p>
+<p><strong>条件扩散动作解码器</strong>：动作生成被建模为一个条件去噪过程。在条件令牌$F_C^t$的引导下，一个基于UNet的噪声预测器通过逐步去噪从高斯分布中采样的噪声，来重构干净的动作轨迹。训练目标是最小化预测噪声与真实噪声之间的均方误差（公式3）。</p>
+<p><strong>训练策略</strong>：与随机采样独立观测-动作对的常规做法不同，MemoAct采用流式训练范式。每个训练批次严格按时间顺序从单个任务片段中构建样本，以确保记忆库能被顺序填充，形成有序的时序上下文，这对模型有效学习至关重要。</p>
+<p>与现有方法相比，MemoAct的创新点具体体现在：1) 受认知模型启发，明确构建了分层的（短时/长时）记忆结构；2) 设计了协同工作的记忆巩固机制，短时记忆库无损保留近期细节以支持精确状态跟踪，长时记忆库通过压缩和合并保留长期信息以支持长时程记忆；3) 通过门控网络自适应融合当前感知与检索到的历史，而非简单拼接或替换。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：构建了专门的MemoryRTBench（基于RoboTwin 2.0仿真器，包含4个任务），并在RMBench的语言无关任务上进行了测试，最后在2个真实世界任务中进行了验证。</li>
+<li><strong>实验平台</strong>：仿真使用Cobot Magic移动机械臂；真机实验使用Realman RM65-B机械臂。</li>
+<li><strong>基线方法</strong>：对比了无记忆的马尔可夫策略（ACT, Diffusion Policy），以及将其记忆机制移植到相同架构下构建的两种记忆增强基线：SAMP（基于FIFO）和MVMP（基于相似性合并）。</li>
+<li><strong>评估指标</strong>：采用严格的成功率，要求机器人按顺序完成所有子任务。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>在MemoryRTBench上，MemoAct平均成功率达到96.5%，显著优于最强的基线MVMP（72%）和SAMP（58%）。无记忆的ACT和Diffusion Policy成功率极低（4.5%和3%）。在RMBench上，MemoAct平均成功率为49.5%，优于MVMP（28.5%）和SAMP（24.75%）。在真实世界任务中，MemoAct平均成功8.75/10次，同样优于其他基线。</p>
+<p><img src="https://arxiv.org/html/2603.18494v1/2603.18494v1/figures/tasks.jpg" alt="任务概览"></p>
+<blockquote>
+<p><strong>图4</strong>：仿真与真实世界任务概览。展示了MemoryRTBench中的四个仿真任务和两个额外的真实世界任务，旨在评估模型的任务状态跟踪和长时程记忆保持能力。任务按字母顺序（A→B→C→…）执行，其中遇到的相同观测用红色或蓝色高亮。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>（表IV）：</p>
+<ol>
+<li><strong>视觉骨干</strong>：将DINOv2替换为ResNet-18导致平均成功率下降18%，证明了DINOv2在视觉表征上的优越性。</li>
+<li><strong>记忆巩固模块组件</strong>：移除时序位置嵌入（TPE）或将巩固模块中的时序Transformer编码器替换为简单加法，在复杂任务（SHT）上性能分别下降至78%和72%，证明了显式时序建模对严格顺序执行的重要性。</li>
+<li><strong>特征融合方式</strong>：将门控网络替换为直接相加，导致SHT和DA-ITR任务性能下降，证明了自适应特征聚合对于整合当前与历史观测的必要性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2603.18494v1/2603.18494v1/figures/comparsion.png" alt="记忆容量影响"></p>
+<blockquote>
+<p><strong>图5</strong>：MemoAct在不同记忆容量下的性能比较（%）。长时记忆容量主要决定长时程记忆保持能力，而短时记忆容量对维持准确的任务状态跟踪至关重要。</p>
+</blockquote>
+<p><strong>记忆容量影响分析</strong>（图5）：<br>减少长时记忆容量（$T_k=0$）会严重损害需要回忆初始状态的任务（BPR, DA-STR, DA-ITR）。盲目扩大长时记忆容量（$T_k=12$）会将平均成功率降至91%，因为过多的历史会引入噪声和冗余特征干扰决策。减少短时记忆容量会严重损害SHT任务（$T_s=2$时降至46%），并在DA-ITR中导致子任务重复或跳过，证明了其对准确状态跟踪的必要性。论文最终选择$T_k=8$, $T_s=6$, $N_{sc}=3$以平衡性能与效率。</p>
+<p><strong>模块扩展性验证</strong>（表V）：<br>将MemoAct的长短时记忆巩固模块（MCM）集成到代表性基线策略DP3中，在MemoryRTBench上的平均成功率从26%大幅提升至76.5%，证明了该记忆模块具有良好的即插即用性和通用性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li><strong>提出了受认知启发的分层记忆策略MemoAct</strong>：通过模拟Atkinson-Shiffrin记忆模型，设计了包含无损短时记忆和压缩长时记忆的分层架构，有效解决了现有方法在记忆依赖任务中无法兼顾精确状态跟踪与长时程记忆保持的难题。</li>
+<li><strong>设计了协同的记忆巩固与更新机制</strong>：通过因果注意力压缩将短时记忆总结后转入长时记忆库，并采用相似性合并策略管理长时记忆容量，实现了两种记忆的优势互补。</li>
+<li><strong>构建了专门的评估基准MemoryRTBench</strong>：为系统评估机器人策略在任务状态跟踪和长时程记忆保持两方面的能力提供了新的测试平台。</li>
+</ol>
+<p>论文自身提到的局限性在于，感觉蒸馏模块将所有视觉令牌压缩为单个全局令牌，这可能会牺牲精细的空间精度，导致在需要回忆目标精确位置的多物体任务（如Observe and Pick Up）中表现不佳。</p>
+<p>本文对后续研究的启示在于：将认知科学中的记忆模型与机器人学习相结合是一个富有前景的方向；分层、结构化的记忆设计优于简单的序列扩展；未来工作可以探索如何在不损失空间细节的前提下进行有效的感知压缩，或者将记忆机制与更细粒度的（如物体中心）表示相结合。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中依赖记忆的任务，提出MemoAct策略，解决现有方法难以同时实现精确任务状态跟踪和长期记忆保持的问题。受Atkinson-Shiffrin记忆模型启发，该方法采用分层记忆架构：无损短期记忆确保精确状态跟踪，压缩长期记忆支持长期记忆保持。实验表明，MemoAct在模拟与真实场景中均显著优于现有基线算法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.18494" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
