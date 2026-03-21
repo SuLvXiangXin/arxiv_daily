@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Fine-tuning is Not Enough: A Parallel Framework for Collaborative Imitation and Reinforcement Learning in End-to-end Autonomous Driving - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Fine-tuning is Not Enough: A Parallel Framework for Collaborative Imitation and Reinforcement Learning in End-to-end Autonomous Driving</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.13842" target="_blank" rel="noreferrer">2603.13842</a></span>
+        <span>作者: Jia Hu Team</span>
+        <span>日期: 2026-03-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>端到端自动驾驶的主流方法基于模仿学习（IL），旨在从传感器输入直接模仿人类专家的驾驶轨迹，代表性工作包括UniAD、VAD、DiffusionDrive等。然而，IL策略的性能受限于人类演示的质量：一方面可能盲目模仿人类的不良驾驶行为（如逆行、闯红灯）；另一方面，数据集中场景分布不均（如nuScenes中73.9%为直行场景）导致策略在处理其他场景时知识不足。</p>
+<p>为提升IL策略，现有方法引入强化学习（RL）进行微调，主要分为两类：1）一次性IL→RL：先训练IL策略，再用RL进行微调；2）迭代式IL↔RL：交替进行IL训练和RL微调。然而，这种顺序微调范式存在根本性局限：RL微调可能引入策略漂移（甚至导致性能低于原始IL策略），并且由于其依赖于预训练的IL策略，容易陷入性能瓶颈。其核心问题在于，IL（最小化与专家轨迹的误差）和RL（最大化累积奖励）的优化目标存在冲突，在同一个策略网络上进行顺序或交替优化可能导致破坏性冲突，陷入局部最优。</p>
+<p>本文针对顺序微调中IL与RL目标冲突、性能受限的痛点，提出了一个全新的并行协作视角。核心思路是将IL和RL解耦为两个并行的优化分支：IL分支专注于学习人类水平的驾驶行为，而RL分支则以人类演示（训练时）或IL输出（推理时）为参考，探索如何超越人类专家的表现，从而打破顺序微调的性能上限。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>PaIR-Drive框架的核心在于训练和推理阶段的并行化设计。整体流程分为并行训练和协作推理两个阶段。</p>
+<p><img src="https://arxiv.org/html/2603.13842v1/2603.13842v1/figures/overall_framework.png" alt="训练过程图示"></p>
+<blockquote>
+<p><strong>图1</strong>：PaIR-Drive训练流程。左侧（I）为IL分支，遵循典型的端到端规划流程，受人类轨迹监督。右侧（II）为RL分支，基于人类轨迹，旨在探索更优轨迹。RL分支中的树状轨迹神经采样器递归地预测人类演示中未见的驾驶意图对应的轨迹点偏移，最终使用轨迹及其模拟奖励进行GRPO来更新策略。</p>
+</blockquote>
+<p><strong>训练阶段（图1）</strong>：IL与RL分支完全并行、独立优化。</p>
+<ol>
+<li><strong>IL分支</strong>：输入为自车状态、多视角RGB图像和激光雷达点云。经过图像编码器、激光雷达编码器、感知融合模块和轨迹解码器，输出规划轨迹 τ_0:T^IL。其损失函数为与人类专家轨迹 τ_0:T^Human 的L1损失：ℒ_IL = L1loss(τ_0:T^IL, τ_0:T^Human)。该分支可替换为任何基于IL的自动驾驶策略。</li>
+<li><strong>RL分支</strong>：输入与IL分支相同的传感器数据，并共享BEV特征图 F_BEV。其核心是一个<strong>树状轨迹神经采样器</strong>。该采样器以F_BEV和人类专家轨迹为输入，递归地预测相对于该专家轨迹在不同驾驶意图（如左转、右转、加速、减速）空间下的轨迹点偏移 Δw_t,i^RL，从而生成一组围绕参考轨迹展开的、具有树状结构的候选轨迹 τ_0:T,i^RL。这些轨迹在NAVSIM模拟器中在线评估，获得考虑安全性、可行驶区域合规性、效率、舒适度等的奖励r_i。策略 π_θ 通过分组相对策略优化（GRPO）进行更新，其目标函数包含基于归一化分组相对优势A_i的策略比 clipped 项以及KL散度正则项。</li>
+</ol>
+<p><strong>推理阶段（图2）</strong>：两个分支协作产生最终规划。</p>
+<ol>
+<li>RL分支的参考轨迹由训练时的人类轨迹替换为IL分支生成的轨迹 τ_0:T^IL。</li>
+<li>通过树状采样器得到一组候选轨迹后，使用一个预训练的<strong>奖励世界模型（RWM）</strong> 来预测每个轨迹的奖励r_i和置信度conf_i。</li>
+<li>最终选择RWM评分最高的轨迹作为车辆的最终行驶计划。此设计可以过滤掉那些比IL原始输出更差的探索性轨迹。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2603.13842v1/2603.13842v1/figures/inference.png" alt="推理过程图示"></p>
+<blockquote>
+<p><strong>图2</strong>：PaIR-Drive推理流程。与图1相比，RL分支中的人类轨迹被IL分支生成的轨迹所取代，同时使用一个额外的训练好的奖励世界模型来评估和选择最终规划。</p>
+</blockquote>
+<p><strong>核心创新模块：树状轨迹神经采样器</strong><br>该采样器是RL分支探索能力的关键，其结构如图3所示。</p>
+<p><img src="https://arxiv.org/html/2603.13842v1/2603.13842v1/figures/tree_sampler.png" alt="树状轨迹神经采样器图示"></p>
+<blockquote>
+<p><strong>图3</strong>：树状轨迹神经采样器架构。输入为BEV特征和上一步扩展的轨迹树。通过轨迹编码器生成轨迹令牌，与意图令牌拼接后，经过一系列多头自注意力和交叉注意力块，捕获BEV空间、轨迹空间和意图空间之间的潜在交互。偏移预测头预测不同意图下的轨迹偏移，得分头预测每个偏移的对数概率。</p>
+</blockquote>
+<p><strong>技术细节</strong>：采样器以循环方式运行。在时间步t，假设已有M条轨迹，采样器会为每条轨迹预测N种不同驾驶意图下的偏移，从而在t+1步将轨迹树扩展到M×N条。为避免维度爆炸（T^N），采样器每两步进行一次扩展，并选择探索价值更高的候选进行后续推演，保证了探索效率。架构上，它使用轨迹编码器生成轨迹令牌，与可学习的意图令牌拼接，通过多头自注意力和交叉注意力块融合BEV特征、轨迹和意图信息。最后，偏移预测头输出特定意图下的规范化偏移量（区别于随机采样），得分头输出每个偏移的对数概率。</p>
+<p><strong>与现有方法的核心区别</strong>：</p>
+<ol>
+<li><strong>并行而非顺序</strong>：IL和RL在训练时完全解耦，拥有独立的优化目标和网络参数，从根本上避免了目标冲突。</li>
+<li><strong>RL的通用性</strong>：RL分支基于人类演示进行训练，而非某个特定的IL策略。因此，在应用于新的IL策略时，RL分支无需重新训练，可作为一个即插即用的性能增强工具包。</li>
+<li><strong>结构化探索</strong>：通过树状采样器进行有意图的、结构化的探索，而非完全随机采样，提升了探索效率和轨迹质量。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在大型真实世界仿真基准NAVSIMv1和v2上进行训练与评估。评估指标为PDMS（v1）和EPDMS（v2），它们是多个子分数（如无碰撞NC、可行驶区域合规DAC、自车进度EP、碰撞时间TTC、舒适度C等）的组合。除了官方<code>navtest</code>测试集，还从测试集中提取了人类表现不佳的场景（<code>human bad v1/v2</code>）以专门评估纠正次优行为的能力。基线方法包括纯IL方法（Transfuser, DiffusionDrive等）和顺序IL+RL微调方法（Transfuser w/ GRPO, ReCogDrive w/ GRPO等）。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><p><strong>纠正人类次优行为的能力</strong>：如表1和表2所示，以人类驾驶员作为“基础IL策略”，PaIR-Drive在<code>human bad v1</code>和<code>human bad v2</code>数据集上分别将PDMS提升了1.6分，将EPDMS提升了10.8分，在<code>navtest</code>全集上也有稳定提升，证明了其探索和优化能力。</p>
+</li>
+<li><p><strong>作为通用增强工具包的性能</strong>：如表3和表4所示，PaIR-Drive无需重新训练即可应用于不同的IL策略（Transfuser, DiffusionDrive），并带来显著提升。在NAVSIMv1上，PaIR-Drive将Transfuser的PDMS从84.0提升至89.7（+5.7），将DiffusionDrive从88.1提升至91.2（+3.1）。在NAVSIMv2上，相应EPDMS提升分别为+6.9和+3.6。若采用best-of-N（N=6）策略，性能可进一步提升（如DiffusionDrive达到94.0 PDMS和89.6 EPDMS）。结果表明，PaIR-Drive的性能提升在更强的IL基线上会减弱，因为性能优异的IL策略留给强化学习细化和探索的空间更小。</p>
+</li>
+<li><p><strong>并行框架的有效性</strong>：如图4左侧所示，基于Transfuser的PaIR-Drive达到89.7 PDMS，优于其顺序RL微调版本（87.9 PDMS）。此外，经PaIR-Drive增强后，原本性能不如ReCogDrive和DriveDPO的Transfuser，其性能实现了反超。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2603.13842v1/2603.13842v1/figures/RLtypes_0314.png" alt="并行与顺序方案性能对比"></p>
+<blockquote>
+<p><strong>图4</strong>：并行方案与常规顺序方案对比。左图为本文PaIR-Drive的PDMS提升结果，右图为常规顺序RL方法的结果。基于相同的Transfuser基线，并行方案性能更优。</p>
+</blockquote>
+<ol start="4">
+<li><p><strong>消融实验</strong>：论文通过消融实验验证了树状采样器中“预测偏移”相对于“直接预测完整轨迹”的优势，以及树状结构相对于线性展开的价值。结果表明，所提出的组件对最终性能均有积极贡献。</p>
+</li>
+<li><p><strong>定性结果</strong>：如图5所示，可视化案例表明，PaIR-Drive能够探索出多条合理的候选轨迹（形成轨迹树），并且其最终选择的轨迹（红色）相较于IL基线（蓝色）和人类演示（绿色）更为合理，例如在弯道中更平滑、更居中。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2603.13842v1/2603.13842v1/figures/visualization_0314.png" alt="定性结果可视化"></p>
+<blockquote>
+<p><strong>图5</strong>：定性结果可视化。展示了PaIR-Drive生成的轨迹树（灰色），其最终输出（红色）与IL基线（蓝色）和人类专家（绿色）的对比。可见PaIR-Drive能探索多样轨迹并做出更优选择。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>PaIR-Drive</strong>，一个用于端到端自动驾驶的IL与RL<strong>并行协作</strong>通用框架。通过解耦优化目标，使RL能基于人类（或IL）轨迹探索更优策略，突破了顺序微调的性能瓶颈。</li>
+<li>该框架作为一个<strong>通用性能增强工具包</strong>，其RL分支基于人类演示训练，可无缝集成到任何IL方法中而无需针对新IL策略重新训练，具备高度灵活性和适用性。</li>
+<li>引入了<strong>树状轨迹神经采样器</strong>到RL分支的GRPO中，通过结构化、有意图的探索，显著提升了探索效率和生成轨迹的质量。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>性能提升幅度依赖于基础IL策略的水平，当IL策略本身很强时，RL的改进空间会变小。</li>
+<li>推理时需要进行多次轨迹采样和RWM评估，增加了计算开销。</li>
+</ol>
+<p><strong>研究启示</strong>：</p>
+<ol>
+<li><strong>解耦与协作</strong>：将不同学习范式（如IL、RL）解耦为并行分支，再进行协作的范式，为解决多目标、多约束的决策问题提供了新思路。</li>
+<li><strong>超越模仿</strong>：该方法明确地将“学习专家行为”（IL）和“探索超越专家”（RL）分离，为构建超越人类演示能力的智能体提供了可行路径。</li>
+<li><strong>结构化探索</strong>：在基于学习的规划中，引入先验知识（如驾驶意图）来引导探索，是提高采样效率和策略性能的有效方向。未来可探索更高效的采样器或世界模型来进一步优化该框架。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对端到端自动驾驶中，模仿学习（IL）受限于人类演示质量、而传统强化学习（RL）微调易引发策略漂移和性能瓶颈的问题，提出并行协作框架PaIR-Drive。其核心是将IL与RL解耦为两个并行分支，避免目标冲突，并通过树形轨迹神经采样器与分组相对策略优化（GRPO）增强RL探索。实验表明，该框架在NAVSIM基准上取得91.2 PDMS和87.9 EPDMS的竞争性能，优于现有微调方法，并能纠正人类专家的次优驾驶行为。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.13842" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
