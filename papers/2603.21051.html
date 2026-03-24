@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Cortical Policy: A Dual-Stream View Transformer for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Cortical Policy: A Dual-Stream View Transformer for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.21051" target="_blank" rel="noreferrer">2603.21051</a></span>
+        <span>作者: Liqiang Nie Team</span>
+        <span>日期: 2026-03-22</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作领域，视图变换器通过处理多视角观测来预测动作，已成为一种主流且高效的解决方案。现有方法（如RVT、RVT-2）通常依赖于一组预定义的静态相机视角，并以视图特定的方式提取和融合2D视觉特征。这种范式存在两个关键局限性：一是缺乏对跨视图关系的显式建模，导致三维空间推理能力不足；二是静态相机配置缺乏动态视角感知，无法适应任务执行过程中物体位置变化等动态场景。这些局限性具体表现为空间推理错误和动态适应失败。</p>
+<p>本文针对上述痛点，受人类大脑视觉皮层中背侧通路（处理动态视觉信号、指导动作）和腹侧通路（处理静态视觉信号、进行场景理解）分工协作的启发，提出了一个新颖的双流视图变换器。其核心思路是：通过一个静态视图流来增强对场景三维结构的理解，并引入一个动态视图流来提供自适应的、以动作为中心的感知，最终融合两者以实现鲁棒的操作策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Cortical Policy的整体框架是一个并行处理的双流架构，最终融合两路信息预测机器人末端执行器的6自由度位姿、开合状态及碰撞指示。输入为三个静态视角（如前、上、右）和一个动态的手腕相机视角的图像，以及语言指令和本体感知；输出为动作。</p>
+<p><img src="https://arxiv.org/html/2603.21051v1/2603.21051v1/Framework_CP.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：Cortical Policy整体框架。受视觉神经科学中背-腹侧通路启发，该架构实现了双处理流：静态视图流用于3D空间理解，动态视图流用于末端执行器位置感知。</p>
+</blockquote>
+<p><strong>核心模块一：静态视图流</strong><br>该流基于RVT-2主干网络，旨在学习具有三维感知能力的场景表征。其创新在于引入了<strong>跨视图几何一致性学习目标</strong>。具体流程如下：</p>
+<ol>
+<li><strong>3D监督信号生成</strong>：利用预训练的3D基础模型VGGT，对N个静态视图图像预测深度图、置信度图和相机参数。通过反投影和坐标变换，生成世界坐标系下的点云，并识别跨视图共视的3D点。经过非极大值抑制后，选取M个高置信度点作为几何一致的关键点集。这些关键点主要位于物体或机器人表面，为任务相关的3D结构提供几何线索。</li>
+<li><strong>特征一致性优化</strong>：在RVT编码器后增加一个可训练的3x3卷积层以提升特征分辨率。对于每个关键点，通过双线性采样从视图特征图中提取其特征。训练目标采用SmoothAP损失，该损失优化跨视图特征的排序，使得来自同一3D点的不同视图关键点特征（正样本）的相似性高于来自不同3D点（负样本）的特征。为了抑制顺序视图匹配中的误差累积，论文提出了<strong>循环几何一致性损失</strong> ℒ_cgc，该损失在一个闭环（v1→v2→…→vN→v1）上最小化排序损失，从而促进视角不变的表征学习。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2603.21051v1/2603.21051v1/static_pipeline.png" alt="静态视图流"></p>
+<blockquote>
+<p><strong>图3</strong>：静态视图流细节。(a) 几何一致关键点可视化。(b) 特征一致性优化流程。</p>
+</blockquote>
+<p><strong>核心模块二：动态视图流</strong><br>该流旨在模拟人类背侧通路，实现自适应动作推理。其核心是将末端执行器位置预测建模为注意力图生成问题，与以自我为中心（第一人称）的凝视估计任务形式相似。</p>
+<ol>
+<li><strong>以自我为中心的视频渲染与位置感知预训练</strong>：为了解决原始手腕相机视角下末端执行器投影位置固定不变、不利于学习的问题，论文在RVT渲染器中构建了动态虚拟相机，使其视场角与人类自我中心数据匹配，并多样化末端执行器的投影。由此生成了一个包含3600个标注了末端执行器位置视频的数据集。随后，使用在Ego4D上预训练的GLC（凝视估计）模型，在该数据集上进行位置感知的微调（15个epoch），使其能够从动态视角帧中预测末端执行器的位置（通过显著性图中最显著的像素确定）。</li>
+<li><strong>动态视图特征提取</strong>：在训练Cortical Policy时，冻结预训练好的GLC模型，提取其中间表征。具体地，从GLC的编码器（包含Transformer编码器和全局-局部相关模块）输出中提取视觉令牌，并通过一个可训练的线性投影层转换为视图特征图；同时，GLC的解码器生成的显著性图作为视图热图。这些特征与静态视图流的输出维度对齐，以便融合。</li>
+</ol>
+<p><strong>双流动作预测与融合</strong><br>策略融合双流输出来决定最终动作。对于3自由度平移，通过将四个视图（3个静态+1个动态）的热图反投影到3D空间，选择得分最高的点。对于3自由度旋转、夹爪状态和碰撞指示，则融合全局和局部特征。全局特征向量由以下部分拼接而成：静态视图和动态视图的<strong>热图加权特征</strong>（通过逐元素相乘和求和池化获得），以及静态视图和动态视图的<strong>原始特征</strong>（通过最大池化获得）。其中，动态视图热图能有效高亮任务相关的自我中心线索，从而产生高度聚焦的全局特征。总损失函数为动作预测损失和静态视图流的循环几何一致性损失之和：ℒ = ℒ_action + λℒ_cgc，其中λ设为1。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在模拟环境RLBench（18个任务，249种语言变体）和更具挑战性的COLOSSEUM基准上进行评估，并进行了真实机器人实验。使用平均成功率（%）和平均排名作为主要指标。基线方法包括Hiveformer, PerAct, RVT, Σ-agent, SAM-E, VIHE, RVT-2, 3D-MVP。</p>
+<p><strong>主要结果</strong>：在RLBench的18个任务上，Cortical Policy取得了最佳的整体性能。</p>
+<p><img src="https://arxiv.org/html/2603.21051v1/2603.21051v1/x1.png" alt="结果对比"></p>
+<blockquote>
+<p><strong>表1</strong>：与SOTA方法在RLBench上的对比。Cortical Policy取得了最高的平均成功率（81.0%）和最低的平均排名（1.8），在多数任务上表现优异或极具竞争力。</p>
+</blockquote>
+<p><strong>消融实验</strong>：论文进行了详尽的消融研究，验证了各组件贡献。</p>
+<ol>
+<li><strong>双流设计</strong>：移除动态视图流或静态视图流均会导致性能显著下降（平均成功率分别下降5.2%和6.7%），证明了双流设计的必要性。</li>
+<li><strong>几何一致性损失</strong>：在静态视图流中移除ℒ_cgc损失，性能下降3.5%，表明该损失对提升3D空间理解至关重要。</li>
+<li><strong>动态视图预训练</strong>：使用未经位置感知预训练的GLC模型（仅使用Ego4D预训练权重）或随机初始化的GLC模型，性能分别下降4.1%和7.0%，证明了针对末端执行器位置进行专门预训练的有效性。</li>
+<li><strong>动态视图输入</strong>：用额外的静态视图（如后视图）替代动态手腕视图，性能下降4.8%，凸显了动态自我中心视角的独特价值。</li>
+</ol>
+<p><strong>鲁棒性分析</strong>：论文在COLOSSEUM基准上测试了模型对环境扰动的鲁棒性，包括存在视觉干扰物、相机位姿变化以及物体外观（纹理、颜色）变化的情况。Cortical Policy在所有扰动类别下均表现出优于基线（尤其是RVT-2）的鲁棒性。</p>
+<p><img src="https://arxiv.org/html/2603.21051v1/2603.21051v1/time_and_real.jpg" alt="鲁棒性结果"></p>
+<blockquote>
+<p><strong>图5</strong>：在COLOSSEUM基准上对环境扰动的鲁棒性评估。Cortical Policy在存在干扰物、相机位姿变化和物体属性变化的情况下，均保持了较高的成功率。</p>
+</blockquote>
+<p><strong>真实世界实验</strong>：在真实的Franka Emika Panda机器人上进行了开瓶盖、堆叠杯子等任务测试，Cortical Policy成功完成了这些任务，验证了其从模拟到现实的迁移能力。</p>
+<p><img src="https://arxiv.org/html/2603.21051v1/2603.21051v1/real_robot.png" alt="真实实验"></p>
+<blockquote>
+<p><strong>图7</strong>：真实机器人实验设置及任务示例。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了Cortical Policy，首个将静态视图与动态视图处理相结合的双流视图变换器，通过模拟人类视觉皮层的双通路机制，显著提升了机器人操作策略的空间理解与动态适应能力。</li>
+<li>在静态视图流中，引入了基于预训练3D基础模型（VGGT）的跨视图几何一致性学习目标，显著增强了模型的3D空间推理鲁棒性。</li>
+<li>设计了一个新颖的动态视图流，通过位置感知预训练将自我中心凝视估计模型适配于末端执行器位置预测，使策略具备在线轨迹调整能力。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，双流架构可能比单流方法需要更多的计算资源。此外，动态视图流的性能依赖于预训练凝视估计模型的质量以及模拟渲染的自我中心视频与真实数据的对齐程度。</p>
+<p><strong>启示</strong>：本文为视觉运动模仿学习提供了一个受神经科学启发的新视角。它表明，显式地建模和处理不同类型（静态/动态）的视觉线索，并利用强大的基础模型提供几何或行为先验，是提升机器人感知与决策系统性能的有效途径。这种“分工协作”的架构思想有望应用于更广泛的基于视觉的机器人控制任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中现有视图变换器因静态视角特定表示导致的3D空间推理能力不足和动态适应性差的问题，提出Cortical Policy：一种新颖的双流视图变换器。该方法包含静态视图流和动态视图流：静态流通过对齐预训练3D基础模型的几何一致关键点特征来增强空间理解；动态流通过位置感知的以自我为中心注视估计模型实现自适应调整，模拟人类皮层背侧通路。两流互补表示整合后生成最终动作。实验在RLBench、COLOSSEUM基准和真实任务中表明，该方法大幅超越现有最优方法，验证了双流设计在视觉运动控制中的优越性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.21051" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
