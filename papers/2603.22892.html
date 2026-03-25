@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VLGOR: Visual-Language Knowledge Guided Offline Reinforcement Learning for Generalizable Agents - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>VLGOR: Visual-Language Knowledge Guided Offline Reinforcement Learning for Generalizable Agents</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.22892" target="_blank" rel="noreferrer">2603.22892</a></span>
+        <span>作者: Yang Yu Team</span>
+        <span>日期: 2026-03-24</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，结合大型语言模型（LLMs）与强化学习（RL）是提升智能体根据语言指令执行任务能力的重要方向。然而，LLMs通常缺乏对物理环境的直接感知，限制了其对环境动态的理解以及向未见任务泛化的能力。现有方法，如KALM，尝试利用纯语言知识生成想象中的轨迹（imaginary rollouts）来增强离线RL数据，但由于语言模型在离散符号上操作，难以忠实捕捉连续物理环境中的时空动态和结构，生成的轨迹常违反物理约束（如物体穿透或不切实际的运动），不适用于需要精确控制的低级任务。</p>
+<p>本文针对纯语言模型在环境“接地”（grounding）上的不足，提出了整合视觉与语言知识的新视角。核心思路是：微调一个视觉语言模型（VLM），使其能够基于初始视觉观测和高级指令预测未来的状态和动作，从而生成时空连贯、物理合理的想象轨迹，并通过反事实提示（counterfactual prompts）进一步增加轨迹多样性，以此丰富离线RL的训练数据，提升智能体在未见任务上的泛化能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>VLGOR框架的核心是利用视觉-语言知识生成高质量的想象轨迹，以增强离线RL的训练数据。整体流程分为两个阶段：轨迹生成（Rollout Generation）和技能获取（Skill Acquisition）。</p>
+<p><img src="https://arxiv.org/html/2603.22892v1/2603.22892v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：VLGOR方法的整体框架。左侧为<strong>轨迹生成阶段</strong>：基于初始状态和指令（包括反事实提示），微调后的视觉语言模型（VLM）预测未来的状态和动作，生成新的轨迹。右侧为<strong>技能获取阶段</strong>：将原始离线数据与生成的轨迹合并，用于训练一个目标条件化的离线RL策略。</p>
+</blockquote>
+<p><strong>1. 轨迹生成阶段</strong><br>此阶段旨在利用视觉语言模型为新的指令生成物理合理的轨迹。具体采用BAGEL模型作为VLM骨干网络。</p>
+<p><img src="https://arxiv.org/html/2603.22892v1/2603.22892v1/x2.png" alt="BAGEL模型结构"></p>
+<blockquote>
+<p><strong>图3</strong>：BAGEL模型的微调与轨迹生成流程。<strong>垂直数据流</strong>展示了<strong>环境接地的微调过程</strong>：输入初始视觉状态和文本指令（包含动作），模型预测未来某一步的状态和动作。<strong>水平数据流</strong>展示了<strong>轨迹生成过程</strong>：基于微调好的模型，输入初始状态和反事实指令，通过自回归预测生成完整的轨迹。</p>
+</blockquote>
+<ul>
+<li><strong>VLM微调用于环境接地</strong>：首先在原始离线数据集 $\mathcal{D}$ 上对BAGEL进行监督微调。对于一条轨迹 $R_k$，取前 $h$ 步 $(s_0^k, a_0^k, ..., s_{h-1}^k, a_{h-1}^k)$ 作为样本。文本输入 $x_{\text{text}}^k$ 由指令 $G_k$ 和动作 $a_0^k$ 组成，视觉输入 $x_{\text{vis}}^k$ 为状态 $s_0^k$ 对应的图像。模型 $f_\theta$ 的目标是预测第 $h$ 步的未来状态 $\hat{s}_h^k$ 和动作 $\hat{a}_h^k$（公式1）。使用均方误差（MSE）损失对预测的状态和动作进行监督。微调时，仅在MMSA模块中插入可训练的LoRA适配器，并优化两个分支（文本和视觉）的模态特定预测头参数。</li>
+<li><strong>基于反事实提示的轨迹生成</strong>：微调后，模型具备了根据指令和初始状态预测下一步动作和状态的能力。为了生成多样化的轨迹，VLGOR引入了<strong>反事实提示</strong>来构造新的指令 $G_k&#39; = \langle t, m, b \rangle$，其中包含背景模板 $t$、操作目标 $m$ 和行为模式 $b$。通过修改 $m$（反事实目标）或 $b$（反事实行为）来生成不同于原始数据的新指令。给定反事实指令 $G_k&#39;$ 和初始状态 $s_0^k$，利用微调好的BAGEL模型自回归地预测动作序列和相应的未来状态，从而生成全新的轨迹 $R_k&#39;$，以此扩充交互数据。</li>
+</ul>
+<p><strong>2. 技能获取阶段</strong><br>此阶段利用增强后的数据集 $\mathcal{D}_t$（包含原始轨迹和生成的轨迹）进行离线强化学习，训练一个目标条件化策略 $\pi(a|s, G)$。策略网络使用轻量级卷积块编码视觉状态 $s$，使用BERT编码语言目标 $G$，融合后输入策略网络。VLGOR原则上兼容任何离线RL算法，论文中选取了两种代表性基线：行为克隆（BC）和保守Q学习（CQL）。</p>
+<ul>
+<li><strong>行为克隆（BC）</strong>：以监督学习方式直接模仿数据集中的动作，损失函数如公式2所示。</li>
+<li><strong>保守Q学习（CQL）</strong>：一种基于价值的离线RL算法，通过增加保守正则项（公式3）来缓解对分布外动作的价值高估问题，从而学习更鲁棒的策略。</li>
+</ul>
+<p><strong>创新点</strong>：与现有方法（如纯语言模型生成轨迹）相比，VLGOR的创新主要体现在：1) <strong>整合视觉语言模型</strong>，通过视觉感知确保生成的轨迹在物理和时空上具有一致性；2) 引入<strong>反事实提示</strong>机制，系统性地生成多样化的指令和轨迹，提升数据覆盖范围；3) 提供了一个<strong>统一框架</strong>，将高质量的、知识驱动的轨迹生成与离线RL策略训练相结合。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在CLEVR-Robot和Meta-World两个机器人操作基准上进行评估。使用KALM收集的包含100,000个轨迹-目标对的离线数据集。定义了三种难度递增的未见任务进行评估：指令重述任务、反事实任务和困难任务。对比的基线方法包括纯离线RL方法（BC， CQL）以及用KALM生成轨迹增强的方法（BC+KALM, CQL+KALM）。VLGOR在离线RL训练时，除了原始数据，还为不同难度任务分别生成了额外轨迹（如反事实任务生成6400条）。</p>
+<p><strong>关键实验结果</strong>：<br><img src="https://arxiv.org/html/2603.22892v1/2603.22892v1/x3.png" alt="不同方法在未见任务上的成功率"></p>
+<blockquote>
+<p><strong>图4</strong>：不同方法在CLEVR-Robot（上）和Meta-World（下）环境中，不同难度未见任务上的成功率（%）。VLGOR增强的方法（橙色和绿色）在所有任务上均显著优于基线，且在困难任务上优势最为明显。</p>
+</blockquote>
+<ol>
+<li><strong>离线RL性能对比</strong>：如图4所示，VLGOR在所有任务类型上均显著优于基线方法。在CLEVR-Robot的困难任务上，BC+VLGOR和CQL+VLGOR分别取得了约19%和22%的成功率，而基线（BC， CQL）和KALM增强方法仅达到1%-8%。在Meta-World的反事实任务上，VLGOR比KALM高出约10-14个百分点。这表明VLGOR生成的物理一致轨迹能更有效地提升策略在复杂未见任务上的泛化能力。</li>
+</ol>
+<p><strong>生成轨迹质量分析</strong>：<br><img src="https://arxiv.org/html/2603.22892v1/2603.22892v1/x4.png" alt="生成轨迹质量对比"></p>
+<blockquote>
+<p><strong>图5</strong>：KALM与VLGOR生成的想象轨迹定性对比。在CLEVR-Robot中，KALM生成的轨迹导致球体重叠（违反物理），而VLGOR的轨迹更合理。在Meta-World中，KALM未能准确定位圆柱体，而VLGOR成功完成了抓取任务。</p>
+</blockquote>
+<ol start="2">
+<li><p><strong>定性可视化</strong>：如图5所示，与KALM相比，VLGOR生成的轨迹在空间配置和时间一致性上更优，避免了物体穿透等物理不合理现象，验证了视觉信息对于生成物理合理轨迹的必要性。</p>
+</li>
+<li><p><strong>定量评估与消融实验</strong>：</p>
+<ul>
+<li><strong>微调数据量影响</strong>：如表1所示，随着用于VLM微调的样本数量增加，生成轨迹的质量指标（PSNR， SSIM上升，MED下降）和最终策略的成功率均持续提升，但在超过10k样本后收益趋于饱和。</li>
+<li><strong>反事实提示的作用</strong>：如表2所示，移除反事实目标（w/o target）或行为（w/o behavior）提示均会降低性能，而同时使用两者（Our VLGOR）能取得最佳成功率，证明了通过反事实提示增加多样性的有效性。</li>
+<li><strong>训练曲线</strong>：如图6所示，在反事实任务上，VLGOR增强的方法在整个训练过程中保持了更高的成功率和更小的性能波动，显示了其训练的稳定性和更好的泛化性。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2603.22892v1/2603.22892v1/x5.png" alt="训练曲线"></p>
+<blockquote>
+<p><strong>图6</strong>：在CLEVR-Robot和Meta-World上，不同方法在未见反事实任务上的训练成功率曲线。VLGOR增强的方法收敛更快且更稳定。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>VLGOR框架</strong>，首次将视觉语言模型整合到离线强化学习中，通过生成物理一致的想象轨迹来增强训练数据，解决了纯语言模型在环境接地上的不足。</li>
+<li>提出了<strong>基于反事实提示的轨迹生成方法</strong>，通过系统性地修改指令中的目标和行为模式，生成多样化且符合物理规律的轨迹，有效提升了智能体对未见任务的泛化能力。</li>
+<li>在CLEVR-Robot和Meta-World基准上的实验表明，VLGOR能显著提升策略在未见任务上的性能，在困难任务上成功率比基线高出超过24个百分点（例如，在CLEVR-Robot上，BC+VLGOR达到19.3%，而基线BC仅为1.2%）。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>实验局限于相对简单的机器人控制模拟环境，未来需要扩展到更复杂的控制场景。</li>
+<li>VLGOR需要联合生成状态和动作，这要求模型同时学习环境建模和模仿策略，增加了学习难度。论文建议未来可采用渐进式策略，利用预测的状态信息来推断动作，以减轻模型负担并确保一致性。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li>验证了<strong>多模态（视觉-语言）知识</strong>对于实现可泛化的、物理可信的决策具有关键作用，为构建更通用的具身智能体提供了新思路。</li>
+<li><strong>反事实数据增强</strong>是提升离线RL泛化能力的一种有效途径，未来可探索更智能的提示生成或课程学习策略。</li>
+<li>揭示了<strong>高质量模拟数据生成</strong>的潜力，未来可以探索更强大的生成模型（如视频生成模型）来合成更逼真、更长视距的交互数据，进一步突破离线RL的数据瓶颈。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对结合大语言模型（LLMs）与强化学习（RL）的智能体在泛化到未见任务时，因LLMs缺乏对物理环境的直接感知而受限的核心问题，提出了VLGOR框架。其关键技术是视觉-语言知识引导的离线强化学习，通过微调视觉语言模型来预测未来状态和动作，生成时空连贯的想象轨迹，并利用反事实提示增加数据多样性，以丰富离线RL的训练数据。实验表明，该方法在需要新策略的未见任务上，性能显著优于基线方法，成功率提升超过24%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.22892" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

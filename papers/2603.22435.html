@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>CaP-X: A Framework for Benchmarking and Improving Coding Agents for Robot Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>CaP-X: A Framework for Benchmarking and Improving Coding Agents for Robot Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.22435" target="_blank" rel="noreferrer">2603.22435</a></span>
+        <span>作者: Linxi “Jim” Fan Team</span>
+        <span>日期: 2026-03-23</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人控制领域存在两种主流范式。一是经典的程序化控制（如分层任务与运动规划，TAMP），其优势在于可解释性和几何精度，但严重依赖人工设计抽象和逻辑，导致可扩展性差、任务特定且泛化能力弱。二是数据驱动的视觉-语言-动作模型，其通过大规模模仿学习在接触式任务上表现出色，但通常缺乏可解释性，且对新的机器人形态和长视野任务泛化能力有限，需要额外数据收集和重新训练。近年来，大型语言模型展现出作为编码智能体生成可执行代码的潜力，形成了“代码即策略”的新范式。然而，现有工作多依赖于高级别、任务特定的原语（如 <code>stack_objs_in_order()</code>），这掩盖了智能体自身的真实能力：尚不清楚其性能有多少源于智能体自身的推理，又有多少源于人工设计的脚手架。具体而言，缺乏一个系统性的框架来衡量当这些脚手架被移除时，智能体性能如何变化，以及通过增加测试时计算（如迭代调试、技能合成、集成推理或多模态接地）能在多大程度上补偿底层接口操作的不足。</p>
+<p>本文针对上述痛点，旨在系统性地评估和改进用于机器人操作的编码智能体。核心思路是提出一个统一的框架CaP-X，其核心是通过CaP-Bench基准，沿着抽象级别、时间交互和感知接地三个轴评估智能体，并基于洞察构建无需训练的智能体框架CaP-Agent0，通过多轮交互、视觉差分、自动技能合成和集成推理来提升在底层原语上的鲁棒性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>CaP-X是一个用于系统研究机器人操作编码智能体的开源框架，包含三个核心部分：交互环境CaP-Gym、评估基准CaP-Bench，以及两个性能提升方法CaP-Agent0和CaP-RL。</p>
+<p><strong>1. 整体框架与核心模块</strong><br>CaP-Gym是构建在Gymnasium接口上的分层控制框架，它将底层物理模拟器（或真实世界）的低级环境循环与一个有状态的代码执行器循环绑定。其架构保留了RoboSuite、LIBERO-PRO和BEHAVIOR等底层模拟器的原生动力学，但通过一个为编码智能体定制的“读取-求值-打印”循环范式暴露给智能体。智能体通过调用感知和控制原语来生成并执行代码程序，从而控制机器人。所有计算密集的感知（如SAM3分割、Molmo 2指向）和控制（如PyRoki运动规划）原语均实现为无状态服务，支持高吞吐量并行评估。</p>
+<p>CaP-Bench是基于CaP-Gym构建的系统性基准，旨在沿着三个维度评估智能体能力：</p>
+<ul>
+<li><strong>抽象级别</strong>：从使用人工设计宏的高级原语，到使用原子级基础原语的低级原语。</li>
+<li><strong>时间交互</strong>：比较零样本单轮程序生成与多轮交互，以量化故障恢复和迭代推理能力。</li>
+<li><strong>感知接地</strong>：评估不同形式的视觉反馈（如原始RGB图像、视觉差分模块生成的文本）如何影响智能体将任务相关视觉特征融入代码生成的能力。</li>
+</ul>
+<p>基准包含4个单轮层级（S1-S4）和4个多轮层级（M1-M4），具体配置见表1。S1/S2使用高级原语（S1有特权状态，S2无特权），S3/S4使用低级原语（S3有使用示例，S4无）。M1提供代码执行的标准输出和错误跟踪；M2提供原始RGB图像；M3引入<strong>视觉差分模块</strong>，将视觉观察转化为结构化自然语言描述；M4结合VDM和低级原语。</p>
+<p><strong>2. 创新智能体框架：CaP-Agent0</strong><br>基于CaP-Bench的洞察，论文提出了CaP-Agent0，一个无需训练的智能体框架，通过三个核心组件增强基础模型：</p>
+<p><img src="https://arxiv.org/html/2603.22435v1/2603.22435v1/x5.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图7</strong>：CaP-Agent0架构。它集成了自动合成的技能库、视觉差分模型和并行推理系统。多个编码智能体根据相同提示生成候选代码，再由一个集成智能体合成最终代码片段，在包含机器人环境（模拟器或真机）的Python沙箱中执行。</p>
+</blockquote>
+<ul>
+<li><strong>多轮视觉差分</strong>：集成VDM，将每轮的视觉观察转换为结构化文本描述（初始场景和后续变化），以解决原始图像在多模态对齐上的不足。</li>
+<li><strong>自动合成与持久化技能库</strong>：从CaP-Bench的成功代码执行轨迹中自动提取函数定义，通过LLM分析识别频繁出现的、与任务无关的逻辑，将其提升为可重用的技能。这避免了智能体反复推导底层工具，同时保留了底层接口的表达能力。当前库中包含9个合成函数。</li>
+<li><strong>并行推理</strong>：在每个回合，系统通过两种配置并发采样候选解决方案：单模型（对单一模型进行9次查询）或多模型（对GPT-5.2、Claude Opus 4.5和Gemini-3-Pro各进行3次查询）。通过变化采样温度以最大化输出多样性，并由一个中央编码智能体将这些候选方案合成为最终代码。</li>
+</ul>
+<p><strong>3. 训练方法：CaP-RL</strong><br>论文还展示了CaP-Gym支持对编码智能体本身进行强化学习。通过环境奖励进行策略上训练，可以提高任务成功率，并且合成的程序可以直接转移到真实机器人上。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>1. 基准与模型</strong><br>实验主要在CaP-Gym的7个核心任务上进行评估，包括Cube Lift, Cube Stack等。评估了12个前沿的开源和闭源视觉-语言及语言模型，如Gemini-3-Pro、GPT系列、Claude系列、Qwen、DeepSeek等。采用零样本Pass@1协议，每个任务每个层级进行100次试验。</p>
+<p><strong>2. 关键实验结果</strong></p>
+<ul>
+<li><strong>前沿模型与人类专家存在显著差距</strong>：在单轮、零样本设置下，即使是最先进的模型，其任务成功率也未能达到人类专家编写的程序水平。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2603.22435v1/2603.22435v1/assets/figures/splash_figure_v3.png" alt="基准结果"></p>
+<blockquote>
+<p><strong>图1</strong>：（上图）CaP-Bench任务成功率随模型发布日期的变化。模型生成的代码成功率普遍低于人类专家。（下图）CaP-Gym集成多个模拟器，且CaP-Agent0在多个任务上达到接近人类水平的性能。</p>
+</blockquote>
+<ul>
+<li><strong>高级抽象提升性能但限制表达能力</strong>：随着原语抽象级别的提高（从S4到S1），任务成功率单调上升。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2603.22435v1/2603.22435v1/x1.png" alt="抽象级别影响"></p>
+<blockquote>
+<p><strong>图3</strong>：平均任务成功率随原语抽象级别增加而上升。这表明高级原语减少了搜索空间，但也掩盖了底层推理的失败。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.22435v1/2603.22435v1/x2.png" alt="代码执行率"></p>
+<blockquote>
+<p><strong>图4</strong>：代码执行成功率 vs 原语抽象级别。性能提升不能完全归因于S3/S4层级的代码正确性降低。</p>
+</blockquote>
+<ul>
+<li><strong>多轮交互与视觉接地可提升性能</strong>：允许智能体通过多轮交互检查执行轨迹（M1）能持续提升性能。直接提供原始RGB图像（M2）反而会降低性能。而通过VDM将视觉差异转化为文本（M3）则显著优于M1和M2。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2603.22435v1/2603.22435v1/x3.png" alt="多轮交互对比"></p>
+<blockquote>
+<p><strong>图5</strong>：单轮（S2）与多轮层级（M1-M3）的模型对比。文本反馈（M1）提升成功率，原始图像（M2）降低成功率，视觉差分文本（M3）则一致提升所有模型的成功率。</p>
+</blockquote>
+<ul>
+<li><strong>CaP-Agent0的有效性</strong>：结合了VDM、技能库和并行查询的CaP-Agent0显著优于单轮基线。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2603.22435v1/2603.22435v1/x6.png" alt="CaP-Agent0消融实验"></p>
+<blockquote>
+<p><strong>图8</strong>：（左）CaP-Agent0的消融实验。结合VDM、技能库和并行查询显著优于单轮低层API设置。（右）在7个CaP-Bench任务中的4个上，CaP-Agent0达到了与人类专家代码相当或更高的成功率。</p>
+</blockquote>
+<p><strong>3. 扩展评估</strong><br>在LIBERO-PRO的30个操作任务上，无需训练的CaP-Agent0在初始位置扰动和指令扰动下的平均成功率，与经过训练的最先进VLA方法（如π0.5）表现相当甚至更优，尤其在指令扰动上更具鲁棒性。在BEHAVIOR的长视野移动操作任务中，CaP-Agent0在导航和任务完成成功率上也接近或超过了人类专家基线。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了CaP-X框架，包含用于交互评估的<strong>CaP-Gym</strong>环境、用于系统性评估的<strong>CaP-Bench</strong>基准。</li>
+<li>基于基准洞察，提出了<strong>CaP-Agent0</strong>，一个无需训练的智能体框架，通过视觉差分、自动技能库和并行推理，在仅使用底层原语的情况下恢复了接近人类水平的可靠性。</li>
+<li>展示了<strong>CaP-RL</strong>，通过对编码智能体进行强化学习来进一步提升性能，并实现从仿真到真实机器人的低gap转移。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>计算成本：多轮交互、并行查询和VDM的使用增加了测试时的计算开销。</li>
+<li>技能库的泛化：当前自动合成的技能库可能无法覆盖所有任务需求，其长期迭代和泛化能力有待进一步研究。</li>
+<li>基准范围：尽管涵盖了多个模拟器，但任务类型和复杂性仍有扩展空间。</li>
+</ol>
+<p><strong>研究启示</strong>：</p>
+<ol>
+<li><strong>评估应关注底层能力</strong>：论文表明，过度依赖高级别原语会高估智能体能力。未来的评估应更侧重于智能体在底层、通用接口上的表现，以确保其鲁棒性源于真正的推理而非人工设计的归纳偏置。</li>
+<li><strong>测试时计算是提升鲁棒性的有效途径</strong>：通过增加多轮交互、结构化反馈和集成推理等“智能体计算”，可以显著补偿底层接口的复杂性，这为设计更强大的自主系统提供了新思路。</li>
+<li><strong>融合学习与推理</strong>：CaP-RL展示了将程序化推理与数据驱动的强化学习结合的潜力，为构建兼具可解释性、泛化能力和持续学习能力的机器人系统指明了方向。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对“代码即策略”方法在机器人操作中自主控制效果未充分探索的核心问题，提出了CaP-X框架。该框架包含CaP-Gym交互环境（让智能体通过合成与执行程序控制机器人）和CaP-Bench评估基准，并发展了无需训练的CaP-Agent0（利用多轮交互、执行反馈等测试时计算）以及CaP-RL强化学习方法。实验评估12个模型发现：性能依赖人工抽象先验，移除后下降；但通过测试时计算可显著提升鲁棒性。CaP-Agent0在多个模拟与真实操作任务中恢复了人类水平的可靠性，CaP-RL则提高了成功率并实现了模拟到真实的有效迁移。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.22435" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
