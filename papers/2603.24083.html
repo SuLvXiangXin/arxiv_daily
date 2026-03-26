@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Knowledge-Guided Manipulation Using Multi-Task Reinforcement Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Knowledge-Guided Manipulation Using Multi-Task Reinforcement Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.24083" target="_blank" rel="noreferrer">2603.24083</a></span>
+        <span>作者: Aleksandr Panov Team</span>
+        <span>日期: 2026-03-25</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作在非结构化的日常环境中本质上是一个部分可观测问题。关键信息经常缺失：物体被遮挡、被先前的动作移动或被隐藏在容器内；光照和视角不断变化。在此条件下，智能体必须维护并推理一个持久的世界模型。纯粹的反应式策略（将像素映射到力矩）容易产生状态混淆，并且在长周期信用分配上表现不佳，而传统的基于模型的方法通常依赖于脆弱、手动调整的几何流程。对多任务能力（如抓取、放置、打开）的实际需求，以及期望获得可跨不同机器人平台（如 Franka 和 UR5 机器人）泛化的方法，进一步加剧了挑战，需要一个统一的架构框架进行学习。</p>
+<p>现有解决方案存在局限：端到端的反应式RL缺乏在遮挡下推理所需的持久结构，而静态、预计算的场景图会迅速过时。本文针对在部分可观测性下，将感知可靠地转化为操作策略的挑战，提出了一个统一的“感知 → 知识 → 策略”框架，即知识引导的大规模多任务基于模型的策略优化（KG-M3PO）。其核心思路是，通过一个端到端训练的、动态更新的3D场景图来增强M3PO策略，该场景图将开放词汇的检测结果转化为度量的、关系型的表示，并使关系特征直接由控制性能塑造，从而为策略提供结构化的、持续维护的世界知识作为强大的归纳偏置。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架（pipeline）是一个端到端的训练流程，将感知、知识和策略统一起来。在每一步，智能体接收多种观察模态（语言目标、当前图像、3D场景图和本体感觉），这些模态被编码到一个公共的观察空间。然后，一个强化学习算法（本文为M3PO）驱动仿真环境内的控制循环。知识编码器（图神经网络）直接通过RL损失进行训练。</p>
+<p><img src="https://arxiv.org/html/2603.24083v1/2603.24083v1/assets/misc/RL_pipeline.jpg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：KG-M3PO的端到端训练流程概述。多个观察模态（语言目标、当前图像、3D场景图、本体感觉）被编码到一个公共观察空间。强化学习算法（M3PO）驱动仿真环境中的控制循环。知识编码器（图）通过RL损失直接训练。</p>
+</blockquote>
+<p>核心模块包括：</p>
+<ol>
+<li><strong>动态知识图构建与更新</strong>：使用BBQ方法从机器人的感官数据流在线构建3D场景图。每个图节点编码物体的3D包围盒中心、尺寸和一个512维的CLIP嵌入。图还编码从定向包围盒和简单接触/可见性测试导出的成对空间关系（如“前面”、“后面”、“上面”、“下面”）。一个轻量级检测器从以自我为中心的流中标记被移动的物体。每n=10步，刷新受影响的子图：更新CLIP嵌入并重新计算局部空间关系。这种部分更新确保了较低的开销。</li>
+<li><strong>多模态编码与融合</strong>：在每一步t，形成三种嵌入并融合为策略状态：图像嵌入 <code>z_t^img = f_ψ(I_t)</code>，知识图嵌入 <code>q_t = GNN_φ(K_t)</code>，任务/语言目标嵌入 <code>u_t = e(g_t)</code>。它们与本体感觉状态 <code>x_t^prop</code> 拼接后，通过线性投影层 <code>W_I, W_K, W_T</code> 融合成最终的状态表示 <code>s_t</code>。</li>
+<li><strong>端到端训练的图编码器</strong>：关键创新在于，图神经网络编码器 <code>GNN_φ</code> 是RL损失计算图的一部分。知识嵌入 <code>q_t</code> 流入策略状态 <code>s_t</code>，因此策略梯度通过 <code>s_t</code> 和 <code>q_t</code> 反向传播到GNN的参数 <code>φ</code>。这使得关系表示直接由控制性能（通过RL目标）塑造，而非通过辅助监督任务。</li>
+<li><strong>控制头与优化</strong>：策略使用高斯策略头 <code>π_θ(a_t|s_t)</code> 和标量价值头 <code>V_ξ(s_t)</code>。控制损失结合了M3PO的策略损失、价值损失和熵正则项：<code>J_ctrl = -L_M3PO + β_V * E_t[(V_ξ(s_t) - R_hat_t)^2] - β_H * E_t[H(π_θ(·|s_t))]</code>。</li>
+</ol>
+<p>与现有方法相比，创新点主要体现在：1) <strong>统一架构</strong>：将动态更新的场景图与M3PO智能体集成，用于部分可观测下的操作；2) <strong>在线关系更新机制</strong>：从以自我为中心的观察流中维护时间一致的空间、包含和功能关系；3) <strong>端到端知识训练</strong>：知识编码器通过RL目标而非预训练或辅助损失进行训练，确保学习到的表示与控制任务对齐；4) <strong>知识条件化的策略接口</strong>：使用图查询提供目标和上下文信号，支持有效的多任务策略学习。</p>
+<p><img src="https://arxiv.org/html/2603.24083v1/2603.24083v1/assets/misc/image.png" alt="场景图生成"></p>
+<blockquote>
+<p><strong>图2</strong>：场景图生成流程示意图。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.24083v1/2603.24083v1/assets/misc/example_bbq.jpg" alt="BBQ输出示例"></p>
+<blockquote>
+<p><strong>图3</strong>：BBQ输出示例，显示了Franka机器人、桌子和柜子构成的场景图。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准环境</strong>：基于NVIDIA Isaac Lab（构建于Isaac Sim之上）构建的光照真实、物理一致的仿真环境。使用1024个并行环境在单工作站（NVIDIA RTX 5070 Ti, 16GB VRAM, 64GB RAM）上进行训练。采用了课程学习和领域随机化以提高鲁棒性。</li>
+<li><strong>机器人平台</strong>：Franka Emika Panda (7-DoF) 和 Universal Robots UR5 (6-DoF)。</li>
+<li><strong>任务</strong>：五个操作任务，涵盖完全可观测（FO）和部分可观测（PO）场景。<ol>
+<li>**Pick-Cube (FO)**：从桌上抓取一个彩色立方体。</li>
+<li>**Pick-Place (FO)**：抓取一个立方体并将其放入方形孔中。</li>
+<li>**Open-Cabinet (FO)**：抓住手柄并打开抽屉。</li>
+<li>**PO Pick (PO)**：抓取最初被墙遮挡的立方体。</li>
+<li>**PO Pick-Place (PO)**：先移开遮挡物（圆锥体），然后抓取并放置立方体。</li>
+</ol>
+</li>
+<li><strong>基线方法</strong>：对比了PPO、SAC、DreamerV3、TD-MPC2、IMPALA和M3PO。对于M3PO主干，评估了两种变体：<strong>M3PO（仅相机）</strong> 和 <strong>KG-M3PO（相机+知识图）</strong>。</li>
+<li><strong>评估指标</strong>：使用归一化分数（0-1000），将智能体平均回报介于随机策略基线和专家/单任务上界之间进行标准化。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>单任务性能（完全可观测）</strong>：在所有三个完全可观测任务中，添加知识图（KG-M3PO）一致地提高了样本效率，并获得了更高的最终分数。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2603.24083v1/2603.24083v1/assets/results/single-task-camera/pick_camera.png" alt="单任务结果（仅相机）"></p>
+<blockquote>
+<p><strong>图11</strong>：Pick任务（仅相机输入）各基线方法的平均归一化分数随时间步变化。M3PO表现最佳。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.24083v1/2603.24083v1/assets/results/single-task-knowledge/pick_kg.png" alt="单任务结果（相机+KG）"></p>
+<blockquote>
+<p><strong>图14</strong>：Pick任务（相机+知识图输入）各基线方法的平均归一化分数随时间步变化。KG-M3PO（即M3PO+KG）表现最佳，且样本效率高于其仅相机版本。</p>
+</blockquote>
+<p>具体数值对比如下表所示（M3PO / KG-M3PO）：</p>
+<ul>
+<li><strong>Pick-Cube</strong>：成功率 71% / 87%，最终归一化分数 760 / 870，达到阈值所需环境步数 410M / 320M。</li>
+<li><strong>Pick-Place</strong>：成功率 55% / 76%，最终归一化分数 670 / 810，达到阈值所需环境步数 460M / 340M。</li>
+<li><strong>Open-Cabinet</strong>：成功率 50% / 72%，最终归一化分数 630 / 780，达到阈值所需环境步数 430M / 300M。</li>
+<li><strong>PO Pick</strong>：成功率 4% / 58%，最终归一化分数 75 / 640，达到阈值所需环境步数 N/A / 310M。</li>
+<li><strong>PO Pick-Place</strong>：成功率 2% / 63%，最终归一化分数 85 / 670，达到阈值所需环境步数 N/A / 270M。</li>
+</ul>
+<ol start="2">
+<li><strong>多任务性能（仅相机）</strong>：在仅使用相机输入的多任务训练中，M3PO在整个训练过程中获得了最高分数，其次是IMPALA和TD-MPC2。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2603.24083v1/2603.24083v1/assets/results/multitask.png" alt="多任务结果（仅相机）"></p>
+<blockquote>
+<p><strong>图17</strong>：多任务（仅相机输入）设置下，各基线方法的平均归一化分数随时间步变化。M3PO表现最佳。</p>
+</blockquote>
+<ol start="3">
+<li><strong>部分可观测任务性能</strong>：在部分可观测任务上，KG-M3PO（相机+KG）相比仅相机的M3PO基线表现出显著优势。对于PO Pick-Place任务，KG-M3PO学习曲线稳步上升，而仅相机的M3PO基线由于遮挡下的状态混淆，性能始终接近随机水平。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2603.24083v1/2603.24083v1/assets/results/partial-obs.png" alt="部分可观测任务结果"></p>
+<blockquote>
+<p><strong>图18</strong>：部分可观测的Pick-Place任务上，M3PO（仅相机）与KG-M3PO（相机+KG）的对比。添加知识图后性能大幅提升。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：论文通过对比“仅相机”与“相机+知识图”两种输入模式，实质上对知识图模块的作用进行了消融研究。结果表明，知识图模块在完全可观测任务中提升了样本效率和最终性能，在部分可观测任务中则是解决任务所必需的。这验证了动态场景图作为持久关系状态的关键作用。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了KG-M3PO，一个将动态更新的3D场景图与多任务模型基RL（M3PO）集成的统一框架，用于部分可观测下的机器人操作；2) 设计了一种新颖的在线关系更新机制和端到端训练的图神经网络编码器，使关系表示直接由控制性能塑造；3) 通过全面的基准测试证明，该框架在完全和部分可观测任务中均能提高样本效率、最终性能，并实现对新物体和未见场景配置的更强泛化能力。</p>
+<p>论文自身提到的局限性包括：知识图堆栈增加了每步的计算开销（检测、动态图更新、图编码），因此在固定环境步数下，KG-M3PO的壁钟/GPU时间比仅相机的M3PO要长，这需要在样本效率与计算效率之间进行权衡。</p>
+<p>对后续研究的启示：这项工作支持了“结构化、持续维护的世界知识是可扩展、可泛化操作的强大归纳偏置”这一前提。当知识模块参与RL计算图时，关系表示能与控制对齐，从而在部分可观测下实现鲁棒的长周期行为。未来的工作可以探索更高效的知识图更新机制、将框架扩展到真实机器人平台，以及研究如何将更高层次的语义或常识知识整合到动态图中以支持更复杂的推理任务。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文研究机器人如何在部分可观察的非结构化环境中进行多任务操作。为解决该问题，提出了KG-M3PO框架，其核心技术是结合在线更新的3D场景图与图神经网络编码器，将视觉、语言等多模态信息编码为共享表征，并基于此进行强化学习决策。实验表明，该方法在存在遮挡和干扰的任务中，相比基线模型取得了更高的成功率、更好的样本效率以及对新场景更强的泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.24083" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
