@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Chameleon: Episodic Memory for Long-Horizon Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Chameleon: Episodic Memory for Long-Horizon Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.24576" target="_blank" rel="noreferrer">2603.24576</a></span>
+        <span>作者: Jianfei Yang Team</span>
+        <span>日期: 2026-03-25</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作任务常常需要依赖记忆：遮挡和状态变化可能导致决策时刻的观察存在感知混淆，使得在观察层面，相同的观察可能源于不同的交互历史，从而动作选择具有非马尔可夫性。当前，大多数具身智能体通过语义压缩的轨迹和基于相似性的检索来实现记忆，例如检索增强生成（RAG）范式。这种方法会丢弃用于消歧的细粒度感知线索，并且可能返回感知相似但与决策无关的历史片段。近期工作通过视觉历史缓冲区来增强智能体，但基于相似性的访问在重复、相似场景对应不同历史时仍会产生干扰。这些局限性暴露了记忆写入和检索两方面的不足：记忆需要被写入为可消歧、可索引的事件以减少干扰，并且检索应基于记忆是否支持当前目标和近期结果，而非单纯基于相似性。</p>
+<p>本文针对感知混淆环境下，现有记忆方法因过度压缩和相似性检索导致决策不可靠的痛点，受人类情景记忆的神经机制启发，提出了一个新视角：记忆应保留用于消歧的几何接地感知上下文，并通过可学习的、目标导向的检索机制进行回忆。核心思路是提出Chameleon架构，它通过几何接地的多模态令牌写入消歧上下文，并通过一个可微分记忆栈产生目标导向的回忆，从而在感知混淆的设置中提升决策可靠性和长视野控制能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Chameleon遵循 Perception → Memory → Policy 的闭环流程，用于处理感知混淆下的长视野操作。</p>
+<p><img src="https://arxiv.org/html/2603.24576v1/2603.24576v1/x1.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图2</strong>：方法整体框架。左侧为Perception模块，通过几何锚定和跨视图增强生成消歧令牌；中间为Memory模块，包含情景记忆、工作记忆和HoloHead，输出决策状态；右侧为Policy模块，基于决策状态通过条件流匹配生成末端执行器轨迹。</p>
+</blockquote>
+<p><strong>感知模块（Perception）</strong>：输入为多模态观察 <code>o_t = {I_t^f, I_t^h, s_t, ψ_t}</code>，包括固定前摄像头RGB图像、手部摄像头RGB图像、机器人本体感知状态（末端执行器位姿、夹爪状态）和可选的阶段指示符。其核心作用是生成几何接地、视图一致的图像块（patch）令牌 <code>x_t</code>，为记忆形成提供消歧证据。具体而言，使用冻结的DINO编码器从两个视图提取外观令牌 <code>V_t^v</code>。同时，利用末端执行器（EE）位姿作为几何锚点，计算每个图像块的几何描述符 <code>g_t,i^v</code>（包含图像坐标、射线方向、到EE投影的距离和夹角余弦值）。通过几何编码器产生条件编码 <code>C_t^v</code> 和一元注意力偏置 <code>b_t^v</code>。两个视图通过几何偏置的双向交叉注意力进行增强，其中注意力对数结合了分析性对极几何可行性偏置 <code>B_{a→b}^{epi}</code> 和学习到的一元偏置，确保跨视图通信基于几何一致性。最后，使用FiLM风格的条件调制输出融合的证据令牌 <code>x_t</code>。</p>
+<p><strong>记忆模块（Memory）</strong>：将感知令牌 <code>x_t</code> 映射为单一的决策状态读出 <code>h_t</code>。其设计旨在减少感知混淆下的干扰，并实现目标导向的检索。首先进行多模态融合，为视觉、本体感和阶段令牌添加可学习的模态和视图标识，形成融合令牌 <code>z_t</code>。记忆的核心是空间-时间锚点（Spatial and Temporal Anchors）。空间锚点通过路由器（Router）将视觉证据分解为A个空间组件，每个组件形成一个视觉摘要。每个空间摘要再与本体感、阶段令牌拼接，并通过注意力扩展为B个时间槽，形成 <code>A×B</code> 的时空槽矩阵，每个槽对应不同的有效半衰期（时间尺度）。</p>
+<p>记忆通过情景记忆（Episodic Memory）和工作记忆（Working Memory）的耦合进行更新。每个时空槽维护一个情景状态 <code>m_{t,a,b}</code>，通过一个参数化的选择性状态空间模型（SSM）进行更新，该模型的步长（对应记忆半衰期）由槽内容自适应调制。情景状态的读出声称 <code>r_{t,a,b}</code> 被聚合后整合到工作状态 <code>h_t^{(ℓ)}</code> 中。最终，所有层的读出通过一个任务查询 <code>q_task</code> 进行注意力加权融合，产生最终的记忆读出 <code>h_t</code>。</p>
+<p>一个关键创新是 <strong>HoloHead</strong>，它通过一个潜在想象目标来强制模式补全：仅以 <code>h_t</code> 为条件，预测未来 <code>N_a+N_c</code> 个步长的末端执行器在2D图像平面和3D世界坐标系中的轨迹。其损失函数 <code>L_holo</code> 强制记忆动力学能够从部分线索中重建连贯的未来，从而驱动任务相关的检索。</p>
+<p><strong>策略模块（Policy）</strong>：仅以记忆读出 <code>h_t</code> 的投影 <code>c_t</code> 为条件，通过条件流匹配（Conditional Flow Matching）生成未来H步的末端执行器位姿轨迹 <code>x_{t:t+H}</code>。在训练时，学习一个速度网络 <code>v_θ</code> 来预测从噪声到真实轨迹的向量场；在推理时，通过求解ODE从噪声中采样轨迹。</p>
+<p>与现有方法相比，创新点具体体现在：1) <strong>几何接地的消歧编码</strong>：在感知阶段利用EE位姿锚定跨视图通信，保留精细的空间关系证据；2) <strong>结构化、目标导向的记忆检索</strong>：通过时空锚点和HoloHead的想象目标，实现基于内容效用而非相似性的回忆，模仿了生物情景记忆的模式分离与补全功能；3) <strong>单状态接口</strong>：策略仅依赖于记忆模块输出的单一决策状态 <code>h_t</code>，迫使所有任务相关信息必须在其中得到有效表征和维持。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了作者新收集的真实机器人数据集 <strong>Camo-Dataset</strong>，在UR5e机器人上采集，包含三类旨在强制感知混淆并需要依赖历史决策的任务（如表1所示）：情景记忆（如清洗指定盘子）、空间记忆（如玩“贝壳游戏”）和顺序记忆（如按顺序添加多种调料）。</p>
+<p><img src="https://arxiv.org/html/2603.24576v1/2603.24576v1/x2.png" alt="任务示例"></p>
+<blockquote>
+<p><strong>图3</strong>：Camo-Dataset中的任务示例。展示了在决策时刻观察相同（感知混淆）但正确动作取决于先前交互历史的场景，例如“贝壳游戏”中杯子互换后，需根据历史选择藏有球的杯子。</p>
+</blockquote>
+<p>对比的基线方法包括：Diffusion Policy, Flow Matching, ACT。此外，还对比了五个Chameleon的消融变体。评估指标包括成功率、决策成功率（在需要记忆的关键决策点的成功率）和操作成功率。</p>
+<p><img src="https://arxiv.org/html/2603.24576v1/2603.24576v1/x3.png" alt="主要结果"></p>
+<blockquote>
+<p><strong>图4</strong>：在Camo-Dataset三个任务类别上的总体性能。Chameleon在全部任务上均优于所有基线方法。</p>
+</blockquote>
+<p>关键实验结果：在最具挑战性的“贝壳游戏”（Shell Game）任务中，Chameleon的决策成功率达到 **75.6%**，显著高于最佳基线Diffusion Policy的 **57.8%**，相对提升超过30%。在顺序操作任务中，Chameleon的成功率达到 **68.9%**，而最佳基线为 **53.3%**。这证明了其在感知混淆环境下进行可靠决策和长视野控制的优势。</p>
+<p><img src="https://arxiv.org/html/2603.24576v1/2603.24576v1/x4.png" alt="消融研究"></p>
+<blockquote>
+<p><strong>图5</strong>：消融实验结果。移除非几何感知模块、HoloHead目标或时空锚点结构均会导致性能下降，证明了各组件的重要性。</p>
+</blockquote>
+<p>消融实验总结了每个组件的贡献：</p>
+<ol>
+<li><strong>移除几何感知</strong>：将感知模块替换为简单的ViT编码器，导致性能显著下降（例如Shell Game决策成功率从75.6%降至61.1%），证明了几何接地对于提供消歧证据至关重要。</li>
+<li><strong>移除HoloHead</strong>：取消潜在想象目标训练，性能下降明显（决策成功率降至65.6%），表明目标导向的检索对于记忆内容的选择至关重要。</li>
+<li><strong>移除时空锚点</strong>：将记忆替换为标准的Transformer-XL，性能也下降（决策成功率降至68.9%），验证了结构化、多时间尺度记忆设计的有效性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2603.24576v1/2603.24576v1/x5.png" alt="记忆状态可视化"></p>
+<blockquote>
+<p><strong>图6</strong>：学习到的记忆状态t-SNE可视化。不同颜色代表“贝壳游戏”中球实际所在的不同杯子。Chameleon的记忆状态 <code>h_t</code> 能够将决策时刻视觉相似但历史不同的状态有效分离。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.24576v1/2603.24576v1/x6.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图7</strong>：在Shell Game任务上的定性对比。Chameleon能够正确追踪被交换的球并执行抓取，而基线方法（如Diffusion Policy）则因记忆混淆而抓错杯子。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.24576v1/2603.24576v1/x7.png" alt="HoloHead预测"></p>
+<blockquote>
+<p><strong>图8</strong>：HoloHead预测的未来轨迹可视化。即使在视觉遮挡（杯子覆盖）的情况下，基于记忆状态的预测（红色）仍能接近真实轨迹（绿色），展示了其模式补全能力。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.24576v1/2603.24576v1/x8.png" alt="失败案例分析"></p>
+<blockquote>
+<p><strong>图9</strong>：典型失败案例。包括因遮挡导致初始观察不完整、以及长序列操作中出现的累积误差。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li><strong>问题表述</strong>：明确将需要记忆的机器人操作任务形式化为感知混淆下的决策问题，强调了情景记忆的必要性。</li>
+<li><strong>方法创新</strong>：提出了一个受神经科学启发的层次化情景记忆架构Chameleon，它整合了几何接地的消歧编码、通过HoloHead训练的可微分目标导向检索，以及基于记忆的条件流匹配控制。</li>
+<li><strong>数据集与评估</strong>：引入了真实机器人数据集Camo-Dataset，并进行了定量评估和表征层面分析，为社区提供了评估记忆能力的基准。</li>
+</ol>
+<p>论文自身提到的局限性包括：1) 计算开销：时空锚点和多SSM设计增加了参数和计算量；2) 泛化性：方法在Camo-Dataset上验证，但其在更广泛、未见任务上的泛化能力仍需进一步探索。</p>
+<p>对后续研究的启示包括：1) <strong>高效记忆机制</strong>：如何在保持性能的同时降低生物启发记忆架构的计算成本是一个重要方向；2) <strong>跨任务泛化</strong>：探索将此类情景记忆机制与大规模预训练模型结合，以支持更广泛的零样本泛化；3) <strong>在线适应与终身学习</strong>：当前记忆主要服务于单任务内的决策，未来可探索如何支持跨任务的记忆积累与复用。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本论文解决机器人长视界操作中因遮挡和状态变化导致的感知混淆问题，即相同观察对应不同交互历史，使决策非马尔可夫。现有方法依赖语义压缩记忆和相似性检索，丢弃细粒度感知线索。为此，提出Chameleon方法，受人类情景记忆启发，写入几何基础的多模态令牌以保留去混淆上下文，并通过可微分记忆栈实现目标导向回忆。实验使用真实机器人UR5e数据集Camo-Dataset，在感知混淆任务中，Chameleon相比基线模型 consistently improves 决策可靠性和长视界控制。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.24576" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
