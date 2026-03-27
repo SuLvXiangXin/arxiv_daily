@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LaMP: Learning Vision-Language-Action Policies with 3D Scene Flow as Latent Motion Prior - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>LaMP: Learning Vision-Language-Action Policies with 3D Scene Flow as Latent Motion Prior</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.25399" target="_blank" rel="noreferrer">2603.25399</a></span>
+        <span>作者: Lixin Yang Team</span>
+        <span>日期: 2026-03-26</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前主流的视觉-语言-动作模型旨在将视觉和语言输入直接映射为底层动作指令，如π0、π0.5、Gr00t、UniVLA和FlowVLA等方法。这些模型虽然展现了强大的泛化能力，但存在一个根本性的表示不匹配问题：其视觉语言模型的骨干网络提取的特征本质上是语义化和以2D为中心的，而机器人操作需要对显式的3D动力学进行推理以实现精确控制。这种不匹配迫使模型仅从动作监督中隐式地学习复杂的3D物理交互，导致其在面对不熟悉的空间动态时性能下降，例如在视角或物体位置与训练数据不同的情况下，执行需要精确深度控制的任务时会失败。</p>
+<p>本文针对VLA模型中2D语义特征与3D物理动力学之间的鸿沟这一具体痛点，提出了将密集的3D场景流作为一种潜在运动先验来显式地指导策略学习的新视角。其核心思路是提出一个双专家框架，通过门控交叉注意力将一个用于流匹配的运动专家与一个用于策略预测的动作专家对齐，利用部分去噪的3D运动状态来指导动作生成，从而为策略提供可操作的几何前瞻。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LaMP的整体框架是一个两阶段训练的解耦双专家系统。第一阶段为运动先验预训练，运动专家学习根据VLM特征预测密集的3D场景流。第二阶段为运动引导的策略学习，冻结预训练的运动专家和VLM骨干，训练动作专家和运动引导模块，其中动作专家利用由运动专家提供的部分去噪运动特征来预测动作。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：LaMP方法整体框架。(a) 运动预训练：运动专家学习以VLM特征为条件预测3D场景流。(b) 动作后训练：冻结的运动专家提供一步去噪特征，通过门控交叉注意力与VLM表征融合。(c) 数据构建：从多样化的机器人实施例中收集160万个观测-语言-运动三元组。</p>
+</blockquote>
+<p><strong>核心模块1：运动专家与3D场景流表示</strong><br>运动专家负责建模潜在运动先验。其输入是当前观测和语言指令经过预训练VLM骨干编码得到的特征，输出是预测的密集3D场景流。该场景流表示定义在均匀空间网格上：在当前图像平面上采样一个Kh × Kw（默认为400）个关键点的网格，并预测每个点在T（默认为32）个未来时间步内的位移增量Δp = (Δu, Δv, Δd)，其中(Δu, Δv)为图像坐标下的2D位移，Δd为深度变化。所有轨迹被转换到统一的相机参考坐标系中。运动专家采用CogVideoX风格的3D Transformer架构，通过空间块化将2×2的关键点块分组为单个token，并通过条件流匹配进行训练，其损失函数为预测的流速场与真实流速场（数据减噪声）之间的L2损失。</p>
+<p><strong>核心模块2：门控运动引导与动作专家</strong><br>运动引导模块旨在将运动专家的输出信息有效地注入到VLM特征中。为了避免对预训练VLM表征的破坏，并实现高效推理，LaMP采用了一种门控交叉注意力机制。具体而言，运动专家从纯噪声开始，仅执行N步（默认为10步）ODE求解器中的一步（到达τ=0.1），提取其部分去噪的中间隐藏状态作为运动特征。这些特征通过一个线性投影和层归一化后，作为键和值，与经过层归一化的VLM最后一层特征（作为查询）进行交叉注意力计算。注意力输出的贡献由一个可学习的标量门控g（初始化为零）通过sigmoid函数缩放后，以残差形式加到原始VLM特征上。这种设计允许模型从近乎零的注入开始，仅在有益时自适应地增加运动引导。<br>动作专家接收经过运动引导的特征，同样采用流匹配的方式预测连续动作。其损失函数为预测的动作流速场与真实动作流速场之间的L2损失。</p>
+<p><strong>创新点</strong><br>与现有方法相比，LaMP的核心创新在于：1) <strong>首次将密集3D场景流预测作为潜在先验集成到预训练的VLA框架中</strong>，而非作为独立的世界模型管道。这为策略学习提供了显式的、几何基础的运动规划信号。2) <strong>提出了门控运动引导机制</strong>，通过一步部分去噪和门控交叉注意力，在保留VLM语义能力的同时，高效、自适应地注入3D动力学线索，避免了表征崩溃。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：LaMP在LIBERO、LIBERO-Plus和SimplerEnv-WidowX三个模拟基准上进行了评估，并进行了真实世界实验。训练采用两阶段范式，运动专家在由TraceForge生成的160万个3D场景流三元组上预训练，随后冻结，再训练动作专家和引导模块。对比的基线方法包括通用VLA（OpenVLA， π0， π0.5， GR00T N1）、潜在动作VLA（UniVLA， villa-X）、视频基VLA（mimic-video， WorldVLA， ℱ1）和2D流/轨迹引导VLA（FlowVLA， TraceVLA）。</p>
+<p><strong>关键实验结果</strong>：<br>在LIBERO基准上，LaMP取得了所有方法中最高的平均成功率（98.3%），并在长视野任务（LIBERO-Long）上达到96.7%，显著优于此前最强的基线π0.5（平均96.9%，长视野92.4%）。<br>在LIBERO-Plus的零样本OOD扰动评估中，LaMP平均成功率为79.3%，比最强的基线OpenVLA-OFT（69.6%）高出9.7个百分点，在背景、光照和机器人配置变化上表现尤为鲁棒。<br>在SimplerEnv-WidowX基准上，LaMP平均成功率为79.2%，优于最强的基线FlowVLA（74.0%）和π0.5（57.1%），在最具挑战性的“堆叠方块”任务上达到75.0%，而FlowVLA为62.5%。</p>
+<p><img src="https://arxiv.org/html/2603.25399v1/2603.25399v1/x1.png" alt="消融实验-几何有效性"></p>
+<blockquote>
+<p><strong>图2</strong>：在SimplerEnv-WidowX基准上的消融研究。对比了LaMP、无运动先验变体和使用2D光流先验变体的成功率。该图表明，移除3D运动先验会导致性能大幅下降，且3D场景流先验优于2D光流先验。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：</p>
+<ol>
+<li><strong>几何前瞻的有效性</strong>：移除运动专家（No-Motion）导致在LIBERO上平均成功率下降5.9%（长视野任务下降18.5%），在SimplerEnv-WidowX上平均下降22.9%，证实了显式运动建模对于长视野规划和跨域泛化至关重要。</li>
+<li><strong>3D几何 vs. 2D像素</strong>：将3D场景流先验替换为2D光流先验（2D-Flow Prior）后，在需要精细空间操作的任务上性能下降，例如“堆叠方块”任务成功率从75.0%降至58.3%，表明深度感知的几何表示对于接触丰富的操作不可或缺。</li>
+<li><strong>融合策略</strong>：将门控交叉注意力替换为直接相加（Add）或拼接后MLP（Concat+MLP）的融合方式，性能均出现显著下降，尤其在复杂任务上。例如在“堆叠方块”任务上，Add变体成功率仅为33.3%，而门控方式为75.0%，证明了门控机制对于选择性、稳定地利用运动先验是关键。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2603.25399v1/2603.25399v1/images/ablation.png" alt="消融实验-融合策略"></p>
+<blockquote>
+<p><strong>图3</strong>：融合策略的消融研究。在四个操作任务上，比较了门控交叉注意力与Concat-MLP和Add变体的成功率。门控交叉注意力在所有任务上表现最佳，表明其能有效整合运动先验。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.25399v1/2603.25399v1/images/real-world-exp.png" alt="真实世界实验"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界实验平台和任务概述。(a) 域内任务：拾放、可变形物体操作和长视野任务。(b) 硬件设置（上）和OOD测试条件：未见过的布局、物体和背景（下）。(c) 运动前瞻可视化：预测的运动轨迹叠加在当前观测上，颜色从蓝到红表示预测运动的时间进展。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了LaMP，一个将密集3D场景流作为潜在运动先验的双专家VLA框架，有效弥合了2D语义与3D物理动力学之间的鸿沟。2) 设计了一种门控运动引导机制，通过一步部分去噪和自适应门控交叉注意力，高效且稳定地将几何线索注入VLA策略中。3) 在多个模拟基准和真实世界任务上的广泛实验表明，LaMP在性能、长视野规划和OOD鲁棒性方面均优于现有VLA基线。</p>
+<p>论文自身提到的局限性在于，尽管采用了一步去噪策略，但在推理时仍然需要运行运动专家，相较于纯反应式策略增加了计算开销。</p>
+<p>这项工作对后续研究的启示在于：探索3D场景流等显式几何动力学表示作为通用先验，是提升VLA模型物理理解和操作鲁棒性的有效途径。其门控融合机制为解决如何将不同模态的预训练模型（如VLM与世界模型）有效结合而不破坏其原有能力提供了一个参考方案。未来可探索更轻量级的运动表示或预测方式以进一步降低计算成本，或将此“潜在运动先验”的思想扩展到更广泛的机器人学习领域中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>论文针对现有视觉-语言-动作模型直接从2D语义特征回归动作、隐式学习复杂3D物理交互导致在陌生空间动态下性能下降的问题，提出LaMP框架。该框架以密集3D场景流为潜在运动先验，采用双专家结构，通过门控交叉注意力对齐流匹配运动专家和策略预测动作专家，显式建模动态关系。实验在LIBERO等基准上，LaMP取得最高平均成功率；在LIBERO-Plus分布外扰动下，鲁棒性平均提升9.7%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.25399" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

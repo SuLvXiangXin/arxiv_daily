@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Beyond Attention Magnitude: Leveraging Inter-layer Rank Consistency for Efficient Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Beyond Attention Magnitude: Leveraging Inter-layer Rank Consistency for Efficient Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.24941" target="_blank" rel="noreferrer">2603.24941</a></span>
+        <span>作者: Xuanjing Huang Team</span>
+        <span>日期: 2026-03-26</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>视觉-语言-动作模型在机器人操作任务中表现出色，但其推理延迟显著，主要源于处理密集视觉令牌带来的二次计算复杂度。为加速推理，现有令牌剪枝方法主要依赖于注意力幅度作为静态选择标准，即假设高注意力权重的令牌对任务更重要。本文挑战了这一普遍假设，揭示了高注意力令牌是任务依赖的，在某些情况下甚至会损害策略性能。针对这一痛点，本文提出了利用层间令牌排名一致性作为动态指导信号的新视角。核心思路是提出一个名为TIES的训练无关动态令牌剪枝框架，通过Kendall τ系数量化层间排名一致性，并据此自适应地平衡基于注意力的选择和多样性保留，以实现鲁棒且高效的令牌选择。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>TIES框架的核心是利用层间令牌排名一致性（Kendall τ）作为动态指标，自适应地调整对高注意力令牌的依赖程度，从而实现内容感知的令牌剪枝。其整体流程分为离线的校准阶段和在线的动态推理阶段。</p>
+<p><img src="https://arxiv.org/html/2603.24941v1/2603.24941v1/a.png" alt="TIES框架"></p>
+<blockquote>
+<p><strong>图2</strong>：TIES框架。TIES动态计算Kendall τ，并自适应地决定令牌选择策略。当视觉相似性低于阈值γ时，重新计算τ并更新策略。</p>
+</blockquote>
+<p><strong>整体流程</strong>：</p>
+<ol>
+<li><strong>离线校准</strong>：从目标数据集中随机采样M帧（实践中M=100），计算每帧的τ值，得到其分布Σ和中位数τ_med，作为后续在线推理的参考基准。</li>
+<li><strong>在线动态推理</strong>：<ul>
+<li>将每段时序的第一个帧设为锚点（anchor），计算其τ_curr。</li>
+<li>对于后续帧，计算其与当前锚点的视觉相似度。若相似度低于阈值γ，则将该帧设为新锚点，并重新计算τ_curr；否则，沿用上一帧的τ_curr。</li>
+<li>根据τ_curr与τ_med的比较，动态决定当前帧的令牌选择策略，组合高注意力令牌和均匀采样令牌，进行前向传播。</li>
+</ul>
+</li>
+</ol>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>层间排名一致性指标（τ）</strong>：该指标用于衡量模型在不同Transformer层之间对高排名令牌关注点的稳定性。具体计算使用Kendall等级相关系数（τ0），评估连续层之间top-k令牌排名的相关性。最终报告的τ是层间τ0的平均值。高τ值表示注意力排名在各层间保持刚性固定；低τ值则表示排名动态变化。</li>
+<li><strong>τ引导的令牌选择策略</strong>：基于τ指标，TIES提供了两种策略来平衡重要性（基于注意力）和信息性（基于多样性）：<ul>
+<li><strong>Hard-TIES</strong>：基于阈值的二元选择。若τ &gt; τ_threshold，则判定当前状态为“注意力陷入伪相关”的类型，完全切换到替代策略（如均匀采样）；否则，默认使用Top-k采样。</li>
+<li><strong>Soft-TIES</strong>：提供更精细的线性插值控制。根据当前τ_curr与τ_med计算一个信任权重w_t。该权重决定了从高注意力候选令牌中保留的比例N_top = floor(w_t * ρ * N)，剩余所需令牌数N_uni = ρ * N - N_top则通过均匀采样或其他基于多样性的算法（如DivPrune）从剩余令牌中补充。最终保留的令牌集为两者的并集。</li>
+</ul>
+</li>
+<li><strong>时间冗余利用</strong>：为最小化在高频控制循环中计算τ的开销，TIES利用了机器人观测的时间冗余。通过相似度触发机制，仅在检测到显著视觉变化时才重新计算τ和更新剪枝策略，避免了静态观测下的冗余计算。</li>
+</ol>
+<p><strong>创新点</strong>：<br>与现有主要依赖静态注意力幅度进行剪枝的方法相比，TIES的核心创新在于：1) 揭示了注意力幅度作为令牌重要性指标的不可靠性，并提出了“伪相关锁定”假设来解释高一致性（高τ）可能意味着模型关注点僵化于有害特征；2) 引入了层间排名一致性（τ）这一动态、轻量级的指标，来区分何时应信任高注意力令牌；3) 基于τ设计了一个自适应的、训练无关的剪枝框架，能够根据输入内容动态调整选择策略，而非采用固定规则。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：主要在SIMPLER仿真基准上进行实验，该基准专为桌面操作任务设计，包含PickCan、MoveNear、Drawer、DrawerApple四个任务，并支持视觉匹配和变体聚合两种评估协议。额外在LIBERO基准上测试了泛化性。</li>
+<li><strong>实验平台</strong>：NVIDIA A800 GPU。</li>
+<li><strong>基线方法</strong>：与原始CogACT模型、FastV、VLA-Cache、EfficientVLA等先进的VLA加速方法进行对比。</li>
+<li><strong>评估指标</strong>：任务成功率，剪枝后保留56个令牌（原256个）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>在SIMPLER基准上，TIES consistently outperforms existing baselines and the full-token CogACT model in all evaluated scenarios. In the Visual Matching protocol, which emphasizes consistency with real-world scenes, Hard-TIES achieves a superior average success rate of 78.1% while retaining only 56 tokens. This performance represents a 5.4% improvement over the unpruned CogACT baseline and significantly exceeds the results of competitive acceleration methods such as FastV and VLA-Cache. The robustness of our framework is further highlighted in the Variant Aggregation protocol, where environmental perturbations such as lighting and texture changes typically degrade policy reliability. In this challenging setting, the unpruned CogACT baseline experiences a sharp decline in performance to 59.9%. In contrast, Soft-TIES maintains a much higher average success rate of 67.6%, effectively bridging the gap between efficiency and robustness.</p>
+<p><img src="https://arxiv.org/html/2603.24941v1/2603.24941v1/b.png" alt="Top-k和Bottom-k策略性能"></p>
+<blockquote>
+<p><strong>图3</strong>：Top-k与Bottom-k策略性能对比。在Drawer任务中观察到性能反转（Bottom-k优于Top-k），而在MoveNear任务中常规注意力重要性假设成立。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.24941v1/2603.24941v1/x1.png" alt="熵分布"></p>
+<blockquote>
+<p><strong>图4</strong>：注意力分布熵的分布。基于注意力幅度的静态统计指标（如熵）无法可靠地区分两种场景（Type 1和Type 2），其分布存在大量重叠。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.24941v1/2603.24941v1/x2.png" alt="Kendall τ分布"></p>
+<blockquote>
+<p><strong>图5</strong>：Kendall τ分布。τ指标能有效解耦两种场景：Type 1（高注意力令牌有益）表现出较低的层间一致性（τ值低），而Type 2（高注意力令牌有害）表现出较高的一致性（τ值高）。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：</p>
+<ol>
+<li><strong>剪枝比率的影响</strong>：<br><img src="https://arxiv.org/html/2603.24941v1/2603.24941v1/x3.png" alt="剪枝比率影响"><blockquote>
+<p><strong>图6</strong>：剪枝比率的影响。TIES对激进剪枝表现出鲁棒性，在保留112个令牌时达到峰值性能，甚至在仅保留28个令牌（FLOPs减少83.6%）时，成功率仍超过未剪枝基线，表明τ引导的选择有效去除了误导性噪声。</p>
+</blockquote>
+</li>
+<li><strong>替代策略比较</strong>：<br><img src="https://arxiv.org/html/2603.24941v1/2603.24941v1/x4.png" alt="替代策略比较"><blockquote>
+<p><strong>图7</strong>：不同替代策略比较。在τ指标的指导下，即使简单的启发式方法（如均匀采样）也能保持稳定且强大的性能，所有策略均优于全令牌基线。</p>
+</blockquote>
+</li>
+<li><strong>跨架构与基准的泛化性</strong>：在OpenVLA和OpenVLA-OFT模型上的实验表明，TIES方法在不同解码器架构（自回归、扩散）和任务域（SIMPLER, LIBERO）上均能保持有效性， consistently outperforms the FastV counterpart。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>挑战了固有假设</strong>：通过实验揭示了在VLA模型中，单纯依赖注意力幅度进行令牌剪枝是不可靠甚至有害的，高注意力令牌可能是任务依赖的，并可能成为误导策略的伪信号。</li>
+<li><strong>提出了新指标与框架</strong>：引入了层间令牌排名一致性（Kendall τ）作为衡量注意力可靠性的动态指标，并基于此提出了训练无关的TIES动态令牌剪枝框架，能够自适应地在基于注意力的选择和多样性保留之间取得平衡。</li>
+<li><strong>实现了效率与性能的双赢</strong>：在SIMPLER基准上，TIES在将令牌使用量减少78%的同时，将平均成功率提升了6%，并在更具挑战性的环境变化下展现了更强的鲁棒性，且能泛化到不同的VLA解码器和基准。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文自身指出，TIES的逻辑依赖于层间排名一致性与令牌重要性之间的启发式相关性，缺乏对模型决策因果链的深层理论依据。此外，当前的选择策略主要侧重于过滤空间冗余，尚未探索更复杂的跨模态对齐以进一步细化视觉特征与复杂语言指令之间的交互。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>探索更本质的可靠性指标</strong>：鼓励后续研究超越启发式相关性，从理论上探究Transformer内部表示演化与任务相关性的本质联系，寻找更根本的令牌重要性或可靠性度量。</li>
+<li><strong>跨模态协同剪枝</strong>：当前工作主要针对视觉令牌。未来的工作可以探索语言令牌与视觉令牌的协同剪枝策略，实现更深层次的跨模态效率优化。</li>
+<li><strong>动态机制的扩展</strong>：TIES的动态适应思想可以扩展到其他模型组件或超参数，形成更全面的动态推理框架。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型因处理密集视觉标记导致推理延迟高的问题，指出仅依赖注意力大小进行标记剪枝存在局限。为此，提出了TIES框架，其核心技术是**利用层间标记排名一致性**来动态选择重要标记，自适应平衡注意力大小与排名一致性，且无需额外训练。实验表明，在CogACT+SIMPLER基准上，该方法将平均成功率提升6%，同时减少78%的标记使用量，并展现出良好的泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.24941" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
