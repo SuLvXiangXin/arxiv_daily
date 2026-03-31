@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Which Reconstruction Model Should a Robot Use? Routing Image-to-3D Models for Cost-Aware Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Which Reconstruction Model Should a Robot Use? Routing Image-to-3D Models for Cost-Aware Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.27797" target="_blank" rel="noreferrer">2603.27797</a></span>
+        <span>作者: Leslie Pack Kaelbling Team</span>
+        <span>日期: 2026-03-29</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作任务对3D网格重建的质量需求各异：灵巧操作需要精细的表面细节，而无碰撞规划则可以容忍更粗糙的表示。目前，从单图像进行3D重建的技术发展迅速，涌现出多种Image-to-3D模型，它们在推理速度、几何保真度和纹理质量上各有侧重，且其性能随物体类别和输入视角的不同而变化。现有机器人感知研究通常固定选用一种重建模型，放弃了根据每个输入选择最佳模型的潜在收益。此外，重建方法不仅包括性能依赖于输入视角的Image-to-3D模型，还包括如结构光扫描等视角无关的方法，其质量取决于物体属性和硬件配置。查询所有模型在计算上是不可行的，因此需要为每个输入进行模型选择。本文针对这一痛点，提出了SCOUT路由框架，其核心思路是：将重建得分解耦为视角相关模型的相对性能和一个捕获图像整体难度的标量项，从而能够在推理时支持任意的多维成本约束，并允许在不重新训练的情况下动态添加或移除视角无关的重建方法。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>SCOUT路由框架旨在实现两个特性：<strong>可扩展性</strong>（无需重新训练即可添加或重新配置视角无关方法）和<strong>灵活性</strong>（支持在任意成本系数向量 𝐜∈ℝᵏ 下进行路由）。框架包含三个阶段：预处理、得分解耦和效用优化。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="SCOUT框架总览"></p>
+<blockquote>
+<p><strong>图1</strong>：SCOUT概述。给定输入图像，(a) SCOUT路由到最合适的重建模型并生成选定的3D重建（与其他候选模型比较）。(b) 在重建网格上生成的抓取提案，在真实网格上评估；碰撞的抓取显示为红色。(c) SCOUT的重建感知路由在下游鲁棒机器人抓取和灵巧操作中的效用。</p>
+</blockquote>
+<p><strong>1. 预处理</strong>：首先，将重建得分向量 <strong>s</strong> 划分为视角相关模型得分 <strong>s_dep</strong> 和视角无关模型得分 <strong>s_inv</strong>。为了平滑跨物体类别的重建质量差异，对 <strong>s_dep</strong> 应用基于标签的得分平滑：**s̃_dep = β * s_dep + (1-β) * s_T(x)**，其中 <strong>s_T(x)</strong> 是与输入图像x具有相同语义标签的所有训练样本的 <strong>s_dep</strong> 平均值。</p>
+<p><strong>2. 得分解耦与学习模型</strong>：这是SCOUT的核心创新。将平滑后的视角相关模型得分 <strong>s̃_dep</strong> 通过带温度T的softmax转换为概率分布 <strong>p</strong>。训练一个神经网络，输入图像x，输出预测的概率分布 <strong>p̂</strong>，训练目标是最小化与目标分布 <strong>p</strong> 的KL散度。<strong>p̂</strong> 捕获了视角相关模型之间的相对性能。</p>
+<p>为了与视角无关模型的绝对得分 <strong>s_inv</strong> 进行比较，需要从 <strong>p̂</strong> 中恢复出视角相关模型的绝对得分估计。这需要一个分区函数估计 <strong>ẑ</strong>。定义真实分区函数 **z = Σ exp(s_dep / T)**，则 <strong>T * ln(p̂_j * z)</strong> 可近似 <strong>s_dep_j</strong>。由于 <strong>z</strong> 未知且得分存在噪声，论文为每个模型j构造了一个代理 <strong>z̃_j = exp(s_dep_j / T) / p̂_j</strong>，然后通过理论推导的最优加权平均（权重与预测概率的方差和决定系数等因素成反比）将这些代理合并为单个估计 <strong>z̃</strong>，并以此作为目标训练第二个监督模型来预测 <strong>ẑ</strong>。</p>
+<p><strong>3. 效用优化</strong>：在推理时，给定预测的 <strong>p̂</strong>、<strong>ẑ</strong> 和用户指定的成本向量 <strong>c</strong>，对每个模型计算其估计效用（得分减成本）。对于视角相关模型 (j ≤ k₁)，估计得分为 **ŝ = T * ln(p̂_j * ẑ)**；对于视角无关模型 (k₁ &lt; j ≤ k)，估计得分直接使用 **s_inv(m_j)<strong>。最终选择效用最大的模型：</strong>m̂ = argmax_j ŝ(x, m_j) - c[j]**。</p>
+<p><strong>与现有方法的创新点</strong>：1) <strong>解耦设计</strong>：将得分预测分解为相对性能 <strong>p̂</strong> 和绝对难度 <strong>ẑ</strong>，使得学习的网络仅针对视角相关模型，视角无关方法可以独立配置，实现了可扩展性。2) <strong>支持任意成本向量</strong>：直接预测得分而非仅排序，允许在推理时灵活指定多维成本约束（如延迟、内存）。3) <strong>理论推导的分区函数估计</strong>：提供了从相对分布中恢复绝对得分的最优加权方案。</p>
+<p><img src="https://arxiv.org/html/2603.27797v1/2603.27797v1/x1.png" alt="解耦效果分析"></p>
+<blockquote>
+<p><strong>图2</strong>：视角无关方法数量对路由性能的影响（在视角相关模型上评估）。采用解耦时，无论训练中包含多少视角无关方法，遗憾值保持不变；未解耦时，遗憾值随视角无关方法数量增加而上升。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>重建模型</strong>：使用了四种具有架构多样性的Image-to-3D模型：Hunyuan3D、InstantMesh、TripoSR、TRELLIS，以及一个用固定得分近似的视角无关方法选项。</li>
+<li><strong>数据集</strong>：Google Scanned Objects (GSO) 数据集（15,450张渲染图）和 YCB 数据集（补充BigBIRD真实图像，共2,106张图，包含更具挑战性的正面视角和光照变化）。</li>
+<li><strong>评估指标</strong>：主要使用取负的密度感知倒角距离（DCD），数值越高越好。也报告了倒角距离、IoU和Eval3D几何指标。</li>
+<li><strong>基线方法</strong>：由于3D重建领域尚无路由方法，论文从LLM路由文献中适配了多种基线：ZOOTER、RouterDC、RouterBench的MLP、基于RouteLLM的矩阵分解(MF)、kNN和线性回归(LR)。还包括一个输入无关的基线（选择平均得分最高的模型）。</li>
+<li><strong>评估方式</strong>：在不同成本子空间上评估平均效用或平均遗憾。成本子空间包括：仅包含视角相关模型的𝒞₀；惩罚延迟、内存及内存-时间占用的一维成本族；以及一个完整的“有意义的”成本子空间𝒞，确保路由决策非平凡。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>在GSO数据集上，SCOUT在所有成本子空间上都取得了显著低于所有基线的遗憾值（以输入无关基线遗憾的比例衡量）。在仅包含视角相关模型的𝒞₀子空间，ZOOTER表现与SCOUT最接近。在更广泛的𝒞子空间（包含视角无关方法，路由决策更敏感），解耦的优势更加明显。</p>
+<p><img src="https://arxiv.org/html/2603.27797v1/2603.27797v1/x2.png" alt="成本-延迟曲线"></p>
+<blockquote>
+<p><strong>图3</strong>：在GSO数据集上，不同路由方法在延迟成本族下的成本延迟曲线。SCOUT（橙色）的曲线最接近Oracle（黑色虚线），在几乎所有成本预算下都优于其他基线。</p>
+</blockquote>
+<p>在更具挑战性的YCB/BigBIRD数据集上，SCOUT同样在所有成本子空间上取得了最低的平均遗憾。例如，在𝒞子空间，SCOUT的遗憾为0.31，而表现次优的LR基线为0.40，输入无关基线为1.00（作为归一化基准）。</p>
+<p><strong>消融实验与组件贡献</strong>：<br>论文通过消融实验验证了核心组件的有效性。关键的消融包括：</p>
+<ol>
+<li><strong>得分解耦的有效性</strong>：比较了SCOUT与一个“未解耦”的变体（将视角无关模型得分也纳入softmax计算）。如图2所示，未解耦变体的性能随视角无关方法数量增加而下降，而SCOUT保持稳定。</li>
+<li><strong>分区函数估计加权方案</strong>：比较了理论推导的最优加权、等权重、单模型权重（one-hot）和使用真实z值作为目标。实验表明，最优加权方案在统计显著性上优于其他方案。</li>
+<li><strong>超参数敏感性</strong>：分析了平滑系数β、softmax温度T等超参数的影响，表明SCOUT在合理范围内对超参数不敏感。</li>
+</ol>
+<p><strong>机器人操作验证</strong>：<br>论文在模拟和真实机器人实验中验证了SCOUT的实用性。在无碰撞抓取提案评估中，使用SCOUT选择重建模型生成的抓取，其碰撞率（4.7%）低于使用任何单一固定模型（最佳单一模型为6.3%）。在Franka Panda机器人上的真实世界拾放任务中，SCOUT路由的成功率（86.7%）也高于所有单一模型基线（最高为80.0%）。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>首次将模型路由问题引入3D重建领域</strong>，提出了一个能够同时容纳视角相关和视角无关方法、并支持任意多维成本约束的通用路由框架。</li>
+<li><strong>提出了一个理论推导的分区函数代理</strong>，能够从学习到的相对性能分布中以可证明的最优权重恢复绝对得分，这是解耦设计的关键。</li>
+<li><strong>设计了得分解耦流程</strong>，将图像难度与模型相对性能分离，使得视角无关方法可以在不重新训练的情况下被添加、移除或重新配置，极大地提高了系统的可扩展性和部署灵活性。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文指出，当前对视角无关方法得分的处理采用了简化假设（固定得分），这适用于纹理漫反射的数据集。在更一般的情况下，<strong>s_inv(m)</strong> 可能需要依赖于物体级属性（如纹理、反射率）进行估计，这为未来工作留下了空间。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>动态模型选择范式</strong>：SCOUT展示了一种为不同输入和任务约束动态选择最合适感知模型的范式，可扩展到其他机器人感知任务（如分割、位姿估计）。</li>
+<li><strong>任务感知路由</strong>：当前成本函数是用户指定的。未来可以探索将下游任务性能直接作为优化目标，实现端到端的任务感知模型路由。</li>
+<li><strong>在线适应与元学习</strong>：路由网络可以进一步在线适应新物体或环境变化，或者利用元学习技术快速适应新的重建模型池。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决机器人如何根据任务需求（如灵巧操作需精细细节，避障规划可容忍粗糙模型）和成本约束，自动选择最合适的单图像3D重建模型的核心问题。提出了SCOUT路由框架，其关键技术是将重建评分解耦为：学习视点依赖模型的相对性能分布，以及估计图像整体难度的标量函数，从而支持动态添加视图不变方法而无需重训练。实验在多个数据集和网格质量指标上验证，SCOUT相比基线方法在不同成本约束下均取得一致性能提升，并成功应用于机器人抓取与灵巧操作任务。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.27797" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
