@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VLA-OPD: Bridging Offline SFT and Online RL for Vision-Language-Action Models via On-Policy Distillation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>VLA-OPD: Bridging Offline SFT and Online RL for Vision-Language-Action Models via On-Policy Distillation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.26666" target="_blank" rel="noreferrer">2603.26666</a></span>
+        <span>作者: Haoang Li Team</span>
+        <span>日期: 2026-03-27</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，预训练视觉-语言-动作（VLA）模型的后训练主要依赖两种范式：离线监督微调（SFT）和在线强化学习（RL）。离线SFT在静态专家演示数据上进行，虽然优化稳定、收敛快，但本质上是离线的，容易因分布偏移（即训练时的专家状态与部署时学生策略诱导的状态不一致）而失败，并且对静态数据集的激进更新常导致灾难性遗忘。在线RL通过环境交互解决分布偏移问题，但依赖稀疏的任务完成奖励，存在样本效率低下、优化方差高的问题。本文旨在解决离线SFT的暴露偏差（无法从自身错误中恢复）与在线RL的稀疏奖励和低样本效率之间的核心矛盾。核心思路是提出一种在线策略蒸馏（VLA-OPD）框架，利用专家教师模型对学生策略自生成轨迹提供密集的令牌级监督，并通过反向KL散度目标进行优化，从而结合SFT的效率与RL的鲁棒性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>VLA-OPD框架旨在通过一个迭代、闭环的过程，将鲁棒的教师策略的知识蒸馏到待训练的学生策略中。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架概述"></p>
+<blockquote>
+<p><strong>图1</strong>：VLA-OPD方法整体框架。左侧为在线策略蒸馏的三个阶段：学生采样（收集轨迹）、教师标注（提供密集监督）、学生优化（基于反向KL更新）。右侧对比了不同KL目标的行为：反向KL（我们的方法）产生有界的模态寻求行为，有效过滤教师的不确定性；而前向KL导致熵爆炸，Hard-CE导致熵塌缩。</p>
+</blockquote>
+<p>整体框架包含三个核心阶段（如算法1所示）：</p>
+<ol>
+<li><strong>阶段一：学生采样（探索）</strong>。学生策略 π_θ 在环境中执行，生成一组轨迹 𝒟_k。这些轨迹中的状态来自于学生当前的策略诱导分布，而非静态专家数据集，从而主动暴露分布偏移和错误状态（s_err），为后续纠正提供数据。</li>
+<li><strong>阶段二：密集教师标注（纠正）</strong>。对于学生轨迹中的每一个状态 s_t，查询一个冻结的专家教师策略 π_tea，获得其动作分布 q_t(a) = π_tea(a|s_t)。这为学生的每一个决策步骤提供了密集的监督信号，将稀疏奖励的RL问题转化为即时监督问题，并能够教给学生从偏离状态中恢复的“最优”行为。</li>
+<li><strong>阶段三：模态寻求优化（更新）</strong>。学生策略通过策略梯度进行更新，其目标是最大化负向反向KL散度：max_θ 𝔼_s∼π_θ [-D_KL(π_θ(·|s) || π_tea(·|s))]。在令牌级别，这转化为一个内在奖励：r_t = - (log π_θ(a_t|s_t) - log π_tea(a_t|s_t))。梯度估计采用分组平均策略以降低方差。</li>
+</ol>
+<p>该方法的创新点体现在两个方面。首先，它创造性地将密集监督（SFT的核心优势）与在线策略数据收集（RL的核心优势）相结合，从而同时解决了SFT的分布偏移问题和RL的样本效率问题。其次，其核心优化目标——反向KL散度——是关键的技术创新。论文理论分析了三种对齐目标的差异：标准SFT使用的前向KL是<strong>模态覆盖</strong>的，在教师不确定的状态下会强迫学生模仿教师的高熵分布，导致<strong>熵爆炸</strong>；类似Dagger等方法使用的Hard-CE（argmax匹配）会丢弃教师的“暗知识”，导致<strong>过早的熵塌缩</strong>，失去动作多样性。而反向KL具有<strong>零强迫</strong>特性，只要学生选择的动作落在教师可接受的概率质量内，它就不会因忽略其他潜在动作而受到惩罚，从而诱导出一种<strong>有界的模态寻求</strong>行为，既能过滤掉教师分布尾部的认知不确定性，又能保留有效模态内的足够随机性，稳定地收敛到高性能策略。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在两个基准上进行：用于测试数据稀缺下泛化能力的<strong>LIBERO</strong>（单臂操作，包含Spatial, Object, Goal, Long四个任务套件）和用于测试复杂协调能力的<strong>RoboTwin2.0</strong>（双臂协调任务）。学生策略分别使用极端数据稀缺（每个任务1条轨迹）和较多数据（每个任务1000条轨迹）的SFT进行初始化。对比的基线方法包括：学生初始化模型（下界）、在线RL方法（GRPO）、以及使用完整专家数据集训练的离线SFT方法。</p>
+<p><img src="https://arxiv.org/html/2603.26666v1/2603.26666v1/x1.png" alt="训练效率对比"></p>
+<blockquote>
+<p><strong>图2</strong>：在LIBERO-Object和LIBERO-Long任务上的训练效率对比。VLA-OPD（Distill）在早期阶段（如10步内）即实现高性能快速收敛，显著快于依赖稀疏奖励探索的GRPO基线。结合后续GRPO微调（Distill+GRPO）能突破性能瓶颈，达到最高成功率。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.26666v1/2603.26666v1/figures/opd/final_object_unseen_task_1.png" alt="策略效果对比"></p>
+<blockquote>
+<p><strong>图3</strong>：LIBERO-Object未见任务上的最终策略成功率对比。VLA-OPD（Distill）仅用1条轨迹初始化，其性能（93.8%）已接近或超越使用50条轨迹的多个全数据集基线方法（如OpenVLA的88.4%），证明了其卓越的数据效率。</p>
+</blockquote>
+<p>关键实验结果总结如下：</p>
+<ul>
+<li><strong>训练效率</strong>：如图2所示，在LIBERO任务上，纯蒸馏方法（Ours (Distill)）在训练早期（约10-50步）即达到高成功率（&gt;90%），而GRPO基线需要150步以上，实现了<strong>3倍以上的加速</strong>。且VLA-OPD的训练曲线更平滑稳定。</li>
+<li><strong>策略效能</strong>：如表2所示，在仅用1条轨迹初始化的极端数据稀缺设定下，VLA-OPD（Distill）将平均成功率从初始的48.9%大幅提升至87.4%，超越了多个使用50条轨迹的全数据集基线（如Octo: 75.1%, OpenVLA: 76.5%）。进一步结合GRPO微调（Distill+GRPO）后，平均成功率可达93.4%，几乎追平专家教师（93.9%）。</li>
+<li><strong>双臂任务泛化</strong>：在更复杂的RoboTwin2.0任务上（表3），VLA-OPD同样表现出色，将1000轨迹SFT初始化的学生策略平均成功率从45.0%提升至78.8%，显著优于GRPO基线的63.8%。</li>
+</ul>
+<p>消融实验验证了核心组件的贡献：<br><img src="https://arxiv.org/html/2603.26666v1/2603.26666v1/figures/opd/kl_direction_ablation_train_reward_verifier_vs_step.png" alt="KL方向消融-训练奖励"></p>
+<blockquote>
+<p><strong>图4</strong>：不同KL目标下的训练奖励曲线。反向KL（VLA-OPD）能稳定收敛到最高奖励；前向KL奖励波动剧烈；Hard-CE则陷入次优平台期。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.26666v1/2603.26666v1/figures/opd/kl_direction_ablation_entropy_vs_step.png" alt="KL方向消融-策略熵"></p>
+<blockquote>
+<p><strong>图5</strong>：不同KL目标下的策略熵变化。前向KL导致熵爆炸性增长；Hard-CE导致熵快速塌缩至接近零；而反向KL能维持一个健康、有界的熵水平，这与图4中其稳定且高性能的表现一致。</p>
+</blockquote>
+<p>消融实验表明，<strong>反向KL目标</strong>是VLA-OPD成功的关键。它有效避免了前向KL的熵爆炸和Hard-CE的熵塌缩，从而实现了最稳定和最高的策略性能。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1）提出了VLA-OPD，一个统一离线SFT与在线RL的后训练框架，通过在线策略上的密集教师监督，同时解决了分布偏移和样本效率低下的问题；2）创新性地采用反向KL散度作为蒸馏目标，其有界的模态寻求特性确保了稳定优化，避免了熵爆炸或塌缩；3）提供了一种缓解灾难性遗忘的原则性方法，通过将梯度更新锚定在学生当前的策略流形上，实现“温和”对齐。</p>
+<p>论文自身提到的一个局限性是<strong>对高质量教师模型的依赖</strong>。虽然文中指出高性能专家（如开源检查点、专有API或单任务策略）越来越易获得，但这仍然是该方法应用的一个前提条件。</p>
+<p>这项工作对后续研究的启示在于：它展示了<strong>将大型基础模型的“暗知识”通过在线蒸馏进行高效迁移</strong>的可行路径，为持续升级通用VLA模型提供了一种可扩展的方案。未来方向可能包括研究如何利用多个或非完美教师，以及将该框架扩展到更广泛的具身智能任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出VLA-OPD框架，以解决视觉-语言-动作模型后训练中离线监督微调存在的分布偏移、灾难性遗忘，以及在线强化学习样本效率低、奖励稀疏的问题。其核心方法是**在线策略蒸馏**，通过专家教师对策略自生成轨迹提供密集的令牌级监督，并采用**反向KL目标**实现稳定、多样化的策略学习，避免熵爆炸或过早熵崩溃。实验在LIBERO和RoboTwin2.0基准上表明，该方法显著提升了样本效率与策略鲁棒性，并有效缓解了灾难性遗忘。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.26666" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
