@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>HCLSM: Hierarchical Causal Latent State Machines for Object-Centric World Modeling - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>HCLSM: Hierarchical Causal Latent State Machines for Object-Centric World Modeling</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.29090" target="_blank" rel="noreferrer">2603.29090</a></span>
+        <span>作者: Osama Jaber Team</span>
+        <span>日期: 2026-03-31</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前基于视频预测的世界模型，如V-JEPA及其后续工作，主要依赖于从编码器获得的非结构化潜在向量来预测未来状态。这些扁平（flat）的潜在表示将所有物体、所有时间尺度以及所有因果关系纠缠在一起，作为一个单一的预测目标。虽然这在视频理解基准测试中有效，但无法为智能体提供进行规划和反事实推理所需的结构化知识。具体而言，现有方法的局限性体现在三个维度：第一，在物体层面，物理场景包含离散实体，其状态半独立演化，而扁平潜在空间无法分离表示不同物体的状态；第二，在时间层面，物理动态同时作用于多个尺度（如连续轨迹、离散事件、抽象目标），需要不同的计算机制，但现有模型通常将时间动态压缩到单一尺度；第三，在因果关系层面，缺乏显式的因果结构使得模型无法回答干预性（“如果…会怎样？”）问题。</p>
+<p>现有的物体中心模型（如Slot Attention, SAVi）能够分解场景为物体槽（slot），但缺乏时间动态建模；而添加了自回归预测的模型（如SlotFormer）又使用单尺度Transformer。DreamerV3为强化学习构建世界模型，但仍使用扁平潜在状态。如论文表1所示，尚无现有系统能在单一可微分架构中统一物体分解、分层时间动态和因果推理。</p>
+<p>本文针对上述三个维度的核心痛点，提出了HCLSM（分层因果潜在状态机）。其核心思路是：世界模型的结构应反映其所建模世界的结构——物体是离散的，因此表示应是物体中心的；时间具有多尺度性，因此动态应是分层的；交互是因果性的，因此模型应维护显式的交互图。本文采用两阶段训练协议，强制模型先学习“事物是什么”（空间重建），再学习“它们做什么”（时间动态），从而解决结构学习与预测优化之间的张力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>HCLSM的整体架构是一个五层处理流水线（如图1所示），将视频处理为结构化的世界状态。这五层依次是：感知层（Perception）、物体分解层（Object Decomposition）、分层动态层（Hierarchical Dynamics）、因果推理层（Causal Reasoning）和持续记忆层（Continual Memory）。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：HCLSM架构。五层结构将视频处理为结构化的世界状态。虚线框内的空间广播解码器（SBD）在训练第一阶段提供重建信号，驱动槽（slot）的 specialization。</p>
+</blockquote>
+<p><strong>Layer 1: 感知层</strong>。使用Vision Transformer（ViT）编码器处理视频帧（形状 <code>(B, T, C, H, W)</code>），将其转换为补丁嵌入（<code>(B, T, M, d_model)</code>），并添加时间位置编码。最后通过一个线性投影映射到统一的表示维度 <code>d_world</code>。</p>
+<p><strong>Layer 2: 物体分解层</strong>。核心是带有动态“生/死”机制的槽注意力（Slot Attention）。初始化 <code>N_max</code> 个槽提案，通过K轮迭代，槽通过softmax在槽维度上竞争补丁令牌，驱动场景分解。每一轮迭代通过加权值聚合和GRU单元细化槽。一个存在性头部预测每个槽的存活概率 <code>p_alive</code>。当未被任何槽捕获的残差注意力能量超过阈值时，会从具有最高残差的令牌投影“诞生”一个休眠槽。<br><strong>空间广播解码器（SBD）</strong> 是关键组件。每个槽被独立广播到一个 <code>14x14</code> 的空间网格，与 <code>(x, y)</code> 位置坐标拼接，并由一个4层CNN解码为特征预测和一个alpha掩码。Alpha掩码在存活的槽之间进行softmax归一化，创建像素级竞争。重建目标不是原始像素，而是来自EMA目标编码器的冻结ViT补丁特征（遵循DINOSAUR方法），这为分解提供了语义信号而非低级纹理匹配。重建损失 <code>L_SBD</code> 是各槽预测特征与目标特征的加权MSE。<br><strong>关系图</strong>：一个图神经网络（GNN）处理所有槽对之间的边特征，通过边MLP产生加权消息并进行每节点聚合。GNN的边权重直接编码了物体间的交互结构。为处理大量槽（N&gt;32）时的内存问题，采用了分块计算。</p>
+<p><strong>Layer 3: 分层动态层</strong>。该层包含三个级别，处理不同时间尺度的动态：</p>
+<ul>
+<li><strong>Level 0: 选择性状态空间模型（SSM）</strong>：用于连续物理动态。每个物体拥有自己共享参数的选择性SSM轨迹。选择性扫描计算输入依赖的状态转移和输出。一个全局SSM处理池化后的物体状态，并通过附加上下文条件化每个物体的轨迹。为确保bf16精度下的数值稳定性，对 <code>A_log</code> 初始化和中间值进行了特殊处理。</li>
+<li><strong>Level 1: 稀疏事件Transformer</strong>：用于离散事件。一个事件检测器监控Level 0的状态，使用多尺度时间特征（尺度为1,2,4的帧差）并通过因果扩张卷积处理。当事件分数超过学习到的阈值时，对应时间步被收集到密集事件张量中。一个标准的Transformer（带SwiGLU前馈网络）仅处理 <code>K &lt;&lt; T</code> 个事件时间步，大幅降低成本。</li>
+<li><strong>Level 2: 目标压缩Transformer</strong>：用于抽象目标推理。学习的摘要查询令牌通过交叉注意力压缩事件序列为 <code>n_summary</code> 个抽象状态令牌，由一个目标级Transformer处理，并可被语言/目标嵌入条件化用于规划。<br>一个<strong>层级管理器</strong>通过向量化的聚集/散射操作（无Python循环）和学习的每层级门控权重将三个级别结合起来。</li>
+</ul>
+<p><strong>Layer 4: 因果推理层</strong>。学习一个因果邻接矩阵 <code>W</code>，采用Gumbel-softmax二元采样进行可微分的边决策，并施加L1稀疏正则化和一个NOTEARS风格的有向无环图（DAG）约束。在当前版本中，GNN边权重作为主要的因果结构信号，显式的DAG学习作为正则化途径。</p>
+<p><strong>两阶段训练协议</strong>：这是HCLSM的关键设计决策。如果所有损失从一开始就激活，JEPA预测损失会占据主导，因为它使用分布式槽编码比使用物体特定表示更容易最小化，导致预测损失梯度淹没SBD信号，槽永远无法 specialization。因此，论文采用两阶段协议（算法1）：</p>
+<ul>
+<li><strong>Stage 1</strong>（前40%训练步数）：仅激活SBD重建损失和一个轻量级的多样性正则器。预测损失被计算用于监控但不产生梯度。这迫使每个槽最小化其自身的空间重建误差，只能通过空间 specialization 实现。</li>
+<li><strong>Stage 2</strong>（后60%训练步数）：激活完整的JEPA预测损失，同时保留SBD（但权重从5.0降至1.0作为正则器）。此时槽已经分解，动态模型学习预测不同物体的未来状态。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：训练HCLSM Small配置（6800万参数）于Open X-Embodiment生态系统中的LeRobot PushT任务。该任务包含206个episode（25,650帧），是一个机器人将T形块推向目标的视频。处理 <code>224x224</code> 分辨率的16帧片段。在NVIDIA H100 80GB GPU上训练，批量大小为4，学习率 <code>1.5e-4</code>，使用bf16混合精度，共50K步。Stage 1占前20K步，Stage 2占后30K步。</p>
+<p><strong>定量结果</strong>：表3比较了使用和不使用两阶段SBD协议的训练结果。</p>
+<table>
+<thead>
+<tr>
+<th align="left">模型</th>
+<th align="left">Pred. ↓</th>
+<th align="left">Track. ↓</th>
+<th align="left">Diversity ↓</th>
+<th align="left">SBD ↓</th>
+<th align="left">Total ↓</th>
+<th align="left">Speed</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">HCLSM (no SBD)</td>
+<td align="left">0.002</td>
+<td align="left">0.001</td>
+<td align="left">0.154</td>
+<td align="left">—</td>
+<td align="left">0.100</td>
+<td align="left">2.3 sps</td>
+</tr>
+<tr>
+<td align="left">HCLSM (two-stage)</td>
+<td align="left">0.008</td>
+<td align="left">0.016</td>
+<td align="left">0.132</td>
+<td align="left">0.008</td>
+<td align="left">0.262</td>
+<td align="left">2.9 sps</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表3</strong>：在PushT上的训练结果（68M参数，50K步）。两阶段训练（TS）包含了空间广播解码器。Pred.=预测损失，Track.=跟踪损失，Diversity=多样性损失，SBD=空间广播解码器损失，Total=总损失，Speed=每秒步数。</p>
+</blockquote>
+<p>不使用SBD时，模型获得了更低的预测损失（0.002），因为所有32个槽以分布式方式编码场景，为动态模型提供了更简单的预测目标。使用两阶段协议后，预测损失更高（0.008），但SBD重建损失达到了0.008，表明单个槽已学会重建特定的空间区域。多样性损失也更低（0.132 vs 0.154），证实槽更具区分性。</p>
+<p><strong>空间分解</strong>：<br><img src="https://arxiv.org/html/2603.29090v1/2603.29090v1/fig_decomposition.png" alt="空间分解结果"></p>
+<blockquote>
+<p><strong>图2</strong>：空间广播解码器输出。顶行：每个槽的alpha热图（所有权概率）。底行：槽在输入帧上的叠加。左图：分割图（槽的argmax）。不同颜色表示不同槽的分配，显示了正在出现的空间分解。</p>
+</blockquote>
+<p>图2显示了两阶段训练后空间广播解码器的alpha掩码。分割图（左下）揭示了不同的槽占据了PushT场景的不同空间区域。虽然分解尚不干净（对于3个物体的场景使用32个槽过多；每个物体被分割到约10个槽中），但这种空间结构代表了模型中物体感知表示的首次出现。没有SBD的先前运行结果显示所有槽的注意力均匀，没有空间结构。</p>
+<p><strong>事件检测</strong>：<br><img src="https://arxiv.org/html/2603.29090v1/2603.29090v1/fig_events.png" alt="事件检测结果"></p>
+<blockquote>
+<p><strong>图3</strong>：跨四个episode的事件检测。蓝色=随时间变化的事件概率。红色虚线=检测到的事件边界。模型学会在状态转换时刻（每个episode 2-3次）触发事件。</p>
+</blockquote>
+<p>图3显示了学习到的事件检测器在PushT episode的状态转换处触发。检测器在每个16帧序列中识别出2-3个事件，对应于显著状态变化的时刻（例如机器人末端执行器与T形块接触）。事件检测通过一个对比信号进行训练，该信号奖励事件概率与实际状态变化幅度之间的对齐。</p>
+<p><strong>潜在动态</strong>：<br><img src="https://arxiv.org/html/2603.29090v1/2603.29090v1/fig_trajectories.png" alt="潜在动态轨迹"></p>
+<blockquote>
+<p><strong>图4</strong>：通过PCA投影到2D的槽状态轨迹（最佳运行中解释了57%的方差，两阶段运行中解释了33.5%）。圆圈=起点，方块=终点。不同颜色=不同槽。轨迹显示了结构化的时间演化，在事件边界处偶有方向变化。轨迹的 spread 表明不同的槽跟踪了场景动态的不同方面。</p>
+</blockquote>
+<p>图4可视化了通过PCA投影到2D的槽状态轨迹。轨迹显示了结构化的时间演化：槽遵循平滑路径，在事件边界处偶尔改变方向。轨迹的 spread 表明不同的槽跟踪了场景动态的不同方面。</p>
+<p><strong>工程实现与性能</strong>：论文实现了用于选择性SSM扫描的自定义Triton内核，在NVIDIA T4上相比顺序PyTorch实现实现了高达 <code>38x</code> 的加速（见表2），将每物体时间预测从主要瓶颈降至前向传播时间的5%。整个系统包含8,478行Python代码，51个模块，171个单元测试。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1. <strong>提出了一种统一架构</strong>：首次在单一可微分模型中整合了物体槽、三层时间层次（SSM + 稀疏Transformer + 目标Transformer）和基于GNN的因果交互。2. <strong>设计了两阶段训练协议</strong>：通过先进行仅重建训练（Stage 1）强制槽 specialization，再进行完整动态预测（Stage 2），解决了物体中心表示学习中结构学习与预测优化之间的冲突。3. <strong>提供了高效、完整的实现</strong>：包括自定义的Triton SSM内核（38倍加速）、bf16数值稳定性解决方案、GPU原生的槽跟踪以及内存高效的GNN，并在真实机器人数据（Open X-Embodiment）上进行了验证。</p>
+<p>论文也明确指出了当前工作的局限性：1. <strong>槽数量固定</strong>：所有32个槽在整个训练中保持存活，未能动态调整数量，导致每个物体被多个槽分割而非单个槽对应。2. <strong>因果发现未经验证</strong>：显式的因果邻接矩阵在稀疏正则化下学习不到边（所有权重坍缩为零），GNN边权重提供的隐式交互结构是否对应真实因果关系尚未验证。3. <strong>规模有限</strong>：仅训练了Small配置（68M）在单个机器人数据集上，更大的配置（262M, 3B）因bf16梯度问题未能成功训练，且训练运行对随机种子敏感（40-60%会因梯度溢出而发散）。</p>
+<p>这些局限性和论文开源的完整代码库为后续研究指明了方向：1. 集成自适应槽数量或去重机制（如MetaSlot）。2. 在已知因果结构的环境中评估和提升因果发现模块。3. 利用预训练视觉骨干（如V-JEPA 2）初始化、在更多样化的多物体数据上训练，并解决大规模训练时的数值稳定性问题，以 scaling 模型能力。4. 将世界模型与规划器（如CEM/MPPI）结合，实现闭环机器人控制。这项工作为构建结构化的、可解释的世界模型奠定了重要的基础。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有世界模型潜在表示扁平、对象纠缠、缺乏因果与多尺度时间结构的问题，提出HCLSM。其核心技术包括：基于Slot Attention的对象中心分解、结合选择性状态空间模型（连续物理）、稀疏Transformer（离散事件）与压缩Transformer（抽象目标）的三层次时序动力学引擎，以及基于图神经网络的因果结构学习。在PushT机器人操作基准上，68M参数模型实现了0.008的下一状态预测MSE损失，空间分解损失为0.0075，并通过定制Triton内核获得了38倍的推理加速。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.29090" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

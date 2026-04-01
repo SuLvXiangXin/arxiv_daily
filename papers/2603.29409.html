@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>CLaD: Planning with Grounded Foresight via Cross-Modal Latent Dynamics - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>CLaD: Planning with Grounded Foresight via Cross-Modal Latent Dynamics</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2603.29409" target="_blank" rel="noreferrer">2603.29409</a></span>
+        <span>作者: Sung-Eui Yoon Team</span>
+        <span>日期: 2026-03-31</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作涉及本体感觉（如关节角度）和语义（如视觉场景）两种状态的转变，它们通过底层的动作天然耦合。然而，现有的规划方法通常在单一的语义空间或潜在空间中进行，缺乏对这些跨模态状态转变的显式对齐。语义推理方法（如基于文本推理或图像生成）在规划过程中需要迭代生成语义产物（如子目标图像），计算开销大。而潜在空间规划方法虽然高效，但学习的潜在表征隐式地混合了语义和运动学信息，缺乏确保不同模态在状态转移过程中保持一致性的显式机制，可能导致规划出的轨迹在物理或逻辑上不一致。</p>
+<p>本文针对跨模态状态转移未对齐这一具体痛点，提出了从学习<strong>静态状态</strong>之间的相关性转向学习<strong>动态转移</strong>之间的相关性的新视角。其核心思路是：通过一种非对称的交叉注意力机制，让本体感觉的状态转移作为查询去“理解”语义状态的转移，从而建模两者在动作下的联合演化关系，并基于此预测一个“基于地接的潜在远见”，用以指导一个扩散策略生成动作。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>CLaD采用两阶段框架。第一阶段，从语义和本体感觉的转移中捕获跨模态动力学，并学习基于地接的潜在远见。第二阶段，通过基于观测的FiLM调制，用预测的远见来条件化一个扩散策略。</p>
+<p><img src="https://arxiv.org/html/2603.29409v1/2603.29409v1/figure/CLaD_method.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：CLaD的两阶段框架。左侧（阶段1）：语义状态和本体感觉状态分别编码后，输入到模态特定的交叉注意力模块中提取转移表示。通过非对称交叉注意力（本体感觉转移查询语义转移）得到共享的动力学表示，轻量级MLP据此预测未来的潜在远见。这些预测通过EMA目标编码器和辅助重建解码器进行监督。右侧（阶段2）：预测的潜在远见通过FiLM层与当前观测进行自适应调制，其结果作为条件输入扩散策略以生成动作序列。</p>
+</blockquote>
+<p><strong>阶段一：跨模态潜在动力学与基于地接的潜在远见</strong></p>
+<ol>
+<li><strong>转移嵌入</strong>：在时间步t，编码当前的本体感觉状态p^t和语义状态s^t（s^t由冻结的预训练VLM提取的视觉-语言嵌入经FiLM层融合得到）。为了学习跨模态转移关系，为每个模态提取转移表示：通过交叉注意力模块，以当前状态为查询，以过去τ步的状态和动作序列为键和值，得到z_p和z_s。在训练中，会随机用可学习令牌替换动作令牌，以鼓励模型从状态差异中推断转移，提高鲁棒性。</li>
+<li><strong>学习跨模态动力学</strong>：核心创新是使用<strong>非对称交叉注意力</strong>，其中本体感觉转移z_p作为查询，语义转移z_s作为键和值（公式9：z_{p→s} = CrossAttn(z_p， z_s)）。这使得模型能够通过机器人的运动学上下文来解释场景级别的语义变化。随后，通过一个可学习的池化操作将z_{p→s}压缩为紧凑的共享动力学表示z_dyn。</li>
+<li><strong>学习基于地接的潜在远见</strong>：使用轻量级MLP解码器从z_dyn预测未来τ步的潜在远见z^{t+τ}（包含z_p^{t+τ}和z_s^{t+τ}）。为防止表征坍塌，采用自监督学习策略：使用EMA（指数移动平均）更新的目标编码器为未来的真实状态生成稳定的目标嵌入z̄^{t+τ}。潜在预测损失L_latent使用L2归一化后嵌入的MSE损失，将表征约束在单位超球面上。同时，引入<strong>辅助重建损失</strong>L_recon，强制预测的潜在远见能通过轻量解码器重建出原始的未来状态（本体感觉和视觉语义）。总损失L = L_latent + λ_recon * L_recon (λ_recon=0.1)。通过EMA目标（关联观测的未来状态）和重建损失（关联可观测的原始状态）这两种机制，确保了预测的“潜在远见”是基于真实世界状态“地接”的，而非任意抽象。</li>
+</ol>
+<p><strong>阶段二：由潜在远见引导的扩散策略</strong><br>标准的扩散策略基于当前观测生成动作。CLaD扩展了此框架，使其额外条件于预测的潜在远见z^{t+τ}。首先，使用FiLM层将每个远见嵌入（z_p^{t+τ}， z_s^{t+τ}）分别用对应的当前观测（o_p^t， o_s^t）进行调制，使远见锚定在当前上下文中，得到g_p和g_s。然后，扩散策略的噪声预测网络ε_θ以加噪的动作序列、扩散步长k以及调制后的远见g_p， g_s为条件进行训练（公式22）。在推理时，策略基于当前观测和预测的远见，通过反向扩散过程生成动作序列。</p>
+<p><strong>创新点</strong>：与现有方法相比，CLaD的创新主要体现在：1) <strong>建模对象</strong>：从对齐静态跨模态状态转向对齐动态跨模态转移；2) <strong>机制设计</strong>：提出非对称交叉注意力（本体查询语义）来提取跨模态动力学；3) <strong>学习目标</strong>：通过EMA目标编码器和辅助重建损失的组合，确保预测的潜在远见是“基于地接”的，兼具语义结构性和对可观测量的对应性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在LIBERO-LONG基准上进行评估，该基准包含10个厨房和桌面环境下的长视界操作任务，每个任务需要2-3个顺序子任务。模型总参数量为0.66B（VLM: 0.1B， CLaD动力学：0.33B， 策略：0.23B）。对比基线包括：生成语义子目标图像的SuSIE、预测未来视觉状态的Seer、进行潜在空间反向规划的LBP、大型开源VLA模型OpenVLA (7B)，以及大规模预训练模型π0和π0.5。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="性能对比表"></p>
+<blockquote>
+<p><strong>表1</strong>：LIBERO-LONG基准上的性能对比。CLaD以显著更少的参数（0.66B）取得了与大型基线模型（OpenVLA: 7B， π0.5: 3.3B）相竞争的平均成功率（94.7%）。在参数量相近的方法中，CLaD显著优于SuSIE和Seer。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：CLaD取得了94.7%的平均成功率，超越了OpenVLA (93.8%， 7B) 和 π0.5 (93.2%， 3.3B)，而参数量仅为0.66B。与参数量级相近的方法相比，CLaD显著优于SuSIE (76.3%， 0.86B) 和 Seer (87.7%， 0.32B)。LBP (88.6%， 0.19B) 在部分任务（如任务9）上表现下降明显，而CLaD表现更稳定，表明显式的跨模态动力学有助于解决感知模糊性。</p>
+<p><img src="https://arxiv.org/html/2603.29409v1/2603.29409v1/figure/CLaD_mode_dropout.png" alt="模态丢弃消融实验"></p>
+<blockquote>
+<p><strong>图3</strong>：模态丢弃消融实验。当在训练或测试时随机丢弃语义或本体感觉模态时，性能均大幅下降（分别降至<del>40%和</del>60%），证明了联合使用双模态进行基于地接的预测对于鲁棒规划是必要的。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2603.29409v1/2603.29409v1/figure/CLaD_umap.png" alt="潜在空间可视化"></p>
+<blockquote>
+<p><strong>图4</strong>：潜在远见空间的UMAP可视化。不同任务（颜色）的潜在远见形成了分离的簇，并且同一任务内，随着时间步推进（标记深浅），轨迹从初始状态（浅色）平滑移动到目标状态（深色），表明学习到的远见具有任务区分性和时间一致性。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：</p>
+<ol>
+<li><strong>跨模态注意力设计</strong>：非对称注意力（本体查询语义）的性能优于对称注意力或单一模态注意力，验证了其作为提取任务相关动力学有效归纳偏置的作用。</li>
+<li><strong>双模态输入必要性</strong>：图3所示实验表明，移除任一模态都会导致性能严重下降，证明联合的、基于地接的预测对鲁棒规划至关重要。</li>
+<li><strong>基于地接机制</strong>：消去EMA目标或辅助重建损失都会导致性能下降，尤其是去掉重建损失会损害任务4（涉及精确对齐）的性能，说明“基于地接”对保持物理一致性很重要。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2603.29409v1/2603.29409v1/figure/CLaD_task1-1.png" alt="任务执行定性结果"></p>
+<blockquote>
+<p><strong>图9-18</strong>（选取代表）：在多个LIBERO-LONG任务上的定性执行序列。例如，任务1“将汤和酱料放入篮子”中，机器人成功识别并依次操作两个目标物体，展示了方法处理长视界、多对象任务的能力。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>跨模态潜在动力学模型</strong>：提出了一个通过非对称交叉注意力学习本体感觉与语义状态转移间联合演化的动力学模型，将一致性约束从静态状态提升到动态转移层面。</li>
+<li><strong>基于地接的潜在远见</strong>：设计了一个两阶段训练框架，通过结合EMA目标编码器和辅助重建损失的自监督目标，预测基于可观测状态“地接”的紧凑未来潜在状态，作为扩散策略的隐式子目标。</li>
+<li><strong>参数高效的规划</strong>：在LIBERO-LONG基准上，以显著更少的参数（0.66B）达到了与数十亿参数大型VLA模型相竞争的性能，证明了在紧凑潜在空间中进行基于地接的前瞻能够实现高效且可扩展的机器人规划。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>依赖于一个预训练的视觉语言模型（VLM）来提供初始的语义状态表示。</li>
+<li>潜在空间的规划牺牲了部分可解释性，与生成显式语义产物（如图像）的方法相比，中间过程更不透明。</li>
+</ol>
+<p><strong>启示</strong>：<br>CLaD为机器人规划提供了一种兼顾效率与性能的新范式。它表明，显式地建模和利用跨模态动态关联，而非简单混合多模态信息，可以更高效地捕获任务本质，实现可靠的长期规划。这启发后续研究进一步探索更精细的跨模态交互机制，以及如何将这种基于地接的潜在规划范式扩展到更复杂的多任务、少样本学习场景中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>这篇论文提出CLaD框架，旨在解决机器人操作中本体感觉状态（如关节角度）与语义视觉状态在动作执行过程中的**耦合转换对齐**问题。其核心技术是**跨模态潜在动力学**，通过**非对称交叉注意力**机制，让本体感觉转换查询语义转换，从而联合建模两种状态的演化。该方法采用两阶段训练，结合EMA目标编码器与辅助重建损失，学习**接地的潜在前瞻**，并用于调制扩散策略。在LIBERO-LONG基准测试中，CLaD取得了**94.7%的成功率**，性能与参数庞大的视觉语言动作模型相当，但自身参数显著减少。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2603.29409" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
