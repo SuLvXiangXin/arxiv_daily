@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>How to Train your Tactile Model: Tactile Perception with Multi-fingered Robot Hands - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>How to Train your Tactile Model: Tactile Perception with Multi-fingered Robot Hands</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.00744" target="_blank" rel="noreferrer">2604.00744</a></span>
+        <span>作者: Efi Psomopoulou Team</span>
+        <span>日期: 2026-04-01</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于视觉的触觉传感器（如TacTip）为机器人操作提供了丰富的接触信息。从这些传感器图像中推断接触属性（如位姿和力）的主流方法是使用卷积神经网络。尽管CNN在已知传感器上表现良好，但其严重依赖局部空间层次的特征提取方式，导致其对传感器间的微小差异（如镜头特性、光照条件和传感器磨损）非常敏感。因此，每部署一个新的传感器，即使设计与之前相同，也需要收集大量该传感器特定的数据并重新训练模型，这成为多指机器人手大规模应用触觉感知的关键瓶颈。</p>
+<p>本文针对触觉模型难以泛化到新传感器这一具体痛点，提出了采用视觉Transformer（ViT）的新视角。ViT通过全局自注意力机制建模图像块间的长程依赖关系，有望学习到对传感器特定变化更鲁棒的特征表示，从而实现在未见传感器上的有效泛化。本文核心思路是提出一个名为TacViT的ViT-based触觉感知模型，通过在大规模图像数据集上预训练、并在多传感器触觉数据上微调，使其能够准确预测接触位姿和力，并显著提升对新部署传感器的零样本泛化能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>TacViT的整体框架是一个基于预训练Vision Transformer的回归模型，其输入是单张触觉图像，输出是预测的接触深度（z）、两个方向的倾斜角度（Rx, Ry）以及三个方向的接触力（Fx, Fy, Fz）。</p>
+<p><img src="https://arxiv.org/html/2604.00744v1/2604.00744v1/images/pipeline_1.jpg" alt="方法总览"></p>
+<blockquote>
+<p><strong>图3</strong>：TacViT整体流程。输入的触觉图像被分割为多个图像块，经线性嵌入后输入Transformer编码器。编码器提取的特征嵌入被送入一个由全连接层构成的回归头，最终输出位姿和力的预测值。</p>
+</blockquote>
+<p>模型架构分为两个主要阶段：</p>
+<ol>
+<li><strong>特征提取器</strong>：采用在ImageNet上预训练的ViT模型（具体为<code>vit-base-patch16-224</code>）。输入触觉图像（224x224分辨率）被划分为16x16的非重叠图像块，经过线性投影后，与位置编码一起输入由12层Transformer编码器组成的网络中，提取全局特征嵌入。</li>
+<li><strong>回归头</strong>：一个由4个全连接层组成的多层感知机，负责将ViT提取的特征嵌入映射为6维的连续输出值，即（z, Rx, Ry, Fx, Fy, Fz）。</li>
+</ol>
+<p>训练过程采用监督学习，使用均方误差（MSE）作为损失函数。核心创新点在于其<strong>微调策略</strong>：</p>
+<ul>
+<li><strong>LoRA微调</strong>：为提高计算效率并稳定训练，在微调ViT时采用了低秩适应（LoRA）技术。LoRA通过向Transformer的自注意力层注入可训练的低秩矩阵（WA和WB，其中秩r远小于原始维度d）来适应新任务，即 ΔW = WA * WB，而保持原始的预训练权重基本冻结。这允许模型以少量参数高效学习触觉感知任务。</li>
+<li><strong>逐步解冻</strong>：训练初期，仅训练回归头，保持ViT主干网络冻结。经过若干轮次后，再逐步解冻部分Transformer层，使其能够微调更深层的特征表示。这种策略有助于防止灾难性遗忘并稳定训练过程。</li>
+</ul>
+<p>与现有CNN方法相比，TacViT的创新点在于利用了ViT的<strong>全局自注意力机制</strong>，使其能够整合触觉图像中分散区域的信息。这对于处理不同传感器间因制造、光照等产生的图像伪影、眩光或亮度差异（如图2所示）尤为重要，从而学习到更具泛化性的特征表示，而CNN的局部感受野特性使其对这些变化更为敏感。</p>
+<p><img src="https://arxiv.org/html/2604.00744v1/2604.00744v1/x1.jpg" alt="传感器图像差异"></p>
+<blockquote>
+<p><strong>图2</strong>：来自不同传感器的触觉图像示例。即使是相同设计的TacTip传感器，采集到的触觉图像也存在明显差异，包括标记点图案、对比度和光照等。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在配备五个TacTip指尖传感器的机器人手上进行。数据收集使用UR5机械臂，让传感器以预定的位姿接触平面，共收集了5个传感器各3000张图像（总计15000张），并记录对应的6自由度位姿和接触力作为真值标签。</p>
+<p>对比的基线方法是标准的卷积神经网络（CNN）。评估设计了三个关键实验来模拟实际部署场景：</p>
+<ol>
+<li><strong>Tr1-Te1</strong>：在单个传感器数据上训练和测试，作为性能基线。</li>
+<li><strong>Tr5-Te1</strong>：在所有五个传感器数据上训练，在其中一个已见传感器上测试，评估多传感器训练对已知传感器性能的影响。</li>
+<li><strong>Tr4-TeU</strong>：在四个传感器数据上训练，在第五个未见传感器上测试，核心评估模型对新传感器的泛化能力。</li>
+</ol>
+<p>关键实验结果如下表所示，其中CNN在Tr4-TeU（泛化到新传感器）场景下性能急剧下降，而TacViT则保持了相对稳定的性能。</p>
+<p><strong>表IV: CNN与TacViT模型预测接触位姿和力的平均MAE对比</strong></p>
+<table>
+<thead>
+<tr>
+<th align="left">实验</th>
+<th align="left">模型</th>
+<th align="left">z (mm)</th>
+<th align="left">Rx (°)</th>
+<th align="left">Ry (°)</th>
+<th align="left">Fx (N)</th>
+<th align="left">Fy (N)</th>
+<th align="left">Fz (N)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">Tr1-Te1</td>
+<td align="left">CNN</td>
+<td align="left">0.1013</td>
+<td align="left">0.8548</td>
+<td align="left">0.8503</td>
+<td align="left">0.1256</td>
+<td align="left">0.1243</td>
+<td align="left">0.3832</td>
+</tr>
+<tr>
+<td align="left">Tr1-Te1</td>
+<td align="left">TacViT</td>
+<td align="left">0.0646</td>
+<td align="left">1.0320</td>
+<td align="left">0.8953</td>
+<td align="left">0.1149</td>
+<td align="left">0.1158</td>
+<td align="left">0.2846</td>
+</tr>
+<tr>
+<td align="left">Tr5-Te1</td>
+<td align="left">CNN</td>
+<td align="left">0.0823</td>
+<td align="left">0.9642</td>
+<td align="left">1.1119</td>
+<td align="left">0.1325</td>
+<td align="left">0.1303</td>
+<td align="left">0.3474</td>
+</tr>
+<tr>
+<td align="left">Tr5-Te1</td>
+<td align="left">TacViT</td>
+<td align="left">0.0625</td>
+<td align="left">1.6514</td>
+<td align="left">1.3855</td>
+<td align="left">0.1207</td>
+<td align="left">0.1065</td>
+<td align="left">0.3344</td>
+</tr>
+<tr>
+<td align="left"><strong>Tr4-TeU</strong></td>
+<td align="left"><strong>CNN</strong></td>
+<td align="left"><strong>0.2116</strong></td>
+<td align="left"><strong>5.7675</strong></td>
+<td align="left"><strong>4.6977</strong></td>
+<td align="left"><strong>0.3915</strong></td>
+<td align="left"><strong>0.4258</strong></td>
+<td align="left"><strong>0.8221</strong></td>
+</tr>
+<tr>
+<td align="left"><strong>Tr4-TeU</strong></td>
+<td align="left"><strong>TacViT</strong></td>
+<td align="left"><strong>0.0796</strong></td>
+<td align="left"><strong>2.7140</strong></td>
+<td align="left"><strong>1.8330</strong></td>
+<td align="left"><strong>0.1846</strong></td>
+<td align="left"><strong>0.1649</strong></td>
+<td align="left"><strong>0.4338</strong></td>
+</tr>
+</tbody></table>
+<p>具体而言，在Tr4-TeU实验中，CNN预测角度（Rx, Ry）的平均MAE比基线（Tr1-Te1）高出一个数量级，而TacViT的误差增长则小得多。例如，对于Rx，CNN的MAE从0.85°激增至5.77°，而TacViT仅从1.03°增至2.71°。</p>
+<p><img src="https://arxiv.org/html/2604.00744v1/2604.00744v1/images/strip_new.png" alt="MAE分布图"></p>
+<blockquote>
+<p><strong>图4</strong>：三个实验中TacViT和CNN预测位姿和力MAE的分布条形图。每个点代表一种训练组合下的模型。在Tr4-TeU（泛化）实验中，CNN的MAE值显著增大且分布分散，而TacViT的MAE仅小幅增加且保持集中，表明其泛化性能更优、更稳定。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.00744v1/2604.00744v1/images/scatter_new.png" alt="预测值与真值散点图"></p>
+<blockquote>
+<p><strong>图5</strong>：各实验下TacViT与CNN预测值与真值的散点图对比。在Tr4-TeU实验中，CNN的预测变得非常嘈杂且范围错误（如z值预测起点错误），而TacViT仅表现出轻微的噪声增加，预测范围正确，显示出对新传感器数据更强的鲁棒性。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li><strong>提出了TacViT模型</strong>：首次将视觉Transformer成功应用于基于视觉的触觉感知任务，为触觉特征学习提供了一个基于全局注意力机制的新框架。</li>
+<li><strong>实现了对新传感器的零样本泛化</strong>：通过实验证明，TacViT能够在不重新训练的情况下，在未见过的触觉传感器上保持较高的预测精度和一致性，显著优于传统CNN方法。</li>
+<li><strong>推动了触觉感知的可扩展部署</strong>：该方法减少了对传感器特定数据收集和模型重新训练的依赖，为多指机器人手上快速部署和更换触觉传感器提供了可行的解决方案。</li>
+</ol>
+<p>论文也指出了自身的局限性：ViT通常需要大规模数据集才能充分发挥其自注意力机制的优势。本研究利用了在ImageNet上预训练的ViT，并在相对较小的触觉数据集上微调取得了良好效果。若要进一步提升性能，可能需要从头开始在超大规模触觉图像数据集上进行训练，但这将消耗大量资源。</p>
+<p>此项研究对后续工作的启示包括：探索针对触觉先验知识（如对称性、表面拓扑）定制的ViT架构设计；将TacViT框架推广到其他类型的视觉触觉传感器，以验证其更广泛的适用性；以及研究如何进一步减少对预训练的依赖，或开发更高效的触觉特定预训练策略。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对多指机器人手触觉感知中，传统CNN方法因传感器差异（镜头特性、光照、磨损）需重复收集数据与训练的问题，提出基于视觉变换器（ViT）的TacViT模型。该模型利用全局自注意力机制提取触觉图像特征，提升对未见过传感器的泛化能力。实验表明，TacViT在五指机器人手触觉传感器上相比CNN具有更优的跨传感器泛化性能，显著减少新传感器部署所需的数据收集与训练成本。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.00744" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
