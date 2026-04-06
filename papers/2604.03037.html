@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>ARM: Advantage Reward Modeling for Long-Horizon Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>ARM: Advantage Reward Modeling for Long-Horizon Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.03037" target="_blank" rel="noreferrer">2604.03037</a></span>
+        <span>作者: Hua Chen Team</span>
+        <span>日期: 2026-04-03</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于视觉-语言-动作（VLA）模型的机器人操作主要依赖模仿学习，这需要大规模、高质量的数据集，收集成本高昂。强化学习（RL）为超越演示数据的策略优化提供了可能，但其在长视野任务中的有效性依赖于高质量的奖励信号。稀疏奖励（如二元成功信号）难以提供有效的学习信号，而密集奖励（如进度奖励）虽然能提供持续监督，但其设计和获取成本构成了“奖励工程瓶颈”。现有方法（如SARM、ReWiND）通常依赖于对任务进度进行绝对量化，并假设进度随时间单调递增。这种范式存在关键局限性：1）零样本VLM标注成本高、不可靠，且缺乏空间几何基础，导致奖励信号非单调振荡；2）单调性假设无法刻画现实中常见的回溯、纠错等非单调行为；3）依赖粗略的子任务划分，难以捕捉长视野任务中关键的、细微的阶段性内过渡。</p>
+<p>本文针对上述痛点，提出了从难以量化的绝对进度建模转向估计相对优势的新视角。其核心思路是，通过一个轻量级的三态（前进、倒退、停滞）标注策略来训练一个优势奖励模型（ARM），该模型能够从轨迹片段中估计相对进度增益，进而自动化地重建全局一致的密集进度信号，最后通过优势加权行为克隆（AW-BC）算法优化策略，过滤次优样本。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架包含三个协同组件：（A）优势奖励模型（ARM），（B）全局进度重建，（C）通过AW-BC进行策略优化。</p>
+<p><img src="https://arxiv.org/html/2604.03037v1/2604.03037v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：方法整体框架。左侧（A）为优势奖励模型（ARM），包含基于MIMO的时序Transformer，由三态标注监督；中间（B）为自动化全局进度重建流程；右侧（C）为优势加权行为克隆（AW-BC）算法，利用重建的进度信号进行策略优化。</p>
+</blockquote>
+<p><strong>核心模块1：优势奖励模型（ARM）</strong><br>ARM旨在解决单帧感知的模糊性，将奖励估计范式从绝对进度回归转变为相对优势分类。与传统的“多输入单输出”（MISO）模型不同，ARM采用“多输入多输出”（MIMO）架构进行序列学习。</p>
+<p><img src="https://arxiv.org/html/2604.03037v1/2604.03037v1/x2.png" alt="MISO与MIMO架构对比"></p>
+<blockquote>
+<p><strong>图2</strong>：MISO与MIMO架构对比。MISO将时序上下文压缩为单个标量，而MIMO能够并行输出序列中每个时间步的优势预测。</p>
+</blockquote>
+<ul>
+<li><strong>MIMO Transformer架构</strong>：模型以SARM中的Transformer时序聚合器为骨干，重构为支持多帧因果推理。它并行处理一个因果窗口 $\mathcal{W}<em>{t}={o</em>{t-4k},\dots,o_{t}}$ 内的历史观测序列。对于每个时间步，模型融合三种信号：基于CLIP的视觉特征 $v_i$、机器人本体感知状态 $s_i$ 和任务指令 $g$。它们通过MLP投影到统一的潜在空间并相加，得到融合嵌入 $x_i$。序列 ${x_i}$ 经过一个8层Transformer编码器，得到富含时序信息的隐状态 ${h_i}$。</li>
+<li><strong>双头学习目标</strong>：1) <strong>多帧优势分类头</strong>：推断连续隐状态 $(h_i, h_{i+1})$ 之间的优势转移 $\Delta\hat{y}$，使用标准交叉熵损失 $\mathcal{L}<em>{\text{int}}$ 进行优化，监督信号为三态标签。2) <strong>任务完成预测头</strong>：预测当前观测 $s_t$ 构成成功终止状态的概率 $C$，使用Focal Loss $\mathcal{L}</em>{succ}$ 优化以解决类别不平衡问题。总损失为 $\mathcal{L}<em>{ARM}=\lambda</em>{int}\mathcal{L}<em>{int}+\lambda</em>{succ}\mathcal{L}_{succ}$。这种联合训练使模型不仅能重建连续进度曲线，还能准确识别倒退行为和关键的任务完成时刻。</li>
+</ul>
+<p><strong>核心模块2：轻量级三态自动标注策略</strong><br>传统方法需要为每帧视频标注一个归一化的标量进度值 $P \in [0,1]$，认知负荷高且标注者间一致性低。本文将其重新定义为相对优势的三态分类任务。</p>
+<p><img src="https://arxiv.org/html/2604.03037v1/2604.03037v1/x3.png" alt="三态标注策略图示"></p>
+<blockquote>
+<p><strong>图3</strong>：应用于演示片段的三态标注策略示意图。标注者只需判断状态对 $(s_t, s_{t+k})$ 是前进（+1）、倒退（-1）还是停滞（0）。</p>
+</blockquote>
+<p>对于任意观测对 $(s_t, s_{t+k})$，根据规则定义标签 $y \in {-1, 0, +1}$：+1（前进）：状态有效向任务目标推进；-1（倒退）：状态偏离目标、遇到错误或导致失败；0（停滞）：没有实质性进展，对应于等待或空闲行为。这种简化范式可用于高效冷启动模型，随后训练好的模型可对大量未标注轨迹进行推理，自动生成大规模伪标签数据。</p>
+<p><strong>核心模块3：全局进度重建</strong><br>利用MIMO架构，ARM可以分解完整的视频演示，并系统性地聚合预测结果以重建密集的全序列进度曲线。流程包括：1）<strong>并行推理效率</strong>：将长轨迹分割成独立、不重叠的段，作为并行批次一次性处理，避免滑动窗口的重叠计算。2）<strong>序列对齐与填充</strong>：对于短于窗口的末端视频段，采用尾帧复制填充策略，在最终聚合时丢弃对应填充区域的预测。3）<strong>连贯进度生成</strong>：将模型预测的相对状态转移 $\Delta\hat{y}$ 与绝对任务完成信号 $C_t$ 进行数学积分，以完成帧（$P_T=1.0$）为锚点，通过累加 $\Delta\hat{y}$ 重建前序帧的密集进度值 $P_t$。</p>
+<p><strong>核心模块4：通过AW-BC进行策略优化</strong><br>基于ARM重建的密集进度信号，提出优势加权行为克隆（AW-BC）。该框架通过基于统计的重新加权机制，优先学习高优势转移，抑制次优行为。</p>
+<ul>
+<li><strong>长度自适应增益公式</strong>：为缓解异构演示中因时长差异导致的进度梯度不一致问题，引入自适应缩放机制。对于一个时长为 $H$ 的动作块，其长度自适应增益 $\Delta G_{t}$ 定义为：$\Delta G_{t}=(P_{t+H}-P_{t})\cdot\frac{L_{\text{seq}}}{\bar{L}}$，其中 $L_{\text{seq}}$ 是当前episode的总长度，$\bar{L}$ 是整个数据集的平均episode长度。这确保了增益反映特定动作序列的相对效率。</li>
+<li><strong>统计加权与目标</strong>：将原始增益转换为稳健的训练权重。设当前批次增益 ${\Delta G_{i}}$ 的均值和标准差为 $\mu$ 和 $\sigma$，定义裁剪边界 $b_{lower}=\mu-2\sigma$ 和 $b_{upper}=\mu+2\sigma$。每个样本的重要性权重 $\tilde{w}<em>{i}$ 计算为：$\tilde{w}</em>{i}=\text{clamp}\left(\frac{\Delta G_{i}-b_{lower}}{b_{upper}-b_{lower}+\epsilon},\ 0,\ 1\right)$。最终AW-BC目标是最小化加权负对数似然：$\mathcal{L}<em>{AW-BC}(\theta)=\mathbb{E}</em>{(s,a)\sim\mathcal{D}}\left[-\tilde{w}(s,a)\log\pi_{\theta}(a|s)\right]$。</li>
+</ul>
+<p><strong>创新点</strong>：1) 提出了任务无关、低认知负荷的三态优势标注策略；2) 设计了MIMO架构的优势奖励模型，将奖励估计转为分类问题，并联合预测任务完成度；3) 提出了AW-BC算法，利用长度自适应的相对优势信号进行样本重加权，有效处理包含错误和恢复的碎片化数据。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在一个具有挑战性的长视野双手毛巾折叠任务上评估框架。任务包含8个阶段：从杂乱堆中取出毛巾、放置并铺平、执行多次纵向和横向折叠、最后将折叠好的毛巾放入目标盒中。使用AgileX ALOHA双手遥操作系统收集数据。<br><strong>数据集</strong>：构建了包含972个毛巾折叠episode（总计20小时）的数据集 $\mathcal{D}_{all}$，包括809个专家演示和163个DAgger增广的错误纠正episode。评估了三种标注范式：VLM标注（使用Qwen3-VL）、人工子任务分割、以及提出的三态标注。<br><strong>对比基线</strong>：在策略性能上对比了：1) 标准行为克隆基线（BC-Baseline）；2) 使用SARM绝对进度信号加权的奖励感知BC（RA-BC）；3) 使用ARM相对优势信号的AW-BC（本文方法）。所有策略基于GR00T-N1.5-3B模型。</p>
+<p><strong>奖励模型性能</strong>：<br>表1定量结果显示，ARM在密集进度估计的保真度（MSE: 0.0014 vs. 0.0059）和成功/失败episode识别准确率（均达到100%）上均显著优于SARM。</p>
+<p><img src="https://arxiv.org/html/2604.03037v1/2604.03037v1/x7.png" alt="奖励模型定量评估表"></p>
+<blockquote>
+<p><strong>表1</strong>：奖励模型的定量评估。ARM在MSE和成功识别准确率上均优于SARM。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.03037v1/2604.03037v1/x4.png" alt="进度重建定性对比"></p>
+<blockquote>
+<p><strong>图5</strong>：进度重建的定性对比。SARM的曲线在子任务边界处呈阶梯状，无法捕捉局部倒退；ARM则能生成平滑、高保真的进度曲线，紧密跟踪真实情况。</p>
+</blockquote>
+<p><strong>标注效率与质量</strong>：<br>表3显示，三态协议将人工标注吞吐量从基线（子任务分割）的100样本/8小时提升至250样本/8小时（2.5倍加速）。自动化三态标注管道吞吐量超过2000样本/8小时，相比人工基线加速超过20倍。</p>
+<p><img src="https://arxiv.org/html/2604.03037v1/2604.03037v1/x8.png" alt="标注效率对比表"></p>
+<blockquote>
+<p><strong>表3</strong>：标注效率对比。三态标注（人工和自动）在吞吐量上显著优于传统方法。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.03037v1/2604.03037v1/x5.png" alt="进度信号质量对比"></p>
+<blockquote>
+<p><strong>图6</strong>：进度信号质量定性对比。三态标注结合ARM能生成平滑、一致的密集进度信号，而人工分割和VLM方法产生的是存在时序错位的阶梯状曲线。</p>
+</blockquote>
+<p><strong>MIMO架构效率分析</strong>：<br>表4显示，ARM的MIMO设计推理速度达到14.1次迭代/秒，相比VLM标注（1.03 it/s）加速13.7倍，相比SARM基线（3.9 it/s）加速3.6倍。</p>
+<p><img src="https://arxiv.org/html/2604.03037v1/2604.03037v1/x6.png" alt="MIMO架构效率对比表"></p>
+<blockquote>
+<p><strong>表4</strong>：MIMO架构效率对比。ARM的MIMO设计在推理吞吐量上大幅领先。</p>
+</blockquote>
+<p><strong>下游策略性能分析</strong>：<br>表2总结了策略性能。AW-BC（GR00T+ARM）取得了99.4%的成功率、32 episodes/小时的任务吞吐量以及3.6分的折叠精度，在所有指标上显著优于标准BC（62.1%， 18 eps/hr， 2.2分）和RA-BC（78.5%， 24 eps/hr， 2.7分）。</p>
+<p><img src="https://arxiv.org/html/2604.03037v1/2604.03037v1/x9.png" alt="下游策略性能对比表"></p>
+<blockquote>
+<p><strong>表2</strong>：下游策略性能定量对比。AW-BC（ARM）在成功率、吞吐量和折叠精度上全面领先。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：实验通过对比SARM与ARM，凸显了相对优势估计和MIMO架构在奖励建模精度和鲁棒性上的贡献。通过对比不同标注策略，验证了三态标注在效率和信号质量上的优势。通过对比不同策略优化方法，证明了AW-BC利用ARM信号进行重加权的有效性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了一种轻量级、任务无关的三态优势标注策略</strong>，显著降低了人工标注的认知负荷和成本，同时确保了高标注一致性。</li>
+<li><strong>设计了优势奖励模型（ARM）</strong>，采用MIMO Transformer架构和双头学习目标，能够从简单的三态标签中自动化重建高质量、全局一致的密集进度奖励，并自然支持非单调行为建模。</li>
+<li><strong>提出了优势加权行为克隆（AW-BC）算法</strong>，通过长度自适应的相对增益和统计重加权，有效从包含错误和恢复的次优、异构数据中提取高性能策略。</li>
+</ol>
+<p><strong>局限性</strong>：论文主要在一个复杂的长视野毛巾折叠任务上验证了方法的有效性，其泛化到更广泛任务集合（尤其是非结构化的日常操作）的能力仍需进一步验证。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>标注范式的转变</strong>：从精细的绝对进度标注转向粗糙的相对优势判断，为大规模机器人学习数据标注提供了可扩展的新思路。</li>
+<li><strong>高效奖励模型设计</strong>：MIMO架构与相对优势分类的结合，为构建高效、鲁棒的密集奖励预测器提供了参考，有助于解决奖励工程瓶颈。</li>
+<li><strong>离线RL与模仿学习的结合</strong>：AW-BC展示了如何利用学得的优势信号进行离线策略改进，为从包含大量非专家数据的混合数据集中学习高性能策略提供了实用框架。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对长视野机器人操作中稀疏奖励难以提供有效学习信号的问题，提出了优势奖励建模（ARM）框架。该方法通过低成本的三态标注策略（进步、退步、停滞）训练奖励模型，并利用MIMO-based Temporal Transformer进行时序建模，以自动化生成密集奖励信号。在具有挑战性的毛巾折叠任务上，该方法实现了99.4%的成功率，相比现有VLA基线，在稳定性和数据效率上均有显著提升。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.03037" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

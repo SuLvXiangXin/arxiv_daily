@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Multi-View Video Diffusion Policy: A 3D Spatio-Temporal-Aware Video Action Model - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Multi-View Video Diffusion Policy: A 3D Spatio-Temporal-Aware Video Action Model</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.03181" target="_blank" rel="noreferrer">2604.03181</a></span>
+        <span>作者: Tieniu Tan Team</span>
+        <span>日期: 2026-04-03</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人操作策略的主流方法主要包括基于视觉-语言-动作（VLA）的模型和基于视频预测的方法。VLA模型利用在静态图像-文本对预训练的大模型，虽然展现了强大的泛化能力，但通常依赖2D视觉观测，缺乏对3D几何结构的建模，且其预训练目标并非为捕捉动态场景演变而设计，导致在数据有限时泛化能力不足。基于视频预测的方法通过预测未来视觉观察来辅助动作生成，但许多方法将视频预测与动作生成分开训练，或未能有效融入3D结构先验，限制了其数据效率和性能。</p>
+<p>本文针对现有策略普遍缺乏对环境的统一3D时空状态（即世界的底层3D结构及其随时间演变）理解这一核心痛点，提出了一个新的视角：通过将视频预训练的表示格式与动作微调对齐，来构建一个时空感知的策略。其核心思路是，利用视频基础模型，联合预测未来多视角RGB视频和表示机器人末端执行器位置的热图视频，从而同时编码3D空间结构并显式建模环境动态，最终解码出连续的动作序列。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>MV-VDP的整体框架包含三个主要组件：多视图投影模块、多视图视频扩散模型和动作解码器。其输入是彩色点云和当前机器人末端执行器位姿，输出是未来一段时间内的连续动作块（包含末端执行器位置、旋转和夹爪状态）。</p>
+<p><img src="https://arxiv.org/html/2604.03181v1/2604.03181v1/x1.png" alt="方法总览图"></p>
+<blockquote>
+<p><strong>图2</strong>：MV-VDP的pipeline概述。(a) 点云和当前末端执行器位姿被投影为空间感知的多视图RGB图像和热图，经编码后通过视频扩散模型联合预测未来的多视图RGB视频和热图视频。预测的热图被反投影以恢复3D末端执行器位置。(b) 多视图视频扩散Transformer在预训练的视频扩散主干上增加了视图注意力模块以实现跨视图交互。(c) 一个轻量级动作解码器从去噪后的视频潜变量中预测末端执行器旋转和夹爪状态。</p>
+</blockquote>
+<p><strong>1. 多视图投影模块</strong>：首先对输入点云进行裁剪，保留工作空间内的点。随后，通过正交投影将裁剪后的彩色点云和末端执行器位姿投影到三个固定视角的平面上，生成多视图RGB图像和热图。对于末端执行器位姿，其在每个视图的投影像素位置被用来生成一个截断的高斯热图（公式1, 2）。这样，机器人的状态和动作（位置）被表示为与RGB图像格式一致的热图，便于后续视频基础模型处理。</p>
+<p><strong>2. 多视图视频扩散模型</strong>：该模型基于一个50亿参数的视频基础模型Wan2.2构建。为了处理多视图输入，在每个Diffusion Transformer (DiT) 块中增加了视图注意力模块。具体而言，将多视图RGB图像和热图图像通过预训练的VAE编码器编码为潜变量，沿视图维度拼接，并进行分块和扁平化处理，形成令牌序列。通过重塑张量形状，视图注意力模块能够在每个时间步实现跨视图的显式交互。模型采用标准的去噪扩散训练目标，学习预测添加到未来帧潜变量中的噪声。总训练损失是RGB视频扩散损失和热图序列扩散损失的加权和（公式3）。</p>
+<p><strong>3. 动作解码</strong>：动作解码分为两部分。对于末端执行器<strong>位置</strong>，从预测的热图序列中提取每个时间步、每个视图的热图峰值像素位置，利用已知相机参数反投影到3D工作空间，从而得到连续的3D轨迹。对于<strong>旋转和夹爪状态</strong>，则使用去噪后的视频潜变量作为输入。首先对潜变量进行时间维度上采样，然后分别提取全局特征和以热图峰值位置为中心的区域特征，融合后通过一个轻量级四层Transformer和两个MLP头进行预测。旋转用欧拉角表示并离散化为72个区间，夹爪状态为二值变量。该模块使用交叉熵损失进行训练（公式4）。</p>
+<p><strong>创新点</strong>：与现有方法相比，MV-VDP的核心创新在于：1) <strong>表示对齐</strong>：将机器人动作（位置）表示为多视图热图视频，使其与RGB视频共享相同的表示格式，从而能够直接利用大规模预训练的视频基础模型进行联合时空建模。2) <strong>3D时空联合建模</strong>：通过多视图投影隐式编码3D空间结构，并通过视频扩散模型显式预测未来的RGB和热图演变，统一了空间感知与动态预测。3) <strong>架构设计</strong>：通过扩展视频扩散Transformer引入视图注意力，有效融合多视角信息，同时保持了预训练知识。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在仿真环境Meta-World和真实机器人平台（Franka Research 3机械臂，配备三个ZED2i相机）上进行了评估。Meta-World包含7个桌面操作任务，每个任务仅使用5条演示轨迹进行训练。真实世界评估了3个基础任务（放置狮子、推T形块、舀玉米饼）和4个泛化任务（改变背景、物体高度、光照、物体类别），每个任务使用约10条演示轨迹。</p>
+<p><strong>对比方法</strong>：</p>
+<ul>
+<li><strong>仿真对比</strong>：包括标准行为克隆方法（BC-Scratch， BC-R3M， Diffusion Policy）、基于视频预测的方法（UniPi， AVDC， Track2Act， DreamZero）。</li>
+<li><strong>真实世界对比</strong>：包括3D策略（DP3）、VLA模型（π₀.₅）、基于视频预测的联合模型（UVA）以及3D VLA模型（BridgeVLA）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>在Meta-World的7个任务上，MV-VDP在仅使用每条任务5条演示的低数据条件下，平均成功率达到了89.1%，显著优于所有基线方法（最佳基线为67.4%）。</p>
+<p><img src="https://arxiv.org/html/2604.03181v1/2604.03181v1/x3.png" alt="Meta-World实验结果表"></p>
+<blockquote>
+<p><strong>表1</strong>：在低数据条件下（每个任务5条演示）七个Meta-World任务的成功率。MV-VDP取得了最高的平均成功率，并在大多数任务上优于先前的视频预测和行为克隆基线。</p>
+</blockquote>
+<p>在真实世界实验中，MV-VDP在基础任务和未见任务上的平均成功率为57.1%，同样是所有方法中最高的。具体而言，在简单的“放置狮子”任务上达到了100%的成功率，在复杂的“推T形块”和“舀玉米饼”任务上也取得了成功。相比之下，DP3和π₀.₅几乎完全失败，UVA成功率很低，最强的基线BridgeVLA平均成功率为41.4%，但在需要连续动作规划的“推T形块”任务上失败。</p>
+<p><img src="https://arxiv.org/html/2604.03181v1/2604.03181v1/x2.png" alt="真实世界实验设置"></p>
+<blockquote>
+<p><strong>图3</strong>：真实世界实验设置和任务。使用配备三个ZED2i相机的Franka Research 3机器人评估三个操作任务，并评估在背景、物体高度、光照和物体类别变化下的泛化能力。</p>
+</blockquote>
+<p><strong>消融实验与分析</strong>：<br>论文通过一系列实验验证了核心设计选择。关键发现包括：1) <strong>数据效率</strong>：仅需10条演示轨迹即可在真实世界任务上成功学习。2) <strong>鲁棒性</strong>：MV-VDP对扩散步数、RGB损失权重λ等超参数表现出强鲁棒性。即使扩散步数降至1（此时变为类似VAE的重构模型），性能下降有限，但推理速度大幅提升。3) <strong>泛化性</strong>：在背景、物体高度、光照、物体类别变化的未见场景中，MV-VDP均表现出良好的泛化能力。4) <strong>可解释性</strong>：模型预测的未来RGB视频与执行动作后的真实结果高度一致，提供了对动作后果的可视化预览。</p>
+<p><img src="https://arxiv.org/html/2604.03181v1/2604.03181v1/x4.png" alt="消融实验图例"></p>
+<blockquote>
+<p><strong>图4</strong>：消融实验展示了MV-VDP对扩散步数（左）和RGB损失权重λ（右）的鲁棒性。即使在单步扩散下，性能依然保持较高水平。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了首个利用视频基础模型构建的3D视频-动作模型（3D VAM），通过将动作表示为多视图热图视频，创新性地对齐了视频预训练与动作微调的表示格式。</li>
+<li>设计了MV-VDP，一个能够联合建模环境空间结构和时间动态的多视图视频扩散策略，实现了数据高效、鲁棒、可泛化且可解释的机器人操作。</li>
+<li>在仿真和真实世界实验中全面验证了方法的优越性，在低数据条件下显著超越了基于视频预测、3D和VLA的先进基线。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>动作解码的精度受限于热图的分辨率（256×256），每个像素对应约4毫米，可能影响需要高精度操作的任务（如舀取任务中的轻微刮擦）。</li>
+<li>目前使用固定的投影视图，自适应选择最优投影平面是一个潜在的改进方向。</li>
+<li>模型参数量较大（视频扩散主干50亿参数），尽管使用了LoRA微调，计算成本仍是一个考量。</li>
+</ol>
+<p><strong>后续研究启示</strong>：</p>
+<ol>
+<li><strong>表示学习</strong>：证明了将动作空间嵌入到与视觉预训练一致的表示中是有效的路径，可启发其他模态（如力觉、触觉）的类似对齐研究。</li>
+<li><strong>基础模型利用</strong>：展示了利用现成视频基础模型（而非从头训练）解决机器人任务的潜力，为利用更多样化互联网规模预训练模型开辟了道路。</li>
+<li><strong>时空统一建模</strong>：将3D结构感知与显式动态预测相结合的策略框架，为开发更类人的、具备“预见”能力的机器人系统提供了新思路。未来工作可探索更高效的多视图融合机制和更精细的动作解码策略。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作策略难以统一理解环境3D时空状态的问题，提出多视图视频扩散策略MV-VDP。该方法核心是同时预测多视图热图视频和RGB视频，利用视频基础模型对齐预训练与微调的表示格式，以3D感知方式处理多视图图像，并联合建模未来RGB与热图序列。实验表明，仅需10条演示轨迹且无需额外预训练，MV-VDP在Meta-World和现实平台上均超越基于视频预测、3D及视觉-语言-动作的模型，实现数据高效、鲁棒且可泛化的操作，并预测真实未来视频，性能达到新SOTA。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.03181" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
