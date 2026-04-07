@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Drift-Based Policy Optimization: Native One-Step Policy Learning for Online Robot Control - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Drift-Based Policy Optimization: Native One-Step Policy Learning for Online Robot Control</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.03540" target="_blank" rel="noreferrer">2604.03540</a></span>
+        <span>作者: Yanyong Zhang Team</span>
+        <span>日期: 2026-04-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作任务要求策略能够处理动作的多模态性，即在给定观测下存在多种有效的动作序列。当前主流方法是多步生成策略，如扩散策略（Diffusion Policy），它们通过迭代去噪过程建模多模态动作分布，在复杂任务上表现出色。然而，这些方法在推理时需要进行数十到数百次的网络前向传播，导致高昂的延迟，这使得它们难以应用于高频闭环控制和在线强化学习。</p>
+<p>为解决这一瓶颈，近期研究探索了一步或少量步的生成策略。这些方法主要分为两类：一是基于扩散加速的方法，通过蒸馏或压缩预训练的多步模型来获得一步行为，但仍依赖于多步预训练；二是基于均值流的方法，虽无需蒸馏，但依赖额外的质量保持或校正机制来稳定严格的一步推理。这两类方法都存在权衡：前者与多步预训练绑定，后者则需要引入额外的优化约束。本文针对的核心痛点是缺乏一种“原生的一步”策略，即一步推理能力直接源于训练目标本身，而非事后加速或目标耦合。本文提出将迭代精炼过程从推理阶段转移到训练阶段，通过固定点漂移目标将修正动态内化到模型参数中，从而在设计上实现一步部署，同时保持多模态动作建模能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出了一个两阶段框架，旨在保持单步部署的同时实现在线策略改进。第一阶段，漂移策略（DBP），从离线演示中学习一个原生的一步生成策略。第二阶段，基于漂移的策略优化（DBPO），在预训练的骨干网络上添加一个兼容的随机接口，使其能够进行精确似然的策略梯度更新，同时严格保持一步部署特性。</p>
+<p><img src="https://arxiv.org/html/2604.03540v1/2604.03540v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：两阶段基于漂移的策略框架。阶段1通过训练期间的吸引-排斥精炼，离线学习一个原生的一步生成器。阶段2使用带锚点正则化的PPO对从预训练骨干网络初始化的随机行动者进行微调，而部署时仍保持一步（1-NFE）。</p>
+</blockquote>
+<p><strong>整体流程与策略设置</strong>：在每个环境步t，策略接收观测历史 <code>o_t^hist</code>，并预测一个长度为H的动作块 <code>x_t</code>。DBP使用一个条件生成器 <code>f_θ</code>，以潜在噪声 <code>z_t ~ N(0, I)</code> 和固定生成索引 <code>τ=0</code> 为输入，通过单次前向传播生成动作块 <code>x_t_hat</code>。部署时采用滚动时域控制，执行动作块中从索引 <code>T_o</code> 开始、长度为 <code>H_e</code> 的子窗口。</p>
+<p><strong>DBP核心：漂移目标</strong>：DBP通过在动作空间中构建一个漂移场来训练 <code>f_θ</code>。对于一个包含B个观测-专家动作对的小批量数据，对每个观测采样G个潜在噪声，生成G个假设动作 <code>x_i^(r)</code>。核心思想是让这些生成的假设与专家锚点进行交互，更新结合了向专家行为的“吸引”和假设之间的“排斥”。这种修正动态在训练中被吸收，部署时仅需一步。</p>
+<p>具体而言，构建一个参考池 <code>Y</code>，包含生成的假设（负参考）、可选的额外负样本以及专家正样本。计算生成样本与参考样本间的空间成对距离 <code>d_i,r,u</code> 和平均距离 <code>s_norm</code>。对于一组预定义的交互尺度 <code>R ∈ R</code>，计算对称亲和度 <code>A_i,r,u^(R)</code>。通过平衡系数 <code>α_i,r,u^(R)</code> 实现从负参考的排斥和向正参考的吸引，并强制了正负侧之间的反质量交换。聚合多尺度漂移贡献后，得到漂移场 <code>V</code>。固定点回归目标 <code>X_tilde</code> 被构造为停止梯度的生成样本与漂移场之和。DBP的损失函数是生成样本与固定点目标之间的均方误差。训练可以采用<strong>分块模式</strong>（对整个动作块应用一次漂移）或<strong>逐步模式</strong>（对每个时间步的动作切片分别应用漂移并取平均）。</p>
+<p><strong>DBPO：在线优化扩展</strong>：为了将DBP扩展到在线RL，同时满足三个要求：保持预训练的一步生成器、为PPO等算法提供精确似然、维持1-NFE部署。DBPO通过一个构建在预训练骨干网络上的最小随机适配器来实现。</p>
+<p><strong>精确似然随机行动者</strong>：DBPO使用一个可训练的主动骨干网络和一个冻结的参考骨干网络。主动骨干网络预测潜在条件块均值 <code>μ_θ(o, z)</code> 和观测特征 <code>c_θ(o)</code>。一个对角对数标准差头 <code>g_ψ</code> 被附加到观测特征上，产生 <code>log σ_ψ(o)</code>。由此定义的随机策略为 <code>π_θ,ψ(x|o, z) = N(x; μ_θ(o, z), diag(σ_ψ(o)^2))</code>。在部署时，策略采样 <code>z_t</code> 然后采样 <code>x_t</code>，并将 <code>(z_t, x_t)</code> 存入缓冲区。由于PPO在评估阶段重用存储的潜在变量 <code>z_t</code>，因此可以提供精确的条件似然。</p>
+<p><strong>在线更新与锚点正则化</strong>：在线更新仅针对实际执行的动-作前缀 <code>x_t^exec</code> 进行。其条件对数似然可通过高斯分布计算。为了在在线微调期间稳定策略并防止灾难性遗忘，引入了<strong>锚点正则化</strong>。该损失鼓励在线策略的均值输出接近冻结的参考骨干网络的输出，从而保留离线学习到的技能。结合PPO的 clipped surrogate 目标，DBPO的总优化目标为：<code>L_DBPO = L_PPO + λ_anchor * L_anchor</code>。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在模拟和真实世界环境中进行了评估。使用了Diffusion Policy的12个任务套件、Adroit和Meta-World的点云操作任务、RoboMimic和D4RL的在线RL基准。真实世界部署在一个物理UR5双臂机器人上进行。对比的基线方法包括多步扩散策略（Diffusion Policy, DP3）和一步基线（MP1, DM1, AdaFlow, FlowPolicy等）。</p>
+<p><strong>DBP vs. 多步扩散策略</strong>：在Diffusion Policy的12个任务上，DBP将家族级平均得分从0.79提升至0.83，同时将推理成本从100 NFEs降低到1，实现了100倍的加速。</p>
+<p><img src="https://arxiv.org/html/2604.03540v1/2604.03540v1/x3.png" alt="DBP性能对比"></p>
+<blockquote>
+<p><strong>图3</strong>：DBP与多步扩散策略在12个任务上的性能与推理延迟对比。DBP在平均性能上匹配或超越多步方法，同时实现极低延迟（1 NFE）。</p>
+</blockquote>
+<p><strong>DBP vs. 一步基线</strong>：在Adroit和Meta-World的点云操作任务上，DBP取得了88.4%的最先进成功率， consistently outperforming existing 1-NFE baselines。</p>
+<p><img src="https://arxiv.org/html/2604.03540v1/2604.03540v1/x4.png" alt="一步基线对比"></p>
+<blockquote>
+<p><strong>图4</strong>：DBP与一步基线在点云操作基准上的成功率对比。DBP在所有任务上均表现最佳，平均成功率达88.4%。</p>
+</blockquote>
+<p><strong>DBPO在线微调结果</strong>：在RoboMimic和D4RL环境中，DBPO能够从强的一步离线初始化开始，通过PPO微调持续提升策略性能，同时严格保持1-NFE部署。</p>
+<p><img src="https://arxiv.org/html/2604.03540v1/2604.03540v1/x5.png" alt="DBPO在线结果"></p>
+<blockquote>
+<p><strong>图5</strong>：DBPO在在线设置下的性能。左图显示在RoboMimic任务上，DBPO通过在线交互显著超越离线DBP性能。右图显示在D4RL的MuJoCo运动任务上，DBPO能有效进行在线微调。</p>
+</blockquote>
+<p><strong>消融实验</strong>：消融实验验证了多尺度交互和锚点正则化的重要性。移除多尺度交互会导致性能下降，证明了在多个空间尺度上建模吸引-排斥相互作用的好处。在线微调阶段移除锚点正则化会导致性能不稳定和下降，突显了其对于稳定优化、防止灾难性遗忘的关键作用。</p>
+<p><img src="https://arxiv.org/html/2604.03540v1/2604.03540v1/x6.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图6</strong>：消融研究。(a) 移除多尺度交互会损害DBP的离线性能。(b) 在线微调时移除锚点正则化会导致性能不稳定和下降。</p>
+</blockquote>
+<p><strong>真实世界部署</strong>：在物理UR5双臂机器人上进行“双手对齐与插入”任务，DBP实现了75%的成功率，控制频率高达105.2 Hz，验证了其在高频实时控制中的实用性。</p>
+<p><img src="https://arxiv.org/html/2604.03540v1/2604.03540v1/x1.png" alt="真实世界部署"></p>
+<blockquote>
+<p><strong>图1</strong>：生成策略范式对比。(a) 多步扩散策略依赖推理时迭代去噪。(b) 一步均值流策略通过辅助校正单步生成。(c) 漂移策略在训练期间内化吸引-排斥精炼，产生原生一步生成器。(d) 在Adroit和MetaWorld上，本文方法相比成熟的生成基线取得了最佳平均成功率和控制频率。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献有三点：1) 提出了漂移策略（DBP），一种用于机器人控制的原生一步生成策略，通过固定点漂移目标将迭代精炼从推理转移到训练，实现了设计上的一步部署并保持了多模态建模能力；2) 提出了基于漂移的策略优化（DBPO），一个建立在DBP之上的在线RL框架，通过一个最小随机接口实现了精确似然的策略梯度更新，同时不牺牲一步部署效率；3) 在模拟、真实世界以及离线和在线学习范式中进行了全面的实证验证，结果表明DBP在性能上匹配或超越多步扩散策略的同时实现了100倍的推理加速，并 consistently outperforms existing 1-NFE baselines，DBPO则能实现稳定有效的在线策略提升。</p>
+<p>论文提到的局限性包括：与某些一步基线相比，DBP的训练可能涉及更多的计算开销，因为它需要在每个训练步骤中为每个观测生成多个假设并进行成对交互。此外，在线阶段探索与利用的平衡，以及标准差头 <code>σ_ψ(o)</code> 的设计，可能影响最终性能。</p>
+<p>本文工作对后续研究的启示在于：它展示了一种“训练中心”的设计思路，将效率作为模型内在属性进行共同设计，而非事后补救。DBPO框架为将高性能生成策略与标准在线RL算法结合提供了一种兼容且高效的路径，证明了在保持部署效率的同时进行策略改进的可行性。这种原生一步生成与在线优化相结合的范式，为未来实现更高效、更强大的机器人控制策略指明了方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对多步生成策略在机器人控制中推理速度慢、不适合在线学习的问题，提出一种原生单步策略学习框架。核心方法包括：1）Drift-Based Policy (DBP)，通过固定点漂移目标在训练中内化迭代优化，设计出能建模多模态动作的单步生成骨干；2）Drift-Based Policy Optimization (DBPO)，为骨干配备随机接口以实现稳定的在线策略更新。实验表明，DBP性能匹配或优于多步扩散策略，推理速度提升达100倍，并在真实双臂机器人上实现了105.2 Hz的高频可靠控制。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.03540" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
