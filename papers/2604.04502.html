@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Veo-Act: How Far Can Frontier Video Models Advance Generalizable Robot Manipulation? - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Veo-Act: How Far Can Frontier Video Models Advance Generalizable Robot Manipulation?</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.04502" target="_blank" rel="noreferrer">2604.04502</a></span>
+        <span>作者: Jianyu Chen Team</span>
+        <span>日期: 2026-04-06</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于视觉-语言-动作（VLA）模型的通用机器人策略是机器人学习领域的主流范式。这类模型通过在预训练的大规模视觉-语言模型（VLM）基础上引入动作模态来构建，旨在将VLM中编码的丰富语义和物理知识迁移到机器人控制中。然而，这种方法面临两个关键挑战：一是收集大规模真实世界机器人数据成本高昂；二是在引入动作模态时，往往会损害预训练VLM的泛化能力，导致知识遗忘。与此同时，视频生成模型（如Veo、Sora）近年来发展迅速，展现出对物理动态的强大理解能力。一些研究开始探索基于视频模型的机器人策略，其基本范式是使用视频模型预测未来的视觉序列，再通过逆向动力学模型（IDM）将视觉轨迹转化为可执行的动作。这种范式保留了视频模型的原生输入输出接口，理论上能更好地继承其泛化能力。然而，现有工作主要基于开源视频模型，其能力远不及前沿的商业模型，且视频模型在涉及密集物理接触的交互中往往不够精确，限制了其在灵巧操作任务中的性能。</p>
+<p>本文旨在探究一个核心问题：利用当今最先进的视频生成模型（如Veo-3），在零人类示教的条件下，能在多大程度上推动通用机器人操作？本文首先验证了“Veo-3 + IDM”这种零样本方法的可行性，发现其虽然能生成大致正确的任务级轨迹，但底层控制精度不足以可靠解决大多数任务。基于此观察，本文提出了一种新的视角：将前沿视频模型作为高层运动规划器，而让VLA策略作为底层执行器，构建一个分层框架，以结合视频模型的强大泛化能力和VLA策略的精确控制能力。本文的核心思路是：利用视频模型生成高层视觉规划，通过一个多头的逆向动力学模型将其转化为动作序列并预测交互时机，在执行过程中动态地在高层规划（指令跟随）和底层VLA策略（灵巧交互）之间切换。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Veo-Act是一个分层规划与控制框架，它结合了视频生成模型（Veo-3）、一个多头的逆向动力学模型（IDM）和一个底层的VLA策略。其核心思想是：首先在图像空间合成一个视觉上合理的未来轨迹，然后通过逆向动力学将其转换为可执行的动作块用于指令跟随，最后在逐步执行该动作块的同时，监控一个学习到的门控信号，以决定何时将控制权移交给反应式的底层VLA策略进行灵巧交互。</p>
+<p><img src="https://arxiv.org/html/2604.04502v1/2604.04502v1/x2.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图3</strong>：分层规划与控制流程总览。从初始观测图像 I₀ 和语言提示开始，视频模型生成未来视觉轨迹 I<em>₀:ₙ。多头逆向动力学模型将此轨迹转换为规划的动作块 a</em>₀:ₙ₋₁ 和预测的门控序列，然后平滑器生成平滑后的动作块 ā*₀:ₙ₋₁。执行期间，控制器从队列中弹出动作以跟随规划，同时IDM的交互检测头根据当前观测实时评估门控值 Gₜ。若 Gₜ 超过阈值，控制从指令跟随阶段切换到反应式底层策略进行灵巧交互；否则继续消耗规划动作队列。系统可以切换回来并继续执行剩余规划动作以完成任务。</p>
+</blockquote>
+<p><strong>整体流程</strong>：给定初始观测图像 I₀ 和任务指令，首先查询视频生成模型（Veo-3），生成一个描绘场景预期未来演变的任务完成视频，记为帧序列 I<em>₀:ₙ。随后，多头IDM以前一帧和当前帧 (Iₜ₋₁, Iₜ) 以及可选的机器人状态 sₜ 为输入，对整个生成的帧轨迹运行逆向动力学，输出规划的动作块 a</em>₀:ₙ₋₁。同时，IDM的交互检测头会为每一对帧预测一个标量门控值 Gₜ ∈ [0,1]。在动作执行前，对预测的动作块应用时间平滑器以消除噪声和高频不可行分量，得到 ā*₀:ₙ₋₁。执行时，控制器维护一个剩余规划动作队列 𝒬。默认从指令跟随阶段开始，依次弹出并执行队列中的动作。在每一步，系统都会基于实时观测通过IDM交互检测头计算当前门控值 Gₜ。若 Gₜ 在短时间持续窗口内超过阈值 τ（如0.5），则切换到底层VLA策略进行反应式控制；否则继续消耗规划队列。当底层策略启用时，它根据当前图像和状态输出动作。系统持续在线评估 Gₜ，一旦其持续低于阈值，便切换回规划动作队列继续执行。在切换回时，系统会剪裁掉对应于门控值高于阈值的区间内的剩余规划动作，从第一个预测门控值低于阈值的片段恢复执行，以避免重复进入同一交互区域，提高稳定性。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>视频生成</strong>：使用前沿视频生成模型Veo-3，以初始观测 I₀ 和任务指令为条件，生成未来 n 帧的视觉轨迹 I*₀:ₙ，作为图像空间的高层运动先验。</li>
+<li><strong>多头逆向动力学模型（Multi-Head IDM）</strong>：这是框架的关键创新模块。它同时执行两个功能：动作预测和交互检测。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2604.04502v1/2604.04502v1/x3.png" alt="多头IDM训练流程"></p>
+<blockquote>
+<p><strong>图4</strong>：多头IDM训练流程。在仿真和真实机器人上收集帧对样本，每个样本包含连续观测 (Iₜ₋₁, Iₜ)、执行的动作 aₜ 和二元交互标签 gₜ（抓取=1，非抓取=0）。对图像序列应用观测级增强（STEM-OB）以提高鲁棒性并减少仿真到真实的差距，将增强后的帧对与状态 sₜ 输入基于DINOv3的编码器。多头IDM使用两个独立的MLP头预测动作 âₜ 和门控值 Ĝₜ ∈ [0,1]。模型使用Huber损失进行动作回归，使用二元交叉熵损失进行交互检测，以联合损失 ℒ = λ_act ℒ_act(aₜ, âₜ) + λ_gate ℒ_gate(gₜ, Ĝₜ) 进行端到端训练。</p>
+</blockquote>
+<pre><code>*   **架构**：使用DINOv3作为视觉编码器，因其具有空间理解能力，适合精确定位。模型包含两个独立的MLP头：动作头输出机器人动作 aₜ，交互检测头输出标量门控值 Gₜ。
+*   **训练数据与损失**：模型在包含30万帧对的仿真数据集上训练，数据来自穿插了抓取和释放动作的随机运动轨迹。动作头使用Huber损失进行监督，以稳健地回归机器人位姿；交互检测头使用二元交叉熵损失进行监督，以有效分类切换触发（抓取步骤标记为1，非抓取标记为0）。总损失为二者的加权和：ℒ = λ_act ℒ_act(aₜ, âₜ) + λ_gate ℒ_gate(gₜ, Ĝₜ)。为提升泛化能力，还额外使用了10万仿真随机运动样本和15万真实世界样本进行训练，并对所有轨迹应用了STEM-OB观测级噪声增强。
+</code></pre>
+<ol start="3">
+<li><strong>动作平滑</strong>：对IDM预测的原始动作块 a<em>₀:ₙ₋₁ 进行平滑处理，生成 ā</em>₀:ₙ₋₁，可通过移动平均滤波、样条插值等实现，以去除噪声并确保动作可行性。</li>
+<li><strong>底层VLA策略</strong>：作为低层执行器，本文使用 π_0.5 作为底层策略。当系统切换到交互阶段时，该策略根据当前图像 Iₜ 和状态 sₜ 输出反应式动作 aₜ = π_VLA(aₜ | Iₜ, sₜ)。</li>
+</ol>
+<p><strong>与现有方法的创新点</strong>：</p>
+<ol>
+<li><strong>分层协同</strong>：不同于单纯使用“视频预测+IDM”或纯VLA策略，本文提出了一个动态分层框架。视频模型（Veo-3）负责高层、长视野的语义规划和轨迹生成，保留了其强大的世界模型和泛化能力；而VLA策略则专注于需要精确接触和反馈的低层、短视野灵巧操作。</li>
+<li><strong>学习型交互检测器</strong>：通过多头IDM中的交互检测头，系统能够根据实时观测自动、智能地判断何时应在“指令跟随”（执行规划）和“灵巧交互”（调用底层策略）之间切换。这避免了手工设计切换规则，使系统能更好地适应视频模型预测的不完美。</li>
+<li><strong>规划恢复机制</strong>：在从底层交互切换回高层规划时，系统会基于预测的门控序列剪裁已执行或不适用的规划部分，直接从合适的片段恢复，提高了在非完美视频预测下的执行稳定性和任务完成率。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>平台</strong>：使用配备12自由度灵巧手和两个RGB相机（全局视角相机和腕部相机）的7自由度机械臂。在IsaacLab中构建了高保真仿真环境以进行大规模评估。</li>
+<li><strong>数据集</strong>：为训练多头IDM，在仿真中收集了30万帧对样本，并额外使用10万仿真随机样本和15万真实样本进行增强。</li>
+<li><strong>Baseline方法</strong>：主要对比了当前先进的VLA策略 π_0.5，以及在仿真中对比了视频规划方法VPP。</li>
+<li><strong>评估场景</strong>：设计了三种在仿真和真实世界中容易导致VLA基线指令跟随失败的混淆场景进行压力测试：<ol>
+<li><strong>腕部相机不可见</strong>：目标物体在腕部相机视野外。</li>
+<li><strong>相似物体干扰</strong>：场景中存在与目标物体颜色形状相似的干扰物。</li>
+<li><strong>途经交互</strong>：在通往目标的路径上放置一个不相似的干扰物，可能引发意外接触。</li>
+</ol>
+</li>
+</ul>
+<p><strong>评估指标</strong>：</p>
+<ol>
+<li><strong>指令跟随成功率</strong>：衡量机械手末端是否成功接近指定目标物体表面（距离小于阈值 τ_ins）。</li>
+<li><strong>整体任务成功率</strong>：衡量完整的抓取-放置任务是否成功完成（物体被放置到目标容器内且静止）。</li>
+</ol>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2604.04502v1/2604.04502v1/x4.png" alt="仿真成功率"></p>
+<blockquote>
+<p><strong>图5</strong>：仿真成功率对比图。黄色条为指令跟随成功率，绿色条为整体任务成功率。C-b：基线在控制条件下的表现；E-b：基线在实验条件下的表现；C-v：Veo-Act在控制条件下的表现；E-v：Veo-Act在实验条件下的表现。该图直观展示了Veo-Act在具有挑战性的实验条件下相对于基线的显著优势。</p>
+</blockquote>
+<p>表I和上图展示了主要结果。在仿真中，三种混淆场景均有效暴露了基线VLA策略的失败模式。在“控制条件”（无混淆）下，Veo-Act与基线性能相当甚至略有优势；而在“实验条件”（有混淆）下，Veo-Act显著优于基线。例如，在“途经交互”场景中，基线的指令跟随成功率从控制条件的0.37骤降至实验条件的0.03，整体成功率从0.33降至0.00；而Veo-Act则将指令跟随成功率保持在0.93（控制条件）和0.50（实验条件），整体成功率保持在0.87和0.47。在真实机器人实验中，Veo-Act同样展现出强大的鲁棒性。在“相似物体干扰”、“途经交互”和“更丰富语义”三个场景下，Veo-Act的指令跟随成功率分别达到0.94、0.92和0.95，整体成功率分别达到0.75、0.85和0.79，远高于基线的0.56/0.50、0.23/0.15和0.21/0.11。</p>
+<p><strong>消融实验分析</strong>：<br>论文还对比了Veo-Act框架的两种简化变体：</p>
+<ol>
+<li><strong>纯IDM执行</strong>：仅使用视频规划+IDM，不进行切换。该方法在简单任务上可行，但缺乏接触交互的精度，在复杂任务上失败率高。</li>
+<li><strong>同步控制</strong>：规划块始终控制手臂位姿，底层策略始终控制手部动作，无离散切换。该方法在某些任务上有效，但不如动态切换的Veo-Act灵活和鲁棒。</li>
+</ol>
+<p>消融实验结果表明，完整的、带有动态切换机制的Veo-Act框架取得了最佳性能，验证了其分层设计和学习型交互检测器的有效性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>系统性地评估了前沿视频模型在机器人操作中的潜力与局限</strong>：首次在零示教设定下，深入探究了如Veo-3这样的顶级视频生成模型对于通用机器人操作的可行性，明确了其能生成合理高层轨迹但缺乏低层控制精度的关键发现。</li>
+<li><strong>提出了一个新颖的分层操作框架Veo-Act</strong>：创造性地将视频模型作为高层规划器，VLA策略作为底层执行器，并通过一个端到端训练的多头逆向动力学模型实现两者间的动态、智能切换，有效结合了视频模型的强泛化能力和VLA策略的精确控制能力。</li>
+<li><strong>在仿真和真实世界灵巧操作任务上实现了显著性能提升</strong>：实验表明，Veo-Act能够显著缓解VLA策略在视角遮挡、视觉模糊和意外干扰等挑战下的失败，将基线策略的平均成功率从45%提升至80%。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li><strong>视频模型的固有缺陷</strong>：框架的性能仍然受限于底层视频生成模型的质量，特别是在涉及复杂接触和精细物理交互的场景中，视频预测可能不准确。</li>
+<li><strong>对高质量视频模型的依赖</strong>：该方法依赖于像Veo-3这样的前沿商业视频模型，其可访问性和可复现性可能受限。</li>
+<li><strong>切换机制的延迟</strong>：学习到的交互检测器可能存在切换延迟，可能影响在快速动态交互中的表现。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>探索更高效的视频模型利用方式</strong>：本文证明了视频模型作为高层规划器的巨大价值。未来研究可以探索如何更高效地提取和利用视频模型中的物理和语义先验，例如通过其内部表征或轻量级微调。</li>
+<li><strong>改进视频模型与机器人的接口</strong>：可以研究如何设计更好的“视频到动作”映射机制，超越当前的IDM，或许可以结合更复杂的轨迹优化或基于模型的强化学习。</li>
+<li><strong>开发更鲁棒的分层架构</strong>：可以探索更复杂的分层策略，例如多级规划、基于不确定性的切换准则，或者将视频预测与在线重规划相结合，以应对动态变化的环境。</li>
+<li><strong>推动开源视频世界模型的发展</strong>：为了促进该方向的研究，社区需要推动开源、高性能的视频预测或世界模型的发展，使其具备与商业模型相媲美的物理理解能力。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文探索前沿视频生成模型（如Veo-3）如何提升机器人操作的泛化能力。核心方法包括：零样本框架“Veo-3+IDM”，其中Veo-3预测未来图像序列，逆动力学模型（IDM）从随机数据训练以恢复动作；针对低层控制精度不足，提出分层框架Veo-Act，用Veo-3作为高层运动规划器，VLA策略作为低层执行器。实验表明，Veo-3+IDM能生成大致正确的任务级轨迹，但低层控制可靠性不足；Veo-Act则显著提升了先进VLA策略的指令跟随性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.04502" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
