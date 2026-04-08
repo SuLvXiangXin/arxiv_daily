@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>A1: A Fully Transparent Open-Source, Adaptive and Efficient Truncated Vision-Language-Action Model - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>A1: A Fully Transparent Open-Source, Adaptive and Efficient Truncated Vision-Language-Action Model</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.05672" target="_blank" rel="noreferrer">2604.05672</a></span>
+        <span>作者: Xiaodan Liang Team</span>
+        <span>日期: 2026-04-07</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）模型已成为开放世界机器人操作的主流范式，其通常采用大型视觉语言模型（VLM）作为主干以获取丰富的语义和功能先验，并配以基于扩散或流匹配的迭代去噪动作头来生成连续动作。然而，这种强大性能伴随着高昂的部署成本：数十亿参数规模的VLM主干和需要10-20步迭代去噪的动作头，在消费级硬件上会产生高延迟和高计算开销，难以实现实时控制。现有的一些效率优化工作（如量化、稀疏化、早期退出）主要针对VLM主干，而迭代动作头的计算开销往往未被触及，成为新的瓶颈。</p>
+<p>本文针对VLA模型端到端推理延迟高、计算成本大的具体痛点，提出了一个全新的视角：仅在动作发生变化时才投入计算资源。其核心思路是通过一个预算感知的自适应推理方案，联合加速VLM主干和动作头，具体包括利用中间层动作一致性触发早期终止以减少主干计算，并提出层间截断流匹配技术来大幅减少有效去噪迭代步数，从而实现低延迟、高效率的推理，同时不牺牲操作成功率。</p>
+<h2 id="方法详解">方法详解</h2>
+<p><img src="https://arxiv.org/html/2604.05672v1/2604.05672v1/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图1</strong>：A1模型整体框架。模型由VLM主干和动作头组成。VLM主干提供语义丰富且具备功能先验的表征。动作头有两种实现形式：流匹配头（FM）和MLP头。为了降低端到端推理延迟，引入了预算感知的加速方案，该方案与两种动作头设计兼容，可联合减少主干计算和动作头迭代。</p>
+</blockquote>
+<p>A1的整体框架如图1所示，包含一个VLM主干和一个动作头。主干权重初始化为开源模型Molmo，以获得强大的视觉语义理解和隐含的功能先验。动作头提供了两种实现：一种是基于流匹配（Flow Matching, FM）的A1-FM，能有效建模高维动作分布；另一种是基于MLP的A1-MLP，通过L1损失监督，能快速拟合任务并抑制噪声。</p>
+<p><img src="https://arxiv.org/html/2604.05672v1/2604.05672v1/x2.png" alt="训练与自适应推理流程"></p>
+<blockquote>
+<p><strong>图2</strong>：A1的训练和自适应推理流程。在训练阶段，对于VLM的每一层i，共享的动作头生成动作A_t^(i)。对于流匹配头，模型执行相同层数i来生成预测。所有层的动作同时被监督。在推理阶段，基于退出准则c自适应地激活合适规模的VLM。阈值η_i由训练集和c生成。当VLM运行到第i层时，计算当前动作与前一层的差异，并通过η_i决定是否终止。提出了层间截断流匹配来加速早期退出推理。</p>
+</blockquote>
+<p><strong>自适应推理加速</strong>是A1的核心创新，其流程如图2所示。该方法基于一个观察：中间VLM隐藏状态已编码了足够的空间和视觉特征来为动作预测提供基础，因此完整的VLM深度评估常常是不必要的。具体包含两个关键技术：</p>
+<ol>
+<li><strong>基于动作一致性的早期终止推理</strong>：在推理时，模型在VLM的中间层计算动作块A_t^(i)，并与前一层生成的动作A_t^(i-1)进行一致性测试。若差异度Δt^i = d(A_t^(i), A_t^(i-1))小于一个离线校准的层特定阈值η_i，则触发在该层提前终止，避免运行更深层。阈值η_i通过训练集上的差异度分布和预设的退出概率分布（如指数分布）进行量化校准，以确保在满足计算预算的同时维持性能。</li>
+<li><strong>层间截断流匹配</strong>：针对流匹配动作头，为了不将计算负担从VLM主干转移到迭代动作头，本文提出了该技术。具体而言，在每一层i，流匹配头仅执行少量（如δ=2）去噪步生成动作A_t^(i)，然后将当前层的最终去噪输出作为下一层去噪的初始条件（即A_t^0(i+1) = A_t^1(i)），而不是从随机噪声重新开始。这种“热启动”方式使得去噪过程可以在不同层间传播，从而在保持精度的同时，用极少的每层去噪步数实现端到端加速。</li>
+</ol>
+<p>与现有方法（如DeeR-VLA）相比，A1的创新点在于：1）不仅优化VLM主干，还联合优化了迭代动作头的效率；2）提出了层间截断流匹配技术，解决了早期退出机制中因多次调用动作头而可能引入的新开销问题。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>本文在仿真和真实机器人平台上进行了广泛评估。使用的<strong>仿真基准</strong>包括LIBERO（评估长期任务和物体目标）和VLABench（包含Toy、Fruit、Painting、Mahjong四个任务）。<strong>真实机器人实验</strong>在Franka、AgiBot、WuJie-Arm、Dobot-Arm四个不同的机械臂平台上进行。此外，还在大规模真实机器人评估基准<strong>RoboChallenge</strong>上进行了测试。</p>
+<p>对比的<strong>基线方法</strong>包括：Octo、OpenVLA、OpenVLA-OFT、CoT-VLA、MolmoAct、SmolVLA、π₀、π₀.₅。</p>
+<p><strong>关键实验结果如下：</strong></p>
+<ul>
+<li><strong>仿真性能</strong>（表1）：在LIBERO基准上，A1取得了96.6%的平均成功率，与最先进的π₀.₅（96.9%）相当，并显著优于π₀（94.2%）。在更具挑战性的VLABench上，A1以53.5%的平均成功率超越了所有基线，特别是比π₀.₅（49.5%）高出4个百分点。</li>
+<li><strong>真实世界性能</strong>（表2）：在四个机器人平台的12个任务上，A1取得了56.7%的平均成功率，优于π₀（40.8%）和π₀.₅（47.5%），展现了强大的跨平台泛化能力。</li>
+<li><strong>RoboChallenge基准</strong>：A1取得了29.00%的平均成功率，超过了π₀（28.33%）、X-VLA（21.33%）和RDT-1B（15.00%）。</li>
+<li><strong>效率提升</strong>：在LIBERO上，使用流匹配推理时，A1将每回合延迟从37.8秒降低到10.5秒，加速了约72%。同时，通过自适应早期退出，VLM主干计算量最高可减少76.6%，而性能仅有微小下降。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2604.05672v1/2604.05672v1/x3.png" alt="仿真任务定性对比"></p>
+<blockquote>
+<p><strong>图3</strong>：A1（第二行）与基线π₀.₅（第一行）在仿真任务中的执行过程对比。展示了模型在不同任务步骤中的决策。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.05672v1/2604.05672v1/x4.png" alt="真实世界任务成功案例"></p>
+<blockquote>
+<p><strong>图4</strong>：A1在真实世界多种操作任务上的成功案例展示。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.05672v1/2604.05672v1/x5.png" alt="消融实验：自适应推理的影响"></p>
+<blockquote>
+<p><strong>图5</strong>：消融实验展示了自适应推理（Adaptive）与固定深度推理（Fixed Depth）在成功率和计算节省（FLOPs）之间的权衡。自适应推理能在轻微性能损失下大幅节省计算。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.05672v1/2604.05672v1/x6.png" alt="消融实验：层间截断流匹配步数"></p>
+<blockquote>
+<p><strong>图6</strong>：消融实验分析了层间截断流匹配中每层去噪步数δ的影响。结果表明，即使δ=2也能保持高性能，验证了该方法的有效性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.05672v1/2604.05672v1/x7.png" alt="消融实验：不同退出准则分布"></p>
+<blockquote>
+<p><strong>图7</strong>：消融实验比较了不同退出准则分布（指数、高斯、伽马）对成功率和计算节省的影响。指数分布倾向于更早退出，在计算节省和性能间取得了良好平衡。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：</p>
+<ol>
+<li><strong>自适应推理机制</strong>：图5表明，自适应推理相比固定深度推理，能以极小的成功率下降（如&lt;1%）换取显著的计算量节省（最高达76.6%）。</li>
+<li><strong>层间截断流匹配</strong>：图6显示，将每层去噪步数δ从10减少到2，对性能影响很小，但能极大加速推理，验证了“热启动”策略的有效性。</li>
+<li><strong>退出准则分布</strong>：图7比较了不同分布，指数分布（强调早期退出）在计算节省和性能保持上取得了最佳平衡。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：</p>
+<ol>
+<li><strong>提出了一种联合加速VLA主干和动作头的预算感知自适应推理框架</strong>，通过动作一致性早期终止和创新的层间截断流匹配技术，实现了端到端推理延迟的大幅降低（高达72%）和计算开销的显著减少，而不牺牲操作性能。</li>
+<li><strong>构建了一个完全透明、开源且高效的VLA系统（A1）</strong>，发布了完整的训练栈（代码、数据、检查点、评估脚本），强调了可复现性和社区开放性。</li>
+<li><strong>通过在大规模开源机器人数据及自采数据上进行预训练，并在多个仿真与真实机器人基准上验证，取得了具有竞争力的先进性能</strong>，证明了该框架的有效性和泛化能力。</li>
+</ol>
+<p>论文自身提到的局限性包括：自适应推理的阈值校准依赖于训练数据分布；在动作快速变化的动态场景中，早期退出机制可能需要调整以避免过早终止。</p>
+<p>本文对后续研究的启示在于：为高效VLA模型的设计提供了新思路，即应协同优化整个推理流水线，而非孤立地优化单个组件。“仅在必要时计算”的原则以及“层间热启动”的技术，可被推广至其他需要迭代生成的具身AI任务中。其完全开源的承诺也为社区提供了宝贵的基准和开发基础。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作（VLA）模型在开放世界机器人操作中因大规模VLM主干和迭代式扩散/流匹配动作头导致的高延迟、高计算成本问题，提出了A1框架。其核心方法包括：1）预算感知的自适应推理方案，通过监控中间VLM层的动作一致性实现主干早期终止；2）层间截断流匹配，跨层预热去噪以减少迭代次数。实验表明，A1在保持高成功率的同时，显著降低了推理成本（流匹配推理延迟降低高达72%，主干计算减少高达76.6%），并在RoboChallenge上以29.00%的平均成功率超越多个基线模型。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.05672" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
