@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Flow Motion Policy: Manipulator Motion Planning with Flow Matching Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Flow Motion Policy: Manipulator Motion Planning with Flow Matching Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.07084" target="_blank" rel="noreferrer">2604.07084</a></span>
+        <span>作者: Minghui Zheng Team</span>
+        <span>日期: 2026-04-08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，用于机械臂的运动规划方法主要分为基于采样的规划器（SBPs）、轨迹优化方法以及开环端到端神经运动规划器。SBPs（如Bi-RRT）通过在构型空间随机采样构建树来连接起点和终点，虽然具有概率完备性且因其随机性可产生多模态路径，但其规划过程严重依赖特权碰撞检查器，而碰撞检查占用了高达90%的计算时间，成为瓶颈。轨迹优化方法（如cuRobo）虽然可通过best-of-N初始化策略并行化，但仍需碰撞检查器提供梯度和碰撞信息。近期，开环端到端神经运动规划器（如PerFACT）被提出，可直接从传感器观测生成路径，无需在规划时进行碰撞检查。然而，现有方法大多是确定性的，对于给定的规划问题仅生成单一路径，因此无法在推理时利用其开环结构进行优化（如best-of-N采样）。少数方法（如Neural MP）采用高斯混合模型（GMM）来支持多路径生成，但GMM表征规划问题内在多模态性的能力有限。</p>
+<p>本文针对现有端到端神经运动规划器无法有效进行推理时优化以提升规划成功率的问题，提出了一种新视角：利用流匹配（Flow Matching）模型的随机生成式建模能力，来捕捉运动规划数据集固有的多模态分布。核心思路是：学习一个在给定规划场景下，覆盖可行路径的条件分布，进而在推理时通过并行采样多条候选轨迹并执行轻量级的碰撞检查，选择第一条无碰撞路径执行，从而实现高效的推理时优化。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Flow Motion Policy 的整体框架是一个开环、端到端的神经运动规划器，其输入是当前时间步的规划信息（包括规划场景点云、机器人点云、当前机器人配置）以及目标配置，输出是未来一段时间内的关节构型增量序列。该方法通过自回归地预测和累加构型增量来生成完整路径。</p>
+<p><img src="https://arxiv.org/html/2604.07084v1/2604.07084v1/x1.png" alt="Flow Motion Policy架构"></p>
+<blockquote>
+<p><strong>图1</strong>：Flow Motion Policy 整体架构。左侧为规划信息编码部分，使用PointNet++处理机器人与场景点云，使用共享MLP处理当前与目标配置，并通过Transformer编码器融合。右侧为流匹配解码头，它以可学习的动作令牌和规划信息为条件，预测连续时间向量场，用于从噪声中重建动作序列。Best-of-N采样模块对一批规划好的运动进行轻量级推理时优化，输出第一条无碰撞路径。</p>
+</blockquote>
+<p>核心模块包括：</p>
+<ol>
+<li><strong>信息嵌入模块</strong>：将不同模态的规划信息编码为统一特征。当前配置 $\mathbf{q}<em>t$ 和目标配置 $\mathbf{q}</em>{goal}$ 通过一个共享的多层感知机（MLP）分别嵌入为 $\mathbf{h}<em>t$ 和 $\mathbf{h}</em>{goal}$。机器人点云 $\mathcal{P}_r$ 和场景点云 $\mathcal{P}_w$ 则通过 PointNet++ 的集合抽象层进行下采样和编码，得到特征 $\mathbf{h}<em>r$ 和 $\mathbf{h}</em>{w}$。</li>
+<li><strong>Transformer编码器</strong>：将上述四种嵌入特征（$\mathbf{h}<em>t, \mathbf{h}</em>{goal}, \mathbf{h}_r, \mathbf{h}_w$）分别与对应的可学习语义令牌相加后，作为令牌输入Transformer编码器，以融合多模态规划信息。</li>
+<li><strong>流匹配解码头（Flow Head）</strong>：这是一个MLP，它以可学习的动作令牌 $\hat{\mathbf{x}}^0 \in \mathbb{R}^H$ 和来自Transformer编码器的规划信息为条件，预测连续时间向量场 $\mathbf{v}_t$。该模块是实现生成式建模的核心。</li>
+</ol>
+<p><strong>流匹配作为运动策略</strong>：方法旨在建模条件路径分布 $p_{\theta}(\delta\mathbf{q}<em>{t:t+H-1}|\mathbf{q}</em>{t},\mathbf{q}<em>{\text{goal}},\mathcal{P})$。它采用流匹配框架，将干净数据（构型增量序列 $\mathbf{x}^0 = \delta\mathbf{q}</em>{t:t+H-1}$）与高斯噪声 $\epsilon$ 通过线性插值构建概率路径：$x^{\tau} = (1-\tau)x^{0} + \tau\epsilon, \tau \in [0,1]$。对应的条件向量场为 $u_{\tau}(x^{\tau}|x^{0}) = \epsilon - x^{0}$。模型学习一个向量场估计器 $v_{\theta}(x^{\tau}, \tau, \mathcal{O})$，通过最小化损失函数 $\mathcal{L} = \mathbb{E} \lVert v_{\theta}(x^{\tau}, \tau, \mathcal{O}) - u_{\tau}(x^{\tau}|x^{0}) \rVert^{2}$ 来匹配真实的条件向量场。推理时，通过从 $\tau=1$ 到 $\tau=0$ 积分学习到的向量场，从噪声 $\epsilon$ 中重建出动作序列 $\hat{x}^0$。</p>
+<p><strong>Best-of-N采样</strong>：这是方法实现推理时优化的关键。利用流匹配模型的随机生成能力，并行采样 $N$ 条候选轨迹 $\mathcal{Q}^* = {q_i}<em>{i=1}^N$。随后，使用一个轻量级的碰撞检查器（在仿真中使用cuRobo的批处理碰撞检查功能）并行评估所有轨迹，并选择第一条完全无碰撞的路径执行。碰撞成本函数定义为轨迹中所有构型点与障碍物距离小于安全阈值 $\delta</em>{safe}$ 的计数。</p>
+<p>与现有方法相比，创新点具体体现在：</p>
+<ol>
+<li><strong>生成式建模</strong>：首次将流匹配模型引入端到端运动规划，以学习可行的多模态路径分布，替代了传统的确定性策略或表达能力有限的GMM。</li>
+<li><strong>高效的推理时优化</strong>：利用生成式模型的特性，实现了无需在规划循环中查询碰撞检查器的、完全并行的best-of-N采样，显著提高了找到可行解的成功率。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在NVIDIA RTX 4080 GPU上进行。使用基于LLM的工作空间生成器创建大量运动规划环境，并利用cuRobo收集规划数据用于训练。评估在六个保留的测试任务上进行：TableTop, Box, Bins, Shelf, Task I, Task II, Task III。</p>
+<p><strong>对比方法</strong>：</p>
+<ul>
+<li><strong>传统采样规划器</strong>：Bi-RRT， BIT*。</li>
+<li><strong>神经启发式采样器</strong>：MPNets, SIMPNet, GAIDE。</li>
+<li><strong>端到端神经规划器</strong>：PerFACT。</li>
+<li><strong>本文方法变体</strong>：FMP-1（无推理时优化，N=1），FMP-100（使用best-of-N采样，N=100）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：主要评估指标为规划时间（T，越低越好）和成功率（S，越高越好）。</p>
+<p><img src="https://arxiv.org/html/2604.07084v1/2604.07084v1/x2.png" alt="与基准规划器的对比结果"></p>
+<blockquote>
+<p><strong>图2</strong>：Flow Motion Policy 与基准规划器在六个任务上的性能对比表（对应论文表I）。数据显示，FMP-1的规划时间（~0.16s）远低于所有其他方法，展现了其作为纯端到端规划器的极高速度。FMP-100通过best-of-N采样，在多数任务上（如TableTop, Shelf, Task III）将成功率提升至与或超过最佳传统规划器（Bi-RRT）相当的水平，同时规划时间仍远低于传统方法。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.07084v1/2604.07084v1/x3.png" alt="Best-of-N采样效果分析"></p>
+<blockquote>
+<p><strong>图3</strong>：Flow Motion Policy (FMP) 与基于GMM的Neural MP在Best-of-N采样下的性能对比。随着采样路径数N增加，两种方法的成功率均提升。在几乎所有任务上，FMP-100的成功率都显著高于GMM-100，证明了流匹配模型在建模路径多模态分布方面优于GMM。</p>
+</blockquote>
+<p><strong>消融实验</strong>：论文比较了不同策略头架构（流匹配 vs. 扩散模型）以及不同解码器架构的性能。</p>
+<p><img src="https://arxiv.org/html/2604.07084v1/2604.07084v1/x4.png" alt="策略头架构消融实验"></p>
+<blockquote>
+<p><strong>图4</strong>：策略头架构消融实验结果表（对应论文表II）。对比了流匹配策略（FMP）和扩散策略（DMP，使用DiT-Block）。结果显示，在相同采样数（N=1或100）下，FMP在大多数任务上取得了比DMP更高或相当的成功率，同时规划时间更短，验证了流匹配框架在运动规划任务中的高效性。</p>
+</blockquote>
+<p><strong>总结</strong>：实验表明，Flow Motion Policy 在纯端到端模式（FMP-1）下具有极快的规划速度（~0.16秒），但成功率有限。通过引入best-of-N采样（FMP-100），其成功率得到大幅提升，在多个复杂任务上达到或超越了传统采样规划器的水平，且规划时间仍远低于后者。与基于GMM的方法相比，FMP-100的成功率更高，证明了流匹配模型更强的多模态建模能力。与扩散模型相比，流匹配在取得相当性能的同时效率更高。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：</p>
+<ol>
+<li><strong>提出了基于流匹配的生成式运动规划策略</strong>：首次将流匹配框架应用于端到端神经运动规划，以捕捉规划问题的多模态解分布，为推理时优化奠定了基础。</li>
+<li><strong>实现了高效的推理时Best-of-N采样</strong>：利用生成式模型的特性，设计了一种轻量级并行优化流程，通过采样并筛选多条候选路径，显著提升了开环规划器的成功率，而无需在规划循环中引入昂贵的碰撞检查。</li>
+<li><strong>进行了全面的实验验证</strong>：在多个基准任务上证明，该方法（FMP-100）在成功率和规划时间上优于或媲美现有的代表性采样规划器和神经规划器，并验证了流匹配相较于GMM和扩散模型在运动规划任务上的优势。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，该方法的性能依赖于离线收集的训练数据集的质量和覆盖范围。在训练数据分布之外的、高度新颖的环境中，其泛化能力可能受限。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>在线适应与学习</strong>：可以探索结合在线学习或微调策略，使模型能够适应训练时未见的新障碍物或环境布局。</li>
+<li><strong>动态环境规划</strong>：当前方法处理静态环境。未来可扩展至动态环境，需要考虑时序观测和动态障碍物预测。</li>
+<li><strong>与其他规划范式结合</strong>：可以将Flow Motion Policy作为高质量提议分布，与基于优化的规划器（如模型预测控制）结合，在保证安全性的同时提升计算效率。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>该论文针对现有开环端到端神经运动规划方法通常只生成单一路径、且未充分利用开环结构进行推理时优化的问题，提出了一种基于流匹配模型的随机生成式运动规划方法Flow Motion Policy。该方法通过流匹配模型捕捉规划任务的多模态性，建模可行路径的分布，从而在推理时实现高效的“最佳N采样”优化，即生成多个候选路径并选择首个无碰撞解。实验表明，该方法相比主流基于采样和神经规划方法，提升了规划成功率和效率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.07084" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
