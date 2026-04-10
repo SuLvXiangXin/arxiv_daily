@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>ViVa: A Video-Generative Value Model for Robot Reinforcement Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>ViVa: A Video-Generative Value Model for Robot Reinforcement Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.08168" target="_blank" rel="noreferrer">2604.08168</a></span>
+        <span>作者: Guan Huang Team</span>
+        <span>日期: 2026-04-09</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>视觉-语言-动作模型通过大规模预训练推动了机器人操作的发展，但在部分可观测和延迟反馈的现实部署中仍面临挑战。强化学习通过价值函数评估任务进展并提供策略改进信号来应对这一挑战。然而，现有基于视觉语言模型的价值模型难以捕捉时序动态，削弱了其在长视野任务中价值估计的可靠性。这些方法通常将价值预测视为分类或时序排序问题，但其训练基于静态图像-文本数据，擅长理解语义而非建模场景随时间的演化，因此难以可靠地评估物理交互如何动态改变环境。</p>
+<p>本文洞察到价值估计本质上是一个预测未来如何展开的问题。与基于静态数据的判别式模型不同，视频生成模型明确地优化以捕捉时序演化，学习场景随交互展开的变化方式，这使其成为价值估计更自然的基础。本文提出了一种视频生成价值模型ViVa，通过重新利用预训练的视频生成器进行价值估计，将价值学习重新定义为未来预测问题。其核心思路是：以当前观测和机器人本体感知为输入，联合预测未来的本体感知状态和一个代表当前状态价值的标量，通过将价值估计建立在预测的具身动态之上，利用预训练视频生成模型的时空先验，实现价值与前瞻的固有耦合。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>ViVa的整体框架基于一个预训练的视频扩散Transformer构建，通过潜在注入扩展其输入输出模态，而无需修改核心架构。模型以当前的多视角观测图像和机器人本体感知状态为输入，联合输出未来某一时刻的本体感知状态和一个代表当前状态价值的标量。</p>
+<p><img src="https://arxiv.org/html/2604.08168v1/2604.08168v1/x1.png" alt="方法整体架构"></p>
+<blockquote>
+<p><strong>图2</strong>：ViVa的整体架构。左侧：当前机器人本体感知和标量价值通过重复填充和广播操作映射为潜在帧。右侧：注入的潜在帧形成一个统一序列，其中当前观测（空白令牌、本体感知和多视角图像）作为干净的 conditioning frames，而未来的本体感知和价值作为噪声 target frames。扩散Transformer在干净前缀的条件下对这些目标去噪，联合预测未来的具身状态和定义为归一化回报的标量价值。</p>
+</blockquote>
+<p>核心模块与技术细节如下：</p>
+<ol>
+<li><strong>潜在编码</strong>：所有模态被映射到形状为<code>(H‘， W’， C‘)</code>的潜在帧。图像使用预训练的时空VAE编码。对于低维向量（如本体感知状态<code>q_t</code>和标量价值<code>v_t</code>），设计了专门的注入过程：先将它们归一化到<code>[-1， 1]</code>，然后通过<strong>重复填充</strong>（重复元素以匹配潜在帧尺寸）嵌入本体感知状态，通过<strong>广播</strong>（将潜在帧的每个元素设置为相同的归一化值）嵌入标量价值。</li>
+<li><strong>训练与推理序列</strong>：<ul>
+<li><strong>训练时</strong>：构建一个固定长度的潜在帧序列：<code>[z_blank， z_qt， z_ot1， z_ot2， z_ot3， z_qt+K， z_vt]</code>。前五帧（空白、当前本体感知、当前图像）作为干净的 conditioning frames，后两帧（未来本体感知<code>z_qt+K</code>和价值<code>z_vt</code>）被添加随机级别的高斯噪声作为目标。去噪器<code>D_θ</code>学习从噪声目标中恢复干净目标，并以干净前缀为条件。</li>
+<li><strong>推理时</strong>：仅使用 conditioning frames 构建相同的前缀，运行反向扩散生成目标帧<code>z_qt+K</code>和<code>z_vt</code>。通过平均<code>z_vt</code>的所有元素并重新缩放得到预测价值<code>v_t</code>；通过对<code>z_qt+K</code>展平、分块、平均和反缩放来恢复未来的本体感知状态<code>q_t+K</code>。</li>
+</ul>
+</li>
+<li><strong>训练目标</strong>：采用流匹配公式。对于干净的潜在帧<code>z_0</code>（本体感知或价值）和高斯噪声<code>z_1</code>，构建线性插值路径<code>z_τ = (1-τ)z_0 + τz_1</code>。模型<code>v_θ(z_τ； τ， c)</code>被训练来预测沿该路径的恒定速度<code>z_1 - z_0</code>。总体损失是未来本体感知预测损失和价值预测损失的加权和：<code>L = λ_prop * E[||v_θ(z_τ^q) - (z_1 - z_0^q)||^2] + λ_val * E[||v_θ(z_τ^v) - (z_1 - z_0^v)||^2]</code>。其中<code>λ_prop=1.0</code>， <code>λ_val=0.5</code>。</li>
+<li><strong>奖励与价值定义</strong>：每个训练片段根据最终任务结果标注二元成功标签。逐步奖励<code>r_t</code>编码了时间进程和完成状态：成功片段中，除最终成功步骤奖励为0外，其余步骤奖励为<code>1/T</code>；失败片段中，最终失败步骤奖励为1。这使得累计回报<code>G_t</code>在成功时位于<code>[0， 1)</code>，失败时位于<code>[1， 2)</code>，在任何时间阶段都确保成功与失败之间有1.0的恒定间隔，有效解决了价值估计中进度与失败之间的模糊性。<code>G_t</code>作为价值潜在<code>z_vt</code>的监督信号。</li>
+</ol>
+<p>与现有方法相比，ViVa的创新点在于：1) <strong>视角创新</strong>：将价值估计重新定义为未来预测问题，而非基于静态图像的分类或排序。2) <strong>模型创新</strong>：重新利用预训练视频生成模型作为价值函数，利用了其从大规模视频数据中学到的时空先验来建模动态演化。3) <strong>多任务学习</strong>：通过联合预测未来本体感知和价值，迫使模型内化机器人自身动力学，为价值估计提供了运动线索的补充。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在三个真实世界任务上进行：衬衫折叠、纸箱包装组装和厕纸整理。使用预训练的VLA模型π0.5和Gigabrain-0作为未经RL微调的模仿学习基线。在RECAP框架内，对比了两种变体：一种使用传统的基于VLM的价值函数，另一种使用ViVa作为价值函数。所有模型均在三个任务的混合演示数据上训练一个周期，批次大小为192，预测视野K设置为50。</p>
+<p>关键实验结果如下：在最具挑战性的纸箱组装任务中，ViVa取得了显著优势。与基于VLM的价值函数相比，ViVa将成功率从44%提升至58%，同时吞吐量（每小时成功次数）从5.1提升至6.9。在衬衫折叠和厕纸整理任务上，ViVa也取得了相当或更好的性能。</p>
+<p><img src="https://arxiv.org/html/2604.08168v1/2604.08168v1/x3.png" alt="纸箱组装任务中的价值估计"></p>
+<blockquote>
+<p><strong>图4</strong>：纸箱组装任务中的价值估计曲线对比。ViVa在机器人出现操作失误时（蓝色阴影区）能产生尖锐的价值下降，显示出其对次优动作的敏感性。而基于VLM的价值函数则单调上升，对这些错误不敏感。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.08168v1/2604.08168v1/x4.png" alt="衬衫折叠任务中的价值估计"></p>
+<blockquote>
+<p><strong>图5</strong>：衬衫折叠任务中的价值估计曲线对比。ViVa保持稳定、平滑上升的趋势，准确反映了任务进展。基于VLM的价值函数则出现剧烈波动（橙色阴影区），且在长时段内保持平坦。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.08168v1/2604.08168v1/x5.png" alt="厕纸整理任务中的价值估计"></p>
+<blockquote>
+<p><strong>图6</strong>：厕纸整理任务中的价值估计曲线对比。ViVa在关键里程碑阶段（蓝色阴影区）显示出清晰的价值上升，平滑地跟踪任务进展。基于VLM的价值函数对这些事件不敏感，且存在高频波动。</p>
+</blockquote>
+<p>消融实验方面，论文探讨了联合预测未来视觉潜在表示的影响，但发现这会降低价值估计的准确性。作者假设这是由于视觉生成（需要捕捉高维空间结构）和价值预测（结构简单得多）之间的难度不匹配所致，在联合优化中，价值目标容易受到视觉重建目标的干扰。因此，最终方法仅联合预测未来本体感知和价值。</p>
+<p>此外，ViVa在未见过的物体上展现出强大的泛化能力。例如，在纸箱组装任务中，当面对训练中未出现的新物体时，ViVa仍能保持合理的价值估计和策略性能，而基线方法则表现不佳。这突显了利用视频语料库中的时空先验进行泛化的潜力。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了价值估计本质上是一个未来预测问题的新视角，指出视频生成模型比基于静态图像的判别式VLM更适合此任务。2) 提出了ViVa模型，通过重新利用预训练视频生成器，以联合预测未来本体感知和标量价值的方式，将价值估计建立在预测的具身动态之上。3) 实验证明，将ViVa集成到RECAP框架中，能在真实世界长视野任务上显著提升策略性能，并产生更可靠、能跟踪进展和检测错误的价值信号，同时展现出对新物体的泛化能力。</p>
+<p>论文自身提到的局限性在于：ViVa没有预测未来的视觉观察，而仅预测了未来的本体感知。作者指出，未来工作可以探索包含未来视觉预测，这可能进一步提高对复杂任务和场景变化的泛化能力。</p>
+<p>本文的启示在于，为机器人价值学习开辟了一条新路径：利用生成模型（尤其是视频生成模型）的时空动态建模能力，而非仅仅依赖判别式模型。这强调了“想象未来”对于评估当前状态价值的重要性。该方法也展示了如何通过多任务学习（如联合预测状态和价值）来约束和提升模型对任务动态的理解。后续研究可以探索更复杂的未来状态预测（如完整的视觉未来），或将此思路扩展到基于模型的规划等领域。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出ViVa模型，以解决机器人强化学习中现有视觉-语言价值模型难以捕捉时序动态、导致长视野任务价值估计不可靠的问题。方法核心是复用预训练视频生成器的时空先验，以当前多视角观测和本体感知为输入，联合预测未来本体状态和一个表征任务完成进度的标量价值，从而将价值估计建立在预测的具身动态上。实验表明，ViVa在真实世界盒子组装任务中性能显著提升，并能泛化到新物体，验证了视频生成模型用于价值估计的有效性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.08168" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
