@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LAMP: Lift Image-Editing as General 3D Priors for Open-world Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>LAMP: Lift Image-Editing as General 3D Priors for Open-world Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.08475" target="_blank" rel="noreferrer">2604.08475</a></span>
+        <span>作者: Guofeng Zhang Team</span>
+        <span>日期: 2026-04-09</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>开放世界机器人操作要实现类人的泛化能力仍是一个根本性挑战。现有的基于学习的方法，包括强化学习、模仿学习和视觉-语言-动作模型，通常难以应对全新的任务和未见过的环境。另一条有前景的路线是探索能够捕捉细粒度空间和几何关系的通用表征。虽然大语言模型和视觉语言模型基于语言或标注的2D表征提供了强大的语义推理能力，但其有限的3D感知能力限制了它们在细粒度操作中的应用。现有基于LLM/VLM的方法最终依赖于语言描述的显式约束，这些约束在3D空间中本质上是稀疏和模糊的，难以表达细粒度的几何关系（如相对旋转、接触几何或交互物体间的精确对齐）。其核心局限源于语言的离散和符号性质，难以捕捉连续的3D空间交互。</p>
+<p>本文针对上述痛点，提出从图像编辑模型中提取连续、几何感知的3D空间先验。核心洞察是：图像编辑过程内在地编码了丰富的2D空间线索，将这些隐式线索提升为3D变换，可以为开放世界操作提供细粒度且精确的指导。本文的核心思路是：将操作任务重新定义为通过视觉编辑预测物体间的相对变换；利用图像编辑模型生成目标状态图像，再通过鲁棒的跨状态点云配准，从单目RGB-D观测中提取出精确的物体间SE(3)变换作为操作指导。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LAMP的整体流程是一个感知-推理-执行框架。给定初始的单目RGB-D观测和语言指令，目标是生成一个6自由度末端执行器轨迹以执行预期操作。</p>
+<p><img src="https://arxiv.org/html/2604.08475v1/2604.08475v1/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：方法整体框架。给定RGB-D观测和语言指令，图像编辑模块生成编辑后的状态图像，在推理阶段用于配准以提取物体间变换，该变换随后被转换为目标位姿用于执行。</p>
+</blockquote>
+<p><strong>1. 感知阶段：从编辑中提取空间先验</strong><br>给定当前RGB观测 <code>I_obs</code> 和任务描述 <code>L</code>，使用现代图像编辑模型生成描绘操作后目标状态的编辑图像 <code>I_edit</code>。为了恢复其几何信息，使用单目深度估计器将 <code>I_edit</code> 提升为像素对齐的点云 <code>P_edit</code>。为了避免分辨率不匹配导致的细节丢失，该方法使用LLMDet进行基于语言的定位，并使用SAM进行像素级细化，提取主动物体 <code>O_a</code> 和被动物体 <code>O_p</code> 的二进制掩码 <code>M_edit^a</code> 和 <code>M_edit^p</code>。然后裁剪并调整包含这些掩码的区域以匹配深度估计器的输入分辨率，确保精确的3D定位。</p>
+<p><strong>2. 推理阶段：跨状态点云配准</strong><br>核心目标是估计主动物体 <code>O_a</code> 的6自由度变换 <code>T_a</code>。这通过将当前观测点云与编辑状态点云进行配准来实现。</p>
+<ul>
+<li><strong>点云过滤</strong>：RGB-D传感器产生的深度不连续和模糊会导致“漂浮边缘点”伪影，影响配准精度。传统基于密度的过滤器可能失效，因为这些伪影在空间上接近有效区域。本文提出一种<strong>2D-3D融合的分层点云过滤</strong>方法。首先利用DINOv3提取2D特征，通过K-Means对具有相似外观的像素进行聚类。然后在每个聚类内部应用DBSCAN去除空间异常值（簇内过滤），再进行跨聚类的细化（簇间过滤）。这种方法抑制了边界伪影，稳定了下游配准。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2604.08475v1/2604.08475v1/x2.png" alt="分层过滤"></p>
+<blockquote>
+<p><strong>图3</strong>：2D-3D分层点云过滤示意图。(a)任务；(b)空间空间：漂浮边缘点（灰框）在空间上接近有效点（橙框）；(c)特征空间：漂浮边缘点（灰框）在特征空间上与有效点（橙框）相距甚远；(d)空间聚类在物体水平或未对齐时会失败；(e)分层过滤成功去除了漂浮边缘点并恢复了正确的空间对齐。</p>
+</blockquote>
+<ul>
+<li><strong>点云配准与对应建立</strong>：分别配准主动和被动物体的观测点云(<code>P_obs^a</code>, <code>P_obs^p</code>)到其编辑后的对应点云(<code>P_edit^a</code>, <code>P_edit^p</code>)。<ul>
+<li>对于被动物体 <code>O_p</code>，由于图像编辑对静态区域保持了视角和像素级一致性，因此建立<strong>密集的像素到像素对应</strong>：<code>C^p = {(p_i_obs, p_i_edit) | i ∈ M_obs^p ∩ M_edit^p}</code>。</li>
+<li>对于主动物体 <code>O_a</code>，其可能移动、变形或被遮挡，几何和外观一致性被破坏。因此使用DINOv3的语义特征 <code>f</code> 来提取点对应。为每个编辑点 <code>p_j_edit</code> 在 <code>P_obs^a</code> 中寻找余弦特征距离最近的邻居，并过滤掉距离超过阈值（<code>d_thr=0.3</code>）的配对。</li>
+</ul>
+</li>
+<li><strong>相对变换计算与尺度对齐</strong>：使用Umeyama算法分别估计每个物体的旋转 <code>R</code>、平移 <code>t</code> 和尺度 <code>s</code>。然而，<code>O_a</code> 和 <code>O_p</code> 可能在不同的尺度下被估计（<code>s_a ≠ s_p</code>），当转换回世界坐标系时会导致明显的偏移。为确保尺度一致，以被动物体为参考（其像素级配准提供了相对准确的尺度映射），设定 <code>s_a = s_p</code>，并在统一尺度下重新计算主动物体的旋转和平移。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2604.08475v1/2604.08475v1/x3.png" alt="尺度对齐"></p>
+<blockquote>
+<p><strong>图4</strong>：尺度对齐示意图。(a)任务“将盖子盖到支架上”的观测和编辑图像；(b)未对齐：在不同尺度下变换回世界帧时，两部分（盖子和支架）会漂移；(c)对齐后：强制执行一致尺度可在变换回世界帧时保持部分间稳定的空间关系。</p>
+</blockquote>
+<p>最终，通过公式计算观测帧中主动物体相对于被动物体的尺度无关相对变换 <code>[R_a|p^o | t_a|p^o]</code>，再通过观测到世界的变换 <code>[R_o2w | t_o2w]</code> 将其转换到世界帧，得到 <code>T_a = [R_a|p^w | t_a|p^w]</code>。</p>
+<p><strong>3. 执行阶段：编辑目标信息引导的执行</strong><br>将预测的变换转化为可执行的机器人运动。操作任务被解耦为抓取和变换两个顺序阶段。利用AnyGrasp等抓取生成器产生抓取候选，但它们是任务无关的。编辑目标提供了任务特定的空间先验来筛选可行性抓取：计算被动物体点云的凸包，对每个候选抓取 <code>G</code>，应用估计的变换 <code>T_a</code> 得到其在目标状态下的位姿，任何导致夹持器与被动物体凸包在编辑状态下发生碰撞的抓取都将被丢弃。</p>
+<p><img src="https://arxiv.org/html/2604.08475v1/2604.08475v1/x4.png" alt="编辑引导抓取"></p>
+<blockquote>
+<p><strong>图5</strong>：编辑信息引导的抓取。(a)在铅笔观测点云上由AnyGrasp生成的候选抓取（蓝色）；(b)使用编辑信息变换从候选集推导出的变换后抓取（蓝色）；(c)支架的碰撞凸包（灰色网格）；(d)过滤后的抓取：红色抓取表示与支架碰撞，绿色抓取表示有效的任务特定候选。</p>
+</blockquote>
+<p><strong>创新点</strong>：1) <strong>新视角</strong>：首次提出从图像编辑模型中提取通用、连续的3D空间先验（物体间SE(3)变换）用于操作。2) <strong>关键技术</strong>：设计了鲁棒的跨状态点云配准流程，包括2D-3D融合的分层过滤和尺度对齐，以处理真实世界的噪声和编辑引入的不一致性。3) <strong>执行集成</strong>：利用编辑目标信息进行任务感知的抓取筛选，提升了操作成功率。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在真实世界场景中进行评估，使用单视角RGB-D相机采集数据。收集的物体对涵盖了插入、覆盖、放置、组装、切割等多种操作类型。使用AR Code扫描物体网格，并利用FoundationPose从人类演示的RGB-D数据中估计真实变换。评估指标为旋转和平移的均方根误差。</p>
+<p><strong>基准方法对比</strong>：</p>
+<ul>
+<li><strong>点云配准</strong>：与Two by Two (2BY2)和AnyPlace进行对比。2BY2使用两步SE(3)位姿估计流程，AnyPlace从VLM提议位置裁剪的局部点云预测放置位姿。</li>
+<li><strong>开放世界操作</strong>：与VoxPoser、CoPa、ReKep进行对比。VoxPoser基于LLM代码生成3D动作地图，ReKep使用关系关键点，CoPa使用关键点和向量。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2604.08475v1/2604.08475v1/figures/lamp_mesh.png" alt="配准定性结果"></p>
+<blockquote>
+<p><strong>图7</strong>：跨多样操作任务的点云配准定性结果。LAMP在各种任务配置下都能一致地对齐主动和被动物体，展示了对噪声、部分真实世界点云的强大泛化能力和鲁棒性。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>点云配准精度</strong>：如表1所示，LAMP在多种任务（如盖子覆盖、吐司插入、积木组装、倒茶、抽屉打开）上均取得了比2BY2更低的平移和旋转RMSE，尽管不依赖物体网格。这表明图像编辑先验提供了强大且可迁移的空间理解。</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th align="left">任务</th>
+<th align="left">方法</th>
+<th align="left">RMSE(t) ↓</th>
+<th align="left">RMSE(R) ↓</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">盖子覆盖</td>
+<td align="left">2BY2</td>
+<td align="left">0.091</td>
+<td align="left">16.54</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">Ours</td>
+<td align="left"><strong>0.003</strong></td>
+<td align="left"><strong>8.736</strong></td>
+</tr>
+<tr>
+<td align="left">吐司插入</td>
+<td align="left">2BY2</td>
+<td align="left">0.095</td>
+<td align="left">35.12</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">Ours</td>
+<td align="left"><strong>0.015</strong></td>
+<td align="left"><strong>11.10</strong></td>
+</tr>
+<tr>
+<td align="left">积木组装</td>
+<td align="left">2BY2</td>
+<td align="left">/</td>
+<td align="left">/</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">Ours</td>
+<td align="left"><strong>0.005</strong></td>
+<td align="left"><strong>30.05</strong></td>
+</tr>
+<tr>
+<td align="left">倒茶</td>
+<td align="left">2BY2</td>
+<td align="left">/</td>
+<td align="left">/</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">Ours</td>
+<td align="left"><strong>0.014</strong></td>
+<td align="left"><strong>21.53</strong></td>
+</tr>
+<tr>
+<td align="left">抽屉打开</td>
+<td align="left">2BY2</td>
+<td align="left">/</td>
+<td align="left">/</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">Ours</td>
+<td align="left"><strong>0.017</strong></td>
+<td align="left"><strong>2.614</strong></td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表1</strong>：点云配准的定量结果。LAMP在各项任务上均取得更低的误差。</p>
+</blockquote>
+<ol start="2">
+<li><strong>开放世界操作成功率</strong>：在13个真实世界操作任务上评估，每个任务进行10次试验。如表2所示，LAMP在包含放置、插入、覆盖、倒液体、切割、组装、堆叠等任务的<strong>前10项</strong>中取得了<strong>66.0%<strong>的总成功率，显著高于VoxPoser(4.0%)、CoPa(13.0%)和ReKep(24.0%)。在</strong>后3项</strong>关节物体操作任务（抽屉开/关、烤面包机打开）中，LAMP取得了**60.0%**的成功率，也高于VoxPoser(26.7%)和CoPa(30.0%)。</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th align="left">任务</th>
+<th align="left">VoxPoser</th>
+<th align="left">CoPa</th>
+<th align="left">ReKep</th>
+<th align="left">Ours</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">鸡蛋放置</td>
+<td align="left">2/10</td>
+<td align="left">2/10</td>
+<td align="left">4/10</td>
+<td align="left"><strong>6/10</strong></td>
+</tr>
+<tr>
+<td align="left">硬币插入</td>
+<td align="left">0/10</td>
+<td align="left">0/10</td>
+<td align="left">0/10</td>
+<td align="left"><strong>5/10</strong></td>
+</tr>
+<tr>
+<td align="left">铅笔插入</td>
+<td align="left">0/10</td>
+<td align="left">4/10</td>
+<td align="left">3/10</td>
+<td align="left"><strong>7/10</strong></td>
+</tr>
+<tr>
+<td align="left">吐司插入</td>
+<td align="left">0/10</td>
+<td align="left">0/10</td>
+<td align="left">0/10</td>
+<td align="left"><strong>6/10</strong></td>
+</tr>
+<tr>
+<td align="left">盖子覆盖</td>
+<td align="left">0/10</td>
+<td align="left">3/10</td>
+<td align="left">4/10</td>
+<td align="left"><strong>8/10</strong></td>
+</tr>
+<tr>
+<td align="left">笔帽覆盖</td>
+<td align="left">0/10</td>
+<td align="left">1/10</td>
+<td align="left">2/10</td>
+<td align="left"><strong>6/10</strong></td>
+</tr>
+<tr>
+<td align="left">倒茶</td>
+<td align="left">0/10</td>
+<td align="left">1/10</td>
+<td align="left">3/10</td>
+<td align="left"><strong>6/10</strong></td>
+</tr>
+<tr>
+<td align="left">吐司切割</td>
+<td align="left">0/10</td>
+<td align="left">0/10</td>
+<td align="left">5/10</td>
+<td align="left"><strong>8/10</strong></td>
+</tr>
+<tr>
+<td align="left">积木组装</td>
+<td align="left">0/10</td>
+<td align="left">1/10</td>
+<td align="left">0/10</td>
+<td align="left"><strong>6/10</strong></td>
+</tr>
+<tr>
+<td align="left">圆环堆叠</td>
+<td align="left">2/10</td>
+<td align="left">1/10</td>
+<td align="left">3/10</td>
+<td align="left"><strong>8/10</strong></td>
+</tr>
+<tr>
+<td align="left"><strong>总计</strong></td>
+<td align="left"><strong>4.0%</strong></td>
+<td align="left"><strong>13.0%</strong></td>
+<td align="left"><strong>24.0%</strong></td>
+<td align="left"><strong>66.0%</strong></td>
+</tr>
+<tr>
+<td align="left">抽屉打开</td>
+<td align="left">2/10</td>
+<td align="left">4/10</td>
+<td align="left">/</td>
+<td align="left"><strong>6/10</strong></td>
+</tr>
+<tr>
+<td align="left">抽屉关闭</td>
+<td align="left">4/10</td>
+<td align="left">4/10</td>
+<td align="left">/</td>
+<td align="left"><strong>7/10</strong></td>
+</tr>
+<tr>
+<td align="left">烤面包机打开</td>
+<td align="left">2/10</td>
+<td align="left">1/10</td>
+<td align="left">/</td>
+<td align="left"><strong>5/10</strong></td>
+</tr>
+<tr>
+<td align="left"><strong>总计</strong></td>
+<td align="left"><strong>26.7%</strong></td>
+<td align="left"><strong>30.0%</strong></td>
+<td align="left">/</td>
+<td align="left"><strong>60.0%</strong></td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表2</strong>：13个真实世界操作任务的成功率。‘/’表示方法不适用于该任务。LAMP在各类任务上均取得显著更高的成功率。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.08475v1/2604.08475v1/x6.png" alt="表征对比"></p>
+<blockquote>
+<p><strong>图8</strong>：不同操作表征的定性比较。蓝色到橙色的箭头表示目标操作位姿。VoxPoser将操作建立在物体中心，ReKep使用关键点，CoPa使用关键点和向量，而我们的方法使用完整的3D物体间变换。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.08475v1/2604.08475v1/x7.png" alt="插入任务定性结果"></p>
+<blockquote>
+<p><strong>图9</strong>：真实世界插入任务（吐司、硬币）的定性结果。VoxPoser无法推断旋转；ReKep错误识别关键点和旋转；CoPa无法可靠捕捉向量约束；我们的方法恢复了精确的物体间3D变换。</p>
+</blockquote>
+<ol start="3">
+<li><strong>关节操作与长视野任务</strong>：如图10所示，LAMP能够处理抽屉开合等关节操作任务。如图11所示，通过将复杂任务分解为子任务并依次应用LAMP，能够完成“打开抽屉、放入吐司、关闭抽屉”这样的长视野操作序列。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2604.08475v1/2604.08475v1/x8.png" alt="关节操作"></p>
+<blockquote>
+<p><strong>图10</strong>：关节操作的定性分析。LAMP能够处理抽屉打开这类任务。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.08475v1/2604.08475v1/x9.png" alt="长视野任务"></p>
+<blockquote>
+<p><strong>图11</strong>：长视野操作任务的示例展开。右下角显示了每一步的编辑先验图像。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：论文通过消融实验验证了核心组件的贡献。结果表明，<strong>分层点云过滤</strong>显著提升了在存在深度噪声和漂浮边缘点情况下的配准鲁棒性；<strong>尺度对齐</strong>对于确保编辑状态和观测状态之间几何一致性至关重要，避免了因尺度不一致导致的执行失败；<strong>编辑引导的抓取筛选</strong>通过排除在目标状态下会导致碰撞的抓取，提高了任务执行的成功率。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了LAMP，一个将图像编辑提升为3D通用先验用于操作的新框架，能够从单视角RGB-D观测中提取精确的物体间3D变换，实现了高效的开放世界操作。</li>
+<li>深入分析了当前基于VLM/LLM的开放世界操作方法，并通过实验证明了基于图像编辑提升的3D先验在开放世界设置中具有更优的泛化性和鲁棒性。</li>
+<li>通过大量实验，展示了该方法在多样真实世界操作任务上强大的零样本泛化能力。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>依赖于图像编辑模型的质量和一致性。编辑模型可能产生不符合物理规律或存在视觉伪影的图像，这会影响后续3D提升的准确性。</li>
+<li>方法基于单视角观测，存在固有的几何模糊性。虽然通过跨状态配准部分缓解了该问题，但对于对称物体或严重遮挡的情况，仍可能估计出错误的变换。</li>
+<li>当前框架主要处理相对刚性的物体交互，对于高度可变形物体或需要复杂力控的操作，其表征能力可能有限。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>利用视觉先验</strong>：展示了如何从大规模2D视觉基础模型（如图像编辑）中挖掘并“提升”出对机器人操作有价值的3D几何与空间先验，为连接2D视觉智能与3D物理交互开辟了新路径。</li>
+<li><strong>跨模态配准</strong>：提出的跨状态点云配准方法（结合2D语义特征和3D几何）为解决非刚性、存在外观/几何变化的物体对齐问题提供了新思路。</li>
+<li><strong>迈向通用空间表征</strong>：将操作表征为物体间的SE(3)变换，是一种紧凑、几何基础且可解释的表示。未来工作可以探索如何将这种表征与更高层的任务规划或学习策略更紧密地结合，以处理更复杂的多步骤和动态场景操作。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对开放世界机器人操作中难以泛化到新任务和环境的核心问题，提出LAMP方法。该方法的关键创新在于将图像编辑中隐含的2D空间线索“提升”为通用的3D变换先验，从而得到细粒度、几何感知的表示，以指导机器人操作。实验表明，该方法能提供精确的3D变换，并在开放世界操作任务中实现了强大的零样本泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.08475" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
