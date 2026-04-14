@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AffordSim: A Scalable Data Generator and Benchmark for Affordance-Aware Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>AffordSim: A Scalable Data Generator and Benchmark for Affordance-Aware Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.11674" target="_blank" rel="noreferrer">2604.11674</a></span>
+        <span>作者: Xuguang Lan Team</span>
+        <span>日期: 2026-04-13</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>仿真数据生成已成为扩展机器人操作训练数据的主导范式，但现有仿真平台均未将物体可操作性信息整合到轨迹生成流程中。物体可操作性是指物体上用于执行特定操作的“功能区域”。当前平台主要通过两种方式处理抓取姿态估计：一是人工手动设计，这费时费力且难以扩展；二是使用通用抓取估计方法（如 AnyGrasp），这些方法仅预测物理上稳定的抓取，而不考虑任务语义，常导致功能错误的抓取（例如，需要倒水时却抓握杯身）。因此，需要精确交互特定功能区域的任务（如抓握杯柄、从杯沿倒水、将杯子挂在挂钩上）无法自动生成语义正确的轨迹。</p>
+<p>本文针对现有仿真数据生成流程缺乏可操作性感知这一关键痛点，提出了首个将开放词汇三维可操作性预测整合到机器人操作数据生成流程中的仿真框架。其核心思路是：利用可操作性预测模型（VoxAfford）在物体点云上预测任务相关的功能区域热图，并以此指导抓取姿态估计和运动规划，从而自动化、规模化地生成语义正确的操作轨迹数据。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>AffordSim 的整体框架是一个端到端的自动化数据生成流水线。给定一个自然语言任务描述（如“抓握杯柄并将其中的水倒入锅中”），系统依次执行以下步骤：1）由视觉语言模型将任务描述解析为包含物体、位姿、机器人实体和目标条件的场景配置；2）从仿真场景中捕获目标物体的点云；3）使用 VoxAfford 模型预测点云上各点针对当前任务的可操作性得分热图；4）基于可操作性热图引导抓取姿态估计，选择语义正确且运动学可行的抓取；5）利用运动规划器生成并执行轨迹，同时应用域随机化渲染观测数据。</p>
+<p><img src="https://arxiv.org/html/2604.11674v1/2604.11674v1/figures/overview.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：AffordSim 方法整体框架。给定自然语言任务描述，通过 VLM 生成仿真场景。VoxAfford 在物体点云上预测 3D 可操作性热图，指导抓取姿态估计和运动规划，生成语义正确的操作轨迹。全面的域随机化（包括基于 DA3 重建的真实背景）支持零样本模拟到真实的迁移。</p>
+</blockquote>
+<p><strong>核心模块一：可操作性感知轨迹生成</strong>。这是 AffordSim 的核心贡献。其关键在于 VoxAfford 模型，该模型通过交叉注意力将冻结的 3D VQVAE 编码器提取的多尺度几何特征注入到多模态大语言模型的输出 token 中，从而在开放词汇设置下预测空间感知的可操作性掩码。给定任务描述和物体点云，VoxAfford 输出每个点的可操作性得分 <code>a_i ∈ [0, 1]</code>。</p>
+<p>基于此，可操作性引导的抓取选择分为两步：首先，根据预测的可操作性热图识别高可操作性区域，并在其周围采样多个接近方向，生成候选抓取集 <code>𝒢</code>。其次，通过公式 <code>s_k = s_k^aff · s_k^kin</code> 对每个候选抓取 <code>𝐠_k</code> 进行评分。其中，<code>s_k^aff</code> 是抓取接触区域的平均可操作性得分，确保语义正确性；<code>s_k^kin</code> 评估给定机器人当前构型下该抓取的运动学可达性和无碰撞可行性。最终选择综合得分最高的抓取 <code>𝐠*</code>。随后，使用 GPU 加速的运动规划库 cuRobo 生成从机器人初始状态到预抓取位姿的无碰撞轨迹，并执行后续操作动作。</p>
+<p><strong>核心模块二：VLM 驱动的任务与场景生成</strong>。该系统利用 VLM 自动将自然语言任务描述转化为具体的仿真场景配置，包括所需物体及其 USD 资产路径、初始位姿、目标机器人实体以及任务特定目标条件。这消除了手动场景设计的需要，并支持四种机器人实体（Franka FR3, Panda, UR5e, Kinova）的自动运动学适配。</p>
+<p><strong>核心模块三：面向仿真到真实迁移的域随机化</strong>。为缩小视觉差异，系统沿五个轴应用域随机化：背景纹理、光照、物体纹理、物体位姿，以及<strong>基于 DA3 的高斯背景</strong>。最后一项是创新点：它使用基于 DA3 的 3D 高斯溅射从 10-20 张真实场景照片中进行重建，生成的 Gaussian 场可以从任意视角渲染出逼真的背景图像，并将其合成到仿真场景后方。这种方法保留了真实环境的视觉统计特性，而非从通用纹理分布中采样，从而显著减少了域差距。</p>
+<p><img src="https://arxiv.org/html/2604.11674v1/2604.11674v1/figures/domain_randomization.png" alt="域随机化"></p>
+<blockquote>
+<p><strong>图2</strong>：AffordSim 中的域随机化。每列展示了叠加一种随机化轴的效果：物体位姿、光照、背景纹理和图像噪声。最右侧列显示了用于随机化的示例背景纹理。三行展示了三个代表性任务。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：研究建立了一个包含 50 个任务的基准测试，涵盖 7 个操作类别（抓取、放置、堆叠、推/拉、倾倒、挂杯子、长视野复合任务）。实验平台基于 NVIDIA Isaac Sim。评估了四种模仿学习基线方法：行为克隆（BC）、扩散策略（Diffusion Policy）、ACT 和 Pi 0.5。所有策略均在每个任务由 AffordSim 生成的 300 条演示轨迹上进行训练。</p>
+<p><strong>关键实验结果</strong>：如表 1 所示，不同类别的任务性能差异显著。抓取任务成功率最高（53–93%），表明基本抓取操作已被当前方法较好解决。放置和推/拉任务成功率中等至高（3–93%）。然而，<strong>对可操作性要求高的任务性能急剧下降</strong>：向宽篮中倒水成功率可达 20–99%，但向窄杯中倒水则骤降至 1–43%；挂杯子任务成功率最高仅 47%（Pi 0.5）。这凸显了当前方法在处理依赖功能区域精确交互的任务时面临巨大挑战。Pi 0.5 平均性能最佳（61%），其次是 DP（44%）和 ACT（35%），BC（16%）显著落后。</p>
+<p><img src="https://arxiv.org/html/2604.11674v1/2604.11674v1/figures/50-Task_Gallery.png" alt="任务库"></p>
+<blockquote>
+<p><strong>图3</strong>：AffordSim 基准测试中的任务库。展示了七个操作类别的代表性任务。</p>
+</blockquote>
+<p><strong>消融实验</strong>：表 2 比较了四种抓取策略。人工指定抓取（Manual）性能最高（87%），但无法扩展。通用抓取估计（AnyGrasp）在可操作性要求高的任务上表现很差（平均 20%）。本文的 VoxAfford 引导方法（平均 61%）显著优于 AnyGrasp，证明了学习到的可操作性引导的价值。例如，在倒水任务上，VoxAfford 达到 80%（锅）和 63%（杯），而 AnyGrasp 仅为 20% 和 0%。然而，在挂杯子任务上，VoxAfford 仅达到 10–17%，原因是其训练数据缺乏“悬挂”这一特定可操作性。使用真实人工标注可操作性（Human Aff.）的“Oracle”方法达到了 92% 的平均成功率，指出了通过扩展可操作性训练集来提升性能的方向。</p>
+<p><strong>跨实体评估</strong>：AffordSim 成功为所有四种机器人实体生成了可操作性引导的轨迹，生成成功率分别为 94%（FR3）、92%（Panda）、83%（UR5e）和 95%（Kinova）。UR5e 成功率较低是由于其 6 自由度机械臂在方向敏感任务（如倒水）上的灵活性受限，而非可操作性预测失败。</p>
+<p><img src="https://arxiv.org/html/2604.11674v1/2604.11674v1/figures/cross_embodiment.png" alt="跨实体支持"></p>
+<blockquote>
+<p><strong>图4</strong>：跨实体支持。展示了四个机器人实体（Franka FR3, Franka Panda, UR5e, Kinova）执行三个代表性任务。</p>
+</blockquote>
+<p><strong>零样本仿真到真实迁移</strong>：如表 3 所示，在真实 Franka FR3 上部署仅用 AffordSim 数据训练的 Pi 0.5 策略，成功率反映了与仿真中一致的可操作性复杂度梯度：抓取 60%，放置 30%，推/拉 40%，堆叠 20%，而倒水（20%）和挂杯子（10%）仍然最具挑战性。这证实了生成数据的可迁移性以及任务难度的真实性。</p>
+<p><strong>域随机化鲁棒性</strong>：如表 4 所示，在训练中加入域随机化（DR）能显著提升策略在真实场景中的性能（Pi 0.5 平均成功率从 17% 提升至 27%）。更重要的是，经过 DR 训练的策略在背景物体和桌布改变的新场景中保持了相同的性能，证明了其对于环境扰动的鲁棒性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了 <strong>AffordSim</strong>，首个将开放词汇 3D 可操作性预测整合进机器人操作数据生成流程的仿真框架，实现了语义正确轨迹的自动化、规模化生成。2）建立了一个包含 <strong>50 个任务</strong>的大规模基准测试，系统性地揭示了当前模仿学习方法在<strong>可操作性要求高的任务</strong>（如倒水、挂杯子）上性能显著不足，指明了新的评估维度。3）通过结合 VLM 任务生成、多实体支持以及创新的基于 <strong>DA3 高斯重建的域随机化</strong>，提供了一个完整且可扩展的数据生成与评估生态系统。</p>
+<p>论文自身指出的局限性包括：1）轨迹质量依赖于 VoxAfford 的预测精度，对于新颖几何、严重遮挡或功能区域模糊的物体，预测可能失效。2）当前框架仅限于<strong>刚体操作</strong>，未涵盖可变形物体、手内操作或双手任务。3）基于 DA3 的背景重建需要针对新环境重新采集照片，限制了便携性。</p>
+<p>这项工作对后续研究的重要启示是：可操作性感知是提升机器人复杂操作能力的关键。未来的研究可以沿着以下几个方向推进：扩展可操作性预测模型对更多样化物体和交互类型的理解；将可操作性推理从抓取规划扩展到更长的操作序列和动态交互中；以及探索更轻量级、无需场景特定数据收集的仿真到真实迁移技术。AffordSim 及其基准测试为开发能够真正理解物体功能并进行精确交互的机器人策略奠定了基础。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有机器人操作仿真平台无法自动生成基于物体功能区域（affordance）的语义正确轨迹的问题，提出了AffordSim框架。其核心技术是集成开放词汇3D功能属性预测模型VoxAfford，通过多尺度几何特征增强MLLM令牌，预测点云的功能区域以引导抓取姿态估计。实验基于包含50个任务的基准测试表明，当前模仿学习方法在需功能属性的任务（如向窄容器倒水成功率1-43%，挂杯子0-47%）上仍面临巨大挑战，验证了生成数据对零样本仿真到真实迁移的有效性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.11674" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
