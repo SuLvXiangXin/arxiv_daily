@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MoRI: Mixture of RL and IL Experts for Long-Horizon Manipulation Tasks - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>MoRI: Mixture of RL and IL Experts for Long-Horizon Manipulation Tasks</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.10165" target="_blank" rel="noreferrer">2604.10165</a></span>
+        <span>作者: Lijun Zhu Team</span>
+        <span>日期: 2026-04-11</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人操作领域，强化学习（RL）和模仿学习（IL）是策略获取的两种主要范式。IL从专家演示中高效学习策略，但存在复合误差和分布偏移问题，难以满足高精度操作的要求。RL通过试错探索优化策略，具备超越演示数据的潜力，尤其擅长接触丰富的任务，但其样本效率低、收敛慢，在真实世界部署中试错成本高昂。现有混合方法（如基于IL预训练再RL微调、并行优化或残差融合）在复杂长视野任务上往往效果不佳，且计算成本高、收敛时间长（例如每任务14小时）。本文针对长视野操作任务中效率、鲁棒性与低干预需求难以兼顾的痛点，提出了一种基于专家混合（MoE）架构的新视角，通过动态调度IL和RL专家来协同工作。核心思路是利用专家动作输出的方差作为调度依据，将确定性高的粗粒度运动分配给IL专家，将不确定性高、需要探索的细粒度操作分配给RL专家，并结合离线预训练与在线微调来加速收敛、减少人工干预。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>MoRI框架旨在学习一个最优策略π*，以最大化期望累积奖励。其整体流程分为两个阶段：离线预训练和在线微调。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：MoRI框架概览。该架构在MoE系统中集成了IL和RL。在离线预训练阶段，使用演示数据初始化BC和RL专家。在线微调阶段，一个门控网络管理动作选择，同时数据路由机制支持对所有专家进行迭代策略优化。</p>
+</blockquote>
+<p><strong>第一阶段：基于优势权重的离线预训练</strong><br>此阶段使用一个包含20条轨迹的小型演示数据集𝒟_demo。目标是在避免真实世界昂贵探索的同时，初始化策略并缓解分布偏移。</p>
+<ol>
+<li><strong>BC专家</strong>：作为负责粗粒度运动的网络，其策略π_BC(a|s)通过最小化预测动作与演示动作之间的均方误差（MSE）损失进行微调（公式1）。</li>
+<li><strong>RL专家</strong>：采用优势加权行动者-评论家（AWAC）算法进行初始化，以平衡演示知识与探索能力。评论家网络通过最小化时序差分误差损失进行更新（公式2），并采用裁剪双Q学习来缓解高估偏差。行动者网络通过优势加权目标进行更新（公式3），其中优势函数A(s,a)用于加权演示数据中的动作。</li>
+<li><strong>离散BC专家</strong>：针对夹爪的离散控制（开、保持、关），引入一个交叉熵损失（公式4）来加速学习，避免了基于自举法的值函数方法收敛慢的问题。<br>此阶段MoE门控网络不参与训练，以防止对有限演示数据的过拟合。</li>
+</ol>
+<p><strong>第二阶段：基于专家混合的在线微调</strong><br>在线阶段维护三个数据集：专家演示缓冲区𝒟_demo（初始为离线数据，在线阶段加入人工干预数据）、成功缓冲区𝒟_success（存储在线成功的轨迹）、回放缓冲区𝒟_replay（存储实时交互数据）。系统通过均匀采样为各专家构建训练数据集。</p>
+<ol>
+<li><strong>专家优化</strong>：<ul>
+<li>BC与离散BC专家的损失函数与离线阶段一致，但训练数据替换为从𝒟_success和𝒟_demo均匀采样构建的𝒟_bc。</li>
+<li>RL专家采用软行动者-评论家（SAC）框架进行优化。评论家损失（公式5）用于稳定值估计。行动者损失（公式6）包含三项：最大化Q值、鼓励探索的熵正则项、以及一个关键的<strong>BC正则化项</strong>（-β‖π_θ_rl(s)-π_θ_bc(s)‖_2^2）。该正则项确保RL探索保持在BC策略的支持分布内，保障安全性并提升样本效率。</li>
+</ul>
+</li>
+<li><strong>门控网络</strong>：门控网络g_ψ(s)为每个状态s生成BC和RL专家的权重w_bc和w_rl（w_bc+w_rl=1）。其优化目标ℒ_MoE(ψ)（公式7）是一个多组件损失函数，包含：<ul>
+<li><strong>加权方差损失</strong>：w_bc·σ_bc(s) + w_rl·σ_rl(s)，其中σ为专家动作输出的方差。该损失引导门控网络将高确定性（低方差）任务分配给BC，将高不确定性（高方差）任务分配给RL。</li>
+<li><strong>专家专精损失</strong>：鼓励权重偏向0或1，促使专家专业化。</li>
+<li><strong>负载均衡损失</strong>：鼓励两个专家的平均使用率接近，防止一个专家被过度使用。</li>
+<li><strong>熵正则化</strong>：防止门控网络过早收敛。</li>
+</ul>
+</li>
+<li><strong>动作选择</strong>：采用硬选择机制。在每个时间步，比较w_bc和w_rl，选择权重更高的专家输出作为连续动作（公式8）。该连续动作与离散BC专家输出的夹爪命令a_g结合，形成最终控制指令。</li>
+</ol>
+<p><strong>核心创新点</strong>：</p>
+<ol>
+<li><strong>动态调度机制</strong>：基于专家动作方差的门控网络，实现了对IL和RL专家的自适应、硬切换调度，而非简单的加权融合。</li>
+<li><strong>离在线协同训练流程</strong>：结合小样本离线预训练与在线微调，加速收敛。</li>
+<li><strong>安全的RL探索</strong>：在RL行动者损失中引入BC正则化项，约束RL探索范围，减少不安全探索和人工干预需求。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在Franka Research 3机械臂平台上评估了四个需要粗粒度运动规划和细粒度接触控制的真实世界任务（图2）：1）将积木放入抽屉；2）将毛巾放入带盖盒子；3）插入两个插头；4）双重折叠毛巾。观测包含三路128x128RGB图像及本体感知数据。动作空间为7维（6维末端位姿增量+1维离散夹爪命令）。基线方法为ConRFT。</p>
+<p><img src="https://arxiv.org/html/2604.10165v1/2604.10165v1/x1.png" alt="实验任务"></p>
+<blockquote>
+<p><strong>图2</strong>：四个真实世界实验任务概述。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：<br>如表I所示，MoRI在平均<strong>成功率</strong>上达到97.5%，显著高于基线ConRFT的57.5%。MoRI的<strong>平均训练时间</strong>为216.3分钟，比ConRFT（273.8分钟）缩短了21.0%。在数据利用方面，MoRI回放缓冲区中演示数据占比（<strong>Demo Ratio</strong>）仅为7.0%，比ConRFT的49.6%降低了85.8%；而其中来自成功轨迹的自主成功数据占比（<strong>Auto-Success Ratio</strong>）达到78.3%，比ConRFT的37.0%提升了111.7%。</p>
+<p><img src="https://arxiv.org/html/2604.10165v1/2604.10165v1/x2.png" alt="学习曲线"></p>
+<blockquote>
+<p><strong>图3</strong>：在线训练期间的学习曲线。MoRI在成功率、干预率和回合长度上均优于ConRFT基线，收敛更快且总干预更少。</p>
+</blockquote>
+<p><strong>与子专家对比</strong>：<br>如表II所示，MoRI的平均成功率（97.5%）和平均回合步数（161.4）均优于单独的BC专家（37.5%， 206.0步）和RL专家（77.5%， 174.9步），证明了动态调度机制有效结合了二者优势。</p>
+<p><strong>专家调度行为分析</strong>：</p>
+<p><img src="https://arxiv.org/html/2604.10165v1/2604.10165v1/x3.png" alt="Q值与方差演化"></p>
+<blockquote>
+<p><strong>图4</strong>：MoRI框架内RL和BC专家的Q值与方差演化示例（抽屉任务）。在开/关抽屉等固定子任务中，BC专家方差低，常被选中；在抓取放置等对随机性敏感的任务中，RL专家凭借密集的Q值指导被更多使用。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.10165v1/2604.10165v1/x4.png" alt="RL专家调用比例"></p>
+<blockquote>
+<p><strong>图5</strong>：训练过程中RL专家选择比例的变化。随着训练进行，RL专家的调用比例从50-60%逐渐增加到70-80%，表明策略从保守模仿向探索驱动的RL平滑过渡。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>表III展示了在抽屉任务中移除BC正则化项的影响。移除后，训练时间从142分钟增加至221分钟，成功率从100%下降至70%，演示数据占比从5.5%飙升至45.4%，自主成功数据占比从85.4%骤降至41.9%。这证明了BC正则化对于维持探索安全、减少干预、提升数据效率和最终性能至关重要。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种基于专家动作方差的动态调度机制，在MoE框架内协调IL和RL专家，针对任务不同阶段的需求自适应分配控制权。</li>
+<li>设计了一个集成离线预训练与在线微调的流程，并引入BC正则化约束RL探索，显著提升了训练安全性、样本效率并减少了人工干预。</li>
+<li>在四个复杂真实世界操作任务上验证了框架的有效性，实现了高成功率（平均97.5%）、快速收敛（减少21%训练时间）和极低的人工干预需求（降低85.8%）。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，门控网络的负载均衡是基于数据集分布而非在线状态-动作分布。随着RL探索的进行，静态数据集的分布可能滞后于当前策略探索的分布，这可能会影响专家调度的最优性。此外，方法性能依赖于初始演示数据的质量。</p>
+<p><strong>启示</strong>：MoRI为异构学习范式的融合提供了一个实用框架。其基于方差的调度思想可扩展至集成更多类型的专家（如基于模型的规划器）。BC正则化项是确保真实世界RL安全探索的有效技术。未来工作可探索更智能的门控网络，使其能自适应在线分布变化，并研究如何降低对高质量演示数据的依赖。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对长时域机器人操作任务中，单一学习范式难以兼顾效率与精度的问题，提出MoRI方法。该方法核心是动态混合模仿学习（IL）与强化学习（RL）专家：依据专家动作方差进行切换，IL负责粗粒度运动，RL处理精细操作，并引入IL正则化确保安全。通过离线预训练与在线微调加速收敛。在四个复杂现实任务中，MoRI平均成功率高达97.5%，微调仅需2-5小时，相比基线RL减少85.8%的人工干预，收敛时间缩短21%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.10165" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
