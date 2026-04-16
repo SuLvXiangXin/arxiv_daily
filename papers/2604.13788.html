@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Failure Identification in Imitation Learning Via Statistical and Semantic Filtering - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Failure Identification in Imitation Learning Via Statistical and Semantic Filtering</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.13788" target="_blank" rel="noreferrer">2604.13788</a></span>
+        <span>作者: Jean-Baptiste Mouret Team</span>
+        <span>日期: 2026-04-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人模仿学习（IL）策略在受控环境中表现出色，但在实际部署中依然脆弱：硬件故障、零件缺陷、意外的人类行为等任何超出训练分布的状态都可能导致执行失败。基于视觉的异常检测（AD）方法被认为是检测这些异常失败状态的合适方案，但它们无法区分失败和良性的偏离。现有AD方法虽然能可靠地识别与正常行为的偏差，但缺乏区分无害异常和真正导致任务失败的异常的能力。本文针对这一关键痛点，提出了FIDeL，一个独立于策略的失败检测模块。其核心思路是，在传统AD模块的基础上，引入基于共形预测的时空阈值和基于视觉-语言模型（VLM）的语义过滤，形成统计与语义的双层过滤机制，以精准识别任务相关的失败。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>FIDeL的整体框架包含离线准备和在线执行两个阶段。离线阶段，利用专家演示数据构建正常行为的统计记忆库并校准检测阈值；在线阶段，对策略执行时的观察进行异常检测、阈值判断和语义过滤，最终输出失败决策。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：FIDeL框架概览。离线阶段：专家演示被编码并存储在记忆缓冲区 ℳ 中，同时使用共形预测计算决策阈值。在线阶段：1. 异常检测：计算当前观测的异常分数和热图；2. 阈值判断：若分数超过阈值，则标记为异常；3. 语义过滤：使用VLM过滤掉良性异常，仅标记威胁任务成功的失败。</p>
+</blockquote>
+<p><strong>核心模块一：记忆表示与异常检测</strong><br>首先，使用视觉编码器（如ResNet18或DINOv2）提取专家演示轨迹的块级（patch-level）特征。为降低内存开销，跨多条演示轨迹计算每个时间步、每个图像块特征的均值和标准差，构建一个统计记忆库 ℳ，用于建模正常特征分布。在线推理时，对于查询观测 O_t<em>，提取其特征 ϕ_t</em>^query。异常检测的核心是最优传输（OT）对齐。该方法不直接逐个块比较，而是寻找查询图像块特征集与记忆库中在某个时间步t的块特征集之间的全局最优匹配。计算一个成本矩阵 M_c(t)，其中每个元素是查询块特征与记忆库中t时刻对应块特征（考虑其统计分布）之间的归一化欧氏距离（即马氏距离）。通过求解熵正则化的OT问题（Sinkhorn迭代），得到最小传输成本 𝒲_t。最终的异常分数是查询特征与所有记忆时间步对齐成本的最小值：D_A = min_t 𝒲_t，同时记录下最相似的时间步 t_min。</p>
+<p><strong>核心模块二：基于空间感知共形预测的阈值判断</strong><br>直接对异常分数设置固定阈值不鲁棒。FIDeL扩展了共形预测（CP）框架，以生成同时考虑时间结构和空间（块级）变化的动态阈值。离线校准时，将用于校准的专家数据分为两个子集 ℰ_A 和 ℰ_B。首先用 ℰ_A 计算每个时间步、每个图像块的“正常”平均异常分数 μ_p^t。然后用 ℰ_B 计算相对于这些平均值的最大偏差，取其 (1-α) 分位数作为带宽 h，从而为每个块在每个时间步计算一个上界 upper_p,t = μ_p^t + ρ_p^t * h，其中 ρ_p^t 是捕捉时空变异性的调制因子。在线时，将当前观测对齐到最相似的时间步 t_min，并检查有多少比例的图像块其异常分数超过了对应的上界 upper_p*,t_min。若超过比例超过用户定义的阈值，则标记为异常。</p>
+<p><strong>核心模块三：基于VLM的语义过滤</strong><br>并非所有异常都是失败。当观测被标记为异常后，触发语义过滤。该模块将任务描述 d、参考专家帧 O(𝒳_N, t_min)、当前观测 O_t* 以及从OT成本矩阵导出的异常热图 M_c^†_p*（突出显示最可疑区域）输入给VLM（如Qwen 2.5-7B）。VLM被提示去：1. 通过比较图像和解读热图来识别异常语义；2. 将异常分类为良性（假阳性，可继续执行）或真正的失败（需中断）。这种结合了任务上下文、正常参考和定位异常线索的方式，约束了VLM的推理空间，提高了判断的可靠性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>数据集与基线</strong>：论文引入了多模态机器人失败检测数据集 <strong>BotFails</strong>，包含10个不同的任务（6个家庭任务，4个工业任务），涵盖了多种异常和失败类型。此外，还在 <strong>Real-π</strong> 数据集的焊接任务上进行了评估，该数据使用IL策略（ACT）生成，更贴近真实部署场景。对比的基线包括：（i）仅用正常数据的AD方法：FAIL-Detect（lopO, logpZ0）、自编码器（AE）、STAC；（ii）阈值策略：标准时间CP（CP-time）、本文的时空CP（CP-time+space）、高斯假设；（iii）端到端失败检测方法：FAIL-Detect、Sentinel、仅用VLM。</p>
+<p><strong>异常检测模块性能</strong>：在应用阈值判断之前，评估原始异常分数的区分能力。</p>
+<p><img src="https://arxiv.org/html/2604.13788v1/2604.13788v1/x2.png" alt="异常检测结果表"></p>
+<blockquote>
+<p><strong>表I</strong>：阈值判断前的异常检测评估（AUROC和最优F1分数，%）。在BotFails和Real-π数据集上，FIDeL使用的基于表示的方法（Representation）在AUROC和F1分数上均显著优于其他AD基线方法。</p>
+</blockquote>
+<p><strong>阈值判断模块性能</strong>：评估不同阈值方法在区分正常与异常帧时的表现。</p>
+<p><img src="https://arxiv.org/html/2604.13788v1/2604.13788v1/x4.png" alt="阈值判断评估"></p>
+<blockquote>
+<p><strong>图5</strong>：应用不同阈值方法后的异常检测评估（TPR， TNR， 平衡准确率等，%）。结果表明，结合了空间信息的CP-time+space阈值方法（FIDeL所用）在平衡准确率上表现最佳。</p>
+</blockquote>
+<p><strong>端到端失败检测性能</strong>：这是最终目标，评估整个流程（包含语义过滤）区分良性异常和真实失败的能力。</p>
+<p><img src="https://arxiv.org/html/2604.13788v1/2604.13788v1/x5.png" alt="端到端失败检测结果"></p>
+<blockquote>
+<p><strong>图6</strong>：端到端失败检测评估（准确率，%）。FIDeL在BotFails和Real-π数据集上的失败检测准确率均大幅领先所有基线方法，分别达到72.63%和85.94%，证明了语义过滤的有效性。</p>
+</blockquote>
+<p><strong>定性分析与消融实验</strong>：<br><img src="https://arxiv.org/html/2604.13788v1/2604.13788v1/x3.png" alt="分数与热图示意"></p>
+<blockquote>
+<p><strong>图3</strong>：异常分数与阈值示意图。展示了在Real-π焊接任务中，异常检测分数随时间的变化。当分数超过CP阈值（红色虚线）时标记为异常。黄色框显示，通过VLM进行语义过滤（从阶段①到阶段②）有效减少了假阳性（将异常标记为失败），但可能引入少量假阴性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.13788v1/2604.13788v1/x6.png" alt="热图可视化"></p>
+<blockquote>
+<p><strong>图4</strong>：异常热图示例。热图能准确定位异常区域，例如，在失败情况（掉落烙铁、打翻杯子）和良性异常（背景有人走过）中，高亮区域都与语义相符，提供了可解释性。</p>
+</blockquote>
+<p>消融实验表明，语义过滤模块贡献了主要的性能提升。在BotFails上，仅使用异常检测和阈值判断（即无VLM过滤）的准确率约为55%，而加入VLM过滤后准确率提升至72.63%。最优传输对齐和空间感知的CP阈值也对性能有正向贡献。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1. <strong>提出了一个完整的、策略无关的失败检测框架FIDeL</strong>，它通过统计（OT对齐与CP阈值）和语义（VLM过滤）两层过滤，有效区分了良性异常与任务失败。2. <strong>扩展了共形预测的应用</strong>，提出了同时考虑时间和空间变化的阈值方法，增强了检测的鲁棒性。3. <strong>创建并发布了专注于机器人失败检测的多模态数据集BotFails</strong>，填补了该领域数据集的空白。</p>
+<p>论文提到的局限性包括：1. <strong>计算成本</strong>：最优传输和VLM推理会带来额外的计算开销，可能影响实时性。2. <strong>对VLM提示工程的依赖</strong>：语义过滤的效果依赖于给VLM的提示设计，可能存在提示敏感性问题。3. <strong>需要少量正常演示数据</strong>进行离线校准。</p>
+<p>这项工作为机器人模仿学习的安全部署提供了新思路，其“检测-过滤”的范式将通用的异常检测与任务语义理解相结合，具有启发性。后续研究可以探索更轻量化的对齐与过滤方法，降低计算成本；或研究如何将失败检测模块的反馈用于策略的在线适应与学习，形成闭环。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对模仿学习在现实部署中因罕见事件（如硬件故障）易失败，且现有视觉异常检测方法无法区分失败与良性偏差的问题，提出FIDeL失败检测模块。该方法结合统计过滤（基于最优传输匹配和扩展符合预测生成异常分数）与语义过滤（利用视觉-语言模型进行语义分析），以独立监控策略执行。在BotFails数据集上，FIDeL相比基线方法，异常检测AUROC提升5.30%，失败检测准确率提升17.38%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.13788" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
