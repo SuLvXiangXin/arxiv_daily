@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>HiVLA: A Visual-Grounded-Centric Hierarchical Embodied Manipulation System - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>HiVLA: A Visual-Grounded-Centric Hierarchical Embodied Manipulation System</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.14125" target="_blank" rel="noreferrer">2604.14125</a></span>
+        <span>作者: Ping Luo Team</span>
+        <span>日期: 2026-04-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，利用大规模预训练视觉语言模型（VLM）能力的端到端视觉-语言-动作（VLA）模型是机器人操作的主流范式。这些模型主要采用单系统（如RT-2、OpenVLA）或双系统（如π0、GR00T）架构，将视觉推理与底层动作生成紧密耦合。然而，这些集成范式面临一个关键瓶颈：在相对稀缺且领域特定的操作数据上对VLM进行微调，不可避免地会损害其从基础模型继承的深刻推理能力，即灾难性遗忘问题，这限制了利用最先进VLM全部认知潜力的能力。</p>
+<p>分层系统（如HiRobot）提供了一种有前景的替代方案，通过将高层语义规划与底层运动控制显式解耦来规避上述问题。在此范式中，VLM纯粹作为高层规划器运行，通过避免底层微调来保留其推理能力，而专用的动作专家执行计划。这一解耦设计成功的关键在于连接两个模块的中间表示。视觉接地（visual grounding）是这一接口的有力候选，它借鉴了VLM智能体中“用图像思考”的范式，即模型在复杂推理前显式定位高分辨率图像中的相关目标区域。尽管以视觉接地为中心的VLA在概念上很优雅，但现有设计难以有效地将接地信息转化为物理动作。当前方法通常在空间上下文和视觉保真度之间被迫妥协：提取局部图像裁剪会剥离绝对空间坐标；而对下采样的全局图像应用物体掩码则会丢失细粒度操作所需的细微视觉细节。</p>
+<p>本文针对“如何设计一个能够充分利用包含高分辨率局部外观、精确全局空间感知和显式子任务指令的接地计划的策略”这一未解决的挑战，提出了HiVLA。其核心思路是：构建一个以视觉接地为中心的分层操作系统，使用VLM作为高层规划器生成结构化计划（子任务指令和精确边界框），并设计一个配备新颖级联交叉注意力机制的扩散变换器（DiT）动作专家，将计划转化为物理动作。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>HiVLA框架显式地将高层语义规划与底层运动控制解耦，包含两个核心模块：VLM规划器和DiT动作专家。</p>
+<p><img src="https://arxiv.org/html/2604.14125v1/2604.14125v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：(a) HiVLA框架概述。高层VLM规划器将复杂指令分解为结构化计划（子任务和边界框）。底层DiT动作专家通过级联交叉注意力机制，依次融合全局视觉上下文、位置感知的局部特征和子任务语言指导，生成动作序列。(b) 在RoboTwin基准上的成功率对比。</p>
+</blockquote>
+<p><strong>整体Pipeline</strong>：如图1(a)所示，给定多视角视觉观测和语言指令，系统首先由VLM规划器进行任务分解和视觉接地，输出一个结构化计划，包含一个语义子任务标签<code>L_sub,t</code>和一个精确的边界框<code>B_t</code>。随后，利用<code>B_t</code>从原始高分辨率（1920×1080）相机图像中裁剪出目标中心的局部图像块<code>I_t^local</code>。最后，DiT动作专家以观测历史、子任务指令和裁剪后的局部图像为条件，生成未来动作序列<code>A_t</code>。</p>
+<p><strong>核心模块1：VLM规划器</strong>。该模块作为系统的“大脑”，是一个先进的VLM。在每个决策步骤<code>t</code>，它接收整体指令<code>L</code>、机器人夹爪状态、前一个执行的子任务以及动作前后的视觉历史。基于这些多模态输入，VLM推理任务进度并决定下一个逻辑步骤。对于复杂的长视野任务（如“堆叠三个积木”），会将其分解为一系列子任务（通常是基本技能与单个目标对象的配对）。其推理结果是一个结构化的JSON计划，包含下一个子任务的描述<code>L_sub,t</code>、动作类型、目标对象名称以及在当前场景图像中定位目标对象的归一化边界框<code>B_t</code>。该设计的优势在于解耦，使系统能够继承预训练VLM的复杂推理能力，而无需为每个任务进行详尽训练。规划器将边界框生成视为调用“图像裁剪”工具的指令，从而获得高分辨率、以目标为中心的图像块<code>I_t^local</code>，与子任务描述一同传递给动作专家执行。</p>
+<p><strong>核心模块2：DiT动作专家</strong>。该模块作为系统的“手”，是一个基于条件流匹配（CFM）的扩散变换器（DiT），负责将VLM规划器制定的高层计划转化为精确的低层运动命令。其核心创新在于一个<strong>级联交叉注意力机制</strong>，该机制嵌入在每个DiT块中，能够顺序地整合三种不同的指导信号：</p>
+<ol>
+<li><strong>全局视觉上下文</strong>：多视角视觉观测<code>O_t</code>通过预训练的视觉编码器（DINOv2+SigLIP）处理，生成全局特征令牌<code>C_global</code>。第一个交叉注意力层使状态-动作令牌可以关注这些全局特征，为策略提供对整个场景空间和语义关系的粗粒度理解。</li>
+<li><strong>位置感知的局部特征</strong>：使用VLM提供的边界框<code>B_t</code>从原始高分辨率帧中裁剪出局部图像块<code>I_t^local</code>，通过同一视觉编码器获得特征令牌<code>C_local</code>。为了保留绝对空间信息，为<code>C_local</code>中的每个补丁令牌计算其在原始相机帧中的中心坐标<code>p</code>，并转换为正弦位置编码<code>PE(p)</code>，然后执行逐元素加法：<code>C_local-pos = C_local + PE(p)</code>。第二个交叉注意力层将<code>C_local-pos</code>注入模型，提供目标对象的高保真细节及其在全局场景中的精确位置。</li>
+<li><strong>子任务语言指导</strong>：将子任务描述<code>L_sub,t</code>编码为语言嵌入<code>C_lang</code>。第三个交叉注意力层使模型能够关注这些语言特征，从而将生成的运动条件化到所需技能（如“抓取”、“放置”）的精确语义上。</li>
+</ol>
+<p>这种级联设计确保了动作专家能最大化地利用VLM高层推理的每个组成部分。该DiT模型基于H-RDT架构，采用LLaMA风格的Transformer主干。训练时，使用CFM目标函数（公式2），学习从噪声到数据动作序列的向量场。推理时，通过求解由学习到的向量场定义的常微分方程（ODE），从初始噪声样本确定性地生成条件化的动作序列。</p>
+<p><strong>创新点</strong>：与现有方法相比，HiVLA的主要创新体现在：1) <strong>架构上</strong>：明确提出了以视觉接地为中心的解耦分层框架，彻底分离VLM规划与DiT控制，避免了灾难性遗忘。2) <strong>方法上</strong>：在DiT中引入了新颖的级联交叉注意力机制，能够顺序且充分地融合全局场景、高分辨率局部外观（带绝对位置编码）和子任务语义这三种关键信息，这是首次将如此细粒度的视觉接地计划有效转化为动作的尝试。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在RoboTwin2.0高保真仿真平台和真实世界机器人操作环境中进行。仿真采用“域随机化”设置以增加视觉多样性和感知复杂性。机器人平台为Aloha-Agilex-1.0双手机器人。构建了大规模数据集HiVLA-HD，包含15个需要鲁棒视觉感知和复杂语言推理的操作任务，观测图像分辨率高达1920×1080。</p>
+<p><strong>对比方法</strong>：选择了四个先进的基线模型进行对比：端到端双系统VLA模型<code>π0</code>及其高级变体<code>π0.5</code>；基于Qwen-VL主干的StarVLA（评估其Qwen-GR00T变体）；以及分层模型H-RDT（作为本文视觉接地机制的一个隐式消融实验，因为它完全依赖全局图像特征生成策略）。</p>
+<p><img src="https://arxiv.org/html/2604.14125v1/2604.14125v1/x2.png" alt="主实验结果"></p>
+<blockquote>
+<p><strong>图2</strong>：RoboTwin模拟器中9个任务的主要成功率。HiVLA在简单任务和困难任务（尤其是长视野和视觉要求高的任务）上均表现出优越性能。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：如表1所示，在RoboTwin基准的9个任务上，HiVLA取得了最佳的平均成功率（83.3%）。相比最强的基线H-RDT（70.6%），HiVLA实现了12.7%的绝对提升。特别是在“移动订书机”、“盖章”、“堆叠3个积木”等困难的、长视野或需要精细操作的任务上，HiVLA的优势更为明显（例如在“堆叠3个积木”任务上，HiVLA成功率为37%，远超H-RDT的20%）。这验证了其视觉接地中心设计在复杂场景和长视野任务组合中的有效性。</p>
+<p><img src="https://arxiv.org/html/2604.14125v1/2604.14125v1/x3.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图3</strong>：消融研究结果。从左至右：(a) 不同视觉表示的影响。使用高分辨率局部裁剪（HiVLA）显著优于仅使用全局图像或下采样局部裁剪。(b) 不同条件注入策略的影响。级联交叉注意力（Cascaded CA）优于早期融合或仅使用局部特征。(c) 规划器错误鲁棒性测试。即使给予有噪声的边界框，HiVLA仍能保持较高的成功率。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：</p>
+<ol>
+<li><strong>视觉表示</strong>（图3a）：比较了三种视觉输入方案。仅使用全局图像（如H-RDT）在需要精细操作的任务上性能较差。使用从下采样图像中裁剪的局部块会丢失细节，性能下降。而HiVLA采用的从原始高分辨率图像裁剪局部块的方法，保留了关键细节，性能最佳。</li>
+<li><strong>条件注入策略</strong>（图3b）：比较了三种将视觉和语言条件注入DiT的策略。仅使用局部特征丢失了全局上下文。早期融合（将全局、局部和语言特征拼接后一次性注入）可能导致信息混淆。HiVLA采用的级联交叉注意力机制能够顺序处理不同模态信息，性能最优。</li>
+<li><strong>规划器错误鲁棒性</strong>（图3c）：测试了动作专家对VLM规划器输出有噪声边界框的鲁棒性。即使人为向真实边界框添加高达40%的噪声（即框尺寸随机缩放），HiVLA的成功率下降相对平缓，表明其动作专家对不完美的接地结果具有一定的容错能力。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2604.14125v1/2604.14125v1/x4.png" alt="真实世界实验"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界任务成功案例可视化。HiVLA能够成功完成一系列需要长视野推理和精细操作的任务，例如堆叠物体、操作小目标等。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.14125v1/2604.14125v1/x5.png" alt="失败案例分析"></p>
+<blockquote>
+<p><strong>图5</strong>：典型失败案例。(a) VLM规划器错误：将“拿起白色杯子”误解为“拿起白色盘子”。(b) 动作专家错误：在“盖章”任务中，机器人在盖章后未能正确提起。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了HiVLA，一个由视觉接地机制桥接的分层VLA框架。该架构显式解耦了基于VLM的高层规划和底层控制，消除了多任务操作中的灾难性遗忘，并允许VLM和动作专家独立改进。</li>
+<li>在DiT动作专家中引入了一种新颖的级联交叉注意力机制，能够顺序整合全局上下文、空间感知的高分辨率局部裁剪和子任务技能指导，释放了接地计划用于精确动作生成的潜力。</li>
+<li>在仿真和真实世界中进行了广泛评估，证明HiVLA显著优于最先进的VLA模型，并在高度杂乱环境中的长视野技能组合和细粒度操作方面表现出卓越能力。</li>
+</ol>
+<p><strong>局限性</strong>：论文指出，系统的性能仍然依赖于高层VLM规划器的准确性。如图5所示，规划器的错误（如错误识别物体）会导致整个任务失败。此外，虽然动作专家对边界框噪声有一定鲁棒性，但极端的定位错误仍可能影响操作精度。</p>
+<p><strong>启示</strong>：HiVLA的工作表明，在具身智能中，将“思考”（规划/推理）与“行动”（控制）通过一种丰富、显式且机器可读的接口（如带有绝对位置的高分辨率视觉接地）解耦，是一条富有前景的路径。这为未来研究提供了方向：如何设计更鲁棒、更具泛化能力的规划器；如何进一步优化跨层接口的表示形式；以及如何将此类分层框架扩展到更复杂的多模态交互和动态环境中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对端到端视觉-语言-动作模型在微调时损害基础VLM推理能力的核心问题，提出了HiVLA分层框架。该方法将高层语义规划与低层运动控制解耦：高层由VLM规划器进行任务分解与视觉定位，输出结构化指令；低层采用引入级联交叉注意力机制的流匹配扩散Transformer动作专家，专注执行。实验表明，HiVLA在模拟与真实环境中均显著优于现有端到端基线，尤其在长时程任务与杂乱场景的精细操作上表现出色。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.14125" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
