@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Active Imitation Learning for Thermal- and Kernel-Aware LFM Inference on 3D S-NUCA Many-Cores - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Active Imitation Learning for Thermal- and Kernel-Aware LFM Inference on 3D S-NUCA Many-Cores</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.11948" target="_blank" rel="noreferrer">2604.11948</a></span>
+        <span>作者: Anuj Pathania Team</span>
+        <span>日期: 2026-04-13</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>大型基础模型推理在传统上依赖GPU，但其有限性和高成本推动了在通用CPU上进行部署的趋势，尤其是新兴的3D堆叠静态非均匀缓存架构系统。这些架构虽能提供更高的带宽和局部性，但由于3D片上网络的存在，面临着严峻的热挑战和不均匀的缓存访问延迟。同时，LFM内部不同计算内核对缓存性能和热行为的敏感性差异巨大。现有的热管理方法通常依赖于过度简化的分析模型，缺乏适应性，难以在保证热安全的前提下，为多样化的LFM内核在异构核心上进行最优的线程迁移和电压/频率调节调度。本文针对3D S-NUCA系统上LFM推理的联合热感知与内核感知调度这一具体痛点，提出了一个基于主动模仿学习的框架。核心思路是通过主动模仿学习，从一个Oracle策略中高效学习近乎最优的调度策略，该策略能同时考虑核心性能异构性和LFM内核特异性，以最小运行时开销实现热安全约束下的性能最大化。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的框架名为 AIℒFM，其整体目标是最小化LFM推理时间，同时确保峰值核心温度不超过预设阈值。可用的管理手段包括线程迁移和基于DVFS的瞬态功率预算，但二者均会带来性能开销（迁移导致缓存冷启动，DVFS降低频率）。</p>
+<p><img src="https://arxiv.org/html/2604.11948v1/2604.11948v1/x2.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图3</strong>：AIℒFM框架概览。左侧Oracle策略使用MoGPR建模系统动态并为迁移决策生成标签（效用值）；右侧学习策略使用带有MC Dropout的神经网络进行决策，并基于不确定性估计选择性地查询Oracle。</p>
+</blockquote>
+<p>整体流程如下：系统运行时，<strong>学习策略</strong> 根据当前可观测的系统状态（输入）做出迁移决策。若其对该决策的<strong>不确定性</strong>高于阈值，则查询<strong>Oracle策略</strong>获取最优动作；否则，执行自主决策。学习策略通过模仿Oracle在不确定状态下的决策以及自我模仿成功决策来不断更新。</p>
+<p><strong>核心模块与技术细节：</strong></p>
+<ol>
+<li><strong>特征选择</strong>：选取了五个关键的系统状态特征作为输入：指令每秒（IPS，性能指标）、最后一级缓存每千指令缺失数（MPKI，缓存局部性指标）、核心的平均曼哈顿距离（AMD，衡量核心在3D S-NUCA中访问LLC延迟的代理）、功率预算（由3D-TTP框架计算）以及当前峰值温度。论文通过实验排除了频率和迁移历史等冗余特征。</li>
+<li><strong>基于MoGPR的Oracle演示</strong>：Oracle的核心是学习一个从系统状态到迁移决策“效用”的映射。由于不同LFM内核（如嵌入、自注意力、FFN、LM头）对缓存距离（AMD）和热动态的敏感性截然不同（如表1所示），论文为每种内核类型训练了一个独立的高斯过程回归专家模型。<ul>
+<li><strong>内核识别</strong>：运行时通过一个加权组合函数（λ₁·IPS + λ₂·MPKI）识别当前正在执行的内核类型，从而激活对应的GPR专家。</li>
+<li><strong>效用建模</strong>：对于内核类型k，其专家模型 𝒢𝒫𝑘 以源核心和目标核心的状态向量 <strong>xᵢ</strong> 和 <strong>x_d</strong> （包含IPS, MPKI, AMD, 功率预算）为输入，预测迁移效用 ℐ。效用综合考虑了性能增益、缓存局部性和热约束。</li>
+<li><strong>决策规则</strong>：Oracle评估所有可能的目标核心，选择在满足热安全约束（T_peak &lt; T_th）前提下能带来最大正效用 ℐ 的迁移。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2604.11948v1/2604.11948v1/x3.png" alt="Oracle机制示意图"></p>
+<blockquote>
+<p><strong>图4</strong>：MoGPR-based Oracle机制示意图。根据识别的当前内核类型（如K_E），选择对应的GPR专家（𝒢𝒫_E），该专家基于源核心和目标核心的状态预测迁移效用。</p>
+</blockquote>
+<ol start="3">
+<li><strong>基于主动模仿学习的学习策略</strong>：学习策略是一个全连接神经网络，其架构通过神经架构搜索确定为三层（64-32-32个神经元，使用ReLU激活）。<ul>
+<li><strong>不确定性估计</strong>：在网络推理时启用<strong>MC Dropout</strong>，进行多次随机前向传播，通过预测输出的方差来量化决策的不确定性 𝑢(𝑠)。</li>
+<li><strong>选择性查询机制</strong>：设置一个不确定性阈值τ。当 𝑢(𝑠) ≤ τ 时，智能体使用自身策略 π_θ(s) 做决策；当 𝑢(𝑠) &gt; τ 时，则查询Oracle策略 π*(s) 获取最优动作。这实现了<strong>主动学习</strong>，减少了为学习所需的数据采样开销。</li>
+<li><strong>策略训练与更新</strong>：损失函数结合了监督损失和自我模仿损失。对于Oracle查询过的状态，使用交叉熵损失让智能体模仿Oracle；对于智能体自主决策成功的状态，使用自我模仿损失来强化这些行为。</li>
+</ul>
+</li>
+</ol>
+<p><strong>创新点</strong>：1) <strong>内核感知</strong>：首次在3D S-NUCA系统的热管理中显式建模LFM不同内核对缓存和热的差异化敏感性，并为之设计专门的Oracle模型。2) <strong>主动模仿学习</strong>：将主动学习引入模仿学习框架，通过不确定性驱动的选择性查询，以更少的Oracle交互代价学习到高质量策略，降低了运行时开销。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：使用先进的CoMeT模拟器对64核x86、128内存bank的3D S-NUCA系统进行间隔热模拟。评估了五个LFM工作负载：BERT-base、ViT-base、LLaMA3.2-1B、Gemma-2B和DeepSeek-2.4B。输入序列长度（L）从128到1024变化，热阈值（T_th）设为75℃和85℃。</p>
+<p><strong>对比方法</strong>：</p>
+<ul>
+<li><strong>3QTM</strong>：基于强化学习的核心与内存协同热管理方法。</li>
+<li><strong>NeuroTAP</strong>：基于分析模型的3D DRAM热管理方法。</li>
+<li><strong>3D-DNaPE</strong>：将任务迁移到最冷相邻空闲核心的调度技术。</li>
+<li><strong>DLFM</strong>：无Oracle指导的直接学习基线。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>不同输入长度下的性能</strong>：如图5所示，在所有LFM工作负载和输入长度下，AIℒFM均优于基线方法，且随着序列长度增加（计算和热压力增大），优势更加明显。例如，在DeepSeek-2.4B上，当L=1024时，AIℒFM比表现次优的DNaPE性能高出约35%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2604.11948v1/2604.11948v1/x4.png" alt="不同输入长度下的归一化性能"></p>
+<blockquote>
+<p><strong>图5</strong>：不同输入序列长度下，各方法相对于AIℒFM在L=128时性能的归一化执行时间。AIℒFM在所有设置下均表现最佳，且长序列下优势扩大。</p>
+</blockquote>
+<ol start="2">
+<li><strong>不同工作负载和热阈值下的性能</strong>：如图6所示，在T_th=75℃和85℃下，AIℒFM在所有LFM工作负载上均取得最佳性能。在更严格的热约束（75℃）下，AIℒFM相比DNaPE最高可获得31%的性能提升。这表明AIℒFM能更有效地在热约束和性能之间取得平衡。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2604.11948v1/2604.11948v1/x5.png" alt="不同热阈值下的归一化性能"></p>
+<blockquote>
+<p><strong>图6</strong>：在 (a) T_th=75℃ 和 (b) T_th=85℃ 下，各方法相对于AIℒFM性能的归一化执行时间。AIℒFM在所有模型和热约束下均保持领先。</p>
+</blockquote>
+<ol start="3">
+<li><strong>热安全性</strong>：论文指出（数据在正文末尾图表中），所有方法都能将峰值温度控制在阈值以下，但AIℒFM在达成相同热安全目标的同时，实现了更高的性能（即更短的执行时间）。</li>
+<li><strong>消融实验</strong>：论文在附录中进行了消融研究，结果表明：（a）<strong>内核感知</strong>是性能提升的关键，忽略内核差异的通用策略性能显著下降；（b）<strong>主动学习</strong>组件有效减少了训练期间对Oracle的查询次数（约40%），降低了开销，同时保持了策略质量。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了首个针对3D S-NUCA众核系统上LFM推理的<strong>热感知与内核感知联合调度框架</strong>AIℒFM，系统性地利用了硬件异构性和工作负载多样性。</li>
+<li>设计了一种<strong>基于MoGPR的Oracle</strong>，能够为不同类型的LFM内核生成高质量的、考虑缓存局部性和热动态的迁移决策演示。</li>
+<li>引入了<strong>主动模仿学习</strong>范式，通过不确定性估计进行选择性查询，以最小的Oracle交互成本学习近乎最优的调度策略，实现了低开销与高适应性的平衡。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到，其评估基于模拟器（CoMeT），虽然该模拟器是先进的，但与真实硬件部署仍可能存在差距。此外，框架需要为每个新的LFM内核类型收集数据以训练对应的GPR专家，这引入了额外的配置成本。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>框架通用性</strong>：AIℒFM的主动模仿学习框架可以扩展至其他存在昂贵Oracle或模拟器、且需要低开销在线决策的场景，如功耗管理、资源分配等。</li>
+<li><strong>硬件-软件协同</strong>：这项工作凸显了针对特定硬件架构（如3D S-NUCA）和特定工作负载家族（如LFM）特性进行协同优化的重要性。未来的系统设计需要更深入地暴露硬件异构特征（如AMD），并为调度器提供更丰富的运行时工作负载表征（如内核指纹）。</li>
+<li><strong>在线适应</strong>：可以探索如何使学习策略能够在线适应新的、未见过的LFM内核或动态变化的系统条件，减少对预训练专家模型的依赖。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对在3D堆叠静态非均匀缓存架构多核系统上运行大型基础模型推理时面临的热管理挑战和内核多样性问题，提出了一种基于主动模仿学习的调度框架AI ℒ FM。该框架通过从Oracle演示中学习，实现了近乎最优的线程迁移和电压/频率缩放调度策略，以在保证热安全的同时最大化性能。实验结果表明，该框架优于现有先进基线方法，并能良好地泛化到不同的LFM工作负载上。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.11948" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
