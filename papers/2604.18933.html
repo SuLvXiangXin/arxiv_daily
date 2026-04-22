@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Gated Memory Policy - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Gated Memory Policy</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.18933" target="_blank" rel="noreferrer">2604.18933</a></span>
+        <span>作者: Shuran Song Team</span>
+        <span>日期: 2026-04-21</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作任务展现出不同的记忆需求：从无需记忆的马尔可夫任务（如简单抓放），到需要单次执行内记忆的任务（如记住物体初始位置），再到需要跨多次尝试记忆的任务（如通过反复试验推断物体摩擦系数）。当前，为视觉运动策略简单地扩展观察历史长度是一种常见做法，但这常导致性能显著下降，主要原因是分布偏移和过拟合。输入维度的增加加剧了过拟合风险，并且历史中存在的噪声或不熟悉的观测可能使整个输入序列偏离训练分布。此外，处理长历史（尤其是跨试验记忆）会带来巨大的计算开销。</p>
+<p>本文针对上述痛点，提出一个核心问题：一个有效的、具备记忆能力的策略必须回答“何时”以及“回忆什么”信息。基于此，本文提出了门控记忆策略（Gated Memory Policy, GMP），其核心思路是：通过一个可学习的记忆门机制自适应地决定“何时”回忆历史，并通过一个轻量级的交叉注意力模块高效地构建潜在记忆表示以决定“回忆什么”，从而在需要时选择性激活历史上下文，以提升鲁棒性和反应速度。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>GMP基于Transformer扩散策略（Diffusion Policy）骨架，增加了门控注意力模块以实现选择性记忆回忆。其整体流程是：给定当前图像观测 (I_t) 和本体感知 (P_t)，策略预测未来动作轨迹 (A_{t:t+h})。同时，策略维护一个由过去 (n) 个轨迹块（每个块包含 (h) 个动作和一个采样的图像）组成的缓存历史。通过一个由当前观测计算出的二元门控信号 (\mu_t)，决定是否将历史信息通过交叉注意力模块整合到当前决策中。</p>
+<p><img src="https://arxiv.org/html/2604.18933v1/2604.18933v1/figures/jpg/network.jpg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：门控记忆策略网络。(a) 基于扩散Transformer (DiT) 骨架，增加了一个门控注意力模块来选择性回忆记忆。(b) 门控注意力模块包含三个关键设计：(1) 决定是否跳过或应用历史交叉注意力的二元记忆门 (\mu_t)；(2) 注入噪声的历史动作条件以提升鲁棒性；(3) 推理时缓存的历时令牌以减少计算成本。</p>
+</blockquote>
+<p><strong>核心模块一：门控记忆回忆机制</strong>。这是GMP的核心创新，用于解决“何时回忆”的问题。一个MLP (\phi) 以当前观测 (I_t, P_t) 为输入，通过Sigmoid激活函数和阈值（0.5）输出一个二元门控值 (\mu_t \in {0, 1})。该门控值被应用于历史交叉注意力模块的输出 (\mathbf{h}<em>{t:t+h}) 上，然后通过残差连接与主干网络的中间特征 (\mathbf{z}</em>{t:t+h}) 相加：(\bar{\mathbf{z}}<em>{t:t+h} = \mu_t \mathbf{h}</em>{t:t+h} + \mathbf{z}_{t:t+h})。当 (\mu_t=0) 时，策略退化为标准的无记忆扩散策略；当 (\mu_t=1) 时，历史信息被整合。</p>
+<p><strong>核心模块二：记忆门校准</strong>。直接端到端训练记忆门是困难的，因为策略倾向于过度使用历史从而导致过拟合。为此，论文提出了一种自监督的校准流程（见图3）。首先，将数据集分为训练集 (\mathcal{D}<em>{\mathrm{train}}) 和验证集 (\mathcal{D}</em>{\mathrm{val}})。在 (\mathcal{D}<em>{\mathrm{train}}) 上训练两个策略：记忆门始终关闭的 (\pi) 和始终开启的 (\pi</em>{\mathrm{mem}})。然后在 (\mathcal{D}<em>{\mathrm{val}}) 上评估这两个策略，计算每个时间步 (t) 的动作预测误差 (\delta_t) 和 (\delta_t^{\mathrm{mem}})。如果无记忆策略的误差显著大于（超过阈值 (\theta) 倍）有记忆策略的误差，则将该时间步标记为需要记忆（(\mu_t=1)），否则标记为不需要（(\mu_t=0)）。使用二元交叉熵（BCE）损失单独校准记忆门。最后，冻结记忆门权重，在整个数据集上重新训练策略，得到最终的GMP (\pi</em>{\mathrm{gated}})。</p>
+<p><img src="https://arxiv.org/html/2604.18933v1/2604.18933v1/figures/jpg/training.jpg" alt="训练流程"></p>
+<blockquote>
+<p><strong>图3</strong>：带有记忆门校准的训练流程。通过比较在验证集上“记忆门始终关”和“记忆门始终开”两个策略的动作预测误差，来生成记忆门标签 (\mu_t)，然后基于这些标签校准记忆门。</p>
+</blockquote>
+<p><strong>核心模块三：高效的交叉注意力与扩散噪声增强</strong>。为了解决“回忆什么”并提升效率，GMP采用了一个轻量级的交叉注意力模块。历史信息（图像特征和动作令牌）被缓存，作为交叉注意力中的Key和Value，当前DiT块的中间特征作为Query。这种方法避免了在历史令牌内部进行昂贵的自注意力计算，复杂度与历史长度呈线性关系。为了减少对干净历史的过拟合并提升鲁棒性，GMP在训练和推理时，都对历史动作条件 (A_{t-nh:t}^{k-1}) 注入按扩散时间表安排的噪声。在去噪早期步骤（(k) 较大），注入强噪声以提供数据增强；在后期步骤（(k) 较小），注入弱噪声以保留精细信息。这使策略对历史中的噪声或累积误差不敏感。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>基准测试与数据集</strong>：论文提出了 <strong>MemMimic</strong> 基准，包含需要单次试验内记忆（T1-T3）和跨试验记忆（T4-T6）的仿真与真实世界任务。同时，在 <strong>RoboMimic</strong>（马尔可夫任务）和 <strong>MIKASA-Robo</strong>（现有记忆密集型基准）上进行了评估。</p>
+<p><strong>对比方法</strong>：包括无历史扩散策略（No-hist DP）、中/长历史扩散策略（Mid/Long-hist DP）、中/长历史过去令牌预测策略（Mid/Long-hist PTP）以及基于LSTM的BC-RNN策略。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>在MemMimic非马尔可夫任务上的优势</strong>：GMP在MemMimic的6个任务上，相比长历史基线（Long-hist DP和Long-hist PTP）平均成功率提升了30.1%。例如，在“匹配颜色”任务中，GMP成功率超过90%，而长历史基线约为60%；在“迭代推动”任务中，GMP成功率达<del>80%，显著优于基线（</del>50%）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2604.18933v1/2604.18933v1/figures/jpg/exp1_match_color.jpg" alt="任务1结果"></p>
+<blockquote>
+<p><strong>图4</strong>：(b) 在“匹配颜色”任务中，GMP（使用长历史配置）性能显著优于不同历史长度的Diffusion Policy和PTP基线。 (c) 注意力可视化显示，在需要回忆颜色信息的关键放置时刻（t=80），注意力聚焦于首次看到颜色的时刻（t=48）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.18933v1/2604.18933v1/figures/jpg/exp4_iterative_pushing.jpg" alt="任务4结果"></p>
+<blockquote>
+<p><strong>图8</strong>：(b) 在“迭代推动”任务中，GMP性能远超基线。(c) 可视化显示，在第4次试验的推动阶段，策略的注意力聚焦于第3次（推力不足）和第2次（推力过度）试验的结果，以调整当前动作。</p>
+</blockquote>
+<ol start="2">
+<li><strong>在马尔可夫任务上保持竞争力</strong>：在RoboMimic的三个任务上，简单扩展历史（Long-hist DP）会导致性能下降，而GMP通过门控机制，在引入记忆能力的同时，保持了与无记忆策略（No-hist DP）相当的性能。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2604.18933v1/2604.18933v1/figures/jpg/exp7_robomimic.jpg" alt="RoboMimic结果"></p>
+<blockquote>
+<p><strong>图11</strong>：在RoboMimic的马尔可夫任务上，长历史策略性能下降，而GMP通过门控机制保持了竞争力。</p>
+</blockquote>
+<ol start="3">
+<li><strong>在现有记忆基准上表现优异</strong>：在MIKASA-Robo的5个任务上，GMP相比之前的记忆方法MemoryVLA平均性能提升了26.6%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2604.18933v1/2604.18933v1/figures/jpg/exp10_mikasa.jpg" alt="MIKASA结果"></p>
+<blockquote>
+<p><strong>图12</strong>：在MIKASA-Robo基准测试中，GMP outperforms prior work MemoryVLA by 26.6% on average.</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：</p>
+<ul>
+<li><strong>记忆门的作用</strong>：移除记忆门（即始终使用记忆）会导致在马尔可夫任务上性能下降，验证了选择性回忆的必要性。</li>
+<li><strong>噪声注入的作用</strong>：在历史动作中注入扩散噪声能有效防止过拟合，提升在长历史和跨试验任务上的泛化能力。</li>
+<li><strong>门控校准 vs. 正则化</strong>：与使用L1正则化鼓励稀疏门控的方法相比，本文提出的校准方法能更有效地平衡马尔可夫和非马尔可夫任务的性能，避免了手动调整正则化权重的困难。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>门控记忆策略（GMP）</strong>：一个高效实用的记忆策略框架，通过可学习的记忆门解决“何时回忆”，通过轻量级交叉注意力解决“回忆什么”，并利用扩散噪声增强鲁棒性。</li>
+<li><strong>MemMimic基准</strong>：一套专门为评估视觉运动策略的记忆能力（尤其是跨试验记忆）而设计的仿真与真实世界基准任务。</li>
+<li><strong>全面的实证研究</strong>：在仿真和真实世界中系统评估了记忆相关设计选择对性能、鲁棒性和计算效率的影响。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，记忆门校准需要额外的验证集和两阶段训练流程，这增加了训练复杂性。此外，当前方法主要处理固定长度的历史缓存，对于需要极长或无限记忆的任务可能存在限制。</p>
+<p><strong>启示</strong>：GMP为构建兼具反应性与长程记忆能力的机器人策略提供了一个简洁而有效的范式。其核心思想——<strong>按需、高效、鲁棒地利用历史信息</strong>——对未来研究具有重要启发。例如，门控机制可以与其他记忆架构（如外部记忆库）结合；校准流程可以探索更端到端的优化方式；该方法可扩展到需要更复杂时空推理的多模态任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作任务中内存需求多样、简单扩展观测历史易导致性能下降的问题，提出Gated Memory Policy (GMP)。该方法通过记忆门机制学习何时选择性激活历史上下文，利用轻量级交叉注意力模块构建有效潜在内存表示，并注入扩散噪声以增强对历史噪声的鲁棒性。实验表明，在非马尔可夫基准MemMimic上，GMP相比长历史基线平均成功率提升30.1%，同时在RoboMimic的马尔可夫任务中保持竞争力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.18933" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

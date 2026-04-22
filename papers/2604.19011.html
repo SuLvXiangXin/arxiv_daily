@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Accelerating trajectory optimization with Sobolev-trained diffusion policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Accelerating trajectory optimization with Sobolev-trained diffusion policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.19011" target="_blank" rel="noreferrer">2604.19011</a></span>
+        <span>作者: Justin Carpentier Team</span>
+        <span>日期: 2026-04-21</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>轨迹优化（TO）求解器通过迭代改进，利用已知系统动力学计算局部最优轨迹。其缺点是每个新问题实例都需独立求解，因此收敛速度和找到的解的质量高度依赖于初始轨迹猜测。为提高效率，一个自然的方法是利用学习到的策略为TO提供初始猜测，该策略在求解器先前生成的轨迹上进行训练。基于扩散的策略因其强大的表达能力，成为这一角色的有力候选者。然而，一个反直觉的挑战源于TO演示的局部最优性：当策略被部署时，微小的非最优偏差可能使其陷入训练数据中未出现的情况，从而在长时域上引发累积误差。本文专注于为基于梯度的TO求解器（同时提供反馈增益）研究基于学习的预热启动方法。利用这一特性，本文推导了一种用于扩散策略Sobolev学习的一阶损失函数，该函数同时利用了轨迹和反馈增益。本文的核心思路是：通过将梯度TO求解器提供的一阶导数信息融入扩散策略的Sobolev训练中，显著减少训练所需轨迹数量，避免累积误差，并加速推理。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出了一种在基于梯度的TO求解器与基于扩散的策略之间交替循环的框架。整体流程如算法1所示，交替进行轨迹收集和策略学习。在收集阶段，策略为TO求解器提供初始猜测，TO求解器将其优化为局部最优解，这些解（包含轨迹和反馈增益）被存入数据集。在学习阶段，使用包含一阶导数信息的Sobolev损失函数（公式11）训练扩散策略。</p>
+<p><img src="https://arxiv.org/html/2604.19011v1/2604.19011v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：方法整体框架。左侧展示了策略训练与TO求解器之间的交替循环：策略提供初始猜测，TO求解器进行优化，生成的轨迹和反馈增益用于训练策略。右侧展示了在策略部署（rollout）时，扩散模型通过多步去噪生成动作序列，并执行其中前几个步骤。</p>
+</blockquote>
+<p>核心模块是经过Sobolev训练的扩散策略。扩散模型（DDPM）用于生成动作序列块 $\tau_0 = a_{t_1:t_1+T_h-1}$，其中 $a_t$ 可以是状态 $x_t$、控制输入 $u_t$ 或其子集（如关节位置 $q_t$）。模型以任务参数 $\xi$ 和历史观测 $o_{\text{hist}}$（包含状态、上一时刻控制输入等）为条件。训练时，通过噪声调度 $\beta_k$ 向干净数据 $\tau_0$ 添加噪声得到 $\tau_k$，网络 $\tau_\theta$ 的目标是从 $\tau_k$ 预测 $\tau_0$。</p>
+<p>本文的关键创新在于将Sobolev学习融入扩散训练。基于梯度的TO求解器（如iLQR/DDP）在收敛后除了轨迹 $(X, U)$，还能提供反馈增益 $\partial u_t / \partial x_t$。通过动力学链式法则（公式2, 7），可以计算出动作序列 $\tau_0$ 相对于历史状态 $x_{\text{hist}}$ 的雅可比矩阵 $\partial \tau_0 / \partial x_{\text{hist}}$。标准的扩散损失 $\mathcal{L}^{\text{Diff}}$（公式6）仅匹配 $\tau_0$。本文提出的Sobolev+Diffusion损失 $\mathcal{L}^{\text{Sob+Diff}}$（公式11）则额外匹配其一阶导数：<br>$$\mathcal{L}^{\text{Sob+Diff}} = \mathbb{E} \left[ | \tau_0 - \tau_0^{\theta,k} |^2 + \frac{\alpha_{\text{Sob}}}{n_{\text{proj}}} \sum_{i=1}^{n_{\text{proj}}} \left| v_i^\top \cdot \frac{\partial \tau_0}{\partial x_{\text{hist}}} - \frac{\partial}{\partial x_{\text{hist}}} (v_i^\top \cdot \tau_0^{\theta,k}) \right|^2 \right]$$<br>其中 $\tau_0^{\theta,k} = \tau_\theta(\tau_k, k, \xi, o_{\text{hist}})$ 是网络在去噪第 $k$ 步对 $\tau_0$ 的估计，$v_i$ 是随机投影向量，$\alpha_{\text{Sob}}$ 是权重。这种在<strong>每个去噪步骤</strong>引导导数的方法，不同于在整个扩散过程结束后匹配导数的方案（公式10），在实践中被证明是有效的。</p>
+<p>与现有方法相比，本文的创新点具体体现在：1) 针对扩散策略，首次引入了利用TO反馈增益的一阶Sobolev训练损失。2) 与仅使用轨迹数据的标准扩散模仿学习相比，该方法能利用一阶信息约束策略的局部行为，使其对微小扰动更具鲁棒性，从而缓解累积误差问题。3) 与同样使用Sobolev训练的非扩散策略（如MLP）相比，扩散模型具有更强的表达能力和泛化能力，能够处理更复杂的任务。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在三个机器人任务上进行：<strong>平面机械臂</strong>（2种变体）、<strong>四旋翼</strong>（3种变体）和<strong>双足机器人</strong>（3种变体），共8个任务变体。使用基于梯度的TO求解器（ProxDPP）生成演示数据。对比的基线方法包括：1) <strong>标准扩散策略</strong> (Diffusion)，仅使用零阶损失。2) <strong>投影DDP策略</strong> (PDDP)，一种使用MLP的直接策略。3) <strong>Sobolev训练的投影DDP策略</strong> (PDDP+S)。4) <strong>无预热启动的TO</strong> (TO from scratch)。评估指标包括：TO求解器的<strong>收敛时间加速比</strong>、策略<strong>rollout成功率</strong>、以及达到特定性能所需<strong>训练轨迹数量</strong>。</p>
+<p><img src="https://arxiv.org/html/2604.19011v1/2604.19011v1/x2.png" alt="收敛时间加速比"></p>
+<blockquote>
+<p><strong>图2</strong>：在不同任务上，使用各策略预热启动后，TO求解器收敛时间的加速比（相对于无预热启动）。Sob+Diff（红色）在大多数任务上实现了2倍到20倍的加速，性能显著优于标准扩散策略（蓝色）和MLP类策略（绿色、紫色）。</p>
+</blockquote>
+<p>关键实验结果如下：Sob+Diff方法在减少所需训练数据方面表现突出。在四旋翼导航任务中，仅需<strong>100条</strong>轨迹训练的Sob+Diff策略，其rollout成功率与使用<strong>10万条</strong>轨迹训练的标准扩散策略相当。在双足行走任务中，Sob+Diff仅用<strong>200条</strong>轨迹就能达到高成功率，而标准扩散策略即使使用800条轨迹成功率仍接近0%。这表明一阶信息极大地提升了数据效率。</p>
+<p><img src="https://arxiv.org/html/2604.19011v1/2604.19011v1/x3.png" alt="训练轨迹数量影响"></p>
+<blockquote>
+<p><strong>图3</strong>：在四旋翼任务上，策略性能随训练轨迹数量增加的变化。Sob+Diff（红色实线）仅用100条轨迹即可达到高成功率，而标准扩散策略（蓝色实线）需要超过1000条轨迹。虚线表示TO求解器使用对应策略预热启动后的平均成本。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.19011v1/2604.19011v1/x4.png" alt="消融实验：扩散步数"></p>
+<blockquote>
+<p><strong>图4</strong>：推理时去噪步数 $K_{\text{rollout}}$ 对策略性能的影响。Sob+Diff（红色）即使在很少的扩散步数（如5步）下也能保持高性能，而标准扩散策略（蓝色）需要更多步数（如20步）才能达到类似效果，这表明一阶训练也<strong>降低了推理延迟</strong>。</p>
+</blockquote>
+<p>消融实验总结了每个组件的贡献：1) <strong>Sobolev损失项</strong>：是提升数据效率、避免累积误差和加速推理的核心。2) <strong>交替循环算法</strong>：对于困难任务（如双足行走），仅用初始TO数据训练一次（$n_{\text{algo}}=1$）可能不够，通过多次交替（$n_{\text{algo}}&gt;1$）让策略为TO提供更好的初始猜测，可以收集到更优的演示数据，形成良性循环，进一步减少总求解时间。3) <strong>扩散模型架构</strong>：相较于MLP（PDDP），扩散模型在复杂任务（如双足）上具有明显的性能优势。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了针对扩散策略的一阶损失函数，能够高效地利用基于梯度TO求解器生成的轨迹和反馈增益进行训练。2) 设计了一种交替收集轨迹与训练的策略学习算法，能够解决缺乏良好初始猜测时TO难以求解的复杂任务。3) 通过在三类机器人任务、八个变体上的综合实验，系统评估了方法对训练轨迹数量、训练轮次和预测时域的敏感性，验证了其高效性和鲁棒性。</p>
+<p>论文提到的局限性包括：方法依赖于能够提供反馈增益的基于梯度的TO求解器；目前主要针对已知动力学的规划问题，在更广泛的策略学习中的泛化能力有待进一步探索。</p>
+<p>本文工作对后续研究的启示在于：将经典优化的一阶信息与深度生成模型相结合，是提升数据效率和学习策略稳定性的有效途径。这种思路可以扩展到其他需要从局部最优演示中学习的场景。此外，交替循环的框架为结合学习与优化解决复杂决策问题提供了一个可扩展的范式。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对轨迹优化（TO）求解器效率低、依赖初始猜测的问题，提出使用Sobolev训练的扩散策略进行预热启动。该方法利用TO求解器提供的轨迹和反馈增益，通过一阶损失函数训练扩散模型，避免长期累积错误。实验表明，该策略能从少量轨迹中学习，提供初始猜测，使求解时间加速2倍至20倍，并减少扩散步骤以降低推理延迟。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.19011" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
