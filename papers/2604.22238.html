@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>CodeGraphVLP: Code-as-Planner Meets Semantic-Graph State for Non-Markovian Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>CodeGraphVLP: Code-as-Planner Meets Semantic-Graph State for Non-Markovian Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.22238" target="_blank" rel="noreferrer">2604.22238</a></span>
+        <span>作者: Ngan Le Team</span>
+        <span>日期: 2026-04-24</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型通过在大规模机器人演示数据上对预训练的视觉-语言主干进行微调，已成为通用机器人控制的主流方法。然而，大多数VLA模型被训练和部署为短视野策略，其核心假设是当前观察足以支持动作推理。这一马尔可夫假设在非马尔可夫的长视野任务中变得脆弱，因为任务相关的证据可能被遮挡或仅在轨迹的早期出现，且环境中的杂乱物体会使精细的视觉定位变得不稳定。现有方法主要分为两类：一是记忆增强的VLA，通过整合时间上下文（如逐步历史、压缩记忆令牌或检索相关经验）来支持时间指代性定位，但其在容量与效率之间存在权衡，且有限的记忆可能错过所需的关键历史证据；二是分层VLM-VLA系统，将VLM规划器置于VLA执行器之上，反复选择子任务并指导VLA以短闭环片段执行，这虽然复用VLA作为通用控制器，但通常不维护持久、已落地的任务状态，决策仍严重依赖最新观察和语言提示，且语言接口易受杂乱场景干扰，同时VLM在环规划会带来显著的推理延迟。</p>
+<p>本文针对非马尔可夫长视野操作中，如何维护一个紧凑、明确的任务状态以保留跨时间的任务相关证据，同时保持推理效率这一核心痛点，提出了CodeGraphVLP框架。其核心思路是结合一个基于代码的可执行规划器、一个在部分可观测性下编码任务相关实体和关系的持久语义图状态，以及基于进度的视觉-语言提示，以实现对杂乱场景鲁棒的长视野操作。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>CodeGraphVLP的整体目标是在非马尔可夫和杂乱条件下实现高效的VLA长视野操作。该框架整合了三个核心组件：用于高效长视野进度估计的可执行代码规划器、跨时间追踪任务相关对象和关系的持久语义图状态，以及引导VLA关注关键证据的视觉-语言提示机制。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图1</strong>：CodeGraphVLP概述。(a) 图状态初始化：从首次多视角观察中分割对象，识别任务相关实体，跨视角关联它们，并推导关系以构建紧凑的语义图。(b) 程序化规划器构建：给定任务和图API，LLM合成一个可执行的<code>policy(graph)</code>，该程序在图结构上执行进度检查并维护轻量级任务记忆。(c) 端到端推理：当新观察到达时，更新语义图，执行规划器以产生下一个子任务和相关对象，构建无杂乱的视觉-语言提示，并运行VLA策略进行动作预测。</p>
+</blockquote>
+<p><strong>1. 通过语义图实现持久的进度状态</strong><br>该方法的核心是一个持久的语义图状态𝒢_t = (𝒱_t, ℰ_t)，它显式地总结任务相关的对象和关系，使场景上下文可查询。每个节点v_i ∈ 𝒱_t代表一个具有语义名称、每视角掩码/边界框落地信息以及任务相关属性的实体。每条边e_ij = (v_i, v_j, r) ∈ ℰ_t以关系类型r（如 <code>in</code>、<code>on</code>、<code>near</code>）连接两个节点。</p>
+<p>图状态的初始化涉及四个步骤：1) 使用YOLOE实例分割器进行对象分割；2) 使用Set-of-Mark提示查询VLM，以识别与任务相关的对象及其属性，并移除不相关对象；3) 通过语义距离（CLIP视觉特征）和几何距离（基于相对空间布局的归一化距离签名）进行多视角关联，将跨视角的掩码链接为视角一致的图节点；4) 基于分割掩码的轻量级几何规则（接近度、包含、支撑）诱导关系边。</p>
+<p>在线更新时，使用Cutie跟踪𝒢_{t-1}中的任务相关对象到新观察o_t，更新现有节点的每视角掩码落地。同时，运行实例分割器以发现新对象，并通过相同的相关性过滤和多视角关联流程处理候选掩码，与现有节点合并或作为新节点添加，最后刷新关系边。</p>
+<p><strong>2. 代码即规划器</strong><br>规划器被表示为一个可执行的Python程序𝒫，它在在线操作部署期间被反复调用。给定当前语义图，它输出下一个子任务指令和应被用于动作推理的子任务相关对象：(l_t^{sub}, 𝒪_t^{rel}) = 𝒫(𝒢_t)。该程序在任务初始化时由LLM一次性合成，输入包括长视野指令l、图模式schema和初始图𝒢_0。合成的任务特定规划器包含三个部分：实现常见图查询的辅助例程、编码任务约束和进度条件的轻量级布尔谓词，以及使用这些原语选择下一个子任务并返回(l_t^{sub}, 𝒪_t^{rel})的主<code>policy(graph)</code>函数。该代码维护一个轻量级的持久列表<code>graph.task_memory</code>，记录哪些子任务已完成，防止重复执行。这种一次性合成摊销了LLM/VLM推理成本，产生的规划器无需在环调用大型LLM/VLM即可廉价执行。</p>
+<p><strong>3. 无杂乱的视觉-语言提示</strong><br>为了应对杂乱工作空间中无关对象对VLA定位的干扰，该方法将规划器输出(l_t^{sub}, 𝒪_t^{rel})与语义图状态𝒢_t结合，转换为面向VLA执行器的进度引导视觉-语言提示。</p>
+<ul>
+<li><strong>子任务语言提示</strong>：VLA执行器以规划器产生的指令l_t^{sub}为条件，而非长视野任务描述l，这使语言上下文专注于即时决策。</li>
+<li><strong>无杂乱视觉提示</strong>：对于每个视角v，利用𝒢<em>t中对象i在该视角渲染的二进制分割掩码m</em>{i,t}^v，定义仅保留子任务相关对象的保留掩码：M_t^v = max_{i∈𝒪<em>t^{rel}} m</em>{i,t}^v。然后通过将其他所有像素置黑来形成无杂乱图像：Ĩ_t^v = I_t^v ⊙ M_t^v。最终的无杂乱多视角观察为õ_t = [Ĩ_t^1, …, Ĩ_t^n]。<br>VLA执行器从(õ_t, s_t, l_t^{sub})预测下一个动作块。在微调时，使用匹配的进度引导执行器输入进行训练，通过仅暴露子任务关键的视觉证据并抑制干扰物，提高了下游VLA策略在杂乱场景下的动作推理鲁棒性。训练目标是在数据集𝒟 = {(õ_i, s_i, τ_i, l_i^{sub})}上通过最大似然估计优化VLA参数。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验旨在评估三个问题：Q1. CodeGraphVLP在杂乱场景中完成非马尔可夫长视野任务是否比强VLA基线更可靠？Q2. 基于持久语义图的程序化规划是否比历史增强VLA或VLM在环分层方法实现更高效的进度估计？Q3. 进度引导的视觉-文本提示在多大程度上改善了执行过程中的杂乱鲁棒动作推理？</p>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>任务</strong>：设计了三个需要依赖过去观察和杂乱鲁棒推理的真实世界桌面操作任务：1) <strong>Pick-and-Place Twice</strong>：将立方体在两盘子间来回放置一次，任务具有历史依赖性；2) <strong>Place-and-Stack</strong>：先将立方体放入一个杯子，再将另一个杯子堆叠其上，立方体放入后完全被遮挡；3) <strong>Swap Cups</strong>：在三个盘子上交换两个杯子的位置，需记住初始分配并执行多步交换。</li>
+<li><strong>演示数据</strong>：为微调所有VLA模型收集了遥操作演示：Pick-and-Place Twice和Place-and-Stack各100条，Swap Cups 200条（黑杯/蓝杯起始各100条）。</li>
+<li><strong>基线方法</strong>：包括π_0、π_0 FAST、π_0.5、Gr00T N1.5等强开源VLA基线，它们直接在原始多视角RGB观察上运行。同时评估了接收过去四帧（以1秒间隔采样）的<strong>历史增强Gr00T N1.5变体</strong>。</li>
+<li><strong>实现细节</strong>：使用π_0实例化CodeGraphVLP的VLA执行器。所有VLA模型使用LoRA微调50K次。测试时，推理在单GPU运行，每次前向传递执行H=10个动作后重新规划。使用GPT-5在每项任务开始时一次性合成可执行规划程序。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2604.22238v1/2604.22238v1/x1.png" alt="定性结果展示"></p>
+<blockquote>
+<p><strong>图2</strong>：CodeGraphVLP在三个真实世界任务上的定性推演。展示了多视角RGB输入、语义图状态𝒢_t以及VLA策略使用的进度引导提示：仅保留子任务相关对象的无杂乱视觉提示和规划器产生的子任务语言提示。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：<br>TABLE I: Comparison of methods on real-world non-Markovian long-horizon tasks. All reported values are success rates (%).</p>
+<table>
+<thead>
+<tr>
+<th align="left">Method</th>
+<th align="center">Pick-and-Place Twice</th>
+<th align="center">Place-and-Stack</th>
+<th align="center">Swap Cups</th>
+<th align="center">Avg.</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left"></td>
+<td align="center">PnP Once</td>
+<td align="center">Success Rate Drop</td>
+<td align="center">Cube Success</td>
+<td align="center">Stage Cup Success</td>
+</tr>
+<tr>
+<td align="left">π_0 FAST [30]</td>
+<td align="center">0</td>
+<td align="center">0</td>
+<td align="center">0</td>
+<td align="center">0</td>
+</tr>
+<tr>
+<td align="left">π_0 [5]</td>
+<td align="center">0</td>
+<td align="center">0</td>
+<td align="center">60</td>
+<td align="center">40</td>
+</tr>
+<tr>
+<td align="left">π_0.5 [18]</td>
+<td align="center">5</td>
+<td align="center">0</td>
+<td align="center">35</td>
+<td align="center">5</td>
+</tr>
+<tr>
+<td align="left">Gr00T N1.5 [4]</td>
+<td align="center">50</td>
+<td align="center">35</td>
+<td align="center">40</td>
+<td align="center">40</td>
+</tr>
+<tr>
+<td align="left">Gr00T N1.5 + Multi-frame</td>
+<td align="center">100</td>
+<td align="center">75</td>
+<td align="center">50</td>
+<td align="center">50</td>
+</tr>
+<tr>
+<td align="left"><strong>CodeGraphVLP (ours)</strong></td>
+<td align="center"><strong>100</strong></td>
+<td align="center"><strong>80</strong></td>
+<td align="center"><strong>95</strong></td>
+<td align="center"><strong>80</strong></td>
+</tr>
+</tbody></table>
+<p>如表I所示，CodeGraphVLP在所有三个非马尔可夫任务上的平均成功率（81.7%）显著优于所有基线。特别是在需要记忆被遮挡立方体位置的Place-and-Stack任务中，CodeGraphVLP的“放置立方体”成功率达到95%，远高于历史增强Gr00T N1.5的50%。在Swap Cups任务中，CodeGraphVLP也达到了最高成功率（黑杯起始100%，蓝杯起始85%）。这回答了Q1，表明CodeGraphVLP能更可靠地完成非马尔可夫长视野任务。</p>
+<p><img src="https://arxiv.org/html/2604.22238v1/2604.22238v1/x2.png" alt="硬件设置"></p>
+<blockquote>
+<p><strong>图3</strong>：UR10e机械臂与平行夹爪的机器人实验设置。系统接收身体姿势和两个同步的RGB视频流（固定摄像头和腕部摄像头）。</p>
+</blockquote>
+<p><strong>规划延迟分析</strong>：与需要反复调用VLM进行进度检查的分层VLM-VLA系统相比，CodeGraphVLP的规划延迟显著降低。其程序化规划器在任务开始时由LLM一次性合成，随后仅需执行轻量级的Python代码和图形查询，避免了每次重新规划时昂贵的VLM推理开销。</p>
+<p><img src="https://arxiv.org/html/2604.22238v1/2604.22238v1/x3.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图4</strong>：消融研究（Swap Cups任务）。从左至右：完整CodeGraphVLP、无杂乱抑制视觉提示（仅使用子任务语言）、无进度引导（使用原始长视野指令）、无语义图（仅使用原始观察进行规划）。完整方法在所有指标上表现最佳。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>为了回答Q3并量化各组件贡献，在Swap Cups任务上进行了消融研究（见图4）：</p>
+<ol>
+<li><strong>无杂乱抑制视觉提示</strong>：仅使用子任务语言提示，但VLA接收完整的原始RGB观察。成功率大幅下降（黑杯起始从100%降至60%，蓝杯起始从85%降至50%），表明视觉杂乱是导致错误定位和动作失败的主要原因。</li>
+<li><strong>无进度引导</strong>：VLA执行器接收原始的长视野任务指令，而非规划器生成的子任务指令。性能也显著下降，突显了子任务级语言指令对于聚焦VLA决策的重要性。</li>
+<li><strong>无语义图</strong>：规划器直接基于原始多视角RGB观察（通过VLM描述）进行推理，而不是查询结构化的语义图。这导致性能最差，因为基于原始图像的VLM描述在杂乱和部分可观测场景中不可靠，无法支持稳健的进度跟踪。<br>消融实验证实了进度引导的视觉-文本提示（尤其是无杂乱视觉提示）以及持久语义图状态对于实现可靠的长视野操作至关重要。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：第一，提出了CodeGraphVLP框架，该框架创新性地结合了基于代码的规划器、持久语义图状态和进度引导的视觉-语言提示，以应对非马尔可夫长视野操作中的挑战。第二，展示了在语义图上执行的可编程代码如何能够高效地跟踪任务进度、选择子任务，并为下游执行产生子任务相关实体，从而避免了昂贵的VLM在环调用。第三，设计并验证了三个具有非马尔可夫依赖性和杂乱场景的真实世界任务，实验表明CodeGraphVLP在提高任务成功率的同时，显著降低了规划延迟。</p>
+<p>论文自身提到的局限性包括：框架依赖于离线LLM来生成任务特定的规划代码，这需要为每个新任务进行一次性合成；此外，语义图构建的准确性依赖于底层感知模块（如实例分割器、VLM、跟踪器）的性能，感知错误可能会传播并影响规划与执行。</p>
+<p>这项工作对后续研究的启示在于：它证明了将高层任务推理与低层视觉运动控制通过一个显式、可查询的中间状态（语义图）进行解耦的有效性。这种“状态显式化”的思想有助于管理部分可观测性和长视野依赖。未来工作可以探索更鲁棒和高效的语义状态维护方法，减少对预训练感知模块的依赖，或将代码规划器的合成过程进一步自动化或泛化，以支持更广泛的任务类别。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对非马尔可夫长时程视觉-语言-动作任务，解决现有VLA模型因依赖当前观测而失效的问题。提出CodeGraphVLP框架，其关键技术包括：1）维护任务实体与关系的**持久语义图状态**；2）基于代码的**可执行规划器**，在图上进行进度检查并输出子任务；3）**进度引导的视觉语言提示**，构建抑制干扰的观测以聚焦VLA执行器。在真实世界任务中，该方法提升了任务完成率，并显著降低了规划延迟。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.22238" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
