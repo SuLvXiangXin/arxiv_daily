@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Move-Then-Operate: Behavioral Phasing for Human-Like Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Move-Then-Operate: Behavioral Phasing for Human-Like Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.23620" target="_blank" rel="noreferrer">2604.23620</a></span>
+        <span>作者: Ruiqi Wang Team</span>
+        <span>日期: 2026-04-26</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型在机器人操作任务中取得了显著进展。主流方法大多学习单一的策略来生成完整的动作轨迹，而未能明确区分粗放的长距离移动和精细的接触式操作。即使是将任务分解为子任务的双系统变体，其底层动作仍在统一的目标下进行优化。这种将异质行为模式耦合在一起的单一策略，在优化时会导致梯度冲突，使得精细操作的学习信号被大量粗放移动帧所淹没，从而限制了高精度操作技能的学习。</p>
+<p>本文针对这一核心优化挑战，提出了受人类运动模式启发的“先移动后操作”新视角。人类操作通常呈现清晰的两阶段结构：一个快速的“移动”阶段将末端执行器带到目标附近，随后是一个依赖反馈的、精确的“操作”阶段。论文旨在将这种结构性归纳偏置显式地编码到策略架构中。其核心思路是，通过一个可学习的阶段选择器路由的双专家策略，结构性地解耦移动和操作阶段，使每个专家专注于学习各自阶段特有的动作分布，从而缓解优化干扰并提升性能。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Move-Then-Operate 是一个层次化门控策略框架，其核心是引入结构性归纳偏置，将粗放重定位与精细操作显式解耦。整体流程如下：首先，通过共享的视觉-语言模型骨干编码多模态上下文 $C_t$；接着，一个轻量级的阶段路由器推断当前的潜在阶段标签 $z_t$；最后，根据此路由信号，系统选择性地激活两个专用的条件流匹配专家 $E_{\text{Move}}$ 或 $E_{\text{Operate}}$ 中的一个，以合成动作轨迹。</p>
+<p><img src="https://arxiv.org/html/2604.23620v1/2604.23620v1/figure/fig_model_struct.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：整体模型架构。虚线表示数据流。最右侧图像展示了两名专家不同的操作尺度。在实际推理过程中，每次只激活单个专家。</p>
+</blockquote>
+<p><strong>核心模块与细节</strong>：</p>
+<ol>
+<li><strong>双专家架构</strong>：模型包含一个共享的VLM编码器和两个架构相同但参数独立的专家头 $E_{\text{move}}$ 与 $E_{\text{operate}}$。这种参数隔离旨在缓解粗放移动和精细操作阶段之间冲突的梯度更新。每个时间步 $t$，通过一个离散潜变量 $z_t \in {\text{Move}, \text{Operate}}$ 进行硬路由，选中的专家将为整个控制步生成动作序列，确保时间一致性。</li>
+<li><strong>基于动作块的专家路由</strong>：路由器工作在高级语义特征层面。VLM编码器将上下文 $C_t$ 编码为密集隐藏状态 $\mathbf{F}_t$，通过掩码全局平均池化得到语义概要 $\mathbf{f}<em>t$。一个轻量级MLP路由器据此预测阶段分布 $p</em>{\phi}(z \mid C_t)$，并通过贪婪解码选择专家 $\hat{z}_t$。</li>
+<li><strong>监督路由学习与推理</strong>：训练采用教师强制策略，使用带有真实阶段标签 $y_t$ 的数据集。动作优化使用条件流匹配损失，但关键之处在于，构建速度场时使用真实标签 $y_t$ 而非路由器预测值，并通过掩码确保梯度 $\nabla_{\theta_{\hat{z}}}$ 仅对匹配的专家非零，从而正交化参数更新。路由器则通过交叉熵损失 $\mathcal{L}<em>{\text{router}}$ 学习模仿真实分配。总损失为 $\mathcal{L}</em>{\text{total}} = \mathcal{L}<em>{\text{action}} + \lambda \mathcal{L}</em>{\text{router}}$。推理时严格遵循路由流程。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2604.23620v1/2604.23620v1/figure/method_mask.png" alt="训练流程"></p>
+<blockquote>
+<p><strong>图4</strong>：训练过程中的数据流。动作优化使用真实阶段标签进行掩码，路由器通过交叉熵损失单独优化。</p>
+</blockquote>
+<ol start="4">
+<li><strong>阶段感知自动标注</strong>：为获得训练所需的阶段标签，论文设计了一个基于多模态大语言模型的自动标注流程。该流程将标注任务构建为层次化时间分割问题：MLLM根据视频 $V$ 和指令 $I$ 预测一个包含 $N$ 个连续子任务的结构化调度 $\mathcal{S}$，每个子任务又包含一个原子阶段序列 $\mathbf{p}_i$（类型为Move或Operate）。为保障物理合理性，对阶段序列施加拓扑约束（如深度不超过2，且若分为两阶段则必须类型不同并按时间顺序）。通过一个确定性验证器 $\mathcal{V}$ 进行迭代自我修正，直至输出有效调度，从而为每个控制步分配阶段标签。</li>
+</ol>
+<p><strong>创新点</strong>：与现有主要针对RL信号或时间缩放的方法不同，本文的核心创新在于<strong>结构性地、显式地</strong>在模仿学习框架下解耦了长距离移动和接触式操作两个阶段。通过双专家架构和硬路由机制，为两种异质行为模式提供了专用的参数空间，从根本上避免了单一策略中的优化冲突。此外，利用MLLM进行自动化、与人类操作模式对齐的阶段标注，也是一种新颖的数据处理思路。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在RoboTwin2基准上进行，重点关注涉及不同接触动力学和物体几何形状的8个任务。模型基于 $\pi_0$ 实现，并注入独立的LoRA适配器给两个专家和骨干网络。训练分为两个阶段：首先在所有50个任务上进行10万步的多任务预训练，然后在8个特定任务上各进行2万步的微调。评估时，每个任务在干净场景中进行100次试验并报告平均成功率。</p>
+<p><strong>对比方法</strong>：主要对比了ACT、RDT以及作为核心基线的单体策略 $\pi_0$。此外，还对比了使用10倍于本方数据训练的 $\pi_{0.5}^*$ 和 GO-1$^*$ 模型，以评估数据效率。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>性能提升</strong>：在每任务50条演示数据的约束预算下，Move-Then-Operate的平均成功率达到 **68.9%**，相比 $\pi_0$ 基线的44.8%实现了 <strong>+24.1%</strong> 的绝对提升。在需要高精度驱动的任务上提升尤为显著，例如“Click Bell”任务从44%提升至99%，“Press Stapler”从62%提升至70%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2604.23620v1/2604.23620v1/figure/nosp_w_delta.png" alt="主实验结果"></p>
+<blockquote>
+<p><strong>表1</strong>：在8个代表性RoboTwin2任务上的成功率。所有方法均使用每个任务50条演示数据且训练步数相同。加粗表示最佳性能。</p>
+</blockquote>
+<ol start="2">
+<li><strong>数据效率</strong>：尽管仅使用十分之一的数据量，本方方法在多项任务上仍能与数据量多一个数量级的基线模型竞争甚至超越。例如，在接触丰富的“Press Stapler”和“Click Bell”任务上，本方分别比 $\pi_{0.5}^*$ 高出 <strong>+13%</strong> 和 **+24%**。这表明，对于复杂操作技能，架构专业化比单纯扩大数据规模更能有效驱动性能提升。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2604.23620v1/2604.23620v1/figure/sp_w_delta.png" alt="数据效率对比"></p>
+<blockquote>
+<p><strong>表2</strong>：与数据丰富的基线对比。标有∗的模型使用了10倍于我们的训练数据。加粗表示最佳性能，下划线表示次佳。</p>
+</blockquote>
+<ol start="3">
+<li><strong>训练效率</strong>：在多任务预训练阶段，本方模型展现出快速收敛能力。例如在“Click Bell”和“Click Alarm”任务上，模型在6万步时即达到接近峰值的性能，超过了经过10万步预训练加2万步微调的 $\pi_0$ 基线的最终性能。在任务特定微调阶段，模型也迅速收敛，如在“Place Cans Plasticbox”任务上，前5千步内成功率就从16%提升至73%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2604.23620v1/2604.23620v1/figure/appx_vis_1.png" alt="训练效率曲线"></p>
+<blockquote>
+<p><strong>图5</strong>：多任务预训练阶段中，我们的模型在60k、80k和100k训练步数时的成功率。π0基线代表单一策略基线的报告性能。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.23620v1/2604.23620v1/figure/appx_vis_2.png" alt="微调收敛曲线"></p>
+<blockquote>
+<p><strong>图6</strong>：任务特定微调在5k、10k、15k和20k步时的成功率。“w/o finetune”列表示预训练多任务模型的性能。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：论文通过架构对比实验验证了双专家设计的必要性。与单体专家相比，双专家架构带来了显著的性能增益。同时，使用自动生成的阶段标签进行训练，其效果与使用人工标注的“Oracle”标签相当，证明了自动标注流程的有效性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个受人类启发的VLA框架“Move-Then-Operate”，通过双专家策略和阶段路由器，显式地解耦了长距离移动和接触式操作，有效缓解了优化干扰并增强了高精度控制能力。</li>
+<li>开发了一个基于MLLM的自动化数据标注流程，结合子任务分解和上下文线索（如速度线索），生成与人类操作模式对齐的高保真阶段标签。</li>
+<li>在RoboTwin2基准上的实验表明，该方法在成功率上相比单体基线有显著提升（+24.1%），同时展现出卓越的数据效率和训练效率——仅用十分之一的数据即可达到可比性能，并以少40%的训练步数达到峰值性能。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，在视觉多样性任务（如“Place Cans Plasticbox”）中，由于小数据集的视觉多样性有限，模型在处理未见过的配置时可能仍会挣扎，尽管其运动基元学习是正确的。这表明架构解耦主要优化了动作学习，但对视觉泛化的提升有限。此外，两阶段的划分可能无法涵盖所有复杂的操作序列。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>更细粒度的行为阶段</strong>：可以探索超越两阶段的、更细粒度的行为阶段分解，以处理更复杂的技能链。</li>
+<li><strong>与强化学习结合</strong>：将这种结构性归纳偏置与强化学习范式结合，利用其探索能力进一步提升在稀疏奖励或动态环境下的性能。</li>
+<li><strong>改进自动标注</strong>：探索更鲁棒、无需严格约束的自动阶段识别方法，以降低对精心设计提示工程的依赖，并扩展到更广泛的数据集。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中单一策略未区分粗重定位与精细操作、导致性能受限的问题，提出Move-Then-Operate视觉语言动作框架。该方法显式解耦操作行为为move（粗重定位）和operate（接触关键交互）两阶段，采用双专家策略与可学习阶段选择器，并基于MLLM自动生成阶段标签以对齐人类运动模式。在RoboTwin2基准测试中，平均成功率提升至68.9%，较单一策略基线提高24%，且匹配或超越10倍数据训练的模型，训练步骤减少40%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.23620" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
