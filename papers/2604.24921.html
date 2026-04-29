@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Libra-VLA: Achieving Learning Equilibrium via Asynchronous Coarse-to-Fine Dual-System - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Libra-VLA: Achieving Learning Equilibrium via Asynchronous Coarse-to-Fine Dual-System</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2604.24921" target="_blank" rel="noreferrer">2604.24921</a></span>
+        <span>作者: Guanghui Ren Team</span>
+        <span>日期: 2026-04-27</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）模型是通用机器人操作的主流范式，旨在将高级语义指令落地为可执行的物理动作。然而，主流方法通常采用<strong>单体生成范式</strong>，以扁平、非层次化的方式直接将视觉-语言特征映射到高频电机指令。具体表现为两种方式：一是将连续动作离散化为海量动作仓以近似连续空间，二是将连续扩散头直接连接到VLM主干来预测连续信号。这种策略忽视了机器人操作固有的层次性：复杂动作可以自然地分解为<strong>离散的宏观方向性趋近</strong>和<strong>连续的微观姿态对齐</strong>。单体范式迫使模型在一个扁平的过程中同时处理高级抽象推理和低级高频控制，造成了巨大的<strong>语义-执行鸿沟</strong>，并为将高级语义落地到连续动作带来了沉重的表征负担。</p>
+<p>现有的一些分层方法主要关注<strong>时间分解</strong>，通过子指令或目标图像等顺序里程碑来引导任务执行。然而，时间解耦仅缩短了规划范围，模型仍需执行到连续动作的直接跨模态翻译，单步生成的表征复杂性仍未解决。本文针对这一痛点，提出了一个新的视角：将分层思想扩展到<strong>表征动作空间</strong>。本文的核心思路是：将机器人动作建模在一个<strong>混合动作空间</strong>中，显式地将学习复杂度解耦到一个从粗到细的层次中，以实现训练均衡，并利用这种结构模块化实现异步执行策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Libra-VLA的整体框架是一个解耦的、异步的粗到细双系统架构，其核心是将动作生成分解为两个条件分布：语义规划器预测离散的宏观意图，动作细化器基于该意图生成连续的精细动作。</p>
+<p><img src="https://arxiv.org/html/2604.24921v1/2604.24921v1/figure/arch_v4.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：Libra-VLA架构总览。框架采用粗到细生成范式，在两个专门阶段内于混合动作空间中显式建模动作。（左）系统2（语义规划器）以低频运行，使用VLM主干和并行粗动作头预测离散宏观方向意图（粗动作令牌）。（右）系统1（动作细化器）以高频运行，使用配备独立视觉编码器的扩散Transformer合成连续微观姿态对齐（细动作令牌）。两个系统通过由意图缓冲区管理的异步执行策略桥接。</p>
+</blockquote>
+<p><strong>系统2：语义规划器</strong><br>该模块负责在离散语义子空间中生成粗粒度的方向性意图。首先，对归一化连续动作进行<strong>粗粒度方向性离散化</strong>。与以往使用精细分箱（如N=256）的工作不同，Libra-VLA<strong>刻意使用显著更少的分箱数（N &lt;&lt; 256）</strong>，将动作抽象为与VLM语义推理能力自然对齐的宏观意图，同时减少语义规划器的学习负担。具体实现上，语义规划器在通用VLM主干上增加了一个<strong>并行粗动作头</strong>以加速推理。它引入可学习的查询令牌，与VLM特征拼接后送入双向Transformer，输出对应查询位置的细化特征，最后投影到N个离散仓的概率分布上。其训练目标是最小化预测分布与真实离散动作索引之间的标准交叉熵损失。</p>
+<p><strong>系统1：动作细化器</strong><br>该模块作为条件扩散策略，将粗意图细化为可执行的精确运动。其核心是<strong>自适应意图注入</strong>：维护一个可学习的码本，用于嵌入粗意图。在训练中采用<strong>动态课程策略</strong>：在早期（当系统2预测成功率低于阈值τ时），使用真实离散令牌检索意图以稳定训练；随着规划器性能提升，切换为从预测分布中采样意图，从而使细化器具备对轻微方向偏差的内在纠错能力。在架构上，动作细化器是一个<strong>扩散Transformer</strong>，并配备了一个<strong>独立的辅助视觉编码器</strong>以提取精细的几何特征，实现了与语义规划器的结构解耦。该模块以带噪动作、几何特征和宏观意图为条件预测噪声，通过去噪过程恢复机器人动作。其训练目标是最小化预测噪声与实际添加噪声之间的均方误差。</p>
+<p><strong>整体优化与异步执行策略</strong><br>整体损失函数是语义规划器损失和动作细化器扩散损失的加权和。为实现高效推理，Libra-VLA采用了<strong>异步执行策略</strong>，由<strong>语义意图缓冲区</strong>管理。通过设置<strong>水平扩展因子M</strong>，语义规划器在一次推理中预测未来M个执行块（每个块包含H_chunk步）的粗动作序列，并将其推入先进先出队列（意图缓冲区）。随后，在接下来的M-1个控制周期内，语义规划器保持休眠。动作细化器则以机器人控制频率运行，每一步从缓冲区弹出对应的粗动作切片作为条件，生成精细动作。这种设计使得昂贵的VLM推理得以低频运行，而轻量的细化器高频执行，兼顾了响应速度与计算效率。</p>
+<p><strong>核心创新点</strong></p>
+<ol>
+<li><strong>混合动作空间与学习均衡</strong>：提出在表征层面进行粗-细分解的混合动作空间，并实证发现模型性能随动作分解粒度呈<strong>倒U型曲线</strong>，峰值出现在两个子系统的学习难度达到平衡时。</li>
+<li><strong>异步双系统架构</strong>：实现了结构解耦的双系统，语义规划器（系统2）与动作细化器（系统1）分别专注于离散语义推理和连续几何生成，并配备独立视觉编码器，避免了特征挤压瓶颈。</li>
+<li><strong>显式可解释的通信</strong>：使用具有明确物理语义（宏观方向意图）的、可直接执行的粗动作令牌作为系统间通信协议，替代了现有双系统架构中不透明的高维潜向量，提高了可解释性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2604.24921v1/2604.24921v1/figure/inverted_u.png" alt="学习均衡曲线"></p>
+<blockquote>
+<p><strong>图4</strong>：性能与离散化粒度（分箱数N）的关系。性能呈现倒U型曲线，在N=16时达到峰值，验证了学习复杂度均衡原则。过细（N=64）或过粗（N=4）的离散化都会损害性能。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：主要在两个模拟基准上进行评估：<strong>LIBERO</strong>（评估标准能力）和<strong>LIBERO-Plus</strong>（深入分析鲁棒性）。同时进行了真实世界实验。模型基于InternVL2.5-2B初始化，未进行大规模机器人数据预训练。</p>
+<p><strong>基线方法</strong>：对比了采用离散动作空间的方法（如CoT-VLA， WorldVLA， DD-VLA， OpenVLA， π0-FAST）和采用连续动作空间的方法（如Diffusion Policy， Octo， DreamVLA， F1， GR00T-N1， GO-1， GE-Act， π0， π0.5）。</p>
+<p><strong>关键实验结果</strong>：<br>在LIBERO基准上（表1），Libra-VLA取得了**97.2%<strong>的平均成功率，创造了新的最高水平。在需要精细几何控制的对象任务上达到</strong>99.4%<strong>，在复杂长视野任务上达到</strong>92.8%**，验证了其双重优势。</p>
+<p><img src="https://arxiv.org/html/2604.24921v1/2604.24921v1/figure/liberotasks.png" alt="LIBERO结果"></p>
+<blockquote>
+<p><strong>图8</strong>：LIBERO基准上的任务示例。展示了模型在空间理解、物体操作、目标遵从和长视野任务上的能力。</p>
+</blockquote>
+<p>在LIBERO-Plus基准上（表2），评估模型在七种扰动维度（如相机视角、光照、背景噪声等）下的鲁棒性。在<strong>零样本迁移</strong>设置下，Libra-VLA平均成功率达<strong>79.5%<strong>，显著优于基线。在</strong>监督微调</strong>设置下，进一步提升至**82.3%**，同样达到最优。</p>
+<p><img src="https://arxiv.org/html/2604.24921v1/2604.24921v1/figure/lbplus_tasks_v2.png" alt="LIBERO-Plus结果"></p>
+<blockquote>
+<p><strong>图9</strong>：LIBERO-Plus基准上的扰动任务示例。包括相机视角变化、光照变化、背景纹理变化等，用于测试模型鲁棒性。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：</p>
+<ol>
+<li><strong>架构有效性</strong>：移除双系统设计（即单体扩散模型）或移除异步执行（即同步执行）均会导致性能显著下降，分别降低6.7%和2.1%。</li>
+<li><strong>意图粒度</strong>：如图4所示，离散分箱数N对性能有显著影响。N=16时性能最佳，过细（N=64）或过粗（N=4）都会损害性能，验证了学习均衡原则。</li>
+<li><strong>训练策略</strong>：动态课程策略（在训练后期从预测分布中采样意图）相比始终使用真实意图，能带来1.3%的性能提升，证明了其培养模型纠错能力的有效性。</li>
+<li><strong>异步执行</strong>：水平扩展因子M=2在性能与延迟之间取得了最佳平衡。M=1（同步）延迟高，M=4则因规划过于超前导致性能下降。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2604.24921v1/2604.24921v1/figure/loss_curve.jpeg" alt="消融实验"></p>
+<blockquote>
+<p><strong>图5</strong>：训练损失曲线对比。Libra-VLA（蓝线）比单体基线（橙线）收敛更快，最终损失更低。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.24921v1/2604.24921v1/figure/realexp_v4.png" alt="真实世界实验"></p>
+<blockquote>
+<p><strong>图7</strong>：真实世界实验设置。展示了在物理机器人上执行长视野、多步骤操作任务。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2604.24921v1/2604.24921v1/figure/realtask.png" alt="真实任务结果"></p>
+<blockquote>
+<p><strong>图10</strong>：真实世界任务成功示例。包括“打开抽屉，取出打蛋器，放在桌上”等复杂指令，证明了方法的实际有效性。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种基于<strong>混合动作空间</strong>的新颖粗到细VLA范式，并发现了<strong>学习复杂度均衡</strong>原则，即模型性能在粗、细两阶段学习难度平衡时达到最优。</li>
+<li>基于该范式，实现了一个<strong>解耦的异步双系统架构</strong>（Libra-VLA），其中语义规划器低频运行提供稳定规划，动作细化器高频运行实现实时控制。</li>
+<li>通过大量实验验证了该框架的有效性，在多个基准上取得了最先进的性能，并展示了出色的鲁棒性和实际部署潜力。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文提到，混合动作空间中离散化的<strong>最佳粒度需要手动探索</strong>（尽管找到了一个稳健的默认值）。此外，当前框架主要处理<strong>单臂操作</strong>，未来可扩展至双手或移动操作。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>范式转变</strong>：为VLA模型设计提供了从“单体扁平映射”到“层次化混合表征”的新思路，强调了在动作表征层面进行解耦的重要性。</li>
+<li><strong>系统设计</strong>：异步双系统架构与显式、可解释的通信协议（粗动作令牌）为构建高效、透明的机器人认知架构提供了参考。</li>
+<li><strong>均衡原则</strong>：发现的“倒U型”性能曲线表明，在分层系统中，并非分解得越细越好，平衡子任务的学习难度是优化整体性能的关键，这一原则可能适用于其他分层学习问题。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有视觉-语言-动作模型采用单一、扁平化生成范式，难以有效桥接高级语义指令与连续动作执行之间的鸿沟问题，提出Libra-VLA模型。其核心方法是采用一种异步的“由粗到细”双系统架构：语义规划器预测离散的宏观意图令牌，动作细化器基于此生成高频连续动作以实现精确对齐。关键实验发现，模型性能与动作分解粒度呈倒U型曲线关系，当两个子系统的学习难度达到平衡时，性能达到峰值。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2604.24921" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
