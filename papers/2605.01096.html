@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning to Race in Minutes: Infoprop Dyna on the Mini Wheelbot - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Learning to Race in Minutes: Infoprop Dyna on the Mini Wheelbot</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.01096" target="_blank" rel="noreferrer">2605.01096</a></span>
+        <span>作者: Sebastian Trimpe Team</span>
+        <span>日期: 2026-05-01</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，基于强化学习（RL）的机器人控制方法在应对快速、非线性和不稳定的动力学系统方面展现出潜力，但传统RL方法样本效率低下，限制了其实际应用。因此，许多成功方法依赖于精心设计的基于物理的模拟器和广泛的域随机化，以在合理的挂钟时间内实现从模拟到现实（sim-to-real）的策略迁移。模型强化学习（MBRL）通过学习系统动力学模型并用其想象轨迹来增强真实经验，从而提高了样本效率。然而，不完美的学习模型可能导致模型利用，尤其是在用于长视野规划时，从而降低现实世界的性能。Infoprop Dyna 是一种最新的MBRL方法，它通过将模型预测视为对真实信号的噪声观测，并利用信息论来恢复估计的真实信号，同时跟踪由噪声引起的累积误差，从而缓解了模型利用问题，实现了比以往方法更可靠的长视野展开。</p>
+<p>本文针对在真实硬件上直接、快速学习具有挑战性动力学系统的控制策略这一痛点，展示了Infoprop Dyna 在真实机器人任务中的实际有效性。具体而言，研究使用Infoprop Dyna框架，让一个欠驱动的独轮机器人Mini Wheelbot直接从现实交互中学习，在11分钟的真实世界经验内学会了围绕固定赛道竞速。本文的核心思路是：绕过对物理模拟器的依赖，利用一种不确定性感知的模型强化学习框架，通过分布式训练架构直接在真实机器人上高效学习高性能的赛车策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文方法的整体框架是一个分布式训练流程，其核心是利用学习到的动力学模型生成大规模并行的合成轨迹，以替代基于物理的模拟器。</p>
+<p><img src="https://arxiv.org/html/2605.01096v1/2605.01096v1/images/setup_schematic_pictorial.png" alt="分布式训练示意图"></p>
+<blockquote>
+<p><strong>图2</strong>：分布式训练示意图。物理机器人执行当前策略收集真实世界数据，轨迹通过SSH传输到本地工作站，然后转发至高性能计算（HPC）集群进行模型学习和策略优化。优化后的策略参数被部署回机器人，形成闭环。</p>
+</blockquote>
+<p><strong>整体流程与输入输出</strong>：训练流程如<strong>图2</strong>所示。输入是机器人在真实赛道上执行当前策略收集到的状态-动作轨迹数据。输出是优化后的策略参数。具体分为三个阶段：1) <strong>真实数据收集</strong>：在物理Mini Wheelbot上执行当前策略，观测其物理状态（包括姿态、角速度等）和由接下来30个赛道点相对位置构成的局部赛道表示，并记录施加的电机扭矩指令。2) <strong>模型学习与策略优化</strong>：收集到的数据被传输至HPC集群。在此，算法学习一个动力学模型，并利用Infoprop Dyna框架进行策略优化，生成大量“想象”的rollouts来改进策略。3) <strong>策略部署</strong>：更新后的策略参数被传回并部署到机器人上，进行下一轮数据收集与评估。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>动力学模型学习</strong>：本文仅学习Wheelbot物理状态的转移模型。局部赛道表示可根据预测的物理状态和已知的赛道几何结构确定性地重构。与先前假设可访问完全观测、无记忆状态的Infoprop基准不同，Mini Wheelbot仅提供通过机载状态估计得到的估计状态。为此，学习模型以一小段历史估计物理状态和施加的控制输入为条件，并被训练来预测下一个估计状态。这使得模型能够隐式地捕捉状态估计器及物理系统的动态特性。</li>
+<li><strong>策略优化与Infoprop Dyna</strong>：策略优化基于学习到的动力学模型，使用Infoprop Dyna框架。该框架的核心创新在于其处理模型不确定性的方式。它将模型的长视野预测视为对潜在真实轨迹的噪声观测，并应用信息传播（Infoprop）技术来“去噪”，从而恢复出更接近真实动态的估计轨迹，同时量化累积的不确定性。这使得算法能够进行比传统MBRL方法更长远且可靠的规划。</li>
+<li><strong>分布式训练架构</strong>：整个训练在分布式设置中进行（<strong>图2</strong>）。本地工作站负责与机器人通信和日志管理，HPC集群利用JAX和BRAX实现进行大规模并行的模型训练和策略优化。这种设计使得计算时间（在集群上）能够与现实世界数据收集时间（在机器人上）重叠，从而实现与数据收集时间相当的总体训练时间。</li>
+<li><strong>初始化</strong>：在完全自主学习开始前，使用通过近似模型预测控制器（AMPC）和操纵杆界面手动驾驶机器人收集的轨迹来“预热”真实世界数据集。这提供了最初一分钟安全且信息丰富的状态转移数据。</li>
+</ol>
+<p><strong>与现有方法的创新点</strong>：</p>
+<ul>
+<li><strong>无需模拟器</strong>：完全摒弃了精心设计的物理模拟器和域随机化流程，直接在真实硬件上学习。</li>
+<li><strong>处理状态估计</strong>：动力学模型明确学习以历史估计状态为条件，从而隐式建模了状态估计器的动态，更贴合实际机器人系统。</li>
+<li><strong>高效的分布式协同</strong>：通过分离数据收集（机器人端）与密集计算（集群端），并利用高度并行化，使得整体挂钟时间主要由真实交互时间主导，而非训练时间，实现了“分钟级”学习。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与基准</strong>：实验平台是Mini Wheelbot，一个具有高度非线性偏航动力学的欠驱动独轮机器人。任务是在一个固定赛道上（<strong>图1</strong>）学习尽可能快的竞速策略。对比的基线方法是该机器人原论文中提出的近似模型预测控制器（AMPC），该控制器此前是用于平衡和基本驱动的，并非为竞速设计。</p>
+<p><strong>关键实验结果</strong>：使用Infoprop Dyna，智能体在<strong>11分钟</strong>的真实世界经验内，从保守运动进步到激进的竞速行为。具体性能对比如下：</p>
+<ul>
+<li>AMPC控制器平均速度为0.15 m/s，最大速度为0.33 m/s。</li>
+<li>最终的Infoprop Dyna竞速智能体平均速度达到<strong>0.5 m/s</strong>，峰值速度达到<strong>0.97 m/s</strong>，平均速度提升超过<strong>3倍</strong>。</li>
+<li>在相同时间内，竞速智能体完成的圈数是AMPC智能体的<strong>3倍以上</strong>。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2605.01096v1/2605.01096v1/images/comparison.png" alt="轨迹对比"></p>
+<blockquote>
+<p><strong>图3</strong>：AMPC控制器（左）与最终竞速智能体（右）的轨迹对比。右图显示竞速智能体的轨迹更贴近赛道中心线，且圈数显著更多。</p>
+</blockquote>
+<p><strong>定性分析</strong>：如<strong>图3</strong>所示，Infoprop Dyna学习到的策略不仅速度更快，而且能更紧密地贴合赛道中心线。为实现这种加速，智能体自主发现并利用了一种<strong>受控打滑行为</strong>来处理高速弯道，这与AMPC依赖陀螺效应重新定向的策略不同。这种行为很难通过纯粹的基于物理的仿真来捕捉。</p>
+<p><strong>训练过程分析</strong>：训练开始于使用操纵杆驱动的AMPC进行初始数据收集。随后，智能体在前5分钟的真实经验中逐渐学会转弯和通过弯道。在经历6分钟的真实交互后，成功完成第一圈。在7到8分钟时，可以完成多圈，但某些转弯仍显保守，在高曲率路段存在明显晃动。从第9分钟开始，智能体掌握了赛道，在11分钟时达到峰值性能。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>现实世界验证</strong>：首次在真实、具有挑战性的机器人平台（Mini Wheelbot）上实证了Infoprop Dyna能够实现快速（分钟级）、高性能的端到端学习，且不依赖于精心设计的sim-to-real流程。</li>
+<li><strong>发现非平凡行为</strong>：学习到的策略自主涌现出如受控打滑等复杂、非平凡的行为，这些行为难以通过基于物理的模型或传统控制方法轻易获得。</li>
+<li><strong>系统集成与流程设计</strong>：设计并实现了一个高效的分布式训练流程，将真实机器人数据收集与集群上的大规模并行计算紧密结合，使得学习时间主要由物理交互时间决定。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，训练初始阶段仍需使用手动驾驶（通过AMPC和操纵杆）收集约一分钟的数据进行“预热”，并非完全从零开始。此外，当前实验是在固定的小型赛道上进行的。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li>证明了先进的不确定性感知MBRL方法（如Infoprop Dyna）可以直接应用于真实机器人学习，并取得卓越的样本效率和最终性能，为绕过仿真建模的复杂性提供了可行路径。</li>
+<li>提出的分布式训练架构为在真实机器人上高效部署计算密集型学习算法提供了参考范式。</li>
+<li>未来的工作可以着眼于将方法扩展到更大的场景、任意的赛道布局，以及开发更通用、模块化的软件接口，以促进MBRL在更广泛机器人系统中的应用。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人直接在真实世界中快速学习控制策略的难题，提出使用Infoprop Dyna这一基于模型的强化学习方法。该方法通过信息理论处理模型预测噪声，实现长时域可靠模拟，避免了传统方法对精细物理模拟器的依赖。在Mini Wheelbot欠驱动独轮车平台上，仅用11分钟的真实交互经验，机器人即学会绕赛道竞速，并展现出从保守行驶到高速甩尾等复杂策略。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.01096" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
