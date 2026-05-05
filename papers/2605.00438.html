@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Thinking in Text and Images: Interleaved Vision–Language Reasoning Traces for Long-Horizon Robot Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Thinking in Text and Images: Interleaved Vision–Language Reasoning Traces for Long-Horizon Robot Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.00438" target="_blank" rel="noreferrer">2605.00438</a></span>
+        <span>作者: Wenbo Ding Team</span>
+        <span>日期: 2026-05-01</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）策略在机器人操作中取得了快速进展。主流方法通常将长视野推理隐含在模型的潜在状态中，或仅暴露单一模态的规划过程。具体而言，纯文本的链式思维或分层语言规划能编码任务因果顺序，但缺乏空间姿态、接触几何等对底层控制器至关重要的细节；而视觉预测或世界模型能提供几何线索，但通常是局部或滚动视野的，且预测出的视觉上合理的未来帧可能并不符合用户意图的因果序列。这两种方式各有局限：文本规划缺少几何基础，视觉预测则语义约束不足且易偏离正确任务序列。</p>
+<p>本文针对长视野机器人操作中逻辑连贯性与几何基础性难以兼顾的痛点，提出了一种新的视角：将显式的、交错排列的视觉-语言推理轨迹作为策略的中间表示。核心思路是：在任务开始时，模型根据初始观测和指令生成一个覆盖整个任务视野的、由文本子目标和视觉关键帧交替组成的“故事板”（即IVLR-Trace），并将其缓存，用于后续闭环动作解码的上下文，从而将长视野的语义逻辑与几何基础统一在一个显式结构中。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>IVLR框架的核心是IVLR-Trace，它是一个由N个阶段组成的序列 $z = [ ( c^{(1)}, k^{(1)} ), \ldots, ( c^{(N)}, k^{(N)} ) ]$，其中每个阶段包含一个描述因果角色的文本子目标 $c^{(i)}$ 和一个锚定预期空间状态的视觉关键帧 $k^{(i)}$。策略将推理与执行分解为：$P_{\Theta}(z, a_{1:T} \mid o_{0}, \mathcal{I}) = P_{\Theta}(z \mid o_{0}, \mathcal{I}) \prod_{t=1}^{T} P_{\Theta}(a_{t} \mid o_{t}, \mathcal{I}, z)$。这使得中间计划显式化，同时动作预测仍基于当前观测 $o_t$ 保持闭环。</p>
+<p><img src="https://arxiv.org/html/2605.00438v1/2605.00438v1/x1.png" alt="统一推理与执行架构"></p>
+<blockquote>
+<p><strong>图2</strong>：统一推理与执行架构。同一个多模态Transformer首先根据初始观测和指令生成完整的IVLR-Trace。文本子目标通过语言头解码，视觉关键帧通过流匹配视觉头生成。在执行期间，生成的轨迹被缓存，动作解码器基于当前观测、原始指令和轨迹上下文预测连续动作。</p>
+</blockquote>
+<p>该方法基于一个原生的多模态Transformer（初始化自Show-o2 1.5B）实现，统一处理文本、视觉和动作表示。<strong>文本</strong>：指令和阶段描述使用语言分词器表示，并由语言头自回归解码。<strong>视觉</strong>：观测和关键帧使用Wan2.1 VAE编码为连续潜在表示。对于生成的关键帧，模型使用一个流匹配头来预测将噪声传输到目标视觉潜在表示的向量场 $v_{\Theta}$。<strong>动作</strong>：引入一个可学习的[ACT]令牌。在执行时，该令牌的隐藏状态关注当前观测、指令和缓存的轨迹，并由一个轻量级MLP预测连续控制：$a_{t} = \mathrm{MLP}(h_{\texttt{[ACT]}}(o_{t}, \mathcal{I}, z)) + \mu_{\text{act}}$。</p>
+<p>在推理阶段（$t=0$），模型生成假设的全局轨迹，交替解码文本 $c^{(i)}$ 和通过求解ODE生成视觉关键帧 $k^{(i)}$。生成后，轨迹被缓存。在每个执行时间步，模型接收实时观测 $o_t$、原始指令 $\mathcal{I}$ 和缓存轨迹 $z$，然后预测动作。模型依赖于学习到的隐式对齐，而非硬编码的阶段指针，即[ACT]令牌关注整个缓存轨迹和实时观测，以选择与当前状态兼容的轨迹内容。</p>
+<p>由于标准机器人数据集不包含此类交错轨迹标注，论文提出了一种伪迹构建流程来生成监督信号。</p>
+<p><img src="https://arxiv.org/html/2605.00438v1/2605.00438v1/x2.png" alt="伪迹构建流程"></p>
+<blockquote>
+<p><strong>图3</strong>：伪迹构建流程。使用通用视觉分解器（UVD）根据视觉嵌入变化将演示轨迹分割成阶段，选取每个片段的最后一帧作为关键帧，并使用视觉语言模型（如Qwen3-VL）为每个阶段生成描述交互和空间关系的结构化描述，从而获得伪监督。</p>
+</blockquote>
+<p>训练目标混合了推理样本 $(o_0, \mathcal{I}, z_{\text{pseudo}})$ 和动作样本 $(o_t, \mathcal{I}, z_{\text{pseudo}}, a_t)$，总损失为 $\mathcal{L}<em>{\text{total}} = \mathcal{L}</em>{\text{text}} + \lambda \mathcal{L}<em>{\text{flow}} + \gamma \mathcal{L}</em>{\text{action}}$，包括文本交叉熵、视觉关键帧的流匹配损失和动作L1损失。训练中还应用了随机轨迹噪声和动态上下文掩码以降低对完美轨迹的过度依赖。</p>
+<p>与现有方法相比，IVLR的创新点在于：1) <strong>全局规划</strong>：生成覆盖整个任务视野的轨迹，而非局部或滚动视野的中间提示。2) <strong>交错表示</strong>：同时包含文本子目标和RGB关键帧，而非单一模态。3) <strong>统一模型</strong>：使用单个原生多模态Transformer配合流匹配视觉头。4) <strong>缓存执行</strong>：将生成的语义-几何轨迹缓存，作为闭环执行的上下文。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在模拟长视野操作基准LIBERO和视觉分布偏移基准SimplerEnv-WidowX上进行。对比的基线方法包括DP*、Octo、OpenVLA、SpatialVLA、CoT-VLA、$\pi_0$-FAST和VLA-0等。</p>
+<p><img src="https://arxiv.org/html/2605.00438v1/2605.00438v1/x3.png" alt="LIBERO上的成功率"></p>
+<blockquote>
+<p><strong>表2</strong>：IVLR在LIBERO上取得了95.5%的平均成功率，在LIBERO-Long子集上达到92.4%，显著优于其他VLA和CoT基线，尤其在长视野任务上优势明显。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.00438v1/2605.00438v1/x4.png" alt="SimplerEnv-WidowX上的成功率"></p>
+<blockquote>
+<p><strong>表3</strong>：在SimplerEnv-WidowX上，IVLR整体成功率为59.4%，高于SpatialVLA的42.7%，表明其在模拟视觉分布偏移下具有一定的鲁棒性。</p>
+</blockquote>
+<p>关键实验结果总结如下：在LIBERO上，IVLR平均成功率达95.5%，其中在测试因果顺序的LIBERO-Long上达到92.4%，而CoT-VLA为69.0%，VLA-0为87.6%。在SimplerEnv-WidowX上，IVLR整体成功率为59.4%。消融实验（表4）清晰展示了交错轨迹的必要性：在LIBERO-Long上，<strong>无轨迹</strong>版本成功率降至37.7%；<strong>纯文本轨迹</strong>为62.0%；<strong>纯视觉轨迹</strong>为68.4%；而<strong>完整交错轨迹</strong>达到92.4%。这表明文本和视觉模态是互补的，文本有助于编码顺序，视觉提供空间锚点，二者结合才能实现最佳性能。</p>
+<p><img src="https://arxiv.org/html/2605.00438v1/2605.00438v1/x5.png" alt="轨迹消融实验"></p>
+<blockquote>
+<p><strong>表4</strong>：轨迹消融实验结果。移除轨迹导致长视野任务性能大幅下降，纯文本或纯视觉轨迹虽有提升但远不及完整的交错轨迹，证实了双模态互补的必要性。</p>
+</blockquote>
+<p>此外，论文进行了受控压力测试（表5）。在轨迹生成后施加一次约2厘米的末端执行器随机扰动，平均成功率从95.5%降至92.1%（LIBERO-Long从92.4%降至88.2%），表明策略能从轻微执行漂移中恢复。随机掩码30%的文本轨迹令牌或30%的视觉关键帧（保持阶段顺序），成功率分别降至92.2%和90.0%。视觉掩码导致更大幅度的下降，说明视觉锚点对于精确操作尤为重要。这些测试表明，轨迹接口能够容忍局部内容缺失和适度的执行扰动。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) 提出了IVLR-Trace，一种用于长视野VLA控制的、显式的、全视野的语义-几何中间表示。2) 在一个统一的多模态Transformer中实例化了该表示，该模型首先生成轨迹，然后将其作为上下文用于闭环动作解码。3) 提出了一种可扩展的伪迹构建流程，为无结构的机器人演示数据提供分阶段的视觉-语言监督。4) 通过实验证明交错轨迹能显著提升长视野任务成功率，且文本与视觉组件均不可或缺，同时策略在受控扰动下仍保持一定功能。</p>
+<p>论文明确指出了其局限性：1) <strong>环境假设</strong>：方法假设在生成轨迹时工作空间是静态且完全可观察的。若规划后场景发生变化、目标初始不可见或其他智能体干预，缓存的轨迹可能过时。2) <strong>延迟成本</strong>：当前实现需要在行动前花费约10秒生成完整轨迹（随后执行频率为10 Hz），这对于快速变化的动态场景是一个限制。3) <strong>失败模式</strong>：IVLR主要减少了因果漂移类失败，但未能解决感知失败、计划过时或部分可观察性问题。</p>
+<p>这项工作对后续研究的启示在于：将交错视觉-语言轨迹作为一种显式的、可检查的中间表示，为机器人策略的长视野多模态推理提供了新思路。未来的工作可以探索滑动窗口重规划或自触发重规划机制，使轨迹能在动态场景中更新；研究不确定性感知的轨迹修订方法；并通过流水线生成等方式优化初始规划延迟，同时推进其在真实机器人上的验证。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决机器人长时程操作中逻辑连贯与几何基础难以兼顾的问题。提出交错视觉-语言推理框架，其核心IVLR-Trace表示交替生成文本子目标与视觉关键帧，作为全局语义-几何规划指导闭环动作。在LIBERO基准上平均成功率95.5%，其中LIBERO-Long达92.4%。消融实验表明双模态缺一不可：无轨迹时成功率降至37.7%，纯文本与纯视觉轨迹分别为62.0%和68.4%，而完整交错轨迹达92.4%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.00438" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

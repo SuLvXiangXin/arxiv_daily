@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Decompose and Recompose: Reasoning New Skills from Existing Abilities for Cross-Task Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Decompose and Recompose: Reasoning New Skills from Existing Abilities for Cross-Task Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.01448" target="_blank" rel="noreferrer">2605.01448</a></span>
+        <span>作者: Yahong Han Team</span>
+        <span>日期: 2026-05-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于上下文学习的方法利用已见任务演示来为未见任务生成动作，无需更新模型参数，是机器人跨任务泛化的主流方法。然而，现有方法仅提供低层次的连续动作序列作为上下文，未能捕获可组合的技能知识，导致模型退化为表面的轨迹模仿。它们缺乏对每个步骤执行何种技能、为何执行以及如何连接后续步骤的因果和程序性信息的表达，限制了其向包含新技能组合任务的泛化能力。</p>
+<p>本文针对现有方法在跨任务泛化中仅依赖轨迹相似性匹配、缺乏显式技能推理的痛点，提出了一个新视角：将可解释的原子技能-动作对齐对作为中间表示。核心思路是：将已见任务演示分解为原子技能序列及其与动作的对齐关系，构建一个可组合的技能库，进而在面对新任务时，通过视觉和规划相似性检索相关演示，并辅以技能覆盖库确保完整性，最终利用大语言模型基于这些技能对齐的演示进行组合式推理，生成可执行的动作序列。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架旨在实现零样本跨任务操作泛化，核心是通过一个免训练的流程，利用预训练的视觉编码器和大语言模型，将操作知识从已见任务迁移到未见任务。其核心洞见是：向大语言模型提供可组合、可解释的中间表示（与低层次动作对齐的原子技能标签），比单纯提供原始数值动作序列更有利于跨任务迁移。</p>
+<p><img src="https://arxiv.org/html/2605.01448v1/2605.01448v1/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：方法整体框架。包含四个组件：(1) 原子技能收集：从已见演示中提取技能-动作对作为可组合的中间表示；(2) 覆盖感知静态库：使用基于逆文档频率的令牌加权确保技能模式覆盖；(3) 动态演示库：通过视觉和基于规划的相似性检索任务自适应示例；(4) 技能增强上下文学习：将检索到的演示输入大语言模型，进行组合式技能推理以预测动作序列。</p>
+</blockquote>
+<p><strong>1. 原子技能收集</strong><br>此模块将不透明的数值动作序列转化为可解释的技能-动作对。首先进行<strong>关键帧提取</strong>：根据夹爪状态变化、运动停止事件和回合终止来分割演示，每个片段代表一个连贯的原子动作。随后进行<strong>基于视觉语言模型的标注</strong>：为每个动作片段标注原子技能标签，格式为 <code>动词[对象]</code> 或 <code>动词[对象1， 对象2]</code>。<strong>夹爪约束标注</strong>利用夹爪状态转换作为硬约束来确保物理一致性（如从开到闭强制标注为抓取）。最后通过<strong>后处理</strong>（如强制执行关系动词的参数顺序、验证抓取/释放对象类别等）产生干净的标签-动作对 <code>{(s_k， a_k)}</code>。</p>
+<p><strong>2. 双库演示检索</strong><br>为了解决选择既相关又技能完整的演示的挑战，本框架结合了动态库和静态库。</p>
+<ul>
+<li><strong>动态演示库</strong>：负责检索与任务相关的演示。它融合了<strong>视觉相似性</strong>（使用预训练的DINOv3编码器提取查询观测的全局特征，计算余弦相似度）和<strong>基于规划的技能匹配</strong>。规划代理首先根据指令和场景状态为查询任务生成预测的原子技能序列，然后通过计算预测序列与演示技能标签在动词集合和二元组链上的Jaccard相似度来衡量对齐程度。最终排名分数是两种相似度的加权融合，选取前 <code>k_sim</code> 个演示构成动态库。</li>
+<li><strong>覆盖感知演示库</strong>：作为静态库，用于补充动态库可能缺失的关键技能模式。它将每个演示抽象为忽略对象身份的、仅捕获动词级技能结构的令牌（如动词令牌“V:Reach”、二元组令牌“B:Reach→Grasp”）。为了优先考虑稀有但可能关键的技能，采用基于逆文档频率的加权策略为每个令牌分配权重。演示的选择分数平衡了覆盖增益与演示长度。在推理时，计算预测计划所需令牌与动态库已覆盖令牌之间的<strong>覆盖缺口</strong>，然后贪婪地从静态库中选择最多 <code>k_cov</code> 个演示来填补缺失的令牌，最终得到动态库与静态库补充的演示合集。</li>
+</ul>
+<p><strong>3. 技能增强上下文学习</strong><br>检索到的演示被格式化为技能-动作对齐的形式：<code>[指令， 观测， 计划] → [(s1， a1)， …， (sK， aK)]</code>。技能标签作为可解释的中间表示，解释了每个动作的目的及其与任务目标的关联。对于查询任务，输入包括指令、观测和规划代理建议的计划。关键设计在于：虽然技能标签指导对动作语义和执行顺序的理解，但大语言模型<strong>仅输出可执行的动作，而不输出标签</strong>。这确保了与机器人控制器的直接兼容性，并促使模型进行隐式的技能级推理，从而泛化到新的技能组合。</p>
+<p><strong>创新点</strong>：与现有方法（如X-ICM）仅提供低层次动作序列相比，本方法的创新具体体现在：1) 引入了原子技能-动作对齐的中间表示，将跨任务迁移从“轨迹相似性”提升到“技能可组合性”；2) 提出了动态库（任务相关性）与静态库（技能覆盖完整性）协同的双库检索机制，确保上下文示例既适配任务又技能完备。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在AGNOSTOS基准（首个为跨任务零样本操作评估设计的模拟测试平台）和真实世界环境（使用UFACTORY xArm6机械臂）上评估方法。超参数λ， α， β， γ分别设为0.7， 0.5， 0.5， 0.03。总共使用20个上下文演示，其中 <code>k_sim=17</code> 个动态检索演示，<code>k_cov=3</code> 个覆盖感知演示。</p>
+<p><strong>基线方法</strong>：与四大类方法对比：1) <strong>基础VLA模型</strong>：如OpenVLA， RDT， π0， LLARVA， SAM2Act， 3D-LOTUS++， VoxPoser；2) <strong>人类视频预训练VLA模型</strong>：如R3M， D4R及其适应变体；3) <strong>域内训练VLA模型</strong>：如PerAct， RVT， RVT2， Sigma-Agent， Instant Policy；4) <strong>跨任务操作的上下文学习方法</strong>：X-ICM。</p>
+<p><img src="https://arxiv.org/html/2605.01448v1/2605.01448v1/x3.png" alt="实验结果表"></p>
+<blockquote>
+<p><strong>表1</strong>：在AGNOSTOS基准23个未见任务上的跨任务零样本操作性能。报告了按难度级别（Level-1和Level-2）分组各任务的成功率（%）。我们的方法（Ours）在Level-1任务平均成功率达到32.5%，在Level-2任务达到18.5%，总体平均成功率为26.4%，超越了所有基线方法。特别是在微波炉、座位、关灯、USB等四个不同任务上成功率超过60%，而其他基线最多仅在三个任务上达到此阈值。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.01448v1/2605.01448v1/x6.png" alt="消融实验表"></p>
+<blockquote>
+<p><strong>表2</strong>：核心组件消融研究。BS.为随机选择演示的基线（总体成功率21.6%）；添加动态演示库（DDL.）提升至23.3%；进一步加入覆盖感知演示库（CDL.）提升至24.9%；最终使用技能增强上下文学习（SA-ICL）达到最佳性能26.4%。这验证了任务自适应检索、技能覆盖补充以及结构化技能表示对激发组合式推理的有效性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.01448v1/2605.01448v1/x4.png" alt="定性结果图"></p>
+<blockquote>
+<p><strong>图4</strong>：在AGNOSTOS基准四个代表性未见任务上组合式技能推理过程的可视化。展示了系统如何基于技能对齐的演示进行推理并生成动作序列。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.01448v1/2605.01448v1/x5.png" alt="真实世界实验图"></p>
+<blockquote>
+<p><strong>图5</strong>：(a) 真实世界实验平台，包含6自由度xArm6机械臂、夹爪和RGB-D相机。(b) 真实世界操作任务的结果，展示了方法在真实环境中的有效性。</p>
+</blockquote>
+<p><strong>其他分析</strong>：论文还分析了视觉编码器和大语言模型主干的影响。使用CLIP或DINOv2替代DINOv3会导致性能下降，表明静态场景语义提取能力影响零样本泛化。使用不同的大语言模型主干（如Llama3.0-8B， Ministral-8B， InternLM3-8B）时，性能随主干推理能力增强而提升，强调了跨任务泛化对增强的大语言模型推理能力的依赖。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 构建了原子技能标签-动作对齐数据，为大语言模型提供了可组合、可解释的原子技能集，使其能够对操作序列进行结构化推理。2) 提出了“分解与重组”组合式技能推理框架，通过动态演示库（任务相关性）和静态演示库（技能覆盖）的协同，获得任务自适应且技能覆盖全面的演示集，以增强零样本跨任务操作泛化。3) 在AGNOSTOS基准和真实世界环境中验证了方法的有效性，取得了具有竞争力的性能。</p>
+<p><strong>局限性</strong>：论文提到，其性能依赖于规划代理生成合理技能序列的能力以及大语言模型的推理能力。此外，原子技能标注的准确性也取决于所使用的视觉语言模型。</p>
+<p><strong>启示</strong>：本研究强调了在机器人学习中将低层次控制与高层次组合式语义推理相结合的重要性。通过引入显式的、可解释的技能中间表示，可以更有效地激发大语言模型的组合泛化能力，这为未来实现更通用的机器人操作提供了一个有前景的方向。同时，双库检索机制为解决上下文学习中示例选择的质量和覆盖度问题提供了新思路。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决机器人操作中跨任务零样本泛化的核心挑战，即如何将从已见任务中学到的知识迁移到全新的、未见过的任务组合中。
+
+提出的关键技术是“分解与重组”框架。其要点是将演示分解为可解释的原子技能-动作对，作为中间表征；然后通过组合推理，将这些技能重组以执行新任务。该方法构建了动态与静态的技能演示库来支持推理。
+
+实验在AGNOSTOS基准和真实环境中验证了该方法具有零样本跨任务泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.01448" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
