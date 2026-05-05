@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Latent Bridge: Feature Delta Prediction for Efficient Dual-System Vision-Language-Action Model Inference - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Latent Bridge: Feature Delta Prediction for Efficient Dual-System Vision-Language-Action Model Inference</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.02739" target="_blank" rel="noreferrer">2605.02739</a></span>
+        <span>作者: Hai Li Team</span>
+        <span>日期: 2026-05-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，双系统视觉-语言-动作模型已成为通用机器人操作的前沿范式。这类模型将大型视觉-语言模型作为特征提取主干，由轻量级的动作头解码为动作，在多样化的操作基准测试中取得了最优结果。然而，这种架构存在一个根本性的非对称延迟瓶颈：尽管VLM主干产生的输出在时间上变化缓慢，但必须在每个控制步骤都执行一次，其高昂的计算成本严重限制了在实时操作中的部署。</p>
+<p>本文针对VLM主干在连续时间步中计算冗余这一具体痛点，提出了利用特征时间冗余性的新视角。核心思路是训练一个轻量级的“桥接器”模型，来预测VLM主干输出特征在相邻时间步之间的增量变化，从而在多数步骤中用该桥接器的预测替代昂贵的VLM主干调用，仅在周期性间隔中调用VLM主干以获取“锚点”特征。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架旨在周期性调用VLM主干，并在中间的步骤中使用轻量级桥接器进行特征预测。设VLM调用周期为<code>f</code>，则在<code>t mod f = 0</code>的步骤中，执行完整的VLM主干<code>𝒱</code>，获取真实特征<code>z_t</code>并缓存。在随后的<code>f-1</code>个步骤中，桥接器<code>ℬ</code>根据最新的特征表示（第一步为真实VLM特征，后续步骤为桥接器自身上一步的预测）、缓存的稳定层特征<code>s_t</code>、机器人本体感知状态<code>q_t</code>和上一动作<code>a_{t-1}</code>，预测特征增量<code>Δ_t</code>，从而得到当前步骤的预测特征<code>ẑ_t</code>。动作头<code>𝒜</code>基于<code>ẑ_t</code>生成动作<code>a_t</code>。桥接器以自回归方式链式预测。</p>
+<p><img src="https://arxiv.org/html/2605.02739v1/2605.02739v1/figure/figure_1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：Latent Bridge方法整体框架。左侧展示了在VLM步骤（蓝色）和桥接步骤（绿色）中的推理流程。桥接器预测特征增量<code>Δ</code>，从而在大部分步骤中跳过昂贵的VLM主干计算，实现加速。</p>
+</blockquote>
+<p>核心模块是轻量级的桥接器模型<code>ℬ</code>。论文针对两种架构不同的双系统VLA模型（GR00T和<code>π_{0.5}</code>）实例化了两种桥接器。对于GR00T这类使用单一特征向量接口的模型，采用<strong>特征空间桥接器</strong>，其输入为当前特征<code>ẑ_t</code>、稳定层上下文<code>s_t</code>、状态<code>q_t</code>和上一动作<code>a_{t-1}</code>，通过一个具有交叉注意力的Transformer（DiT块）直接预测特征增量<code>Δ_t</code>。该桥接器的输出层被零初始化，确保未经训练时其预测为零，即退化为特征缓存基线。对于<code>π_{0.5}</code>这类使用交错层设计、动作头通过跨注意力访问VLM主干每层KV缓存的模型，采用<strong>KV缓存桥接器</strong>。它接收视觉嵌入<code>e_t</code>及其增量<code>Δe_t</code>、上一时间步的KV缓存预测<code>KV̂_{t-1}</code>、<code>q_t</code>和<code>a_{t-1}</code>，通过一个共享的DiT主干和多个轻量级输出头，同时预测所有<code>L</code>个Transformer层的Key和Value增量<code>{ΔK_l, ΔV_l}_{l=1}^L</code>。</p>
+<p><img src="https://arxiv.org/html/2605.02739v1/2605.02739v1/figure/figure_2.png" alt="架构对比"></p>
+<blockquote>
+<p><strong>图2</strong>：两种桥接器架构对比。左侧为GR00T的特征空间桥接器，预测单一特征向量的增量；右侧为<code>π_{0.5}</code>的KV缓存桥接器，预测所有层的KV缓存增量。两者均使用DiT主干和零初始化输出。</p>
+</blockquote>
+<p>与现有VLA加速方法（如令牌剪枝、量化）主要优化VLM前向传播过程不同，本文的创新点在于在中间步骤中<strong>完全跳过</strong>VLM主干计算，用一个极轻量的模型（2-6ms）替代之。这突破了仅优化主干计算带来的“阿姆达尔定律”天花板。该方法与现有加速技术正交且可组合。</p>
+<p>训练流程包含三个阶段，且是任务无关的。<strong>阶段1</strong>：同步数据收集与R0训练。在模拟器中运行原始VLA策略（每步都调用VLM），收集数据对<code>(z_t, z_{t+1}, s_t, q_t, a_{t-1})</code>，然后以监督学习方式训练桥接器，损失函数为图像令牌上的MSE和余弦损失。<strong>阶段2</strong>：DAgger精炼（R1）。为了解决桥接器在部署时需处理自身预测（分布偏移）而在同步数据中只见过干净VLM特征的问题，论文采用DAgger算法：在模拟器中运行R0桥接器策略，同时并行运行VLM主干作为“预言机”提供真实特征目标，用混合数据（同步数据+DAgger数据）对桥接器进行微调。<strong>阶段3</strong>（可选增强）：对于长视野任务，额外采用LoRA微调动作头以增强其对桥接器预测噪声的鲁棒性，并采用基于动作平移幅度的<strong>相位感知VLM调度</strong>，在动态高的阶段（如导航）使用较小的<code>f</code>（更多VLM调用），在动态低的阶段（如精细操作）使用较大的<code>f</code>。</p>
+<p><img src="https://arxiv.org/html/2605.02739v1/2605.02739v1/figure/figure_3.png" alt="训练流程"></p>
+<blockquote>
+<p><strong>图3</strong>：任务无关的三阶段训练流程。阶段1（R0）在同步数据上进行监督训练；阶段2（R1）通过DAgger在线修正分布偏移；阶段3（可选）包含动作头LoRA适应和相位感知调度，用于长视野任务。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在两个双系统VLA模型上进行：GR00T-N1.6-3B和<code>π_{0.5}</code>。评估基准包括四个LIBERO任务套件（Spatial, Object, Goal, Long-10）、24个RoboCasa厨房任务以及ALOHA模拟器的双手转移立方体任务。对比的基线方法包括：原始同步推理（Sync）、特征缓存（Feature Caching，即<code>Δ_t=0</code>），以及适配到双系统VLA上的令牌剪枝方法FastV和VLA-Cache。</p>
+<p>关键实验结果如下：在LIBERO上，Latent Bridge在<code>f=2-4</code>（相位感知）的设置下，对于GR00T，平均成功率从同步基线的96.58%保持在94.54%（保留97.9%），每步平均延迟从90ms降至49ms，净加速达1.73倍。对于<code>π_{0.5}</code>，在<code>f=4</code>时，平均成功率从96.96%保持在96.92%（近乎100%保留），延迟从76ms降至46ms，净加速1.65倍。而特征缓存基线性能严重下降（GR00T降至34.25%，<code>π_{0.5}</code>降至56.38%），令牌剪枝方法则因仍需执行完整主干，净加速有限（VLA-Cache为1.08倍）甚至可能导致减速（FastV为0.95倍）。</p>
+<p><img src="https://arxiv.org/html/2605.02739v1/2605.02739v1/x1.png" alt="表1"></p>
+<blockquote>
+<p><strong>表1</strong>：LIBERO上的主要结果对比。Latent Bridge在显著降低延迟（-39%至-45%）的同时，保持了95-100%的任务性能，实现了1.65-1.73倍的净加速。特征缓存性能崩溃，令牌剪枝方法加速比有限。</p>
+</blockquote>
+<p>跨平台评估表明方法的泛化性。在RoboCasa（GR00T，零样本）上，桥接器平均成功率为63.16%，相对于同步基线（66.22%）保留了95.38%，远高于特征缓存的49.78%。在ALOHA双手任务（<code>π_{0.5}</code>）上，桥接器成功率为86.00%（保留97.73%），特征缓存仅为46.00%。</p>
+<p><img src="https://arxiv.org/html/2605.02739v1/2605.02739v1/x2.png" alt="表2"></p>
+<blockquote>
+<p><strong>表2</strong>：跨基准测试结果。在RoboCasa和ALOHA任务上，Latent Bridge同样实现了高性能保留（95.38%和97.73%），证明了其在不同机器人平台和任务分布上的可迁移性。</p>
+</blockquote>
+<p>消融实验揭示了关键设计选择。移除视觉输入<code>Δe_t</code>或稳定层上下文<code>s_t</code>都会导致性能下降，尤其在长视野、复杂任务（LIBERO-10）上更为显著，表明两者对于提供场景动态和静态结构信息都至关重要。一个仅有19M参数的小型桥接器与148M参数的大型桥接器性能相当，表明模型容量并非瓶颈。</p>
+<p><img src="https://arxiv.org/html/2605.02739v1/2605.02739v1/x3.png" alt="表3"></p>
+<blockquote>
+<p><strong>表3</strong>：桥接器消融实验。视觉输入和稳定层上下文对于复杂任务至关重要。小模型（19M）能达到与大模型（148M）相当的性能。</p>
+</blockquote>
+<p>DAgger训练至关重要。R0（仅同步数据训练）在较简单任务上已能恢复约93-96%的同步性能，但在长视野任务上（如GR00T LIBERO-10）性能较差（54.33%）。经过一轮DAgger精炼（R1）后，所有任务性能均有3-13个百分点的显著提升，对于GR00T LIBERO-10，结合阶段2（LoRA）和阶段3（相位感知调度）后，性能最终提升至89.17%。</p>
+<p><img src="https://arxiv.org/html/2605.02739v1/2605.02739v1/x4.png" alt="表4"></p>
+<blockquote>
+<p><strong>表4</strong>：DAgger训练进程。R0（仅同步训练）提供了一个强起点，而R1（+DAgger）在所有套件和两种架构上均带来了3-13个百分点的稳定性能提升，有效纠正了分布偏移。</p>
+</blockquote>
+<p>VLM调用周期<code>f</code>与性能的权衡关系显示，对于Spatial、Object、Goal套件，<code>f</code>最大可至8而性能仍保持在94.5%以上；而对于最困难的LIBERO-10套件，性能随<code>f</code>增大下降更快，在<code>f=8</code>时从94.0%降至84.5%，这归因于长视野任务中预测误差的累积效应。</p>
+<p><img src="https://arxiv.org/html/2605.02739v1/2605.02739v1/figure/figure_4.png" alt="性能与周期关系"></p>
+<blockquote>
+<p><strong>图4</strong>：VLM调用周期<code>f</code>对<code>π_{0.5}</code>性能的影响。Spatial、Object、Goal套件在<code>f</code>高达8时仍能保持94.5%以上的成功率，而LIBERO-10因长视野误差累积，性能下降更早、更快。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了 <strong>Latent Bridge</strong>，一种通过预测VLM特征增量来跳过大部分VLM主干计算的轻量级模型，为双系统VLA推理加速提供了新思路；2）在两种架构迥异的VLA模型（GR00T和<code>π_{0.5}</code>）上成功实例化了该方法，并在多个基准测试中实现了<strong>95-100%</strong> 的任务性能保留和<strong>1.65-1.73倍</strong> 的净加速，证明了其通用性；3）设计了一套<strong>任务无关</strong>的三阶段训练流程（同步训练、DAgger精炼、可选增强），该流程可跨任务和平台迁移，无需修改。</p>
+<p>论文自身提到的局限性包括：1）<strong>计算效率与性能的权衡</strong>：虽然桥接器显著减少了VLM调用，但其自回归预测在长视野任务中可能导致误差累积，需要额外的机制（如相位感知调度）来缓解。2）<strong>架构依赖性</strong>：桥接器的具体设计需要适应目标VLA的接口（如特征向量或KV缓存）。3）<strong>在线适应</strong>：当前方法依赖离线收集的同步数据进行训练，未来可探索在线学习以更好地适应新环境。</p>
+<p>本工作对后续研究的启示在于：首先，它证明了<strong>利用VLM特征的时间冗余性进行预测</strong>是一条高效的加速路径，与优化单次VLM计算的方法互补。其次，<strong>DAgger式的在线分布纠正</strong>对于处理自回归预测中的分布偏移至关重要，这一范式可应用于其他存在类似“教师-学生”分布差异的序列预测问题。最后，<strong>针对不同任务阶段动态调整计算资源分配</strong>（相位感知调度）是平衡长视野任务中性能与效率的有效策略，值得进一步探索。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对双系统视觉-语言-动作模型在机器人操作中推理效率低下的核心问题，即VLM主干网络需每步执行产生冗余特征，提出Latent Bridge方法。该轻量级模型通过预测VLM输出特征差异，使动作头基于预测输出操作，VLM主干仅周期性调用，并在GR00T和π0.5两种架构上验证通用性。实验表明，在LIBERO、RoboCasa和ALOHA多项任务中，性能保留95-100%，VLM调用减少50-75%，整体加速达1.65-1.73倍。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.02739" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
