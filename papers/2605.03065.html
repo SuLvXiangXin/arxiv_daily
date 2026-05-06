@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>OGPO: Sample Efficient Full-Finetuning of Generative Control Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>OGPO: Sample Efficient Full-Finetuning of Generative Control Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.03065" target="_blank" rel="noreferrer">2605.03065</a></span>
+        <span>作者: Max Simchowitz Team</span>
+        <span>日期: 2026-05-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，生成控制策略（GCPs），如基于扩散或流模型的策略，已成为机器人学习中的有效策略参数化方法。微调此类预训练策略的主流方法面临数据效率与策略改进程度之间的权衡。一方面，注重样本效率的方法结合了离策略（off-policy）批评家（critic）学习，但通常只对GCP进行部分微调（如引导初始生成噪声或学习残差修正），或通过行为克隆模仿高回报动作。这些方法在基础策略已覆盖最优动作时学习迅速，但难以探索新行为。另一方面，追求最终任务性能最大化的方法（如DPPO）使用同策略（on-policy）策略梯度更新，虽能驱动显著的策略改进，但样本效率严重受损。</p>
+<p>本文针对上述痛点，提出了一种新视角：利用环境交互（昂贵）与GCP内部计算（廉价）之间的成本不对称性，进行解耦优化。具体而言，OGPO在昂贵的环境动态MDP中进行样本高效的离策略时序差分（TD）学习以训练Q函数，同时在廉价的去噪MDP中进行数据效率较低但稳定的同策略强化学习（RL）更新来提取策略。核心思路是：通过将双层MDP在环境转换处“切断”，利用离策略批评家作为去噪轨迹的终端奖励，实现一种既数据高效（得益于环境MDP中的TD学习）又表达性强（得益于去噪MDP中的同策略RL微调）的全策略微调算法。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>OGPO的整体框架基于从Ren等人（2024）借鉴的双层MDP（Bi-level MDP）概念。该框架将GCP的每一步动作生成过程视为一个内层的去噪MDP，而将环境中实际执行动作的序列视为外层的环境动态MDP。OGPO的关键创新在于“切断”这两个MDP的连接，仅使用批评家网络Q作为去噪MDP轨迹的终端奖励，从而进行解耦优化。</p>
+<p><img src="https://arxiv.org/html/2605.03065v1/2605.03065v1/x1.png" alt="OGPO方法示意图"></p>
+<blockquote>
+<p><strong>图1</strong>：OGPO方法整体框架。左侧展示了GCP在每一步环境步内诱导出一个去噪MDP。OGPO在已执行的动作处切断双层MDP，并使用离策略批评家作为纯计算型去噪轨迹的PPO式优化的终端奖励。中间和右侧展示了与基线方法的对比及优势。</p>
+</blockquote>
+<p>OGPO的核心模块包括离策略批评家学习和基于PPO的零阶策略提取。算法流程如下：1) 收集环境交互数据存入回放缓冲区；2) 使用标准TD误差（公式2.3）更新批评家网络；3) 从缓冲区采样状态，并为每个状态并行采样多条去噪轨迹；4) 使用Q函数计算优势估计，通过聚合的PPO损失（公式3.3）更新策略（actor）参数。</p>
+<p>具体技术细节包括：</p>
+<ol>
+<li><strong>策略更新损失</strong>：对于给定的状态$s_t$和从目标策略$\pi_{\bar{\theta}}$采样得到的去噪轨迹$a_{t, K:0}$，OGPO应用标准PPO损失，但优势估计$\hat{A}$由批评家网络$Q_{\text{targ}}$和基线$V$计算得出：$\hat{A} = Q_{\text{targ}}(s_t, a_{t,0}) - \hat{V}$。重要性采样比$\rho$通过计算整条去噪轨迹上动作概率的比值得到。</li>
+<li><strong>并行多轨迹采样</strong>：由于去噪轨迹可纯计算生成，OGPO对每个从缓冲区采样的状态$s^{(i)}$，并行采样$N_{\text{group}}$条独立的去噪轨迹$a_{K:0}^{(i,j)}$。这大大减少了梯度方差，并允许通过蒙特卡洛平均直接估计价值基线：$\hat{V}^{(i)} \leftarrow \frac{1}{N_{\text{group}}} \sum_j Q_{\text{targ}}(s^{(i)}, a_0^{(i,j)})$。</li>
+<li><strong>针对流策略的去偏噪声注入</strong>：为了在PPO比计算中避免奇异似然，OGPO为流策略的每一步注入高斯噪声（公式3.4）。为避免噪声改变边缘分布，论文采用了Albergo等人（2023）提出的随机插值校正，确保噪声增强后的动作分布与标准流采样匹配。</li>
+</ol>
+<p>与现有方法相比，OGPO的创新点具体体现在：</p>
+<ul>
+<li><strong>与DPPO等完全同策略方法相比</strong>：OGPO通过离策略学习Q函数实现了数据重用，大幅提升了样本效率。其策略更新仅针对计算成本低的去噪MDP，而非整个双层MDP，优化问题的时间范围仅与去噪步数K有关，而非K乘以任务视野。</li>
+<li><strong>与通过反向传播（BPTT）直接优化Q的方法相比</strong>：OGPO采用零阶PPO优化，避免了反向传播穿越整个GCP链和Q函数可能带来的梯度爆炸问题，也规避了在接触丰富任务中可能不准确的$\nabla_a Q_{\text{targ}}$计算。</li>
+<li><strong>与部分微调方法（如DSRL、EXPO）或行为克隆提取方法（如QC）相比</strong>：OGPO对整个生成过程进行更新，能够利用正负优势梯度推动策略向高价值动作移动，同时围绕多个高成功模式进行聚类，探索能力更强。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2605.03065v1/2605.03065v1/x2.png" alt="不同离策略RL算法对比"></p>
+<blockquote>
+<p><strong>图2</strong>：不同离策略RL算法的可视化对比。DSRL训练初始噪声引导策略，EXPO训练残差策略修改最终GCP动作，QC通过监督微调（SFT）基于批评家排序的Best-of-N动作来驱动策略改进，BPTT通过整个GCP反向传播梯度。OGPO则使用批评家集成计算优势估计，通过退火重要性采样直接更新GCP链上的对数似然。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：OGPO在多个机器人操作基准上进行了评估，包括：1) <strong>Robomimic</strong>（状态与图像观测）的<code>Transport</code>、<code>Tool Hang</code>、<code>Square</code>任务；2) <strong>Adroit</strong>灵巧手操作任务；3) <strong>LIBERO</strong>多任务长视野任务。实验平台为模拟环境。基线方法包括：DPPO（完全同策略）、EXPO（残差学习）、DSRL（初始噪声引导）、QC（基于批评家的行为克隆）、BPTT（通过GCP链的反向传播梯度）。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>主要性能对比</strong>：在状态观测的Robomimic任务上，OGPO及其变体（OGPO+， OGPO+CA）在成功率和样本效率上均大幅超越所有基线。例如，在<code>Tool Hang</code>任务中，OGPO+CA在约15万步后达到接近100%的成功率，而DPPO在相同步数下成功率约为60%，QC和EXPO则低于40%。在长视野的<code>Transport</code>任务中，OGPO+CA也实现了最快的学习速度和最高的最终成功率（接近100%）。</li>
+<li><strong>像素观测任务</strong>：在图像输入的Robomimic任务上，OGPO+²（结合了方差缩减的批评家更新）表现最佳，成功解决了<code>Tool Hang</code>任务，而其他基线方法（包括DPPO）均失败。</li>
+<li><strong>零专家数据微调</strong>：OGPO能够从性能不佳的行为克隆初始化策略开始，在在线回放缓冲区<strong>没有专家数据</strong>的情况下，微调到接近完全的任务成功率。这在<code>Tool Hang</code>和<code>Square</code>任务中得到了验证。</li>
+<li><strong>LIBERO多任务基准</strong>：OGPO+CA在LIBERO的10个任务套件上取得了最先进的平均成功率（约80%），显著优于DPPO（约65%）和QC（约55%）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2605.03065v1/2605.03065v1/x3.png" alt="状态Robomimic任务训练对比"></p>
+<blockquote>
+<p><strong>图3</strong>：状态观测Robomimic任务上，原始OGPO、OGPO+和OGPO+CA的训练曲线对比。红色轴为成功率，蓝色轴为成功轨迹的平均长度。原始OGPO为最大化稀疏奖励，会同时优化成功率和完成速度，导致二者产生张力，可能引起性能振荡或平台期。OGPO+通过成功缓冲区偏向任务成功，OGPO+CA则通过保守优势估计缓解了离线BC到在线训练间的“性能下降”。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.03065v1/2605.03065v1/x4.png" alt="像素观测Robomimic任务结果"></p>
+<blockquote>
+<p><strong>图4</strong>：像素观测Robomimic任务结果。OGPO+²（结合了方差缩减）是唯一成功解决<code>Tool Hang</code>任务的方法，而其他基线（包括DPPO）均失败，显示了OGPO在像素领域经过改进后的有效性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.03065v1/2605.03065v1/figs/libero_combined.png" alt="LIBERO多任务基准结果"></p>
+<blockquote>
+<p><strong>图5</strong>：在LIBERO多任务长视野基准上的结果。OGPO+CA取得了最高的平均成功率（约80%），显著优于DPPO和QC等基线方法。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>论文通过消融实验验证了OGPO核心组件的贡献。关键发现包括：</p>
+<ul>
+<li><strong>解耦优化的重要性</strong>：将OGPO与在完整双层MDP上应用PPO的DPPO进行对比，OGPO的样本效率显著更高。</li>
+<li><strong>并行多轨迹采样</strong>：增加每状态的轨迹采样数（$N_{\text{group}}$）能有效减少梯度方差，稳定并加速训练。</li>
+<li><strong>去偏噪声注入</strong>：使用随机插值校正对于维持流策略的原始动作分布、保证微调后策略的性能至关重要。</li>
+<li><strong>OGPO+的改进组件</strong>：在稀疏奖励环境下，添加成功轨迹的行为克隆正则化（OGPO+）或使用保守优势估计（OGPO+CA）能有效缓解原始OGPO对不完美批评家的过利用问题，提升稳定性和最终性能。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：</p>
+<ol>
+<li>提出了<strong>OGPO</strong>，一种用于生成控制策略全微调的样本高效算法。其核心是<strong>解耦优化框架</strong>：在环境MDP中进行离策略Q学习以实现数据重用，在去噪MDP中进行同策略PPO更新以实现表达性强的策略改进。</li>
+<li>引入了<strong>零阶优化</strong>方法，通过PPO风格更新避免了对Q函数和整个GCP链的反向传播，简化了高Lipschitz任务中的RL微调，并提出了针对流策略的<strong>去偏噪声注入</strong>技术。</li>
+<li>分析了原始OGPO的局限性（对不完美批评家的过利用），并提出了经验优化的变体<strong>OGPO+<strong>（包含成功缓冲区和保守优势估计）和</strong>OGPO+²</strong>（针对像素观测的方差缩减），这些改进稳定了训练并实现了最先进的性能。</li>
+</ol>
+<p>论文提到的局限性包括：在像素观测环境中，即使使用OGPO+²，过利用问题仍然比状态观测更严重；方法需要大量计算资源进行并行轨迹采样以降低方差。</p>
+<p>本文的启示在于，通过巧妙利用不同层次决策过程的成本差异进行解耦优化，可以同时实现高样本效率和高表达性的策略更新。这为微调大型生成式机器人策略提供了一条新路径。未来工作可以探索更高效的批评家学习方法来缓解过利用，或将此框架扩展到更广泛的生成模型和任务领域。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对生成控制策略（GCPs）在微调时样本效率低、对任务变化适应性差的问题，提出OGPO（离策略生成策略优化）算法。该方法通过维护离策略评论家网络最大化数据重用，并利用修改的PPO目标将策略梯度贯穿整个生成过程，以评论家作为终端奖励进行优化。实验表明，OGPO在多任务操作、高精度插入及灵巧控制任务上达到最先进性能，能够在不依赖专家数据的情况下，将初始化不良的行为克隆策略微调至接近完全成功，且所需超参数调整极少。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.03065" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
