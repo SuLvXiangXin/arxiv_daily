@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>OA-WAM: Object-Addressable World Action Model for Robust Robot Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>OA-WAM: Object-Addressable World Action Model for Robust Robot Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.06481" target="_blank" rel="noreferrer">2605.06481</a></span>
+        <span>作者: Wenbo Ding Team</span>
+        <span>日期: 2026-05-07</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，世界动作模型通过联合预测场景演变和机器人动作来增强视觉-语言-动作策略。然而，主流方法将预测的世界表示为整体图像、视频token流或全局潜在向量，这使得当指令涉及特定目标物体时，动作解码器难以定位它：在新颖的场景变化下，相关物体通常仍然可见，但其身份信息在整体token中与周围上下文纠缠在一起。本文将此问题归结为缺乏<strong>对象可寻址性</strong>。现有基于对象槽的方法虽能分解场景，但每个槽仍混合了对象的身份、外观、姿态和局部上下文，导致在扰动下动作解码器仍可能漂移到错误的实例。</p>
+<p>本文针对上述痛点，提出了<strong>OA-WAM</strong>。其核心思路是：将每一帧分解为N+1个对象槽状态token，并将每个槽的向量显式分割为冻结的<strong>身份地址</strong>和时变的<strong>内容</strong>两部分；通过在Transformer每一层强制跨槽注意力键仅读取身份地址，并在残差流中重置地址切片，在张量层面将“对哪个对象操作”与“该对象当前状态是什么”解耦，从而为语言引导的动作生成提供一个稳定、可干预的对象级接口。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>OA-WAM的整体框架是一个多模态序列模型，以语言指令、历史观测（图像、本体感知、动作）为输入，在单次前向传播中同时预测未来帧的对象状态和一个16步的连续动作块。</p>
+<p><img src="https://arxiv.org/html/2605.06481v1/2605.06481v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：OA-WAM概览。在场景扰动下（左图，六种典型扰动轴），整体式WAM将目标身份与上下文在全局token中纠缠，导致动作漂移（右上）。我们的OA-WAM（右下）将每帧分解为N+1个可寻址的对象槽，其跨槽注意力的键仅读取身份地址子向量，从而保持鲁棒的操作。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.06481v1/2605.06481v1/x2.png" alt="架构图"></p>
+<blockquote>
+<p><strong>图2</strong>：OA-WAM架构。多模态输入被编码成各自的token流：对象槽token通过SAM3+DINOv3提取，并由可学习的槽适配器投影；只有槽流引入了新参数。token被组装成一个块因果序列，以一个可学习的动作查询[ACT-Q]结束，并由槽感知主干处理。世界头读取槽隐藏状态以预测下一帧每个槽的（内容，姿态）作为辅助监督；动作头解码一个16步的动作块。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>对象槽标记化与统一序列</strong>：使用冻结的基础模型（SAM3, DINOv3, Qwen3-VL）将每帧分解为N+1个槽（1个机器人槽，N个物体槽）。每个槽token是一个320维向量，由四部分拼接而成：一个32维的<strong>身份地址</strong>（在情节开始时根据语言标签和初始DINOv3特征计算一次并固定）、一个256维的<strong>时变内容</strong>（每帧根据SAM3掩码和DINOv3特征重新计算）、一个16维的帧索引正弦位置编码、一个16维的基于角色（机器人、物体、填充）的学习查找表。这些槽token与文本、图像VQ、本体感知和过去动作token流一起，通过一个可学习的槽适配器投影到主干网络的隐藏维度（4096），并组装成一个块因果序列。</li>
+<li><strong>对象可寻址注意力</strong>：这是实现可寻址性的核心创新。在Transformer的每一层，对于槽类型的位置，标准的自注意力被修改。具体而言，键投影的输入被限制为仅使用地址子向量（前32维），而查询和值投影仍使用完整的隐藏状态。此外，在每一Transformer块之后，一个前向钩子将槽位置残差流中的地址切片重置回缓存的初始身份地址。<br><img src="https://arxiv.org/html/2605.06481v1/2605.06481v1/x3.png" alt="注意力掩码"><blockquote>
+<p><strong>图3</strong>：OA注意力掩码。跨帧为块因果；帧内槽之间是双向的（红色对角线）。WK仅读取addr_k（前32维）。</p>
+</blockquote>
+</li>
+<li><strong>预测头</strong>：<ul>
+<li><strong>世界头</strong>：读取每个槽的最终隐藏状态，通过两个平行的MLP分别预测下一帧每个槽的内容（256维）和姿态（9维），使用均方误差损失进行监督。</li>
+<li><strong>动作头</strong>：读取序列末尾可学习的<code>[ACT-Q]</code> token的隐藏状态，采用一个流匹配MLP来预测16步动作块上的速度场，使用条件流匹配目标进行训练。推理时通过4步前向欧拉积分解码动作，避免了自回归解码的误差累积。</li>
+<li><strong>辅助图像-VQ头</strong>：复用主干的<code>lm_head</code>来预测下一帧的VQ token，作为额外的监督信号。</li>
+</ul>
+</li>
+<li><strong>训练目标</strong>：总损失函数结合了动作损失、世界预测损失、VQ损失，以及两个来自先前对象中心VLA工作的辅助正则化损失（组合损失和角色损失）。</li>
+</ol>
+<p><strong>创新点</strong>：</p>
+<ul>
+<li><strong>对象可寻址性约束</strong>：通过“仅地址键投影”和“每层地址流重置”这两个无参数的张量级操作，在架构层面强制动作选择仅依赖于冻结的对象身份地址，从而将目标绑定与场景内容解耦。</li>
+<li><strong>槽状态表示</strong>：显式地将每个对象的状态分解为固定的身份地址和时变的内容，为策略提供了稳定的、基于语言的查询接口。</li>
+<li><strong>统一的预测</strong>：在单次前向传播中联合预测对象级未来状态和长时程动作块，实现了高效的时间对齐监督。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在三个模拟基准上评估：LIBERO（分布内任务成功率）、SimplerEnv WidowX（视觉匹配，评估仿真到真实迁移）、LIBERO-Plus（鲁棒性，包含相机、机器人初始状态、布局、光照、背景、语言、传感器噪声七个扰动轴）。</p>
+<p><strong>对比方法</strong>：与先进的VLA策略（如OpenVLA, π0.5, InternVLA-M1）和世界动作模型（如VLA-JEPA, CoWVLA, Cosmos-Policy）进行对比。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><p><strong>标准基准性能</strong>：在LIBERO上达到97.8%的平均成功率，优于之前最强的基线VLA-JEPA（97.2%）；在SimplerEnv上达到79.3%，优于之前最强的基线CoWVLA（76.0%）。这表明对象分解并未牺牲分布内性能。</p>
+<p><img src="https://arxiv.org/html/2605.06481v1/2605.06481v1/x3.png" alt="主要结果"></p>
+<blockquote>
+<p><strong>图4</strong>：主要结果。左：LIBERO-Plus在七个扰动轴上的雷达图；右：SimplerEnv WidowX每任务成功率。OA-WAM在几何扰动轴（Geo-Avg 84.3，比π0.5高+4.8%）和SimplerEnv（79.3 avg）上设立了新的SOTA。</p>
+</blockquote>
+</li>
+<li><p><strong>鲁棒性基准性能</strong>：在LIBERO-Plus上，OA-WAM在与假设最一致的<strong>几何扰动轴</strong>（相机、机器人初始状态、布局）上取得了新的SOTA（Geo Avg 84.3%，比π0.5高+4.8%）。在光照、背景、语言轴上与π0.5表现相当，但在<strong>传感器噪声</strong>轴上落后17.1%（见表2）。论文指出，这是因为光度失真破坏了感知阶段的槽提取，而非策略本身的问题。</p>
+</li>
+<li><p><strong>消融实验</strong>（A1）：通过控制变量（关闭地址键掩码和/或重置钩子）来隔离对象可寻址性约束的作用。</p>
+<ul>
+<li>关闭键掩码（V1）导致LP相机成功率下降13.3%，LP机器人下降18.2%，而LIBERO仅变化1.5%。这体现了该约束对分布外几何扰动的特异性提升，而非通用的容量增加。</li>
+<li>同时关闭键掩码和重置钩子（V2，即无OA约束）导致性能进一步下降，LP相机成功率降至60.5%，LP平均成功率降至76.2%，且“交换绑定”指标降至0.06（见表3）。这证实了OA约束是几何轴性能增益的关键来源。</li>
+</ul>
+</li>
+<li><p><strong>因果槽干预测试</strong>（A2）：在测试时交换语言绑定的目标槽与场景中另一个槽的地址，其他输入不变，度量机械臂末端轨迹残差与指向交换后目标方向位移的余弦对齐度。<br><img src="https://arxiv.org/html/2605.06481v1/2605.06481v1/x4.png" alt="机制诊断"></p>
+<blockquote>
+<p><strong>图5</strong>：机制诊断。 (c) 在A2地址交换下的末端执行器轨迹：OA-WAM（完整版）轨迹偏向交换后的目标，而整体式基线则没有（余弦值见表4）。<br>OA-WAM（完整版）的交换绑定余弦相似度为0.87，而所有八个整体式基线均≤0.09，OA-WAM变体V1（掩码关闭）为0.19（见表4）。这直接证明了OA-WAM的动作选择确实基于显式的地址子空间。</p>
+</blockquote>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>问题定义</strong>：将现有WAM在操作扰动下鲁棒性差的问题，形式化为缺乏<strong>对象可寻址性</strong>，即世界状态不仅应预测未来，还应提供稳定的、可按对象查询的状态接口。</li>
+<li><strong>方法提出</strong>：设计了OA-WAM，通过<strong>每槽地址/内容状态token</strong>、<strong>块因果世界-动作序列</strong>、时间对齐的预测头，以及关键的<strong>两部分OA约束</strong>（仅地址键投影+每层地址流重置），在架构层面解耦了对象身份寻址与时变内容建模。</li>
+<li><strong>实验验证</strong>：在标准基准上达到SOTA水平，并在与假设最直接相关的几何扰动轴上领先；消融和槽干预测试证实了对象可寻址接口是此鲁棒性模式的关键来源。</li>
+</ol>
+<p><strong>局限性</strong>：OA-WAM的鲁棒性<strong>有条件地依赖于上游槽提取的正确性</strong>。如果SAM3漏检了物体或两个槽的地址初始化模糊，路由约束无法从上游错误中恢复。这在传感器噪声轴上的性能下降中有所体现。</p>
+<p><strong>启示</strong>：显式地将世界模型组织为可寻址的对象状态，是实现场景扰动下更鲁棒机器人操作的一条有效路径。这种架构级的对象绑定机制，为构建对视觉上下文变化更具不变性的VLA模型提供了新思路。未来的工作可以探索更鲁棒的感知前端，或将对象可寻址性原则应用于其他模态和任务。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有世界动作模型（WAM）在场景扰动下，因使用整体表征导致目标物体身份与上下文纠缠、难以准确定位的问题，提出了对象可寻址世界动作模型（OA-WAM）。其核心方法是将每帧场景分解为N+1个对象槽位（含身份与内容向量），并通过仅基于身份向量的跨槽注意力机制，在架构层面实现对象寻址。实验表明，OA-WAM在LIBERO和SimplerEnv基准上分别达到97.8%和79.3%的成功率，与SOTA相当；在LIBERO-Plus的特定几何轴上刷新了记录，其对象绑定鲁棒性（干预测试余弦值0.87）远超基线模型（≤0.09）。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.06481" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
