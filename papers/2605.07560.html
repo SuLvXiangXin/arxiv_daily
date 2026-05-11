@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>How to utilize failure demo data?: Effective data selection for imitation learning using distribution differences in attention mechanism - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>How to utilize failure demo data?: Effective data selection for imitation learning using distribution differences in attention mechanism</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.07560" target="_blank" rel="noreferrer">2605.07560</a></span>
+        <span>作者: Tetsuya Ogata Team</span>
+        <span>日期: 2026-05-08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人模仿学习领域，主流方法通常仅使用成功演示数据来训练策略。然而，在实际的人工数据收集中，由于操作失误或环境因素，失败轨迹是不可避免的，现实世界的数据集往往同时包含成功和失败轨迹。尽管利用这些自然累积的失败数据可以实现更高效的学习，但现有方法大多依赖于事后数据编辑、额外数据收集或通过自主运行进行迭代策略更新，这带来了操作成本和可扩展性方面的挑战。因此，需要一个能够稳定利用数据集中已有失败数据、无需额外数据收集或大规模数据校正的框架。直接添加失败数据到训练中可能会因为成功与失败轨迹遵循不同的动作分布而导致学习不稳定，因此，在没有仔细选择的情况下，利用数据收集中积累的失败数据是困难的。</p>
+<p>本文针对如何直接、稳定地利用离线数据集中已有的失败演示数据这一具体痛点，提出了一个新视角：通过注意力机制的分布差异来学习成功与失败之间的差异表征，并基于此选择对学习有益的失败数据。本文的核心思路是，在训练中通过成功/失败标签引导注意力分布分离，学习表征成功-失败差异的潜在向量（参数化偏置，PB），并在推理时根据初始观测选择成功的PB模式以生成稳定动作；同时，提出一种基于训练后注意力分布差异的度量来筛选与成功演示互补的失败样本。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架包含两个主要训练过程（如图1所示）。第一个过程是在包含所有成功和失败演示的完整数据集 <code>{D_S, D_F}</code> 上进行初始训练（全数据集训练）。第二个过程是在初始训练后，计算每个失败样本与成功演示之间的注意力分布差异度量，据此选择差异较小的失败样本子集 <code>D_F^low</code>，并与成功数据集 <code>D_S</code> 组合成新的训练集进行重新训练（失败选择重训练）。</p>
+<p><img src="https://arxiv.org/html/2605.07560v1/2605.07560v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：方法整体框架。左侧为完整数据集训练过程，右侧为基于KL的失败数据选择和重新训练过程。</p>
+</blockquote>
+<p>本文以 Action Chunking with Transformers (ACT) 作为基线模仿学习模型。ACT使用Transformer根据包含多视角相机图像和关节角度的观测 <code>o_t</code> 来预测未来的动作序列 <code>a_{t+1,...,t+H}</code>。其核心创新在于将参数化偏置（PB）引入Transformer解码器的多头自注意力模块，并通过KL正则化使PB能够捕捉成功与失败演示在注意力分布上的差异。</p>
+<p><img src="https://arxiv.org/html/2605.07560v1/2605.07560v1/x2.png" alt="方法细节"></p>
+<blockquote>
+<p><strong>图2</strong>：方法细节概述。框内区域表示在基线ACT基础上添加的模块，展示了PB如何融入自注意力机制以及KL正则化的计算方式。</p>
+</blockquote>
+<p><strong>核心模块1：参数化偏置（PB）与注意力调制</strong>。PB是一个可学习的潜在向量，为每个训练样本分配一个形状为 <code>[L, 5]</code> 的PB（L为预测动作序列的长度）。PB通过层特定的线性映射投影到注意力空间，生成查询侧偏置 <code>pb_q</code> 和价值侧偏置 <code>pb_v</code>，并以系数 <code>α_pb</code> 缩放后分别加到查询 <code>Q</code> 和价值 <code>V</code> 上，从而调制注意力计算（公式1）。这使得PB能够捕捉样本特有的潜在特征，并影响注意力分布。</p>
+<p><strong>核心模块2：KL正则化</strong>。为了鼓励PB表征成功与失败的差异，引入了KL正则化项 <code>L_KL</code>。对于一个输入观测 <code>o_t</code>，使用其自身PB（正PB）计算得到的注意力分布记为 <code>A+(o_t)</code>，使用随机从不同标签数据中选取的PB（负PB）计算得到的注意力分布记为 <code>A-(o_t)</code>。<code>L_KL</code> 定义为这两个分布间KL散度的负值（公式2），目的是最大化成功与失败样本注意力分布之间的差异。最终训练目标 <code>L</code> 是ACT的模仿损失 <code>L_ACT</code> 与加权后的 <code>L_KL</code> 之和（公式3），模型参数和PB被联合优化以最小化 <code>L</code>。</p>
+<p><strong>核心模块3：基于KL的失败数据选择</strong>。在初始训练后，对于每个失败样本 <code>f ∈ D_F</code>，计算其与所有成功样本的注意力分布差异度量 <code>K(f)</code>（公式4）。该度量计算了当使用失败样本 <code>f</code> 自身的PB（正PB）与使用每个成功样本 <code>s</code> 的PB（负PB）时，在 <code>f</code> 的观测序列上产生的注意力分布之间的KL散度，并在时间步和所有成功样本上求和平均。基于该度量的平均值 <code>K̄(f)</code> 对失败样本进行升序排序，选择 <code>K̄(f)</code> 值较小的失败样本构成 <code>D_F^low</code>，与 <code>D_S</code> 组合进行重新训练。<code>K̄(f)</code> 值小意味着存在成功样本，其环境状态和轨迹与该失败样本相对相似，这类“接近成功”的失败可能对学习区分成功与失败的关键因素更有益。</p>
+<p><strong>推理时的PB选择</strong>。在推理时，基于初始俯视观测图像的嵌入，使用余弦相似度检索最相似的成功训练样本，并使用该成功样本对应的PB来生成动作。这是一种基于检索的近似PB选择，旨在将动作生成偏向成功行为。</p>
+<p>与现有方法相比，本文的创新点具体体现在：1) <strong>直接利用</strong>：无需额外数据收集、人工干预或迭代评估/重训练，可直接利用离线数据集中的失败数据；2) <strong>差异表征</strong>：通过PB和KL正则化，在注意力机制中显式地学习并分离成功与失败的分布差异；3) <strong>数据选择</strong>：提出了一种基于训练后注意力分布差异的度量，用于筛选对学习有益的失败样本。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在基于MuJoCo的robosuite仿真环境中进行，使用7自由度Panda机械臂执行立方体抓取提升（Lift）任务。收集了100条遥操作演示轨迹，包含50条成功和50条失败轨迹，构成完整数据集 <code>{D_S, D_F}</code>。模型输入包括俯视和腕部相机RGB图像以及14维机器人状态。使用5个随机种子进行训练和评估，每个种子进行100次 rollout，以平均成功率作为性能指标。</p>
+<p><strong>实验1：验证所提方法的有效性</strong>。比较了不同模型和数据配置下的成功率。</p>
+<table>
+<thead>
+<tr>
+<th align="left">模型</th>
+<th align="left">数据集</th>
+<th align="left">成功率 [%]</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">ACT</td>
+<td align="left"><code>D_S</code></td>
+<td align="left">71.0 ± 3.39</td>
+</tr>
+<tr>
+<td align="left">ACT</td>
+<td align="left"><code>{D_S, D_F}</code></td>
+<td align="left">71.6 ± 5.22</td>
+</tr>
+<tr>
+<td align="left">所提方法</td>
+<td align="left"><code>D_S</code></td>
+<td align="left">74.2 ± 3.63</td>
+</tr>
+<tr>
+<td align="left">所提方法</td>
+<td align="left"><code>{D_S, D_F}</code></td>
+<td align="left"><strong>77.8 ± 2.59</strong></td>
+</tr>
+</tbody></table>
+<p>结果显示，单纯将失败数据加入ACT训练并未带来显著提升（71.0% vs 71.6%），且标准差增大。所提方法即使在仅使用成功数据时（此时KL项未激活），也取得了74.2%的成功率，优于基线ACT，表明引入PB本身不会损害性能。当使用完整数据集 <code>{D_S, D_F}</code> 训练时，所提方法取得了最高的77.8%的成功率，证明了其能有效利用失败数据进行学习。</p>
+<p><img src="https://arxiv.org/html/2605.07560v1/2605.07560v1/x3.png" alt="任务示例"></p>
+<blockquote>
+<p><strong>图3</strong>：Lift任务中成功（上）与失败（下）序列的示例。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.07560v1/2605.07560v1/x4.png" alt="PB选择"></p>
+<blockquote>
+<p><strong>图4</strong>：推理时在初始观测嵌入空间中使用最近邻检索进行PB选择。图中显示了几个点及其对应的初始观测图像。</p>
+</blockquote>
+<p><strong>实验2：分析失败数据选择策略</strong>。比较了随机选择与基于KL度量的选择方法。在“50成功 + 10失败”的设置下，基于 <code>K̄(f)</code> 将失败数据分为低 (<code>D_F^low</code>)、中 (<code>D_F^mid</code>)、高 (<code>D_F^high</code>) 差异三组。</p>
+<table>
+<thead>
+<tr>
+<th align="left">数据集</th>
+<th align="left">ACT成功率 [%]</th>
+<th align="left">所提方法成功率 [%]</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left"><code>{D_S, D_F^rand}</code> (平均)</td>
+<td align="left">72.8 ± 5.55</td>
+<td align="left">75.8 ± 5.40</td>
+</tr>
+<tr>
+<td align="left"><code>{D_S, D_F^low}</code></td>
+<td align="left">74.2 ± 7.40</td>
+<td align="left"><strong>79.4 ± 4.56</strong></td>
+</tr>
+<tr>
+<td align="left"><code>{D_S, D_F^mid}</code></td>
+<td align="left">76.0 ± 5.74</td>
+<td align="left">78.6 ± 2.07</td>
+</tr>
+<tr>
+<td align="left"><code>{D_S, D_F^high}</code></td>
+<td align="left">70.4 ± 7.44</td>
+<td align="left">71.8 ± 3.35</td>
+</tr>
+</tbody></table>
+<p>结果显示，对于所提方法，使用低KL差异的失败数据 <code>D_F^low</code> 取得了最高的79.4%成功率。随着所选失败数据KL差异值的升高，成功率呈下降趋势，使用 <code>D_F^high</code> 时性能甚至接近或低于仅使用成功数据的基线。这表明，选择与成功演示在注意力分布上差异较小的失败样本（即“接近成功”的失败）对学习最有益。</p>
+<p><img src="https://arxiv.org/html/2605.07560v1/2605.07560v1/x5.png" alt="失败数据选择"></p>
+<blockquote>
+<p><strong>图5</strong>：基于KL度量的失败数据选择概述。左图显示了所有PB的PCA投影，红色为成功PB，蓝到绿为失败PB（颜色梯度表示KL度量值增加）。右图显示了按度量值排序的失败样本。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) <strong>提出了一个稳定利用失败数据的模仿学习框架</strong>：通过将捕捉成功-失败分布差异的潜在表征（PB）引入注意力机制，使模型能够在训练中区分成功与失败，并在推理时选择成功模式以生成稳定动作。2) <strong>提出了一种基于注意力分布差异的失败数据选择度量</strong>：该度量能够在训练后识别出与成功演示互补的失败样本，实验证明选择低差异的失败数据能进一步提升策略性能。</p>
+<p>论文自身提到的局限性在于，推理时的PB选择依赖于对初始观测的最近邻检索，这可能无法完美匹配所有新情况，是一种近似方法。</p>
+<p>本文对后续研究的启示包括：1) <strong>数据高效利用</strong>：为如何更高效地利用机器人数据收集中自然产生的混合质量数据提供了新思路，减少了对纯成功数据的依赖。2) <strong>注意力机制的解释与利用</strong>：展示了注意力分布差异可以作为衡量演示数据质量或特性的有效信号，启发了基于注意力分析的数据筛选或课程学习策略。3) <strong>扩展方向</strong>：未来可以探索更鲁棒的PB推断机制（而非检索），或将此框架应用于更复杂的多模态任务和更大型的视觉-语言-动作模型中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决模仿学习中失败演示数据难以稳定利用的问题。提出一种基于注意力机制分布差异的数据选择方法：通过学习成功与失败轨迹差异的潜在表示，并将其整合到注意力机制；同时设计一种训练后指标，量化失败样本与成功演示的注意力差异以筛选有益数据。实验表明，该方法在使用失败数据训练时提升了任务成功率，且所提指标能有效识别出对学习有积极作用的失败样本。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.07560" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
