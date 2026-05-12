@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VEGA: Visual Encoder Grounding Alignment for Spatially-Aware Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>VEGA: Visual Encoder Grounding Alignment for Spatially-Aware Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.10485" target="_blank" rel="noreferrer">2605.10485</a></span>
+        <span>作者: Shanghang Zhang Team</span>
+        <span>日期: 2026-05-11</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前主流的视觉-语言-动作模型通过在大规模2D图像-文本对上进行对比学习预训练其视觉主干，虽然具备了强大的语义理解能力，但其视觉表示缺乏对三维几何空间的准确感知。这限制了模型在需要精确深度估计、空间关系推理和视角变化的机器人精细操作任务上的性能。</p>
+<p>为弥补这一缺陷，现有方法主要分为两类：显式空间对齐和隐式空间对齐。显式方法通过引入深度图或点云等额外传感器数据，存在硬件依赖、噪声和计算开销等问题。隐式空间对齐方法则通过将VLA模型的特征与3D感知基础模型的特征进行对齐，避免了额外传感器。然而，现有隐式方法存在两个关键局限性：一是依赖于经验性的层搜索来确定对齐目标层，缺乏原则性且难以泛化；二是通常在LLM层级的视觉词元上进行对齐，此时视觉特征已与语言语义纠缠，导致几何结构信息模糊，可解释性差。</p>
+<p>本文针对现有隐式空间对齐方法中“对齐目标层选择困难”和“语言语义与空间几何信息过早纠缠”这两个具体痛点，提出了一个新颖的视角：在视觉编码器的输出层进行对齐。核心思路是，在视觉特征与语言信息融合之前，利用一个经过3D感知监督的视觉编码器（DINOv2-FiT3D）作为教师模型，直接监督VLA模型视觉编码器的输出特征，从而将空间感知能力“锚定”在更纯粹、更具几何可解释性的视觉表示阶段。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>VEGA框架的核心是在训练阶段，将VLA模型视觉编码器（学生）的输出特征与一个冻结的、具有3D空间感知能力的教师视觉编码器（DINOv2-FiT3D）的输出特征进行对齐，而在推理阶段丢弃教师模型和投影器，不引入任何额外计算开销。</p>
+<p><img src="https://arxiv.org/html/2605.10485v1/2605.10485v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：VEGA训练框架概览。冻结的DINOv2-FiT3D编码器作为空间教师，通过一个轻量级投影器监督VLA视觉主干中DINOv2分支的输出。对齐损失计算为投影后的DINOv2特征与FiT3D特征之间的余弦距离，并与动作预测损失结合进行训练。在推理时，投影器和教师编码器被丢弃，不引入额外开销。</p>
+</blockquote>
+<p><strong>整体流程与核心模块</strong>：</p>
+<ol>
+<li><strong>输入与特征提取</strong>：给定输入图像I，分别通过VLA模型中的学生视觉编码器（DINOv2分支）和冻结的教师编码器（DINOv2-FiT3D）提取特征。具体而言，从学生编码器的倒数第二层（L-2）提取特征，以绕过可能存在的FiLM语言调节层，保留视觉特异性表示；从教师编码器的最后一层（L-1）提取特征，以获得最完整的3D空间表示。两者均输出N个维度为d=1024的块级词元特征。</li>
+<li><strong>特征投影</strong>：引入一个轻量级投影器φ，将学生特征F^DINO投影到与教师特征空间对齐更好的空间。该投影器由一个LayerNorm层和一个两层的MLP（使用GELU激活函数）构成，输出投影后的特征F̂^DINO。</li>
+<li><strong>损失计算与训练</strong>：对齐损失L_align定义为投影后学生特征与教师特征之间的平均余弦距离。最终的训练目标L_VEGA是标准的动作预测损失L_action与对齐损失的加权和，权重系数为λ。模型在训练时，仅VLA模型参数（通过LoRA微调）和投影器参数被更新，教师编码器保持冻结。</li>
+<li><strong>推理</strong>：推理时，仅使用训练好的VLA模型，教师编码器和投影器被移除，因此模型架构和计算成本与原始VLA模型完全相同。</li>
+</ol>
+<p><strong>创新点</strong>：</p>
+<ul>
+<li><strong>对齐阶段更早、更可解释</strong>：与现有方法在LLM层级或视觉编码器深层进行对齐不同，VEGA直接在视觉编码器输出层对齐。这确保了空间感知在视觉特征与语言语义发生任何纠缠之前就被注入，目标特征更具几何可解释性。</li>
+<li><strong>无需经验性层搜索</strong>：由于对齐目标明确设定为视觉编码器的输出，VEGA避免了繁琐且不稳定的中间层搜索过程。</li>
+<li><strong>使用FiT3D作为空间教师</strong>：与之前工作使用的VGGT等模型不同，VEGA采用基于DINOv2并使用多视角一致的3D高斯溅射监督微调得到的FiT3D模型。FiT3D生成密集的、块级的3D感知特征，其架构与标准ViT完全匹配，更适合作为对齐的监督信号。</li>
+<li><strong>零推理开销</strong>：对齐过程仅在训练阶段进行，推理架构不变，保持了部署效率。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>仿真基准</strong>：在RoboTwin 2.0基准测试上进行评估，使用AgiLeX ALOHA平台模拟6个双手操作任务（如移开扑克牌、转动开关等）。分别在“简单”和“困难”设置下测试，“困难”设置引入了场景杂乱、背景纹理变化、光照变化和桌面高度随机化等域随机化。</li>
+<li><strong>真实世界平台</strong>：在实体双手机器人平台（AgileX ALOHA）上验证，执行4个复杂度不同的任务（如关闭笔记本、递黄瓜、双手取放胡萝卜和花朵）。</li>
+<li><strong>基线方法</strong>：对比了多种方法，包括DP、RDT、π0等基础模型，以及结合了当前先进隐式空间对齐方法（Spatial Forcing， ROCKET）的变体。以OpenVLA-OFT作为主要的基础VLA模型进行增强和对比。</li>
+<li><strong>评估指标</strong>：任务成功率。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2605.10485v1/2605.10485v1/x3.png" alt="定量对比结果"></p>
+<blockquote>
+<p><strong>表1</strong>：在RoboTwin 2.0上的定量对比结果。VEGA在Easy和Hard设置下的平均成功率分别为67.5%和30.7%，均优于所有基线方法，特别是在需要精确定位的任务（如Move Card Away）和Hard设置下优势明显。</p>
+</blockquote>
+<p>在RoboTwin 2.0仿真实验中，VEGA取得了最佳性能。在Easy设置下，平均成功率达到67.5%，比最强的基线OFT+SF高出3.3%；在更具挑战性的Hard设置下，平均成功率为30.7%，比OFT+SF高出2.9%。这表明VEGA注入的空间感知能力能有效提升模型在分布外场景下的鲁棒性。</p>
+<p><img src="https://arxiv.org/html/2605.10485v1/2605.10485v1/x4.png" alt="训练与数据效率"></p>
+<blockquote>
+<p><strong>图4</strong>：VEGA相比OpenVLA-OFT在训练效率和数据效率上的提升。(a) 在“移开扑克牌”任务上的训练曲线显示，VEGA收敛更快且达到更高的性能上限。(b) 在不同比例演示数据下训练，VEGA在所有数据规模下均表现更优，尤其在数据稀缺时（25%）有10%的绝对提升。</p>
+</blockquote>
+<p>VEGA显著提升了训练和数据效率。在训练仅10k步时，其性能已达到基础模型训练60k步的水平，且最终收敛到更高的成功率。在仅使用25%演示数据时，VEGA比基础模型成功率高出10%，证明其提供的空间先验能有效补偿数据的不足。</p>
+<p><img src="https://arxiv.org/html/2605.10485v1/2605.10485v1/x5.png" alt="对齐损失系数消融"></p>
+<blockquote>
+<p><strong>图5</strong>：对齐损失系数λ的消融研究。λ=0.1时在Easy和Hard设置下取得了最佳的平均性能。λ过大（0.2）或过小（0.05）均会导致性能下降，表明需要平衡空间对齐与任务学习。</p>
+</blockquote>
+<p>消融实验表明，对齐损失权重λ=0.1时效果最佳。此外，将空间教师模型从FiT3D替换为VGGT会导致性能（尤其在Hard设置下）严重下降，验证了FiT3D因其架构同质性和密集块级特征而更适合作为对齐教师。</p>
+<p><img src="https://arxiv.org/html/2605.10485v1/2605.10485v1/x6.png" alt="真实世界实验结果"></p>
+<blockquote>
+<p><strong>图6</strong>：真实世界任务的定性可视化。展示了VEGA模型成功执行四个任务的序列关键帧，从初始状态到任务完成。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.10485v1/2605.10485v1/x7.png" alt="真实世界定量结果"></p>
+<blockquote>
+<p><strong>表3</strong>：真实世界实验的定量对比。VEGA在四个任务上的平均成功率为60%，优于OpenVLA-OFT（48%）和OFT+SF（55%）。</p>
+</blockquote>
+<p>在真实世界实验中，VEGA在四个任务上的平均成功率达到60%，优于基础模型（48%）和OFT+SF基线（55%），证明了其从仿真到实物的有效迁移能力。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：</p>
+<ol>
+<li><strong>提出了视觉编码器级对齐的新范式</strong>：指出了现有隐式空间对齐方法在LLM层级对齐的弊端，并提出在视觉编码器输出层进行对齐，从而在语言融合前注入空间感知，提供了更可解释、更原则性的对齐目标。</li>
+<li><strong>设计并验证了高效的VEGA框架</strong>：利用DINOv2-FiT3D作为空间教师模型，通过一个轻量级投影器和余弦对齐损失，在训练阶段将3D空间感知能力迁移到VLA模型中，且不增加推理开销。</li>
+<li><strong>实现了显著的性能提升</strong>：在仿真和真实机器人任务上进行了广泛验证，表明VEGA在多项任务上超越了现有隐式空间对齐方法，并显著提升了训练和数据效率。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，VEGA的性能依赖于基础VLA模型（如OpenVLA）的能力以及作为教师的FiT3D模型在其训练域之外的泛化能力。此外，对齐过程仍需额外的训练计算（尽管推理无开销）。</p>
+<p><strong>启示</strong>：这项工作为增强VLA模型的空间感知提供了一条简洁有效的路径。其核心思想——在表征学习的最早阶段、在信息发生“污染”之前注入先验知识——可能对其他希望提升模型特定能力（如物理推理、动态预测）的研究具有启发意义。同时，其“训练时对齐、推理时丢弃”的轻量级设计范式，对于追求高效部署的机器人应用具有实用价值。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决当前视觉-语言-动作模型因视觉主干缺乏3D监督而空间感知不足的问题。提出VEGA框架，其关键技术是直接对齐VLA视觉编码器的输出与经3D高斯溅射监督微调的DINOv2-FiT3D模型的空间感知特征，在语言语义混入前进行空间对齐，并使用轻量投影器进行训练，推理时无额外开销。实验表明，VEGA在仿真与真实机器人任务上持续优于现有隐式空间对齐基线，成为该领域的新SOTA方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.10485" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

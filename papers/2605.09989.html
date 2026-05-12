@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>StereoPolicy: Improving Robotic Manipulation Policies via Stereo Perception - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>StereoPolicy: Improving Robotic Manipulation Policies via Stereo Perception</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.09989" target="_blank" rel="noreferrer">2605.09989</a></span>
+        <span>作者: Ruohan Zhang Team</span>
+        <span>日期: 2026-05-11</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人模仿学习领域的主流方法是基于单目视觉输入的视动策略。这些策略通常依赖在互联网规模数据上预训练的2D视觉编码器来提取特征。然而，单目观测本质上缺乏可靠的深度线索和空间感知能力，这在处理杂乱或几何复杂的场景时，对于实现精确操作至关重要。为解决这一局限性，现有工作通常间接使用立体视觉，即先通过立体图像对重建显式的3D表示（如深度图或点云），再将其输入控制模块。这种方法面临显式3D重建对传感器噪声和标定误差敏感、3D预训练编码器不成熟、以及重建过程计算开销大难以满足实时控制需求等挑战。</p>
+<p>本文针对“如何高效、鲁棒地为策略引入3D几何理解”这一痛点，提出了一个新视角：绕过显式的3D重建，设计一个能直接消费同步立体图像对并隐式提取几何感知特征的策略学习框架。其核心思路是，利用预训练的2D视觉编码器独立处理每张图像，然后通过一个立体Transformer融合特征，从而将2D预训练表示的强大泛化能力与立体视觉固有的3D几何信息结合起来。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>StereoPolicy的整体框架是一个模块化的立体感知模块，用于为机器人策略提取几何感知特征。该框架可无缝集成到扩散策略和预训练的视觉-语言-动作模型中，分别对应StereoPolicy-DP和StereoPolicy-VLA两种变体。</p>
+<p><img src="https://arxiv.org/html/2605.09989v1/2605.09989v1/figs/pipeline_v11.jpg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：StereoPolicy 流程。立体输入由视觉主干网络编码，通过立体Transformer融合，并应用于扩散策略训练和微调VLA基线。</p>
+</blockquote>
+<p><strong>整体流程</strong>：对于每个时间步t和每个相机视角i，输入是一对立体图像 <code>(I_{t,i}^L, I_{t,i}^R)</code>。流程分为三步：1) 立体图像编码；2) 立体特征融合；3) 多视图聚合。最终输出的观测表征 <code>z_obs</code> 与本体感知特征 <code>s_t</code> 拼接后，输入策略主干网络以预测机器人动作。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>立体图像编码</strong>：左右图像共享权重的2D视觉编码器 <code>V_i(·)</code> 处理，生成单视图特征图 <code>f_{t,i}^L, f_{t,i}^R ∈ R^{H×W×C}</code>。为增强几何推理，论文将图像特征与DINOv2嵌入进行拼接，并通过一个线性投影层 <code>φ(·)</code> 对齐维度，得到增强特征 <code>\tilde{f}_{t,i}^·</code>。需要注意的是，DINOv2仅应用于外部视角，因为其与第一人称（腕部）视角图像存在域不匹配问题。</li>
+<li><strong>立体特征融合</strong>：这是方法的核心创新点。采用立体Transformer，通过交替的自注意力和交叉注意力机制，将左右视图的增强特征融合为立体感知的token <code>z_{t,i}</code>。其中，交叉注意力的查询和键投影应用了2D RoPE，以鼓励显式的跨视图对应关系学习和空间位置推理。该模块使策略能够隐式地捕获3D空间对应关系，而无需显式的3D监督或精细的相机标定。</li>
+<li><strong>多视图聚合</strong>：每个相机视图独立进行立体融合。将所有视图的融合嵌入 <code>z_{t,i}</code> 与本体感知特征 <code>s_t</code> 拼接，形成最终的观测表征 <code>z_obs</code>，供策略主干网络使用。</li>
+<li><strong>策略集成</strong>：<ul>
+<li><strong>StereoPolicy-DP</strong>：将融合后的立体嵌入 <code>z_obs</code> 作为条件，注入到扩散策略的去噪网络中。模型使用标准去噪目标进行训练，在推理时从高斯噪声进行迭代 refinement。</li>
+<li><strong>StereoPolicy-VLA</strong>：在预训练的VLA模型的视觉编码器之上，引入一个轻量级的立体特征提取器（即Stereo Transformer），用立体感知表征替换原来的单目视觉嵌入，然后对整体系统进行微调。</li>
+</ul>
+</li>
+</ol>
+<p><strong>与现有方法的创新点</strong>：与依赖显式3D重建（深度图、点云）的基线方法不同，StereoPolicy直接、隐式地从原始立体图像对中学习几何信息，避免了重建带来的噪声敏感性和计算开销问题。与简单的多视图RGB基线（仅拼接特征）相比，StereoPolicy通过立体Transformer显式建模视图间对应关系，性能更优。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：三个仿真基准——RoboMimic, RoboCasa, OmniGibson；真实机器人实验涵盖桌面操作和双臂移动操作场景。</li>
+<li><strong>对比基线</strong>：包括单目RGB、多视图RGB、RGB-D、基于PointNet的点云、RGBD-3DDA、PCD-DP3等显式3D方法，以及预训练的VLA模型（Pi0.5, GR00T N1.5）。</li>
+<li><strong>评估指标</strong>：成功率（SR）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>StereoPolicy-DP 对比各类视觉模态</strong>：在真实世界桌面任务（5个任务）中，StereoPolicy-DP平均成功率达59.0%，显著优于RGB（42.0%）、RGB-D（41.0%）、点云方法（14.0%-27.0%）和多视图基线（44.0%）。点云和RGB-D方法在玻璃杯悬挂任务上完全失败（SR=0%），凸显了显式3D方法对物体纹理（如透明、反光）的敏感性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2605.09989v1/2605.09989v1/figs/real_tabletop_traj.jpg" alt="真实世界桌面任务性能"></p>
+<blockquote>
+<p><strong>表1</strong>：真实世界桌面任务性能。StereoPolicy-DP 一致优于其他视觉模态。PCD在所有真实任务中表现最差；RGB-D和PCD在玻璃杯悬挂任务上失败，表明显式3D方法在实践中对物体纹理敏感。</p>
+</blockquote>
+<p>在仿真任务中，StereoPolicy-DP在大多数任务和不同演示数据量下都取得了最佳或极具竞争力的性能。特别是在涉及遮挡和精细3D对齐的任务（如ToolHang, PourWater）上，提升明显。例如，在OmniGibson的PourWater任务（100演示）上，SR从RGB的10%提升至34%。StereoPolicy-DP也超越了性能最好的显式3D基线RGBD-3DDA，并在数据效率上表现更优。</p>
+<p><img src="https://arxiv.org/html/2605.09989v1/2605.09989v1/figs/all_baseline.jpg" alt="仿真任务性能"></p>
+<blockquote>
+<p><strong>表2</strong>：扩散策略在不同视觉模态下的仿真任务性能。立体输入持续提升性能，尤其在低数据情况下。</p>
+</blockquote>
+<ol start="2">
+<li><strong>StereoPolicy-VLA 增强预训练模型</strong>：将StereoPolicy集成到预训练的Pi0.5和GR00T-N1.5模型中进行微调。在RoboCasa的24个厨房任务中，StereoPolicy-VLA在不同演示数据量下均一致优于单目RGB基线。在移动操作任务中，RGB策略在插入抓手到收音机把手、精确按压按钮等精确动作上失败，而StereoPolicy-VLA能够成功。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2605.09989v1/2605.09989v1/figs/robocasa_sr.jpeg" alt="VLA模型在RoboCasa的性能"></p>
+<blockquote>
+<p><strong>图6</strong>：StereoPolicy-VLA在RoboCasa厨房24个任务上的平均性能。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.09989v1/2605.09989v1/figs/real_mobile_sr2.png" alt="VLA模型在移动操作任务的性能"></p>
+<blockquote>
+<p><strong>图7</strong>：StereoPolicy-VLA (Pi0.5) 在真实世界和仿真中双臂移动操作任务上的性能。</p>
+</blockquote>
+<ol start="3">
+<li><strong>硬件配置分析</strong>：性能并非由立体基线距离或物距单独决定，而是由两者的比值 <code>r = 基线 / 物距</code> 决定，该比值决定了有效视差。StereoPolicy-DP在 <code>r ∈ [0.09, 0.13]</code> 范围内（即基线约为目标距离的10%）时性能最佳，此时视差足够强以实现可靠的深度估计，同时左右视图保持足够的重叠区域。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2605.09989v1/2605.09989v1/figs/baseline.png" alt="基线距离与物距比值分析"></p>
+<blockquote>
+<p><strong>图9</strong>：任务成功率与立体基线及距离的关系。</p>
+</blockquote>
+<ol start="4">
+<li><strong>相机角度鲁棒性</strong>：StereoPolicy-DP在不同相机角度下均优于RGB基线。在正对视角（frontview）提升最大（+18%），在侧面视角提升较小。立体视觉的收益与几何模糊度成正比：当单目线索不足时收益最大。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2605.09989v1/2605.09989v1/figs/all_angles.jpg" alt="不同相机角度性能"></p>
+<blockquote>
+<p><strong>图8</strong>：(a) 相机角度可视化。(b) RGB策略和StereoPolicy-DP在ToolHang任务上10种不同相机角度的成功率。StereoPolicy-DP对相机角度变化比RGB基线更鲁棒。</p>
+</blockquote>
+<ol start="5">
+<li><strong>消融实验</strong>：<ul>
+<li><strong>视觉主干网络</strong>：在低数据量（100演示）下，更大的预训练视觉-语言主干（如OpenCLIP、SigLIP）比小卷积网络（ResNet18）带来显著性能提升。具有多尺度特征的架构（如带FPN的ResNet18）也有益。</li>
+<li><strong>DINOv2增强</strong>：在外部视角添加DINOv2特征能提升性能，但在腕部视角会因域不匹配导致性能下降。</li>
+<li><strong>立体Transformer模块</strong>：移除该模块（即仅有多视图拼接）会使性能从0.94下降至0.85，验证了立体融合模块的有效性。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2605.09989v1/2605.09989v1/figs/ablation.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图10</strong>：视觉编码器与组件消融实验。在ToolHang任务（100演示）上进行。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了StereoPolicy，一个无需显式3D重建、直接消费同步立体图像对以增强机器人操作策略的新框架。其核心是使用预训练2D编码器和立体Transformer隐式融合几何信息。</li>
+<li>在仿真和真实机器人实验中，StereoPolicy一致超越了基于RGB、RGB-D、点云和多视图的基线方法，尤其在处理透明/反光物体和需要精细几何对齐的任务上展现出更强的鲁棒性，并且具有更好的数据效率。</li>
+<li>通过系统分析，为立体相机硬件配置提供了实用指导（如最佳基线-物距比约为10%），并验证了该框架能够有效提升现有预训练VLA模型的性能。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，当前工作主要在桌面和移动操作设置上进行，训练规模相对较小。未来方向包括在大型机器人立体数据（如Droid）上扩展StereoPolicy，以及探索更高效的立体编码器设计。</p>
+<p><strong>启示</strong>：这项工作表明，立体视觉是一种可扩展且鲁棒的感知模态，能够有效桥接2D预训练表示与3D几何理解。它为机器人学习提供了一种兼顾性能、鲁棒性和计算效率的感知方案，避免了显式3D重建的诸多弊端。其模块化设计也使其易于与现有的先进策略架构（如扩散模型、VLA模型）集成。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>这篇论文针对单目视觉策略在机器人操作中缺乏可靠深度感知和空间理解的问题，提出了StereoPolicy框架。其核心方法是直接利用同步立体图像对，通过预训练的2D视觉编码器独立处理左右图像，并利用一个立体Transformer（Stereo Transformer）融合特征，从而隐式地捕捉空间对应关系和视差线索，增强几何推理能力。实验表明，该框架在多个仿真基准测试中，性能一致优于RGB、RGB-D、点云和多视角基线方法，并在真实机器人任务中得到了验证。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.09989" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LoopVLA: Learning Sufficiency in Recurrent Refinement for Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>LoopVLA: Learning Sufficiency in Recurrent Refinement for Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.09948" target="_blank" rel="noreferrer">2605.09948</a></span>
+        <span>作者: Zhiwei Wang Team</span>
+        <span>日期: 2026-05-11</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前主流的视觉-语言-动作模型通常将视觉-语言骨干网络最深层的表示视为动作预测的通用最优解。然而，机器人操作包含大量频繁的闭环空间调整，过度的抽象可能浪费计算资源，并削弱精确控制所必需的低层几何线索。现有方法试图通过提前退出策略来减少计算，例如在预定义层停止或应用动作一致性等启发式规则，但这些方法并未直接回答“一个表示何时对动作预测是充分的”这一根本问题。</p>
+<p>本文针对VLA模型中“表示充分性”这一具体痛点，提出将表示精炼、动作预测和充分性估计联合建模的新视角。其核心思路是采用一个参数共享的循环Transformer块迭代地精炼多模态表示，并在每次迭代中同时产生候选动作和一个估计是否需要进一步精炼的充分性分数，从而动态地决定所需的计算量。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LoopVLA的整体框架是一个循环精炼架构。输入为视觉观测和语言指令，它们分别通过视觉编码器和文本编码器转换为令牌。此外，模型引入了可学习的动作令牌和充分性令牌。这些令牌拼接后，首先经过固定的感知锚定层（保留预训练模型的前四层以维持低层特征），然后进入核心的循环块进行迭代处理。每次迭代输出一个候选动作和一个停止概率，最终根据这些概率选择或提前停止以输出最终动作。</p>
+<p><img src="https://arxiv.org/html/2605.09948v1/2605.09948v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：LoopVLA整体框架。视觉、语言、动作和充分性令牌首先由感知锚定层处理，随后由一个共享的循环块进行迭代精炼。动作头在每次迭代中预测候选动作，而充分性头通过交叉注意力和剩余质量分配机制估计停止概率。训练分为联合精炼学习和充分性校准两个阶段。</p>
+</blockquote>
+<p>核心模块包括循环块、动作头和充分性头。<strong>循环块</strong>是一个浅层Transformer模块，其参数在所有迭代间共享，用于迭代精炼所有令牌的表示。它采用结构化的因果注意力掩码，确保动作令牌可以关注视觉和语言令牌，而充分性令牌可以关注所有令牌以聚合全局信息。<strong>动作头</strong>在每次迭代时将精炼后的表示映射为一个未来动作序列。<strong>充分性头</strong>是本文的关键创新，其结构如图2所示，用于估计当前表示的充分性。在每次迭代n，它从精炼表示中提取充分性令牌和动作令牌。充分性令牌会加上循环索引位置编码，以区分不同的精炼阶段。随后，充分性令牌作为查询，动作令牌作为键和值，通过一系列共享的交叉注意力层进行交互。一个MLP后接Sigmoid函数产生一个中间停止分数s^(n)。</p>
+<p><img src="https://arxiv.org/html/2605.09948v1/2605.09948v1/x1.png" alt="充分性头架构"></p>
+<blockquote>
+<p><strong>图2</strong>：充分性头架构。在迭代n，充分性令牌通过带有循环位置编码的交叉注意力层关注动作令牌，以预测停止概率p^(n)。RMA表示剩余质量分配机制。</p>
+</blockquote>
+<p>为了将中间停止分数转换为跨迭代的有效概率分布，本文引入了<strong>剩余质量分配机制</strong>。该机制递归计算剩余概率质量r^(n)（初始为1），并在每一步计算停止概率p^(n) = s^(n) · r^(n)，然后更新剩余质量r^(n+1) = r^(n) · (1 - s^(n))。这确保了所有迭代的停止概率之和小于等于1，并实现了自适应停止。</p>
+<p>与现有方法相比，LoopVLA的创新点主要体现在三个方面：1) <strong>参数共享的循环设计</strong>：用浅层共享块的多次迭代替代传统的深层固定网络，将精炼过程与绝对网络深度解耦，使充分性估计基于表示内容本身而非层索引。2) <strong>双头架构与充分性学习</strong>：同时输出动作和充分性分数，将“何时停止”内化为策略学习的一部分。3) <strong>自监督的分布对齐目标</strong>：由于缺乏充分性的真值标签，模型通过将预测的停止概率分布与基于动作损失构建的目标分布进行对齐来学习，从而将充分性学习与策略优化信号直接关联。</p>
+<p>训练采用两阶段策略。<strong>第一阶段：联合精炼学习</strong>。优化所有模块，使用所有迭代动作预测的L1损失之和，并辅以熵正则化和多样性正则化以防止分布过早坍缩或产生平凡映射。<strong>第二阶段：充分性校准</strong>。冻结除充分性头外的所有参数，使用KL散度损失将预测的停止概率分布p与由动作损失构建的软目标分布q对齐，其中q^(n) = softmax(-ℓ(A^(n), Â)/τ)，τ为温度系数。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在LIBERO、LIBERO-Plus和VLA-Arena三个仿真基准上进行。对比的基线方法包括Diffusion Policy、OpenVLA、π0、UniVLA、Qwen3OFT等主流VLA模型。</p>
+<p>关键实验结果如下：在LIBERO基准上（表1），LoopVLA在显著减少参数和提升推理速度的同时，取得了匹配或超越强基线的性能。例如，配置为(3⊗8)的LoopOFT*模型达到了96.0%的平均成功率，优于Qwen3OFT的94.9%，同时参数量从2.2B减少至1.2B（减少45%），推理吞吐量从10.49 Hz提升至10.93 Hz。采用效率-性能权衡推理策略的LoopOFTα模型，吞吐量进一步提升至12.15 Hz（约1.7倍），同时保持95.3%的高成功率。</p>
+<p><img src="https://arxiv.org/html/2605.09948v1/2605.09948v1/x3.png" alt="主要结果"></p>
+<blockquote>
+<p><strong>图4</strong>：LIBERO主要结果对比表。LoopVLA（灰色高亮行）在平均成功率上达到或超越基线，同时参数量（Params）显著减少，推理吞吐量（Thrpt.）大幅提升。</p>
+</blockquote>
+<p>在VLA-Arena基准上（表3），LoopVLA平均成功率为48.7%，优于Qwen3OFT的47.0%。在零样本泛化测试LIBERO-Plus上（表2），LoopOFTα取得了65.8%的成功率，与参数量更大的π0.5（65.0%）性能相当，展示了其良好的泛化能力与效率优势。</p>
+<p>消融实验研究了循环配置和推理设置的影响。如表4所示，在总计算量固定的前提下（L×N=24），不同的(L⊗N)配置性能呈非单调趋势，平衡配置如(4⊗6)和(3⊗8)能取得最佳效果。表5显示了不同推理策略的影响，其中“*”表示选择概率最高的迭代动作，其性能最佳（96.0%）；而固定迭代次数的策略性能稍低，验证了自适应停止机制的有效性。</p>
+<p><img src="https://arxiv.org/html/2605.09948v1/2605.09948v1/x4.png" alt="消融实验：循环配置"></p>
+<blockquote>
+<p><strong>图5</strong>：循环配置消融实验。展示了不同(L⊗N)组合下的性能，平衡配置（如(4⊗6)和(3⊗8)）通常能获得更好的平均成功率。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.09948v1/2605.09948v1/x5.png" alt="消融实验：推理设置"></p>
+<blockquote>
+<p><strong>图6</strong>：推理设置消融实验。比较了固定迭代次数与自适应选择（<em>）策略的性能，自适应选择策略（LoopOFT</em>）取得了最高的平均成功率。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) 提出了一个循环精炼的VLA框架，将表示学习重新定义为基于共享循环Transformer的迭代过程，并引入了基于分布对齐的自监督目标来从动作优化信号中学习充分性估计。2) 设计了LoopVLA模型，用循环共享块替代固定深度Transformer，在保持强性能的同时将模型大小减少了45%。3) 引入了动作头与充分性头的双头设计，使得充分性能直接从演化中的表示中估计，而非依赖启发式准则。</p>
+<p>论文提到的局限性包括：在极端泛化场景（如机器人本体变化）下性能仍有下降，表明减少容量和自适应计算在应对巨大分布偏移时存在权衡；此外，循环设计可能增加训练复杂性。</p>
+<p>本工作对后续研究的启示在于：为具身智能中的自适应计算提供了新思路，将“计算量”视为一个可学习的决策变量；其自监督的充分性学习范式可推广至其他需要动态推理深度的序列决策任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有视觉-语言-动作模型仅使用最深层的抽象表示进行动作预测，可能浪费算力并削弱机器人精细控制所需低级几何线索的问题，提出了LoopVLA模型。其核心技术是**循环细化架构**，通过共享的Transformer块迭代地细化多模态表征，并在每一步同时输出动作候选和**充分性分数**，以动态决定细化是否足够。该模型采用**自监督分布对齐目标**来学习充分性估计。实验表明，该方法在多个基准上匹配或超越基线性能，同时**减少了45%的参数，并将推理吞吐量最高提升了1.7倍**。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.09948" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
