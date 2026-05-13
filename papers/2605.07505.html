@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LiteGUI: Distilling Compact GUI Agents with Reinforcement Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>LiteGUI: Distilling Compact GUI Agents with Reinforcement Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.07505" target="_blank" rel="noreferrer">2605.07505</a></span>
+        <span>作者: Hao Chen Team</span>
+        <span>日期: 2026-05-08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于视觉的图形用户界面（GUI）智能体主要分为两类：一是直接调用强大的通用多模态大语言模型（MLLM），二是利用大规模交互数据微调领域特定的GUI视觉模型。然而，这些模型在推理时计算开销巨大，阻碍了其在本地设备或边缘端的部署。因此，开发轻量级（如20亿/30亿参数级别）的端侧GUI智能体成为迫切需求。然而，当前轻量级模型的训练几乎完全依赖于传统的监督微调（SFT）或使用简单坐标奖励的强化学习（RL）。这种粗粒度的训练范式正是导致小模型在长视野、多步骤探索中出现策略僵化和能力退化的根源。具体而言，SFT容易导致模型过拟合于特定领域和固定的交互轨迹，损害零样本泛化能力，并在动态UI环境中难以有效恢复错误。</p>
+<p>本文针对上述痛点，提出了一种全新的免SFT训练范式，旨在显著提升小规模GUI智能体的性能。核心思路是，首先通过引入真实轨迹参考和动态检索机制的引导策略蒸馏，来减少幻觉并缓解多解任务中的认知错位；在此基础上，进一步提出一个多解双层次GRPO框架，联合优化宏观层面的子任务规划和微观层面的执行匹配，以改善长视野GUI任务中的探索能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出一个两阶段训练范式，整体框架如图所示。</p>
+<p><img src="https://arxiv.org/html/2605.07505v1/2605.07505v1/x1.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图1</strong>：Lite-GUI整体框架。包含：(a) 自动化GUI轨迹生成模块，用于为GUI任务生成动作轨迹；(b) OPD &amp; RL数据构建模块，用于生成训练数据，特别关注为OPD和RL提供的多解标注；(c) 提出的两阶段训练范式，包括引导策略蒸馏和多解双层次GRPO。</p>
+</blockquote>
+<p><strong>任务定义</strong>：给定用户指令<code>q</code>，模型在时间步<code>t</code>的输入<code>x_t</code>包含指令、当前GUI截图<code>s_t</code>以及前<code>w</code>步的历史状态和输出。模型输出<code>y_t</code>包含三个关键部分：推理字段<code>r_t</code>（遵循观察-意图-分析结构）、子任务列表<code>c_t</code>（作为显式规划和记忆状态）以及可执行的GUI动作<code>a_t</code>（包含动作类型、位置参数和文本/键值参数）。对于每个状态<code>x_t</code>，维护一组人工验证的有效动作作为真值集<code>A*_t</code>，其中包含<code>K</code>个可以正确推进任务的动作，这代表了有效动作空间的有限近似。</p>
+<p><strong>第一阶段：引导策略蒸馏</strong>。标准策略蒸馏中，教师模型仅基于默认上下文评估学生模型的输出，这在GUI任务中可能导致不稳定的似然信号。为此，本文提出引导策略蒸馏，为教师模型提供从真值集<code>A*_t</code>构建的额外动作引导<code>g_t</code>。教师模型的分布变为<code>π_T(·|x_t, g_t)</code>，而学生策略仍为<code>π_θ(·|x_t)</code>，<code>g_t</code>仅在训练时用于教师端。本文探索了三种引导变体：</p>
+<ol>
+<li><strong>单真值引导</strong>：从<code>A*_t</code>中随机采样一个动作作为参考。</li>
+<li><strong>多真值引导</strong>：将整个真值集<code>A*_t</code>提供给教师。</li>
+<li><strong>最匹配真值引导</strong>：根据统一的GUI动作匹配函数<code>φ_gui</code>，从<code>A*_t</code>中选择与学生当前输出<code>ŷ_t</code>最匹配的动作作为参考。该函数综合评估动作类型、位置和文本值的匹配度。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2605.07505v1/2605.07505v1/x2.png" alt="引导策略蒸馏示意图"></p>
+<blockquote>
+<p><strong>图2</strong>：引导策略蒸馏示意图。核心创新在于根据学生输出，从多解真值集中动态检索最匹配的参考动作，将其作为特权信息提供给教师模型，以生成更稳定的监督信号。</p>
+</blockquote>
+<p>获得引导<code>g_t</code>后，将其与原始输入拼接构造教师输入<code>x̃_t</code>，并采用教师强制方式计算学生输出序列的标记级似然。最终，使用反向KL散度目标函数<code>L_OPD</code>来优化学生策略，使其与拥有特权信息的教师策略对齐。</p>
+<p><strong>第二阶段：多解双层次GRPO</strong>。为进一步优化学生，本文提出了多解双层次GRPO框架。对于从当前策略采样的<code>G</code>个候选输出，其总奖励<code>R_t</code>由两部分组成：</p>
+<ol>
+<li><strong>多解动作奖励</strong>：<code>R_ms</code>。该奖励将模型输出与真值集<code>A*_t</code>中的所有有效候选动作进行比较，并取最大匹配分数。这改变了奖励标准，从“模型是否重现了某个特定的标注动作？”变为“模型是否匹配了任何可接受的动作？”，从而大幅减少了由固定标注路径引起的“假阴性”惩罚。</li>
+<li><strong>长视野规划奖励</strong>：<code>R_sub</code>。该奖励评估模型生成的子任务计划<code>c_t</code>，通过一个强大的VLM评判器<code>f_judge</code>来打分。评判器从任务相关性与适应性、视觉基础、分解粒度和状态一致性四个维度进行评估，特别关注模型在陷入错误或循环状态时是否能识别并规划纠正步骤。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2605.07505v1/2605.07505v1/x3.png" alt="多解双层次GRPO示意图"></p>
+<blockquote>
+<p><strong>图3</strong>：多解双层次GRPO框架示意图。该框架包含两个核心奖励：微观层面的多解动作奖励（避免假阴性）和宏观层面的长视野规划奖励（评估子任务计划质量），共同优化局部执行与长期规划。</p>
+</blockquote>
+<p>总奖励<code>R_t = R_ms + λ_sub * R_sub</code>。在计算组内归一化的优势估计<code>Â_t</code>后，使用标准的GRPO裁剪目标函数<code>L_GRPO</code>进行策略优化，其中包含KL散度正则项以防止策略偏离参考模型过多。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：模型基于Qwen3-VL-2B和Qwen3-VL-30B-A3B骨干网络实现，使用Qwen3-VL-32B作为教师模型。在三个基准上进行评估：ScreenSpot-Pro、OS-World以及本文新构建的Lite-Bench。Lite-Bench包含160个任务（最多18步），涵盖75个网页任务、38个终端任务和47个禁止使用终端的文件系统任务。训练数据方面，扩展了ShowUI-Desktop-8k数据集并添加多解标注，同时使用了自建的包含3万条完整长轨迹和1.1万条多解标注的Lite-Dataset。</p>
+<p><strong>主要结果</strong>：在ScreenSpot-Pro基准上，如表1所示，经过本文方法训练的LiteGUI模型在2B规模上达到了40.16%的平均准确率，显著优于同规模基础模型（Qwen3-VL-2B， 40.16% vs 29.41%），甚至超越了部分7B模型，并与经过SFT的18B模型（CogAgent-18B， 7.7%）相比有巨大优势。在OS-World基准上，LiteGUI-2B取得了51.9%的成功率，远超同规模SFT基线（34.3%），并接近了部分70B大模型（如Qwen3-VL-70B， 54.8%）的性能。在Lite-Bench上，LiteGUI-2B以56.9%的成功率在轻量级模型中领先。</p>
+<p><img src="https://arxiv.org/html/2605.07505v1/2605.07505v1/x4.png" alt="ScreenSpot-Pro结果"></p>
+<blockquote>
+<p><strong>图4</strong>：在ScreenSpot-Pro基准上的性能对比。表格显示，LiteGUI-2B在平均准确率上达到40.16%，在轻量级模型中表现最佳，并大幅领先于其他经过SFT的GUI专用模型。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.07505v1/2605.07505v1/x5.png" alt="OS-World结果"></p>
+<blockquote>
+<p><strong>图5</strong>：在OS-World基准上的性能对比。LiteGUI-2B的成功率达到51.9%，显著优于同规模SFT基线，并与大规模模型性能相当。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.07505v1/2605.07505v1/x6.png" alt="Lite-Bench结果"></p>
+<blockquote>
+<p><strong>图6</strong>：在Lite-Bench基准上的性能对比。LiteGUI-2B以56.9%的成功率领先于其他轻量级模型。</p>
+</blockquote>
+<p><strong>消融实验</strong>：消融研究验证了各个组件的贡献。在ScreenSpot-Pro上，移除引导策略蒸馏（仅用SFT）导致性能下降6.2%；移除多解奖励（使用单解奖励）导致下降4.1%；移除规划奖励导致下降2.7%。在OS-World上，完整方法相比无任何OPD/RL组件的SFT基线，绝对提升达17.6%。实验表明，最匹配真值引导策略蒸馏和多解双层次GRPO均能带来显著性能增益，且二者结合效果最佳。</p>
+<p><img src="https://arxiv.org/html/2605.07505v1/2605.07505v1/x7.png" alt="消融实验（ScreenSpot-Pro）"></p>
+<blockquote>
+<p><strong>图7</strong>：在ScreenSpot-Pro上的消融实验结果。展示了移除引导OPD、多解奖励或规划奖励组件对性能的影响，证实了每个组件的有效性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.07505v1/2605.07505v1/x8.png" alt="消融实验（OS-World）"></p>
+<blockquote>
+<p><strong>图8</strong>：在OS-World上的消融实验结果。对比了SFT基线、仅OPD、仅GRPO以及完整方法（OPD+GRPO）的性能，证明两阶段联合训练范式带来最大提升。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li><strong>提出了一种免SFT的轻量级GUI智能体训练新范式</strong>：通过完全绕过传统的监督微调，结合引导策略蒸馏与强化学习，充分释放了20亿/30亿参数级纯视觉GUI智能体的潜力，有效缓解了小模型面临的过拟合、灾难性遗忘和策略僵化问题。</li>
+<li><strong>设计了引导策略蒸馏与多解双层次GRPO两大关键技术</strong>：引导策略蒸馏通过向教师模型提供真实轨迹参考和动态检索机制，减少了蒸馏中的幻觉和认知错位；多解双层次GRPO通过结合多解动作奖励和长视野规划奖励，共同优化了微观执行准确性与宏观任务规划鲁棒性。</li>
+<li><strong>构建了自动化数据生成流程并开源了高质量数据集与基准</strong>：开发了半自动化的多解GUI轨迹生成管道，并开源了包含3万条轨迹和1.1万条多解标注的Lite-Dataset，以及包含160个多样化任务的评估基准Lite-Bench，以解决该领域高质量数据稀缺的问题。</li>
+</ol>
+<p>论文提到的局限性包括：引导策略蒸馏的有效性依赖于教师模型的质量；长轨迹的在线环境评估成本高昂；多解标注的覆盖范围可能仍不完备。</p>
+<p>这项工作为轻量级具身智能体的训练提供了新思路，表明通过精心设计的蒸馏和强化学习机制，小模型在复杂决策任务上也能达到与大规模模型相竞争的实用性能。其提出的多解奖励设计和规划奖励评估方法，对于其他存在多模态、长序列决策问题的领域也具有启发意义。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对轻量级、设备端GUI智能体因模型容量有限而性能受限的核心问题展开研究。为解决传统监督微调（SFT）导致的过拟合和策略僵化，论文提出了两项关键技术：1）引导式在线策略蒸馏（Guided On-policy Distillation），首次将广义知识蒸馏系统性地引入GUI智能体领域；2）多解决方案双层GRPO框架，联合优化宏观任务规划和微观执行匹配。实验表明，该方法使2B-3B规模的轻量级智能体性能达到最先进水平，并在多个基准测试中与更大规模模型保持竞争力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.07505" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
