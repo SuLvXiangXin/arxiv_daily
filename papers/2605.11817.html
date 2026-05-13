@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>See What Matters: Differentiable Grid Sample Pruning for Generalizable Vision-Language-Action Model - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>See What Matters: Differentiable Grid Sample Pruning for Generalizable Vision-Language-Action Model</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.11817" target="_blank" rel="noreferrer">2605.11817</a></span>
+        <span>作者: Chang Xu Team</span>
+        <span>日期: 2026-05-12</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>视觉-语言-动作（VLA）模型在机器人操作任务中展现出强大潜力，但其高昂的计算成本阻碍了实时部署。当前主流的高效化方法主要包括视觉令牌修剪和异步执行。视觉令牌修剪方法（如基于语义的修剪或动态令牌修剪）存在一个根本性权衡：为了压缩而进行的激进修剪不可避免地会丢弃关键的几何细节（如接触点），导致性能严重下降，这限制了可实现的压缩率和潜在的加速效果。异步执行方法则因状态陈旧问题，在动态交互任务中会导致性能退化。更根本地，现有修剪方法都受限于对固定网格的离散选择，而机器人交互通常需要亚补丁级别的精度，离散选择会引入量化误差并损失空间保真度。</p>
+<p>本文针对VLA模型效率与性能之间的权衡难题，提出将压缩重新构想为视觉编码器中一种几何感知的、连续的令牌重采样过程。核心思路是提出可微网格采样器（GridS），通过动态预测任务驱动的连续空间坐标，并利用可微插值从密集特征图中查询特征，从而在保留关键空间信息的同时实现极致的压缩。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>GridS的整体框架是一个即插即用的模块，插入在视觉编码器和下游Transformer之间。其输入是视觉编码器输出的密集视觉令牌网格 $T_{dense} \in \mathbb{R}^{H \times W \times C}$，输出是压缩后的稀疏视觉令牌 $T_{spa} \in \mathbb{R}^{K \times C}$，其中 $K \ll H \times W$。</p>
+<p><img src="https://arxiv.org/html/2605.11817v1/2605.11817v1/assets/fig2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：GridS令牌修剪框架概览。(a) 标准密集表示：输入图像被视觉编码器处理为密集的视觉令牌。(b) GridS令牌修剪模块：该模块识别显著区域以采样一组稀疏视觉令牌，包含两个阶段：全局坐标预测和带有几何注入的网格采样。</p>
+</blockquote>
+<p>核心模块分为两个阶段：</p>
+<ol>
+<li><strong>全局坐标预测</strong>：首先对密集特征图 $T_{dense}$ 进行全局平均池化，得到上下文向量 $z \in \mathbb{R}^C$，以获取场景的全局语义信息。随后，一个轻量级MLP以 $z$ 为输入，预测 $K$ 组连续的、归一化的坐标 $P \in [0,1]^{K \times 2}$，即 $P = \sigma(MLP(z))$，其中 $\sigma$ 为Sigmoid函数以确保坐标在图像范围内。</li>
+<li><strong>网格采样与几何注入</strong>：基于预测的连续坐标 $P$，通过<strong>可微双线性采样</strong>从 $T_{dense}$ 中提取特征，得到 $F_{spa} \in \mathbb{R}^{K \times C}$。同时，为了恢复因采样而破坏的空间结构，使用一个坐标编码器将坐标 $P$ 映射为位置嵌入 $E_{pos} \in \mathbb{R}^{K \times C}$，并与采样特征相加，形成最终的稀疏视觉令牌 $T_{spa} = F_{spa} + E_{pos}$。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2605.11817v1/2605.11817v1/assets/fig3.png" alt="可微双线性采样"></p>
+<blockquote>
+<p><strong>图4</strong>：可微双线性采样。为了在连续坐标 $P(x,y)$ 处提取特征，该模块计算其四个最近整数邻点的加权插值。此操作实现了亚像素级特征提取，并保证了采样过程的可微性。</p>
+</blockquote>
+<p><strong>可微双线性采样</strong>是GridS的核心创新。对于一个连续坐标 $P(x, y)$，其采样特征值 $F_{sampled}(x,y)$ 由其四个最近邻整数网格点 $(x_i, y_i), (x_i+1, y_i), (x_i, y_i+1), (x_i+1, y_i+1)$ 的特征值通过权重 $\omega_k$ 加权求和得到，权重由坐标偏移量 $\Delta_x, \Delta_y$ 决定（如公式2所示）。此过程完全可微，梯度可以通过采样特征反向传播到坐标 $P$，进而更新坐标预测MLP（公式4），使得坐标预测能够根据下游任务损失进行端到端优化。</p>
+<p>与现有方法相比，GridS的创新点在于：1) <strong>从离散选择到连续采样</strong>：突破了固定网格的限制，能够实现亚补丁级精度的特征提取，避免了量化误差。2) <strong>任务感知与可微性</strong>：坐标预测模块与策略联合优化，使采样点主动向对任务决策至关重要的区域移动，而非使用固定的启发式规则。3) <strong>极致的压缩率</strong>：能够将视觉令牌数量压缩至原始数量的10%以下（如从256个减至16个或4个）。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在仿真基准LIBERO、ALOHA以及真实机器人平台（SO100机械臂）上进行。对比的基线方法包括：标准VLA模型（OpenVLA, CogACT, SmolVLA, $\pi_0$, $\pi_{0.5}$）以及多种训练后修剪方法（FastV, SparseVLM, VLA-Cache）。</p>
+<p><img src="https://arxiv.org/html/2605.11817v1/2605.11817v1/x1.png" alt="LIBERO实验结果"></p>
+<blockquote>
+<p><strong>表1</strong>：在LIBERO数据集上的模型效率与性能对比。GridS在将视觉令牌从256个压缩到16个时（FLOPs减少约76%），平均成功率（Avg. SR）反而提升了+1.6%（$\pi_0$）和+1.0%（$\pi_{0.5}$），而其他修剪方法均导致性能下降。</p>
+</blockquote>
+<p>关键实验结果如下：</p>
+<ul>
+<li><strong>LIBERO仿真</strong>：如表1所示，GridS在$\pi_0$模型上仅使用16个视觉令牌（原256个的6.25%）时，FLOPs从216.01G降至51.65G（减少76%），任务完成时间从8.17秒降至6.05秒，同时平均成功率从94.4%提升至96.0%（+1.6%）。在长视野（Long）任务上提升尤为显著（+4.6%）。即使压缩到仅4个令牌，性能仍与基线相当或略有提升。</li>
+<li><strong>ALOHA仿真</strong>：如表2所示，在$\pi_0$模型上使用16个令牌，GridS在保持或提升任务成功率的同时（平均成功率87.0% vs. 基线86.3%），将推理延迟从7.04秒降低至6.32秒。</li>
+<li><strong>真实世界实验</strong>：如图5(c)所示，在SO100机器人上进行三项任务测试，GridS（基于SmolVLA）在全部任务上均超越基线。在最难的堆叠方块任务中，成功率从基线的~7.6%大幅提升至60.0%（+52.4%）。在21个分布外（OOD）场景中，GridS的OOD成功率比基线高出+28.6%。同时，平均执行时间减少了2.3秒。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2605.11817v1/2605.11817v1/assets/fig4.png" alt="真实世界实验结果"></p>
+<blockquote>
+<p><strong>图5</strong>：真实世界评估。(a) 三个语言条件任务的执行过程。(b) 对应的OOD测试场景。(c) 成功率与执行时间的定量对比。GridS在所有任务上均优于基线，尤其在堆叠方块任务和OOD泛化上优势显著。</p>
+</blockquote>
+<p><strong>消融实验</strong>主要研究了令牌数量 $K$ 的影响。在真实世界堆叠方块任务中（表3），性能随 $K$ 变化呈倒U形曲线：$K=4$时完全失败，$K=16$时达到最优（成功率61.9%，OOD成功率38.1%），$K=32$时性能骤降至19.0%，接近基线水平（9.5%）。这表明存在一个最优压缩点（$K=16$），既能过滤冗余背景噪声，又保留了足够的几何信息。</p>
+<p><img src="https://arxiv.org/html/2605.11817v1/2605.11817v1/assets/ablation.png" alt="令牌数量消融"></p>
+<blockquote>
+<p><strong>表3</strong>：真实世界堆叠方块任务中不同令牌数量的成功率消融研究。结果呈现倒U形趋势，$K=16$为最优。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.11817v1/2605.11817v1/assets/fig6.png" alt="效率分析"></p>
+<blockquote>
+<p><strong>图6</strong>：性能分析。对比基线方法与GridS（16令牌）在不同批次大小下的推理延迟（左）和计算成本（右）。GridS在不同批次大小下均实现了加速和效率提升。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了<strong>可微网格采样器（GridS）</strong>，将VLA的令牌压缩重新定义为一种主动、几何感知的连续重采样过程，突破了离散修剪的性能-效率权衡。2) 实现了<strong>极致的压缩率</strong>（视觉令牌减少90%以上）和显著的效率提升（FLOPs减少76%），同时<strong>提升或保持了模型性能</strong>，在OOD场景下泛化能力显著增强。3) 提供了一种<strong>即插即用、可端到端联合优化</strong>的通用压缩模块，兼容自回归和流匹配等多种VLA范式。</p>
+<p>论文自身提到的局限性包括：在极端稀疏（如$K=4$）和长视野任务中，性能可能因几何信息不足或中间帧采样误差累积而下降。此外，最优令牌数量$K$可能因任务而异。</p>
+<p>本文的启示在于：1) <strong>连续采样范式</strong>：为视觉表示压缩提供了新思路，未来可探索扩展到其他模态（如语言、音频）的稀疏化。2) <strong>任务驱动的自适应</strong>：证明了通过下游任务损失直接驱动特征选择的有效性，这为设计更高效的感知-控制一体化架构指明了方向。3) <strong>迈向实时部署</strong>：GridS大幅降低了VLA的计算负担，为在资源受限的机器人平台和高度动态的物理交互环境中部署强大的VLA模型铺平了道路。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型计算成本高、难以实时部署的问题，指出现有token剪枝方法因丢弃关键几何细节（如接触点）而导致性能下降。为此，作者提出了可微分网格采样器（GridS），这是一个即插即用的模块，通过自适应预测显著坐标并进行可微分插值，实现任务感知的连续视觉token重采样。该方法在LIBERO基准和真实机器人平台上的实验表明，GridS能以少于10%的原始视觉token实现高达76%的FLOPs减少，且成功率无损失，同时推理延迟降低2.3秒，分布外任务成功率提升28.6%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.11817" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

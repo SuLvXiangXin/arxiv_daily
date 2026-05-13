@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RIO: Flexible Real-Time Robot I/O for Cross-Embodiment Robot Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>RIO: Flexible Real-Time Robot I/O for Cross-Embodiment Robot Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.11564" target="_blank" rel="noreferrer">2605.11564</a></span>
+        <span>作者: Jean Oh Team</span>
+        <span>日期: 2026-05-12</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人学习领域，尤其是视觉-语言-动作模型（VLA）的发展，依赖于大规模、多任务、跨形态的机器人演示数据。然而，尽管存在如Open X-Embodiment等跨形态数据集，通用化策略的实际部署仍然面临巨大挑战。当前主流方法面临的核心局限在于基础设施的碎片化：大多数机器人代码高度依赖于用户特定的硬件设置（如特定机械臂、夹爪、传感器配置和驱动代码），导致在用户间复用代码、共享数据集或复现结果时产生巨大的工程开销。例如，要复现基于特定机械臂（如DROID中的Franka）训练的策略，用户必须拥有一模一样的硬件，否则就需要从头重写整个控制栈。</p>
+<p>本文针对机器人学习领域缺乏灵活、可复用、高性能的全栈基础设施这一具体痛点，提出了一个新的视角：不应构建又一个封闭、特定的系统，而应提供一套轻量级、可组合的“构建模块”。这些模块在机器人控制栈的每一层（硬件、传感器、遥操作、中间件、数据格式、策略）都提供灵活的抽象，允许用户自由选择并轻松切换，从而将应用逻辑与硬件细节解耦。本文的核心思路是推出一个名为RIO（Robot I/O）的开源Python框架，通过提供可配置的、与中间件无关的节点抽象和统一的数据格式，显著降低跨不同机器人形态（单臂、双臂、人形）进行数据收集和策略部署的工程负担。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RIO的整体框架是一个基于节点（Node）和中间件（Middleware）抽象的可组合系统。用户通过一个配置文件定义机器人工作站（Robot Station），该站聚合了所有必要的节点（如机械臂、夹爪、相机、遥操作设备、策略）。这些节点通过可插拔的中间件进行通信，主程序则通过统一的API与这些节点交互，从而实现了硬件和策略的即插即用。</p>
+<p><img src="https://arxiv.org/html/2605.11564v1/2605.11564v1/x1.png" alt="架构总览"></p>
+<blockquote>
+<p><strong>图1</strong>：RIO系统架构概览。框架的每个组件都是灵活的，用户可以在不同选项（机器人、传感器、遥操作接口、中间件、数据格式、策略）之间自由选择并轻松切换。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>节点（Nodes）与中间件（Middlewares）</strong>：节点是RIO的基本构建块，代表一个硬件组件（如机器人、相机）或软件模块（如策略）。所有节点继承自同一个模板，并动态绑定到一个指定的中间件，由中间件处理消息传递。节点支持三种执行模式：仅发布数据（<code>pub</code>）、仅处理请求（<code>req</code>）、或两者结合（<code>pubreq</code>）。发布的数据通过环形缓冲区（ring buffer）以固定频率流式传输，确保时间同步；请求则通过队列（queue）进行异步命令通信。中间件抽象了传输细节，支持多种后端，包括用于高性能本地进程间通信的共享内存（Shared Memory）、用于简化调试的线程（Thread）、以及用于跨机器通信的Zenoh、ZeroRPC等网络中间件。这种设计使得节点与通信机制解耦，可根据部署需求（如单机调试、分布式系统）灵活切换。</li>
+<li><strong>机器人工作站（Robot Stations）</strong>：工作站通过一个可组合的数据类配置进行实例化，定义了部署的硬件拓扑（例如，对于双臂机器人站：<code>{arm, gripper, arm2, gripper2, wrist_camera, wrist_camera2}</code>）。通过上下文管理器，所有服务器节点使用指定的中间件后端初始化，而客户端节点则生成代理对象供主程序透明调用。这使得相同的应用程序逻辑无需修改即可运行在任意工作站配置上。</li>
+<li><strong>遥操作与数据收集（Teleoperation and Data Collection）</strong>：RIO提供了三种通用的遥操作脚本，分别控制末端执行器相对位姿（键盘、手机、游戏手柄、空间鼠标）、基于领导者-跟随者设置的绝对关节位置映射（如ALOHA、GELLO）、以及基于VR头显的腕部姿态重定向控制人形机器人上半身。为确保数据一致性，RIO强制使用标准单位（米、弧度），并采用RLDS风格的数据格式。通过引入“形态学”（morphology）抽象来描述机器人的结构及其特定的状态键，从而标准化不同平台的状态报告。数据使用RoboDM工具包进行高效压缩存储。</li>
+<li><strong>策略推理（Policy Inference）</strong>：RIO为策略提供了一个高级API，仅需轻量级接口来实例化策略、将标准化观察转换为策略特定格式并运行推理。一个策略包装器节点使用此API直接实例化策略并异步处理推理请求，避免了专用策略服务器的开销。此外，一个可配置的、与策略和硬件无关的推理脚本负责持续获取观察、对动作进行后处理（如平滑滤波）并发送命令，实现了策略与硬件的无缝切换。</li>
+</ol>
+<p><strong>创新点</strong>：与现有框架（如表I中对比的Ark、LeRobot、ROS等）相比，RIO的创新性体现在其极致的灵活性和可配置性。它并非一个捆绑了特定硬件驱动、中间件或数据格式的完整解决方案，而是一套“构建模块”。用户可以在每一层（机器人、夹爪、遥操作设备、相机、中间件、数据格式、策略）进行自由组合，并通过修改配置文件而非重写代码来切换组件，从而真正实现了“一次编写，多处运行”的跨形态机器人控制逻辑。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在配备NVIDIA RTX 4090 GPU、AMD Ryzen 7 5700X CPU和64GB RAM的桌面平台上进行。评估旨在验证RIO在从遥操作数据收集到策略微调与部署的完整机器人学习工作流中的能力，覆盖了三种机器人形态（单臂、双臂、人形）和四种硬件平台（xArm7, SO-100, Unitree G1, Booster T1），并测试了多种策略家族（VLA包括π0.5和GR00T N1.5、Diffusion Policy、RL-PPO）。</p>
+<p><strong>关键实验结果</strong>：<br>如表III所示，研究团队使用RIO收集了50-150条演示数据，对前沿策略进行了微调，并在真实机器人上进行了部署测试。所有任务在20次试验中均取得了≥60%的成功率。具体而言，单臂桌面操作任务（使用π0.5策略折叠衬衫、放置罐头）成功率分别达到92.5%和95%，且策略执行时间与人类演示时间接近（差异在2秒内）。动态任务（使用Diffusion Policy翻转玉米饼、投掷球）成功率分别为66.7%和100%。双臂任务（折叠布料、擦碗）成功率均为60%。人形机器人抓取盒子任务（使用GR00T N1.5）成功率达95%，且策略执行平均快于人类演示。此外，异步策略推理保持了较高的GPU利用率（最高达61.7%），表明RIO能有效利用计算资源，满足实时控制需求。</p>
+<p><img src="https://arxiv.org/html/2605.11564v1/2605.11564v1/figures/keyframes_grid.jpg" alt="VLA操作轨迹"></p>
+<blockquote>
+<p><strong>图2</strong>：π0.5策略在三种不同机器人形态（单臂、双臂、人形）上执行5种多样化任务的轨迹截图，展示了任务完成度从0%到100%的过程。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.11564v1/2605.11564v1/figures/keyframes_grid_nav.jpg" alt="人形机器人运动轨迹"></p>
+<blockquote>
+<p><strong>图3</strong>：在不同制造商的人形机器人（Unitree G1和Booster T1）上部署的RL-PPO运动策略轨迹，证明了RIO支持人形机器人实时运动控制的能力。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.11564v1/2605.11564v1/figures/piper_teleop_overlay.png" alt="数据格式"></p>
+<blockquote>
+<p><strong>图8</strong>：RIO采用RLDS风格的数据格式，将多个数据流（如图像、机器人状态、动作）聚合为统一的状态表示，以支持跨平台的一致数据收集。</p>
+</blockquote>
+<p><strong>消融实验与组件贡献</strong>：论文未进行传统的消融实验，但通过支持多种中间件（共享内存、线程、网络中间件）和多种遥操作设备（空间鼠标、GELLO、VR）的实践，间接验证了其模块化设计的有效性。整个框架的成功部署本身即证明了其各核心组件（灵活的节点抽象、可互换的中间件、统一的数据收集接口、异步策略推理）共同协作，能够支撑完整的跨形态机器人学习流程。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了RIO，一个灵活、实时、跨形态的机器人I/O框架，其设计遵循灵活、可重用、易用、高性能和一致性的原则，提供了可组合的构建模块。2) 在三种机器人形态和四种硬件平台上验证了RIO对于VLA部署工作流的实用性，成功微调并部署了包括π0.5、GR00T、Diffusion Policy在内的多种先进策略，完成了从数据收集到策略部署的闭环。3) 开源了全部代码与努力，旨在降低社区进行真实机器人学习的门槛。</p>
+<p>论文自身提到的局限性在于，虽然RIO能够支持跨形态机器人学习工作流（如收集多形态数据），但如何有效利用此类多形态数据来提升策略性能，仍然是一个有待未来探索的开放研究问题。</p>
+<p>对后续研究的启示是，RIO通过提供一套标准化的、可复用的基础设施，有望减少机器人学习研究中重复的工程开销，促进不同硬件平台间的代码共享、数据复现和协作，从而加速整个领域在真实硬件上的迭代与进步。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>这篇论文针对机器人学习领域的基础设施碎片化问题，即代码高度依赖特定硬件，导致跨平台复用和共享困难。提出了RIO开源框架，其核心技术是提供灵活的抽象层，用于机器人控制、遥操作、数据格式化和策略部署，实现跨不同形态和硬件平台的无缝切换。实验验证表明，RIO成功支持了三种机器人形态和四种硬件平台的VLA部署工作流，并用于收集数据以微调前沿模型。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.11564" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
