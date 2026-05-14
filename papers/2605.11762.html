@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>NavOL: Navigation Policy with Online Imitation Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>NavOL: Navigation Policy with Online Imitation Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.11762" target="_blank" rel="noreferrer">2605.11762</a></span>
+        <span>作者: Li Zhang Team</span>
+        <span>日期: 2026-05-12</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人导航策略学习的主流方法主要分为两类：离线模仿学习（如NavDP）和强化学习。离线模仿学习直接从专家演示中学习，避免了复杂的奖励设计，但其性能受限于预收集数据集的覆盖范围和多样性，无法与环境交互，导致在部署时因分布偏移和复合误差而性能下降。强化学习通过与环境的交互进行策略优化，但严重依赖精心设计的奖励函数，在复杂环境中存在样本效率低、训练困难的问题。本文针对离线模仿学习的分布偏移与复合误差痛点，提出将模仿学习的样本效率与在线学习的交互优势相结合。核心思路是构建一个在线模仿学习范式，在仿真器中与环境交互并在线收集专家轨迹进行策略更新，从而无需奖励设计、提高学习效率并缓解分布偏移。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>NavOL的整体框架是一个在IsaacLab仿真器中运行的“滚动-更新”循环，如图3所示。在滚动阶段，智能体以第一人称RGB-D观察和目标位置为输入，由扩散策略输出未来路径点序列，经模型预测控制（MPC）和底层控制器转换为物理动作；同时，一个拥有环境全局地图特权信息的全局规划器提供最优路径段作为专家监督信号。在更新阶段，使用滚动阶段收集的（观察，专家轨迹）数据对来优化策略和评论家网络。</p>
+<p><img src="https://arxiv.org/html/2605.11762v1/2605.11762v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：NavOL整体流程。系统在IsaacLab仿真器中交替进行滚动和更新阶段，形成一个闭环交互。在滚动阶段，智能体导航并接收专家规划器提供的轨迹作为监督信号。收集的数据用于在更新阶段联合优化轨迹生成器和评论家网络。</p>
+</blockquote>
+<p>模型架构基于一个预训练的多模态扩散策略，包含一个轨迹生成器和一个评论家。生成器以RGB-D观察<code>o</code>和目标指令<code>g</code>为条件，通过一个Diffusion Transformer（DiT）去噪生成一个K步的相对路径点序列 <code>{ (Δx_i， Δy_i， Δω_i) }</code>。视觉编码器使用DepthAnythingV2 ViT骨干网络，目标指令被嵌入并与视觉特征融合，共同作为DiT的条件。评论家网络与生成器共享视觉编码器和DiT主干，但输入不包括目标信息，以保持目标无关性。它接收观察<code>o</code>和一个候选轨迹<code>a</code>，输出一个标量安全分数<code>v</code>，用于在执行时对扩散策略采样的多个轨迹进行排序和选择。</p>
+<p>在线模仿学习的核心在于专家规划器和在线数据聚合。专家规划器基于Habitat-Sim的导航网格（NavMesh）计算从当前位姿到目标的最优路径，并通过后处理（如线性搜索调整、均匀重采样、样条平滑）确保路径平滑且无碰撞。在线数据聚合过程受DAgger启发：在每个时间步<code>t</code>，策略输出动作 <code>a_t^policy</code>，专家规划器提供最优动作 <code>a_t*</code>。最终执行的动作以概率ρ（如0.8）来自策略，否则来自专家，这有助于稳定训练。同时，利用导航网格计算轨迹中每个路径点到最近障碍物的距离，生成目标安全分数 <code>v_t‘</code> 来监督评论家网络。整个系统在IsaacLab中大规模并行运行，在8个RTX 4090 GPU上，每小时可在50个场景中收集超过2000条新轨迹。</p>
+<p>策略优化使用滚动阶段收集的最新数据进行。生成器的损失是标准去噪损失，条件于观察、目标和专家轨迹：<code>L_actor = MSE(ε_k， ε_θ(a_t* + ε_k， k))</code>。评论家网络的损失是MSE损失：<code>L_critic = MSE(v‘， V_θ(o， a))</code>。总损失为两者加权和 <code>L = L_actor + λ L_critic</code>。为提高训练速度，更新阶段复用滚动阶段已计算好的视觉特征。</p>
+<p>与现有方法相比，NavOL的创新点在于：1) 将DAgger风格的在线模仿学习范式首次成功应用于高维视觉扩散策略，通过大规模并行仿真解决了其计算瓶颈；2) 通过与环境交互并在线获取专家监督，直接针对策略自身探索的轨迹分布进行训练，有效缓解了离线模仿学习的分布偏移问题；3) 整个框架无需手动设计奖励函数。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了两个仿真基准：现有的NavDP基准和本文新提出的基于3D-Front数据集的室内视觉导航基准。此外，还在真实世界的Unitree Go2机器人上进行了零样本迁移实验。对比的基线方法包括：DD-PPO（强化学习）、iPlanner（无监督规划）、ViPlanner（无监督规划）和NavDP（离线模仿学习）。</p>
+<p>在NavDP基准上的关键实验结果如表1所示。NavOL在四个场景（Cluttered-Easy， Cluttered-Hard， Intern-Home， Intern-Commercial）上的平均成功率（mSR）和平均SPL（mSPL）分别为80.4%和76.3%，均优于所有基线方法，特别是相比其前身NavDP（77.8%， 74.8%）有稳定提升。</p>
+<p><img src="https://arxiv.org/html/2605.11762v1/2605.11762v1/x3.png" alt="NavDP基准结果"></p>
+<blockquote>
+<p><strong>表1</strong>：在NavDP基准上的性能。NavOL在所有场景和指标上均优于基线，尤其在SPL指标上表现出色，表明其生成轨迹更接近最优路径。</p>
+</blockquote>
+<p>在新提出的基准（8个未见过的场景）上的结果如表2所示。NavOL取得了显著优势，平均成功率和平均SPL分别达到69.0%和63.7%，远超最强的基线NavDP（42.2%， 37.7%）。这验证了在线模仿学习框架在缓解分布偏移、提升零样本泛化能力方面的有效性。</p>
+<p><img src="https://arxiv.org/html/2605.11762v1/2605.11762v1/x4.png" alt="新基准结果"></p>
+<blockquote>
+<p><strong>表2</strong>：在新基准上的性能。NavOL在几乎所有场景上都大幅超越基线，展示了其在线模仿学习框架在缓解分布偏移方面的鲁棒性和泛化能力。</p>
+</blockquote>
+<p>定性分析如图6所示，与NavDP相比，NavOL生成的轨迹分布更集中、更稳定，尤其在障碍物附近能保持无碰撞，而NavDP的轨迹分布分散且可能穿过障碍物，导致抖动和失败。</p>
+<p><img src="https://arxiv.org/html/2605.11762v1/2605.11762v1/x5.png" alt="轨迹可视化对比"></p>
+<blockquote>
+<p><strong>图6</strong>：在相同起点-目标对下采样轨迹的定性对比。NavDP（上）的轨迹分布在障碍物附近分散，多个样本穿过障碍物；而NavOL（下）的轨迹则集中在无碰撞路径上。</p>
+</blockquote>
+<p>真实世界实验在三个杂乱场景（办公室、健身房、走廊）中进行，各进行10次试验。如图7所示，NavOL成功到达了目标，而NavDP则失败。这初步证明了该方法具备从仿真到现实的零样本迁移能力。</p>
+<p><img src="https://arxiv.org/html/2605.11762v1/2605.11762v1/x6.png" alt="真实世界实验"></p>
+<blockquote>
+<p><strong>图7</strong>：在Unitree Go2机器人上的零样本真实世界部署。上图（第三方视角）显示NavOL（每个场景的上子行）成功到达目标，NavDP（下子行）失败。下图展示了同一轨迹中车载RGB摄像头捕捉的快照。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) 提出了NavOL，一个用于导航策略学习的在线模仿学习框架，成功地将DAgger范式应用于高维视觉扩散策略；2) 实现了一个高度并行化的滚动-更新流程，实现了大规模高效的数据收集与训练；3) 引入了一个新的室内视觉导航基准，用于全面评估策略的零样本泛化能力；4) 通过广泛的仿真与真实世界实验，验证了该方法在提升导航性能、缓解分布偏移方面的有效性。</p>
+<p>论文自身提到的局限性主要在于其训练依赖于一个拥有环境全局地图特权信息的规划器来提供在线专家监督，这在真实世界中通常无法获得，限制了其在完全未知环境中的在线学习潜力。</p>
+<p>这项工作对后续研究的启示在于：它证明了将在线交互学习与模仿学习相结合，是提升视觉导航策略鲁棒性和泛化能力的有效途径。未来的工作可以探索如何减少对特权信息的依赖，例如通过基于学习的规划器或从交互中学习到的价值函数来生成监督信号，从而向完全自主的在线学习迈进。此外，该并行高效的训练框架也为在更复杂、多样化的场景中规模化训练导航策略提供了可行的技术路径。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人导航策略学习中离线模仿学习的分布偏移与误差累积问题，以及强化学习需要奖励工程、效率低下的挑战，提出了NavOL在线模仿学习范式。该方法基于预训练的导航扩散策略，通过“ rollout-update ”循环与模拟器交互：在 rollout 阶段，策略在环境中执行并查询全局规划器获得最优路径段作为专家轨迹；在 update 阶段，利用在线收集的观测-轨迹对更新策略。实验在NavDP基准及自建基准上进行评估，结果表明NavOL在在线模仿学习中取得了持续的性能提升，展现出优异的鲁棒性和泛化能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.11762" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
