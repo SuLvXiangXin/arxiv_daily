@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>WarmPrior: Straightening Flow-Matching Policies with Temporal Priors - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>WarmPrior: Straightening Flow-Matching Policies with Temporal Priors</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.13959" target="_blank" rel="noreferrer">2605.13959</a></span>
+        <span>作者: Kimin Lee Team</span>
+        <span>日期: 2026-05-13</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于扩散和流匹配的生成式策略已成为机器人视觉运动控制的主流范式。这些方法的核心思想是训练一个神经场，将样本从一个固定的源分布（source distribution）输送到目标动作块的数据流形上。几乎无一例外，这个源分布都被设定为各向同性的高斯分布𝒩(0, I)。这一惯例继承自扩散模型的“从噪声去噪”解释，并在流匹配及其少步推理的后续工作中得以保留。然而，随着去噪（或积分）步数的缩短，起始点承担了原本由积分步骤分担的更多负担。一个无状态、无信息的源分布对机器人动作的连续性和时间相关性是“盲目的”，这迫使策略每次都必须从头开始重建每个动作块。</p>
+<p>本文针对这一具体痛点，提出将源分布从一个继承的默认设置提升为一个可设计的一级对象。核心思路是：用基于近期动作历史的、具有时间接地性（temporally grounded）的先验分布（称为WarmPrior）来替代标准高斯分布，从而缩短传输距离、拉直概率流路径，并自然地引入时间一致性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>WarmPrior仅修改流匹配策略的源分布，而保持网络结构、插值函数和训练目标不变。其整体框架是在标准的流匹配策略训练与推理流程中，替换掉源分布a₀的采样方式。</p>
+<p><img src="https://arxiv.org/html/2605.13959v1/2605.13959v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：WarmPrior概念图。标准的流匹配策略将样本从与上下文无关的𝒩(0, I)传输到动作流形（左）。WarmPrior则将传输的起点初始化为一个以近期过去动作块（Past）或模型自身对当前块的先前预测（Preview）为中心的时间接地高斯分布（中，右）。由此产生的概率路径更短、更直，并且在连续块之间具有时间相关性。</p>
+</blockquote>
+<p>核心模块是两种具体的WarmPrior变体，它们仅在于先验均值μ如何锚定到智能体的动作历史上。对于一个预测位置上的“温暖”索引集合𝒲及其补集“寒冷”集合𝒞，WarmPrior的采样公式为：<br>a₀[τ] = { μ_τ + σ ε_τ, τ ∈ 𝒲; ε_τ, τ ∈ 𝒞 }，其中ε ∼ 𝒩(0, I)。<br>“寒冷”区域保持与标准流匹配相同的先验，而“温暖”区域则围绕一个预测均值μ添加一个尺度为σ的残余高斯噪声，使其保持为一个合理的分布而非确定性点质量。</p>
+<p>**WarmPrior-Past (WP-Past)**：这是最简单的变体，预测单个长度为H的动作块，并将先验均值μ锚定在上一个已执行的动作块上。在训练时，对于缓冲区中索引为i的样本，从回放缓冲区中检索前H个动作a^{data}_{i-H:i}作为μ。在推理时，直接使用上一个执行的动作块作为μ。该方法设置σ=0.5。</p>
+<p>**WarmPrior-Preview (WP-Preview)**：该变体训练策略去预测比所需多一个块的动作。具体而言，它在每个推理步骤预测2H个动作，但只执行前H个。后H个动作作为对下一个块的“预览”，成为模型自身对未来动作的预测。当进入下一个决策步骤时，这个预览恰好与新预测的前H个位置对齐，为新的生成过程提供了一个自然而准确的先验均值。在训练时，由于理想的先验均值（模型自身的过去预览）尚不可用，论文使用真实目标动作本身作为完美校准预览的代理来设置μ。在推理时，使用上一个2H步预测的后半部分作为当前先验的均值。该方法设置σ=1.0。</p>
+<p>与现有方法相比，WarmPrior的创新点在于：1）它聚焦于重构源分布p₀本身，而非改变耦合（如OT-CFM）或修改轨迹内部（如STEP）；2）它保持了端到端的随机流匹配公式，是一种极简的干预；3）残余噪声尺度σ成为一个可调节旋钮，在时间一致性和多模态表达能力之间进行权衡。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在模拟和真实机器人两个平台上进行。模拟实验使用了<strong>Robomimic</strong>（包含Square， Transport， Tool-Hang任务，PH和MH数据分割）和<strong>MimicGen</strong>（包含Stack， Coffee， Threading任务）两个机器人操作基准数据集，观测模态包括状态和图像。策略骨架采用广泛使用的<strong>Diffusion Policy (ChiTransformer)<strong>，并使用流匹配进行训练。真实机器人实验在</strong>Franka Research 3</strong>上部署，构建了四个桌面操作任务（食品废物处理、杯子堆叠、积木堆叠、线缆插入），使用<strong>GR00T N1.5 VLA模型</strong>作为策略骨架。</p>
+<p>对比的<strong>基线方法</strong>是标准的使用𝒩(0, I)作为源分布的流匹配策略。</p>
+<p><strong>关键实验结果</strong>：如表1所示，在绝大多数任务和推理预算（NFE=9，3，1）下，WarmPrior（尤其是WP-Preview）都显著提升了成功率。提升在最低推理预算（NFE=1）时最为显著。例如，在Robomimic Square-MH（状态观测）任务上，NFE=1时，WP-Preview将成功率从基线的65.9%提升至77.8%（绝对提升+11.9%）。在更困难的任务（如Transport-MH， Tool-Hang-PH）和MimicGen任务上，WP-Preview也带来了最大的增益。</p>
+<p><img src="https://arxiv.org/html/2605.13959v1/2605.13959v1/x2.png" alt="模拟实验结果表"></p>
+<blockquote>
+<p><strong>表1</strong>：在Robomimic和MimicGen（图像观测）上，H=8时，三种推理预算下的模拟成功率（%）。括号内显示相对于𝒩(0, I)基线的绝对增益；绿色标记表示增益超过了基线与方法的标准差之和（非重叠的1σ种子区间）。每个（任务，NFE）下的最佳结果以粗体显示。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.13959v1/2605.13959v1/x3.png" alt="真实机器人实验结果"></p>
+<blockquote>
+<p><strong>图3</strong>：真实机器人成功率。在四个桌面操作任务上评估WP-Past、WP-Preview和𝒩(0, I)基线，报告了三个训练种子（每个种子50次试验）的均值和标准差。WarmPrior在所有四个任务上一致地提高了总体成功率，在精度要求高的线缆插入和积木堆叠任务上增益最大。</p>
+</blockquote>
+<p><strong>流轨迹可视化与曲率分析</strong>：为了理解性能提升的原因，论文可视化了学习到的流轨迹并测量了路径曲率。</p>
+<p><img src="https://arxiv.org/html/2605.13959v1/2605.13959v1/x4.png" alt="流轨迹可视化"></p>
+<blockquote>
+<p><strong>图4</strong>：在Square-MH任务上的流轨迹。归一化的动作坐标与去噪时间t∈[0,1]的关系；底部标记：先验p₀，顶部标记：预测p₁。基线策略的路径明显弯曲，而WarmPrior的路径由于起点靠近流形，显得更直、更平行。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.13959v1/2605.13959v1/x5.png" alt="路径曲率表"></p>
+<blockquote>
+<p><strong>表2</strong>：在状态观测任务上学习到的流的路径曲率κ(o)（公式5；值越低表示越直；数值已归一化，使𝒩(0, I)基线为1.000）。所有任务的曲率均下降，且曲率下降幅度与表1中的成功率增益趋势一致（例如Square-MH， Transport-MH下降最多，增益也最大），支持了“拉直路径解释性能”的假设。</p>
+</blockquote>
+<p><strong>消融实验与理论分析</strong>：论文通过一个1D导航玩具实验（图5）展示了WarmPrior的第二个好处：提供可调的时间一致性。残余噪声尺度σ成为在多模态表达和 rollout 内一致性之间权衡的旋钮。较小的σ增强一致性但可能抑制多模态，较大的σ则相反。论文还从理论上推导了“分支成本”（branching cost）的上界（公式7），解释了WP-Preview优于WP-Past的原因（预测误差小于持续性残差），并阐明了σ的权衡作用。</p>
+<p><img src="https://arxiv.org/html/2605.13959v1/2605.13959v1/x6.png" alt="1D导航玩具实验"></p>
+<blockquote>
+<p><strong>图5</strong>：1D导航玩具中的模式切换。所有策略共享一个1024维4层MLP主干。(a)训练数据；(b)回归策略坍缩到均值；(c)朴素流匹配恢复了两种模式但在推理时在它们之间振荡；(d)历史条件流匹配在一个rollout内保持承诺，但在推理时历史偏移下会偏离流形；(e, f) σ=0.1和σ=0.5的WarmPrior在每个rollout内保持承诺，并通过σ在多模态和时间一致性之间调节。</p>
+</blockquote>
+<p><strong>强化学习扩展</strong>：论文还将WarmPrior应用于先验空间强化学习（Prior-Space RL），表明其通过将探索分布围绕在一个时间接地的均值周围，从而重塑了探索空间。实验表明，在预训练策略之上进行 tighter residual action 搜索，其样本效率和渐进性能均优于 vanilla DSRL。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）<strong>将源分布提升为生成式机器人控制中一个重要的、未被充分探索的设计轴</strong>，挑战了使用𝒩(0, I)的惯例。2）提出了<strong>WarmPrior</strong>，一种极简的、基于时间历史构建先验的方法，为行为克隆带来了<strong>几何（拉直路径）和时态（可调一致性）的双重收益</strong>，并在低推理预算下效果尤为显著。3）展示了该方法可<strong>自然延伸至强化学习</strong>，通过重塑探索分布来改善先验空间RL的探索效率。</p>
+<p>论文自身提到的局限性包括：1）WarmPast需要一个动作历史缓冲区，而WarmPreview需要额外的计算来预测更长的视野（2H vs H）。2）在非常长的视野或快速变化的动态下，基于过去动作的预测可能不准确。3）与所有历史条件方法一样，对执行错误的累积敏感。</p>
+<p>本文的启示在于：源分布的设计是一个富有潜力的方向。未来的研究可以探索更复杂或自适应的先验构建方式，将WarmPrior的思想与其他改善耦合或插值器的方法结合，以及研究如何自动学习最优的残余噪声尺度σ以适应不同的任务和多模态需求。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对生成式机器人控制中标准高斯源分布忽略动作时间连续性的核心问题，提出WarmPrior方法。该方法以简单的时间基础先验替换传统高斯分布，包括两种变体：WP-Past基于过去动作块，WP-Preview重用模型自身先前预测，均添加高斯扰动以保持分布性而不改动网络结构。实验表明，WarmPrior使概率路径显著变直，类似最优传输耦合效果，一致提高机器人操作任务的成功率，并在先验空间强化学习中改善样本效率和最终性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.13959" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

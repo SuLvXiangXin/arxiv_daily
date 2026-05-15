@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>IntentVLA: Short-Horizon Intent Modeling for Aliased Robot Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>IntentVLA: Short-Horizon Intent Modeling for Aliased Robot Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.14712" target="_blank" rel="noreferrer">2605.14712</a></span>
+        <span>作者: Kai Chen Team</span>
+        <span>日期: 2026-05-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人模仿学习的主流方法是视觉-语言-动作模型。这类模型基于当前帧的图像观察和语言指令直接预测机器人动作。然而，人类演示数据本质上是多模态的：相似的视觉-语言观察可能对应不同的后续动作块，因为演示者可能持有不同的短期意图、处于不同的任务阶段或受不同近期上下文影响。现有基于帧条件化的VLA策略仅从当前观察和指令推断每个动作块，因此在部分可观测性下，它们可能在相邻的重新规划步骤中对不同的意图进行重复采样，导致动作块之间的冲突和不稳定的执行。本文针对这一具体痛点，即<strong>帧条件化策略在观测混叠下无法保持跨动作块的意图一致性</strong>，提出了<strong>历史条件化</strong>的新视角。核心思路是：编码近期视觉观察为一个紧凑的短期意图表示，并用它来条件化动作块的生成，从而维持当前轨迹已表达的局部承诺。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>IntentVLA的整体框架是一个历史条件化的模仿学习框架，其输入包括当前图像观察 $o_t$、语言指令 $\ell$ 以及一个有限的近期视觉历史窗口 $h_t^K = o_{t-K:t-1}$，输出是未来 $H$ 步的动作块 $\tau_t$。</p>
+<p><img src="https://arxiv.org/html/2605.14712v1/2605.14712v1/x3.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图4</strong>：IntentVLA方法概述。左侧Qwen3-VL主干编码当前图像和语言指令，右侧冻结的VGGT-1B历史编码器提取近期视觉证据。两者通过门控交叉注意力融合，并附加一个紧凑的短期意图令牌，共同条件化一个基于DiT的流匹配动作头以生成动作块。</p>
+</blockquote>
+<p>框架包含三个核心模块：</p>
+<ol>
+<li><strong>当前上下文编码器</strong>：使用Qwen3-VL 4B作为主干网络 $q_{\psi}$，处理当前图像 $o_t$ 和语言指令 $\ell$，取其最后一层隐藏特征 $F_t \in \mathbb{R}^{N \times d}$ 作为当前条件表示。</li>
+<li><strong>近期历史编码器</strong>：使用一个冻结的VGGT-1B编码器 $g_{\phi}$ 处理近期 $K$ 帧（仅使用头摄像头图像）的历史窗口 $h_t^K$。对于每一帧，保留其相机令牌和四个寄存器令牌，这些令牌编码了视角变化和帧间结构信息。编码器输出历史令牌序列 $U_t$ 及其池化后的摘要表示 $\bar{e}_t$。随后通过可学习的投影层 $W_h$ 和 $W_e$ 将其映射到与动作模型相同的隐藏空间，得到 $ \tilde{U}_t $ 和紧凑的历史证据令牌 $e_t$。</li>
+<li><strong>意图条件化动作生成</strong>：首先通过一个<strong>门控交叉注意力</strong>模块将历史信息融入当前上下文：$F_{t}^{\prime}=F_{t}+\sigma(\alpha),\mathrm{MHA}(Q=\mathrm{LN}(F_{t}),K=\tilde{U}<em>{t},V=\tilde{U}</em>{t})$，其中 $\alpha$ 为可学习的标量门控。接着，将投影后的历史证据令牌 $e_t$ 重塑为单令牌 $e_t^{\mathrm{tok}}$ 并附加到 $F_t‘$ 之后，形成最终的上下文条件 $C_t = [F_t’; e_t^{\mathrm{tok}}]$。$C_t$ 即代表了模型学习到的、依赖于当前观察和历史的短期意图表示 $m_t$。最后，使用一个基于DiT的条件流匹配动作头，以 $C_t$ 为条件生成动作块。训练采用标准条件流匹配目标 $\mathcal{L}_{\mathrm{flow}}$，使模型预测的流场与真实动作块和噪声之间的位移相匹配。</li>
+</ol>
+<p>与现有方法相比，IntentVLA的核心创新在于：1）<strong>明确建模并利用短期意图</strong>，通过编码近期视觉历史来推断当前轨迹已承诺的延续模式，而非仅依赖易混叠的当前帧；2）<strong>高效的历史融合机制</strong>，使用轻量的冻结历史编码器和门控交叉注意力，避免了将大量原始历史帧直接输入VLM主干所带来的巨大计算开销和内存问题。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了四个基准进行评估：专门为测试观测混叠而构建的<strong>AliasBench</strong>（基于RoboTwin2模拟器，包含4类共12个任务），以及三个标准机器人操作基准<strong>SimplerEnv</strong>、<strong>LIBERO</strong>和<strong>RoboCasa</strong>。</p>
+<p>对比的基线方法包括强VLA基线Qwen3VL-GR00T，以及多种将历史帧作为额外上下文直接输入Qwen主干的变体。</p>
+<p>在AliasBench上的关键定量结果如下表所示：<br><img src="https://arxiv.org/html/2605.14712v1/2605.14712v1/x5.png" alt="AliasBench结果"></p>
+<blockquote>
+<p><strong>表1</strong>：AliasBench上的成功率（%）。IntentVLA（45.8%）显著优于仅使用当前帧的基线Qwen3VL-GR00T（9.0%）以及将4帧历史直接作为上下文的最佳可行基线（28.1%）。直接输入8或16帧历史会导致内存不足。</p>
+</blockquote>
+<p>除了成功率，论文还定义了<strong>块间一致性误差</strong>来衡量在混叠窗口内相邻规划动作块的重叠部分是否一致。如图5所示，IntentVLA在所有任务和混叠类型上都显著降低了不一致性，平均ICC-L2误差相对降低了17.6%，这表明其能更好地维持短期意图的连贯性。</p>
+<p><img src="https://arxiv.org/html/2605.14712v1/2605.14712v1/x4.png" alt="块间一致性"></p>
+<blockquote>
+<p><strong>图5</strong>：在AliasBench混叠窗口内的块间一致性比较。左图显示各任务的平均ICC-L2误差，IntentVLA（蓝色）普遍低于基线（灰色）。右图显示按任务家族统计的90百分位ICC-L2误差，IntentVLA在尾部不一致性上也表现更优。</p>
+</blockquote>
+<p>在标准基准上的实验结果进一步验证了方法的通用性。例如，在SimplerEnv上，IntentVLA取得了72.9%的平均成功率，优于包括MemoryVLA（71.9%）在内的多个先进基线。<br><img src="https://arxiv.org/html/2605.14712v1/2605.14712v1/x6.png" alt="标准基准结果"></p>
+<blockquote>
+<p><strong>表2</strong>：在SimplerEnv上的成功率（%）对比。IntentVLA（72.9%）取得了最佳平均性能，尤其在“Stack Green Block on Yellow Block”任务上优势明显（54.2%）。</p>
+</blockquote>
+<p>消融实验（隐含在表1的基线对比中）表明：1）直接使用原始历史帧作为上下文（即使采样4帧）效果有限且计算代价高；2）IntentVLA采用的紧凑历史编码与融合策略更为有效。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）识别并形式化了帧条件化VLA策略在部分可观测和观测混叠下存在的“意图冲突”失败模式；2）为此构建了专门的评测基准AliasBench，以量化和评估策略的短期意图一致性；3）提出了IntentVLA，一个通过编码近期视觉历史来建模短期意图，并以此条件化动作生成的历史条件化模仿学习框架。</p>
+<p>论文自身提到的局限性包括：1）所使用的历史窗口有限（16帧），可能无法覆盖所有需要长程上下文的任务阶段；2）在闭环执行中，历史可能因执行误差而偏离演示数据中的模式，导致性能下降。</p>
+<p>本研究对后续工作的启示在于：强调了在模仿学习中显式建模短期意图和利用历史上下文对于实现稳定、连贯操作的重要性。所提出的历史编码与融合范式为在保持计算效率的同时增强VLA策略的时序推理能力提供了一种可行的技术路径。AliasBench的构建也为未来研究评估策略在模糊观测下的决策一致性提供了一个有价值的工具。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决机器人模仿学习中因视觉观察歧义（Aliasing）导致的动作冲突问题。现有基于单帧的视觉语言动作模型在部分可观测下，会因相邻决策步骤中意图不一致而产生不稳定执行。提出的IntentVLA框架通过编码近期视觉观察历史，构建紧凑的短期意图表示，并以此条件化动作块的生成，确保意图在时间上的连续性。实验在AliasBench等多个基准上进行，结果表明IntentVLA显著提升了任务执行的稳定性，并优于现有强VLA基线。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.14712" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

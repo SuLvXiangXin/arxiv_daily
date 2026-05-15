@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SR-Platform: An Agentic Pipeline for Natural Language-Driven Robot Simulation Environment Synthesis - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>SR-Platform: An Agentic Pipeline for Natural Language-Driven Robot Simulation Environment Synthesis</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.14700" target="_blank" rel="noreferrer">2605.14700</a></span>
+        <span>作者: Thanh Nguyen Canh Team</span>
+        <span>日期: 2026-05-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人学习的大规模应用依赖于大量多样化、物理合理的仿真环境。然而，构建这些环境——特别是广泛使用的MuJoCo仿真器场景——仍然是一个主要瓶颈。这需要工程师具备3D资产建模、MJCF规范编写、空间布局、碰撞避免和机器人模型集成等多方面专业知识，过程繁琐且难以扩展。尽管大型语言模型在代码生成、任务规划等方面展现出潜力，但现有方法大多依赖于固定的物体库，或仅停留在符号化场景描述，无法实现从自由形式的自然语言提示到可直接执行的、物理有效的机器人仿真场景的端到端生成。</p>
+<p>本文针对“将无约束的自然语言工作空间描述自动转化为可执行的MuJoCo仿真环境”这一具体痛点，提出了一种新型的智能体流水线视角。核心思路是将复杂的场景合成任务分解为由LLM协调的多个专业化阶段，包括语义规划、资产解析、空间布局和仿真器组装，并通过缓存感知和工业约束验证来提升效率和实用性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>SR-Platform的整体框架是一个四层场景合成流水线，由一个<code>PipelineCoordinator</code>协调。每个阶段接收一个结构化的<code>PipelineContext</code>，用特定于阶段的输出对其进行丰富，并将更新后的上下文传递给下一阶段。</p>
+<p><img src="https://arxiv.org/html/2605.14700v1/2605.14700v1/sr_figure/architecture.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：SR-Platform用于自然语言驱动机器人仿真合成的四层流水线。L1将用户提示解析为结构化场景计划；L2从Qdrant检索缓存资产或通过LLM-to-CadQuery合成生成新的STL网格；L3计算空间布局并验证工业约束；L4组装最终的MJCF场景并合并所选机器人模型。</p>
+</blockquote>
+<p><strong>L1: 编排器</strong>：负责将自由形式的用户提示转换为结构化的场景计划。输入是自然语言描述，输出是一个包含房间尺寸、物体列表、语义标签、所选机器人身份等信息的JSON计划。该阶段仅进行语义规划，不生成几何图形或最终位姿，其输出作为下游阶段的数据契约。</p>
+<p><strong>L2: 资产锻造</strong>：将场景计划中的每个物体标签解析为可插入仿真器的3D网格。采用缓存优先策略：首先使用文本嵌入模型查询Qdrant向量数据库进行语义检索，若找到相似度超过阈值的缓存资产，则直接从MinIO加载对应的STL网格复用。若未命中缓存，则调用LLM生成代理来合成描述该物体的CadQuery代码，执行该代码生成新的STL网格，并将其存储和索引以备将来重用。该模块包含验证和重试机制，以处理生成失败的情况。</p>
+<p><strong>L3: 布局架构师</strong>：为所有已解析的物体分配空间位姿。它使用基于LLM的布局模型来提出语义合理且物理一致的物体放置方案（如桌子应放在地板上）。此外，它集成了一个<code>IndustryRulesChecker</code>，根据电气间隙、消防安全出口、机器安全距离等工业约束来验证生成的布局。检测到的违规会作为结构化条目返回，系统可据此重新采样布局或通知用户。</p>
+<p><strong>L4: 桥接与MJCF组装</strong>：将布局后的场景计划转换为可执行的MuJoCo场景。此阶段以MJCF格式构建地板、墙壁、物体实体、网格引用、材质和全局仿真设置。每个STL资产都作为一个具有网格的实体被插入，其位置和旋转由L3的输出决定。同时，该阶段通过<code>RobotRegistry</code>和<code>RobotMerger</code>集成所选机器人模型，并处理坐标系一致性。</p>
+<p><img src="https://arxiv.org/html/2605.14700v1/2605.14700v1/sr_figure/request_flow.png" alt="请求生命周期"></p>
+<blockquote>
+<p><strong>图3</strong>：场景生成的端到端请求生命周期。前端通过WebSocket提交请求，经ARQ队列化后由L1-L4流水线处理，连接Qdrant进行语义资产检索、MinIO进行网格存储、Redis存储用户场景状态，最终生成的MJCF XML通过MuJoCo WASM在浏览器中渲染。</p>
+</blockquote>
+<p>与现有方法相比，SR-Platform的创新点在于：1) <strong>分阶段的智能体设计</strong>：将端到端任务分解为明确的、可缓存和可调试的阶段，而非单一的大型LLM提示。2) <strong>缓存感知的资产生成</strong>：结合语义检索和按需生成，显著减少重复的LLM调用。3) <strong>工业布局验证</strong>：在场景合成流程中直接集成现实世界的安全与间隙约束检查。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验基于一个30天部署窗口内收集的生产遥测数据，涵盖了611次成功的LLM调用。评估主要关注各阶段延迟、端到端场景生成延迟、资产生成可靠性以及系统吞吐量。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>各阶段延迟</strong>：L2资产锻造是主要延迟贡献者。<code>skill_generator</code>调用（首次尝试生成）的中位数延迟为17.9秒，P95延迟为65.4秒。重试调用更慢，中位数为24.4秒。未单独标记的L1编排和L3布局调用中位数延迟为15.9秒。</li>
+<li><strong>端到端延迟</strong>：对于一个包含5个物体且均未命中缓存的场景，估计的中位数端到端延迟约为50秒。对于8物体场景，延迟增至约68秒。当所有请求的物体均从语义缓存中检索到时，中位数延迟降至约30-40秒。</li>
+<li><strong>资产生成可靠性</strong>：在300次首次尝试资产生成调用中，34次需要至少一次重试，首次尝试重试率为11.3%。失败主要与格式错误的CadQuery代码或无效几何体有关，系统可通过自动重试或回退到简化几何体来恢复。</li>
+<li><strong>系统吞吐量</strong>：部署的 worker 配置支持5个并发场景生成作业。吞吐量主要受L2资产生成限制，但架构支持水平扩展。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2605.14700v1/2605.14700v1/sr_figure/classroom39_1.png" alt="生成场景示例"></p>
+<blockquote>
+<p><strong>图4a</strong>：生成的“教室”仿真场景示例，展示了从自然语言描述到包含资产、布局和机器人的完整可执行MJCF场景的端到端输出。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.14700v1/2605.14700v1/sr_figure/computerclass40_1.png" alt="生成场景示例"></p>
+<blockquote>
+<p><strong>图4b</strong>：生成的“计算机教室”场景。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.14700v1/2605.14700v1/sr_figure/kitchen23_3.png" alt="生成场景示例"></p>
+<blockquote>
+<p><strong>图4c</strong>：生成的“厨房”场景。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.14700v1/2605.14700v1/sr_figure/lab25_1.png" alt="生成场景示例"></p>
+<blockquote>
+<p><strong>图4d</strong>：生成的“实验室”场景。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.14700v1/2605.14700v1/sr_figure/object_1.png" alt="资产示例"></p>
+<blockquote>
+<p><strong>图5a</strong>：通过文本驱动生成的“屏障围栏”3D资产示例。当语义检索未命中时，资产锻造会合成CadQuery/OpenSCAD几何体。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.14700v1/2605.14700v1/sr_figure/object_2.png" alt="资产示例"></p>
+<blockquote>
+<p><strong>图5b</strong>：生成的“滚动凳”资产。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.14700v1/2605.14700v1/sr_figure/object_5.png" alt="资产示例"></p>
+<blockquote>
+<p><strong>图5c</strong>：生成的“光学显微镜”资产。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2605.14700v1/2605.14700v1/sr_figure/object_10.png" alt="资产示例"></p>
+<blockquote>
+<p><strong>图5d</strong>：生成的“重型工业车床”资产。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) 提出了一个<strong>端到端的智能体流水线</strong>，能够将自然语言工作空间描述转化为包含机器人模型、网格资产、物体位姿和生成坐标的可执行MuJoCo仿真场景。2) 设计了一个<strong>缓存感知的资产锻造器</strong>，结合语义检索与LLM-to-CadQuery生成，减少了对已生成物体类型的冗余LLM调用。3) 将<strong>工业布局验证</strong>集成到场景合成过程中，使生成的布局在MJCF组装前能检查间隙与安全约束。4) 报告了基于611次成功LLM调用的<strong>生产遥测数据</strong>，为类似系统的设计与部署提供了实证参考。</p>
+<p>论文提到的局限性包括：系统延迟主要受L2资产生成（缓存未命中时）支配；在评估期间，由于仪表化不完整，端到端延迟是基于观测到的LLM调用分布和已知的流水线结构进行估计的。</p>
+<p>这项研究对后续工作的启示在于：首先，它展示了将复杂机器人仿真环境构建任务分解为多个由LLM驱动的、专业化且可缓存的阶段的可行性。其次，缓存策略对于降低生成延迟和成本至关重要，如何更智能地管理和复用资产是未来优化的方向。最后，将领域知识（如工业约束）编码到生成流程中，是提升生成场景实用性和安全性的关键，这一思路可扩展到其他需要遵循特定规则或标准的场景生成领域。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出SR-Platform，旨在解决机器人仿真环境生成需专业知识的瓶颈问题。该系统采用代理管道，通过LLM编排器、资产锻炉、布局架构师和桥接层四阶段，将自然语言描述转换为可执行的MuJoCo场景。实验基于30天生产数据，生成五对象场景中位延迟约50秒，缓存加速后为30-40秒，资产锻炉首次重试率11.3%，缓存检索有效减少LLM调用。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.14700" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

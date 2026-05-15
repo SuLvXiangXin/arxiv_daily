@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Teacher-Guided Policy Optimization for LLM Distillation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Teacher-Guided Policy Optimization for LLM Distillation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.13230" target="_blank" rel="noreferrer">2605.13230</a></span>
+        <span>作者: JingBo Zhu Team</span>
+        <span>日期: 2026-05-13</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前大语言模型（LLM）蒸馏的主流方法主要分为两类。一类是传统的离策略（off-policy）方法，如监督微调（SFT），其让学生模仿教师模型生成的轨迹。这种方法效率高，但存在分布偏移（暴露偏差）问题，即教师强制训练与学生自主推理之间的差异会导致级联错误，限制了模型的探索能力。另一类是基于强化学习（RL）的在策略（on-policy）方法，例如带可验证奖励的强化学习（RLVR），它通过探索和结果奖励进行优化。然而，这类纯RL方法需要在巨大的组合搜索空间中探索，对于能力较弱的小模型或训练早期阶段计算成本过高。</p>
+<p>为了结合教师监督和在策略探索的优势，社区近期聚焦于在策略蒸馏，通常形式化为最小化反向KL散度（RKL）。该方法利用学生自身采样的轨迹，理论上能统一RLVR的探索优势与教师监督。然而，本文指出其存在一个关键局限：当学生和教师模型的概率分布存在显著差异时，标准RKL方法往往失效。这是因为RKL仅将教师用作事后判别器，仅对学生生成的词元给出标量惩罚（负奖励），而无法提供“下一步应该生成什么”的方向性指导。当师生分布差异大时，教师会给许多学生生成的词元分配极低的概率，导致梯度信息量不足，使学生陷入盲目的试错，造成训练不稳定甚至崩溃。</p>
+<p>本文针对RKL在师生分布差异大时指导信息不足、训练不稳定的痛点，提出了教师引导策略优化（TGPO）这一新视角。其核心思路是：将教师的角色从“事后判别者”转变为“事前引导者”，即基于学生模型当前已生成的前缀（context），让教师模型预测下一个最优词元，从而为学生提供密集的（dense）、方向性的（directional）逐词元指导，而非单一的序列级标量反馈。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>TGPO的整体框架是一个在策略蒸馏算法，其Pipeline无缝集成在基于组的相对策略优化（GRPO）框架内。输入是提示（prompt）数据集，学生策略模型基于提示生成一组（G个）轨迹（rollout）。在轨迹生成的每个时间步，教师模型都会基于当前的学生生成前缀，预测下一个最优目标词元。这一密集的教师引导信号与一个基于规则验证器（Rule-based Verifier）计算出的结果奖励（用于计算优势A）相结合，共同用于更新学生策略参数。</p>
+<p><img src="https://arxiv.org/html/2605.13230v1/2605.13230v1/x1.png" alt="方法框架图"></p>
+<blockquote>
+<p><strong>图3</strong>：TGPO方法概览。策略模型基于输入x生成一组轨迹{y_i}。在每一步，教师模型根据学生当前的生成前缀，通过预测最优目标词元y^T来提供动态的词元级引导。这一密集的引导信号（J）与基于规则的验证器得出的结果优势（A）互补，共同用于更新策略。</p>
+</blockquote>
+<p>核心模块是教师引导目标函数。其具体作用是最大化教师预测的目标词元在学生策略下的似然，计算公式为：<br>𝒥<em>Guidance(θ) = 𝔼_x∼𝒟, y∼π_θ [ - (1/|y|) Σ</em>{t=1}^{|y|} log π_θ(y_t^T | x, y_{&lt;t}) ]<br>其中，y_t^T = argmax_{v∈𝒱} π_T(v | x, y_{&lt;t}) 是教师基于学生当前状态y_{&lt;t}预测的最优下一个词元。该目标在形式上类似于SFT的教师强制学习，但关键区别在于轨迹y是从学生策略π_θ中采样得到的，而非静态的教师轨迹或标准答案。这使得教师的指导是动态的、基于学生当前实际状态的，从而缓解了离策略SFT的分布偏移问题。</p>
+<p>如何将引导目标𝒥_Guidance集成到GRPO框架中是一个关键设计选择。论文探讨了两种范式：</p>
+<ol>
+<li><strong>奖励塑形（Reward Shaping）</strong>：将引导信号作为标量奖励并入优势估计。增强后的优势为 Â_{i,t} = A_i + λ · sg[log π_θ(y_{i,t}^T | x, y_{i,&lt;t})]，其中sg[·]表示停止梯度操作。此时引导信号仅作为标量权重，不提供直接的可微分路径。</li>
+<li><strong>可微分正则化（Differentiable Regularization）</strong>：将引导目标作为直接的正则化项与GRPO目标相加。联合优化目标为：𝒥_TGPO^D(θ) = 𝒥_GRPO(θ) + w · 𝒥_Guidance(θ)。这种方法通过引导项注入了密集的梯度信号，显式地引导策略参数以最大化教师目标词元的似然。</li>
+</ol>
+<p>论文最终采用了可微分正则化方案，并为进一步平衡模仿与探索，引入了引导权重w的线性衰减计划（称为TGPO-annealing）：w_t = max(w_init - δ·t, 0)。这使得训练初期能获得强引导以实现快速对齐，后期则平滑过渡到以奖励驱动为主的优化。</p>
+<p>与现有方法相比，TGPO的核心创新点在于彻底改变了教师在蒸馏过程中的作用机制。RKL等方法中，教师仅用于评估学生最终输出的似然（提供标量奖励或正则化），是一种“事后评判”。而TGPO让教师基于学生的中间状态进行“下一步”预测，是一种“事前引导”，提供了明确的优化方向，从而有效解决了在师生分布差异大时RKL指导信息不足的问题。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：研究使用Qwen2.5-Math-7B作为基础学生模型，Qwen3-30B-A3B作为教师模型（构成跨家族蒸馏场景）。训练数据来自OpenR1-Math-46k-8192。评估涵盖了六个数学推理基准测试（AIME24/25, AMC, MATH-500, Minerva, Olympiad）和三个分布外（OOD）基准测试（ARC-c, GPQA*, MMLU-Pro）。</p>
+<p><strong>对比基线</strong>：</p>
+<ul>
+<li><strong>在策略方法</strong>：包括蒸馏类（OP Distill, KDRL）和RLVR类（SimpleRL-Zero, PRIME-Zero, Oat-Zero, GRPO++）。</li>
+<li><strong>离策略/混合策略方法</strong>：SFT和混合策略方法LUFFY。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2605.13230v1/2605.13230v1/Figures/intro_compare.jpg" alt="RKL训练动态问题"></p>
+<blockquote>
+<p><strong>图2</strong>：RKL蒸馏动态对比。使用同家族教师（Qwen2.5-Math-7B）时训练稳定；而使用跨家族教师（Qwen3-30B-A3B）时，则出现训练分数骤降、梯度范数爆炸和响应长度无限增长的不稳定现象，验证了RKL在分布差异大时的失效。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：<br>如表1所示，TGPO-annealing在所有对比的7B规模方法中取得了最佳的整体性能。在数学推理（ID）任务上，其平均分达到45.6，显著优于其他在策略蒸馏方法（如KDRL的41.7和OP Distill的25.7），并超越了混合策略方法LUFFY（44.4）和RLVR方法GRPO++（43.4）。在分布外（OOD）泛化任务上，TGPO-annealing的平均分达到56.8，同样表现最优，特别是在ARC-c上达到82.8，超过了LUFFY的80.1，证明了其在提升复杂推理的同时保持了强大的通用智能。</p>
+<p><img src="https://arxiv.org/html/2605.13230v1/2605.13230v1/x2.png" alt="训练动态分析"></p>
+<blockquote>
+<p><strong>图4</strong>：训练动态分析。（左）训练奖励：TGPO相比RKL展现出稳健的增长和收敛。（中）响应长度：TGPO避免了RKL的长度爆炸问题，与GRPO++一样稳定。（右）梯度范数：TGPO的优化过程稳定，而RKL、KDRL和LUFFY则表现出高方差。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：<br>论文比较了两种集成策略（TGPO^R 与 TGPO）以及引入衰减计划的TGPO-annealing。结果表明，可微分正则化（TGPO）优于奖励塑形（TGPO^R）。而引入线性衰减计划（TGPO-annealing）能进一步提升性能，这验证了“初期强引导对齐，后期鼓励自主探索”策略的有效性。图4的训练动态曲线进一步证实了TGPO相比RKL等方法，在训练稳定性（无梯度爆炸、无长度漂移）和收敛性方面的优势。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li><strong>问题诊断</strong>：深入分析了标准RKL框架用于LLM蒸馏时的局限性，指出其在师生分布差异显著时，因教师仅提供无方向性的标量惩罚而导致训练不稳定和失效。</li>
+<li><strong>方法创新</strong>：提出了教师引导策略优化（TGPO），一种新颖的在策略蒸馏框架。它将教师的角色从“事后判别器”转变为“事前引导者”，通过基于学生生成前缀的教师预测，提供密集的词元级方向性指导。</li>
+<li><strong>实证验证</strong>：在复杂的数学推理任务上验证了TGPO的有效性。实验表明，TGPO不仅解决了RKL的稳定性问题，能从差异大的分布中有效学习，其性能也优于现有的混合策略方法，并展现出优秀的泛化能力。</li>
+</ol>
+<p>论文提及的局限性包括：TGPO的性能依赖于教师模型提供高质量引导的能力；同时，在每一步都查询教师模型会带来额外的计算开销。</p>
+<p>本研究对后续工作的启示在于：为在策略强化学习与知识蒸馏的结合提供了新范式，即通过动态、密集的教师交互来增强探索过程的引导效率。未来方向可能包括探索更高效的教师查询策略（如稀疏引导）、研究不同引导权重衰减策略的影响，以及将TGPO思想应用于更广泛的序列生成任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对LLM蒸馏中，当学生与教师模型分布差异显著时，标准Reverse KL方法因负反馈信息不足而效率低下的核心问题，提出了Teacher-Guided Policy Optimization (TGPO)算法。该方法通过利用教师对学生rollout的条件预测提供密集方向性指导，保持on-policy特性，无需额外标注即可与现有RLVR框架集成。在复杂推理基准上的实验表明，TGPO显著优于标准基线方法，且对不同教师模型具有鲁棒性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.13230" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

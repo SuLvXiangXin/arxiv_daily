@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DSSP: Diffusion State Space Policy with Full-History Encoding - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>DSSP: Diffusion State Space Policy with Full-History Encoding</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.14598" target="_blank" rel="noreferrer">2605.14598</a></span>
+        <span>作者: Yutong Ban Team</span>
+        <span>日期: 2026-05-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人模仿学习领域，扩散策略因能建模复杂、多模态的动作分布而展现出强大潜力。然而，现有方法大多采用短上下文条件机制，仅基于当前或近期观测来预测动作。这在处理长时程操作任务时成为一个关键瓶颈，因为视觉上相似的观测可能对应不同的任务阶段（例如物体是否已被移动、容器是否已装满），所需的动作取决于揭示任务进度和先前交互的稀疏历史事件。若无历史信息，策略无法区分这些时间上混淆的状态，可能导致忽略已完成的子目标或撤销先前动作。</p>
+<p>本文针对长时程操作中因依赖历史而导致的观测歧义这一具体痛点，提出了一个融合全历史编码的新视角。核心思路是：利用状态空间模型（SSMs）的连续序列建模特性，高效地将整个观测流压缩为紧凑的上下文表示，并通过一个动态感知的辅助训练目标确保该上下文保留对未来状态演化至关重要的信息，最终将此高层上下文与近期状态观测分层融合，以指导扩散模型生成动作。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>DSSP的整体框架是一个分层条件化的扩散状态空间策略，其核心是利用SSM编码完整历史，并以此为条件生成动作。</p>
+<p><img src="https://arxiv.org/html/2605.14598v1/2605.14598v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：DSSP方法总览。方法使用状态空间历史编码器将过去的多模态观测总结为一个紧凑的上下文令牌。一个动态感知的辅助损失鼓励该令牌保留能预测未来状态演化的历史信息。学习到的上下文令牌与近期的状态令牌结合，作为分层前缀条件输入给一个状态空间扩散去噪器，以生成未来动作。</p>
+</blockquote>
+<p>整体流程如下：在时间步t，多模态观测o_t（包含视觉和本体感觉）被编码为状态表示z_t。一个因果状态空间历史编码器G_ψ递归地处理从起始到当前时刻的状态序列z_1:t，并输出一个经时间整合的上下文表示序列。取该序列的最后一个令牌作为当前的历史上下文c_t = z̃<em>t。同时，保留最近N个状态令牌z</em>{t-N+1:t}作为局部观测。将上下文c_t与这些近期状态令牌拼接，构成分层条件序列C_t = [c_t, z_{t-N+1}, …, z_t]。该条件序列作为前缀，与噪声化的未来动作轨迹x_τ一同输入到一个同样基于SSM（Mamba）构建的扩散去噪骨干f_θ中，以预测干净的动作序列x_0。扩散时间步τ通过自适应层归一化（AdaLN）单独注入动作令牌，以实现任务条件与扩散步骤调制的解耦。</p>
+<p>核心模块包括：</p>
+<ol>
+<li><strong>因果历史编码器</strong>：采用Mamba作为编码器G_ψ。其循环公式允许在线更新紧凑的隐藏状态，以线性时间复杂度聚合长历史。其选择性状态更新机制是输入依赖的，使模型能自适应地决定保留或丢弃哪些信息，这对于过滤冗余观测、保留如物体状态转换等稀疏任务相关事件至关重要。</li>
+<li><strong>动态感知上下文学习</strong>：为确保压缩后的上下文c_t保留对未来决策有用的信息，引入一个轻量级动态预测器g_φ。它以c_t和当前执行的动作a_t为输入，预测下一时刻的状态表示ẑ_{t+1}，并通过余弦相似度损失 ℒ_dyn 进行监督。该目标鼓励c_t编码能够支持在给定动作下预测未来状态的历史信息，从而为下游动作生成提供更具信息量的条件信号。</li>
+<li><strong>分层前缀条件化与SSM去噪</strong>：条件序列C_t作为前缀与噪声动作序列拼接，形成 <code>[c_t, z_{t-N+1}, …, z_t, x_τ]</code> 的输入顺序。这种因果前缀设计使得长期上下文能先对近期状态进行语境化，再将信息传播至动作令牌。去噪骨干f_θ同样使用Mamba实现，其从左到右的选择性状态更新自然匹配此条件流，并为迭代扩散采样提供线性缩放。</li>
+</ol>
+<p>与现有方法相比，创新点主要体现在：1) <strong>分层条件机制</strong>：将长期任务进度（c_t）与近期局部细节（z_t）解耦并融合；2) <strong>全历史上下文学习</strong>：利用SSM高效编码完整历史，并辅以动态感知目标确保任务相关性；3) <strong>统一的SSM架构</strong>：历史编码器和扩散去噪器均基于SSM，保持了架构一致性与高效性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在模拟和真实世界任务上进行了全面评估。模拟基准包括50个双手机器人任务（RoboTwin 2.0）、34个桌面任务（MetaWorld）和3个灵巧手任务（Adroit）。真实世界实验在一个搭载固定RGB-D相机的AgileX机器人平台上进行，设计了三个需要长时程执行或进度跟踪的桌面任务。主要评估指标是任务成功率。</p>
+<p><strong>对比方法</strong>：与多种代表性模仿学习基线进行了对比，包括ACT、Diffusion Policy (DP)、π0、RDT、SeedPolicy、DP3（3D Diffusion Policy）、FlowPolicy、AdaFlow、CP、MP1等。</p>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2605.14598v1/2605.14598v1/x2.png" alt="实验环境概览"></p>
+<blockquote>
+<p><strong>图3</strong>：实验环境概览。展示了模拟（RoboTwin, MetaWorld, Adroit）和真实世界实验中的代表性任务。</p>
+</blockquote>
+<p>在RoboTwin基准测试中，DSSP在点云观测下取得了最佳平均成功率（62.30%），相比最直接的基线DP3（55.24%）有12.8%的相对提升，且在长时程任务上提升最大（21.4%）。同时，DSSP的参数量仅为44.3M，远小于多数对比方法（见表1）。</p>
+<p>在MetaWorld和Adroit基准上，DSSP也取得了最具竞争力的整体性能（平均成功率80.1%），尤其在MetaWorld的简单和极难任务组上表现优异（见表2）。</p>
+<p><img src="https://arxiv.org/html/2605.14598v1/2605.14598v1/x3.png" alt="历史编码分析"></p>
+<blockquote>
+<p><strong>图4</strong>：历史编码分析实验。(a) 不同历史编码主干和长度下的性能与编码成本对比。(b) 与仅使用近期观测（N帧）的基线相比，DSSP在不同历史长度下的性能缩放效率。(c) 当近期观测被破坏时，DSSP（依靠上下文）与基线（依赖近期观测）的成功率对比。</p>
+</blockquote>
+<p><strong>消融与分析</strong>：</p>
+<ol>
+<li><strong>历史编码器分析</strong>：如表3所示，使用Mamba作为编码器在处理完整历史时，在成功率和计算效率（延迟与GPU内存）上均优于Transformer。随着历史长度增加，Mamba的编码成本增长远低于Transformer。</li>
+<li><strong>历史利用效率</strong>：如图4b所示，随着可用历史长度T_h增加，DSSP的性能持续提升并趋于稳定，而仅使用近期N帧观测的基线性能很快饱和。这表明DSSP能有效利用更长的历史信息。</li>
+<li><strong>上下文依赖验证</strong>：如图4c所示，当最近观测被破坏（加入噪声）时，DSSP的性能下降远小于严重依赖近期观测的基线（DP3），证明DSSP确实依赖于学习到的上下文表示c_t来做出决策。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了一个<strong>分层条件化的状态空间策略框架</strong>，将SSM用于历史编码和扩散去噪，实现了架构统一与高效推理；2) 设计了<strong>动态感知的全历史上下文学习机制</strong>，通过辅助预测目标确保压缩的历史表示保留对未来状态预测有用的信息，从而有效解决长时程任务中的观测歧义；3) 在模拟和真实世界任务上进行了<strong>全面评估</strong>，证明了DSSP在取得最先进性能的同时，具有更小的模型尺寸和更优的历史长度缩放效率。</p>
+<p>论文提到的局限性包括：方法在部分非常短视的任务上性能提升不明显；动态预测辅助目标可能无法捕获所有类型的任务相关历史信息。</p>
+<p>此项工作对后续研究的启示在于：证明了SSM在高效编码长序列机器人观测数据方面的优势；为机器人策略学习中的历史信息利用提供了一种新的、可扩展的范式，即通过可学习的、面向未来的目标来塑造历史表示，而非简单存储或注意力机制；分层条件机制解耦长期与短期信息，为构建更复杂、更鲁棒的具身智能体提供了思路。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对扩散模仿学习策略在长时机器人操作任务中因仅依赖短期观察而难以解决历史依赖视觉模糊的核心问题，提出了DSSP方法。该方法利用状态空间模型（SSM）编码全历史观察流，通过动态感知辅助训练目标优化上下文表示，并与近期状态融合形成分层条件机制；扩散主干也基于SSM实例化以减少内存开销。实验表明，DSSP在模拟和真实世界任务中以显著更小的模型尺寸达到最先进性能，验证了分层条件机制在长历史下的高效性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.14598" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

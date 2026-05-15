@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Evo-Depth: A Lightweight Depth-Enhanced Vision-Language-Action Model - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Evo-Depth: A Lightweight Depth-Enhanced Vision-Language-Action Model</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2605.14950" target="_blank" rel="noreferrer">2605.14950</a></span>
+        <span>作者: Bo Zhao Team</span>
+        <span>日期: 2026-05-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型通过统一感知、语言理解和动作生成，已成为机器人操作的一个有前景的范式。然而，主流VLA模型主要依赖2D视觉表示，缺乏深度信息和详细的空间关系，因此在需要精确空间理解（如精确定位、细粒度放置）的场景中性能显著下降。为解决此问题，现有方法主要分为两类：一是引入显式3D输入（如深度图、点云），但这增加了系统复杂性、需要额外传感器且对感知噪声敏感；二是从RGB观测中隐式建模3D空间，但通常依赖大型几何基础模型，导致训练和部署成本高昂。本文针对上述痛点，提出了一种轻量级的深度增强VLA框架Evo-Depth，其核心思路是：设计一个轻量级的隐式深度编码模块从多视角RGB图像中提取紧凑的深度特征，并通过空间增强模块和渐进式对齐训练策略，在不增加额外传感器或显著提升计算开销的前提下，有效增强模型的空间感知与操作能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Evo-Depth的整体框架旨在将隐式深度线索融入策略学习，无需额外3D传感器或显式3D输入。给定多视角RGB观测图像集合 ${I_{t}^{i}}_{i=1}^{N}$、语言指令 $L_t$ 和机器人状态 $s_t$，模型预测目标动作轨迹 $a_t$。</p>
+<p><img src="https://arxiv.org/html/2605.14950v1/2605.14950v1/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：Evo-Depth整体架构。模型由四个组件构成：隐式深度编码模块、视觉-语言主干、空间增强模块和动作专家。底部展示了渐进式对齐训练策略，通过分阶段优化促进模块间协调与特征融合。</p>
+</blockquote>
+<p>整体框架包含四个核心组件：</p>
+<ol>
+<li><strong>隐式深度编码模块</strong>：IDEM是一个仅0.13B参数的朴素视觉Transformer，其权重初始化为一个经过多视角深度估计预训练的编码器。它接收多视角RGB图像，通过特定的注意力机制提取隐式深度特征 $D_t$。具体而言，在前 $l_0$ 层，每个视角内部进行自注意力以保持局部图像结构；在后续层中，则交替使用视角内和跨视角注意力，逐步实现不同观测间的信息交换，从而将空间线索聚合到一个统一的潜在特征空间中。这些特征编码了物体布局、相对位置关系和跨视角空间一致性。</li>
+<li><strong>视觉-语言主干</strong>：该主干基于预训练的InternVL3-1B模型，负责将多视角RGB图像和语言指令编码为2D视觉-语言表示 $Z_t$。其中，视觉编码器为InternViT-300M，语言分支基于Qwen2.5-0.5B，并只保留前14层以利用其中间层更强的跨模态对齐能力。</li>
+<li><strong>空间增强模块</strong>：SEM负责将IDEM提取的隐式深度特征 $D_t$ 注入到2D视觉-语言表示 $Z_t$ 中。首先，将 $D_t$ 转换到与 $Z_t$ 对齐的隐藏空间，并跨token平均得到一个紧凑的全局描述符 $g_t$。然后，一个轻量级的调制头 $f_{\mathrm{mod}}(\cdot)$ 根据 $g_t$ 预测一对通道级的调制参数 $\gamma$ 和 $\beta$。最后，以FiLM风格对 $Z_t$ 进行调制：$\hat{Z}<em>{t}=\gamma \odot Z</em>{t}+\beta$，得到空间增强的表示 $\hat{Z}_{t}$。</li>
+<li><strong>动作专家</strong>：该模块基于流匹配范式实现为一个条件去噪策略，使用Diffusion Transformer从空间增强表示 $\hat{Z}_{t}$ 和机器人状态 $s_t$ 生成未来的动作序列。训练目标遵循流匹配公式，通过最小化预测向量场与目标流方向之间的差异来学习。</li>
+</ol>
+<p>本文的核心创新点在于：1）提出了一种轻量级的隐式深度编码策略，仅需RGB输入即可获得深度感知特征，避免了显式3D感知的硬件依赖和计算负担；2）设计了高效的空间增强模块，通过轻量级的特征调制而非复杂的特征融合来注入空间信息，保持了模型的轻量化；3）引入了渐进式对齐训练策略，分阶段优化以促进深度特征与视觉-语言表示的有效融合。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在四个仿真基准（Meta-World, VLA-Arena, LIBERO, LIBERO-Plus）和真实机器人任务上进行评估。对比的基线方法包括TinyVLA、π0、SmolVLA、OpenVLA、SpatialVLA等主流VLA模型。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="仿真结果1"></p>
+<blockquote>
+<p><strong>表1</strong>：仿真实验结果对比。Evo-Depth在Meta-World上取得了最高的平均成功率84.4%，在VLA-Arena和LIBERO上也表现出色。尽管参数量仅为0.9B，其性能与参数量大得多的模型相当甚至更优。</p>
+</blockquote>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="仿真结果2"></p>
+<blockquote>
+<p><strong>表2</strong>：LIBERO-Plus基准结果。Evo-Depth在应对相机、机器人、语言、光照、背景、噪声和布局等多种扰动时，取得了69.6%的平均成功率，显著优于其他对比模型，展示了强大的鲁棒性。</p>
+</blockquote>
+<p>关键实验结果总结如下：</p>
+<ul>
+<li><strong>仿真性能</strong>：在Meta-World上，Evo-Depth平均成功率达84.4%，在中等、困难和极难任务分划上均取得最佳成绩。在VLA-Arena上总体表现强劲，尤其在存在干扰物和长视野任务设置中表现良好。在LIBERO上平均成功率达95.4%。在更具挑战性的LIBERO-Plus上，Evo-Depth取得了69.6%的平均成功率，在多个扰动维度上表现稳健。</li>
+<li><strong>真实世界性能与效率</strong>：在三个难度递增的真实世界操作任务（橙子放置、网球存放、杯子堆叠）中，Evo-Depth取得了最高的平均成功率90%。</li>
+</ul>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>表3</strong>：真实机器人实验的推理效率与任务成功率对比。Evo-Depth以最小的模型参数量、最低的GPU内存占用和最高的推理频率，实现了最高的平均成功率，展现了优异的效率-性能权衡。</p>
+</blockquote>
+<ul>
+<li><strong>泛化能力</strong>：在四种干扰设置（背景干扰、未见过的干扰物、水平和高度位置扰动）下的泛化实验中，Evo-Depth在所有任务和设置下均持续优于基线模型，表明其对未见过的视觉和空间变化具有更好的鲁棒性。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2605.14950v1/2605.14950v1/x4.png" alt="泛化与消融实验"></p>
+<blockquote>
+<p><strong>图5</strong>：(a) 泛化实验结果，显示Evo-Depth在四种干扰设置下均优于基线。(b) 隐式深度感知消融实验，移除IDEM后模型在LIBERO-Plus的各项指标上性能下降。(c) 渐进式对齐训练策略消融实验，三阶段训练取得最佳性能。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：</p>
+<ol>
+<li><strong>隐式深度感知的作用</strong>：移除IDEM模块后，模型在LIBERO-Plus的所有评估维度上性能均下降，尤其在应对相机视角、机器人本体和物体布局变化时下降明显，验证了隐式深度线索对于提升空间感知和操作鲁棒性的有效性。</li>
+<li><strong>渐进式对齐训练策略</strong>：对比一阶段、两阶段和三阶段训练变体，三阶段渐进式对齐训练在LIBERO Long基准上取得了最佳性能，表明分阶段优化能更有效地促进跨模块对齐和特征融合。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了Evo-Depth，一个轻量级且易于部署的深度增强VLA框架，它通过隐式深度信息增强空间感知，无需显式3D输入或额外传感硬件；2）引入了空间增强模块以实现轻量化的空间-语义融合，并提出了渐进式对齐训练策略以逐步对齐深度增强表示与下游动作学习；3）在仿真和真实世界实验中均验证了方法的有效性与高效性，模型在保持小参数量、低内存占用和高推理频率的同时，取得了优异的性能。</p>
+<p>论文提到的局限性包括：IDEM的初始化依赖于一个为任意视角深度估计预训练的编码器，其性能可能受此预训练任务的限制；此外，多视角输入虽然提供了更丰富的空间信息，但也可能增加数据采集的复杂性。</p>
+<p>这项工作为后续研究提供了重要启示：轻量级的隐式深度增强是提升VLA模型空间感知能力的一种有效且实用的途径。未来的工作可以探索更高效或自监督的深度表示学习方法，进一步降低对预训练数据的依赖；同时，可以研究如何将这种轻量级深度增强范式扩展到更复杂的3D场景理解与推理任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>论文针对当前视觉-语言-动作（VLA）模型在机器人操作中因依赖2D视觉表示、缺乏深度信息而导致空间理解不足的问题，提出轻量级深度增强框架Evo-Depth。其关键技术包括：采用隐式深度编码模块（IDEM）从多视角RGB图像提取紧凑深度特征，通过空间增强模块（SEM）进行深度感知调制以融合空间语义，并引入渐进对齐训练策略。实验表明，该模型仅0.9B参数，在四个模拟基准测试中表现优越；真实世界实验中达到最高平均成功率，同时模型尺寸最小、GPU内存使用最低、推理频率最高。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2605.14950" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
