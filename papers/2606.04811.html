@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Dream.exe: Can Video Generation Models Dream Executable Robot Manipulation? - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Dream.exe: Can Video Generation Models Dream Executable Robot Manipulation?</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.04811" target="_blank" rel="noreferrer">2606.04811</a></span>
+        <span>作者: Mike Zheng Shou Team</span>
+        <span>日期: 2026-06-03</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视频生成模型在合成视觉上逼真的内容方面取得了显著进展，但主流评估方法（如EvalCrafter、VBench）主要关注视觉质量、时间一致性和文本-视频对齐等感知指标。这些指标无法判断生成视频中隐含的运动在物理世界中是否真实可行。一个广泛存在的假设是，大规模视频生成模型正在从互联网规模的数据中学习隐式的世界模型，但这一假设从未被直接验证。本文针对“如何评估视频生成模型是否真正内化了物理规律”这一具体痛点，提出了一个全新的评估视角：将机器人操作作为具体、可衡量的测试窗口。其核心思路是：如果一个模型真正内化了物理规律，那么其描绘的运动应该能够转化为可执行的机器人行为，并通过在物理模拟器中的任务成功率来量化评估，而非仅依赖视觉分数。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Dream.exe 的整体框架是一个端到端的视频到执行（video-to-execution）评估流水线。给定一个初始场景图像和一个自然语言任务描述，流程依次为：视频生成模型合成操作视频；对视频进行视觉质量评估；通过一个五步流水线从视频中提取机器人轨迹；最后在物理模拟器中执行该轨迹并评估任务成功率。</p>
+<p><img src="https://arxiv.org/html/2606.04811v1/2606.04811v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：Dream.exe评估流水线。给定初始场景图像和任务提示，视频生成模型产生操作视频。视频经过视觉质量和物理合理性评估，其隐含运动被提取为机器人轨迹。该轨迹随后在物理模拟器中执行，任务成功率是最终评判标准。</p>
+</blockquote>
+<p>核心模块与技术细节如下：</p>
+<ol>
+<li><strong>视频生成</strong>：各模型接收统一的初始场景图和任务提示，生成操作视频。对于多阶段复合任务（Level 3），会生成长视频以适应更长的任务跨度。</li>
+<li><strong>视觉质量评估</strong>：使用VLM（Gemini 3 Pro和Qwen3-VL-Plus）从机器人主体稳定性、物理合理性和任务遵循性三个维度对生成视频进行评分。</li>
+<li><strong>视频到轨迹提取</strong>：这是将像素运动转化为可执行指令的关键模块，包含五个步骤：<ul>
+<li><strong>区域掩码初始化</strong>：在第一帧识别末端执行器和被操作物体的空间区域。若存在匹配的仿真场景，则使用实例分割直接获取像素掩码；否则使用Grounding DINO和SAM2进行开放词汇检测和分割。</li>
+<li><strong>2D点跟踪</strong>：在每个识别区域内采样基于掩码的查询点，使用CoTracker跨所有视频帧进行跟踪，获得末端执行器和物体每帧的像素坐标及可见性标志。</li>
+<li><strong>深度估计与3D提升</strong>：使用在机器人 rollout 视频上经过LoRA适配的DVD模型估计视频深度（仿射深度），并利用初始场景的深度校准到公制尺度。结合已知的相机内参和外参，将每个有效的跟踪像素点提升到世界坐标系下的3D点。</li>
+<li><strong>末端执行器轨迹提取</strong>：从提升的点集中估计每帧的视觉中心。由于末端执行器的视觉中心并不直接对应机器人控制点，因此开发了一个校准模块，利用初始状态信息将视觉中心轨迹转换为控制器参考点的轨迹。末端执行器的方向则通过对跨帧的提升点应用Kabsch对齐算法来估计。</li>
+<li><strong>夹爪感知的动作组装</strong>：通过分析末端执行器轨迹与被操作物体轨迹之间的相对运动来推断夹爪的开合时序。当有任务标注可用时，阶段级先验会约束每种交互类型的预期开/合事件；对于多阶段任务，每个阶段独立处理其目标物体，然后合并为单一的视频级夹爪时序表。结合此时序表和校准后的末端执行器运动，即得到可执行的动作流。</li>
+</ul>
+</li>
+<li><strong>机器人执行与评估</strong>：提取的动作流通过robosuite控制框架在MuJoCo中的Franka Panda机器人上执行。场景在每次试验前恢复到精确的初始状态。执行采用闭环方式：在每个检查点边界，比较当前末端执行器位姿与目标位姿，若偏差超过阈值则施加校正序列，以防止开环误差累积。</li>
+</ol>
+<p>与现有方法相比，Dream.exe的根本创新在于它将视频生成模型视为固定的测试对象，通过一个严谨的流水线，将生成的视频内容“原样”转化为机器人指令，并以模拟器中的实际任务成功率作为最终评估标准，从而直接验证其物理可执行性，而非仅通过视觉分类器或人类评分来间接判断物理合理性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在基于RoboCasa365手动策划的101个任务场景上进行，这些任务按物理复杂度分为三个等级：Level 1（原子单物体操作）、Level 2（多物体交互）和Level 3（多阶段复合任务）。评估了8个模型，涵盖前沿闭源生成器（Hailuo 2.3， Kling 3.0， SeedDance 2.0， Veo 3.1， Wan 2.7）、开源生成器（Wan 2.2， LTX-Video）以及机器人专用策略模型（Cosmos Policy）。此外，还包括了在非测试集RoboCasa片段上微调后的Wan 2.2变体（LoRA 2K/7K）。</p>
+<p>关键实验结果总结如下：</p>
+<ol>
+<li><strong>视觉评估</strong>：如表1所示，CosmosPolicy-BenchCam在机器人主体稳定性上得分最高（7.532），与其在机器人数据上进行的领域特定训练一致。Veo 3.1在任务遵循性上领先（3.031），LTX 2.3在物理合理性上领先（2.389）。这表明不同模型在不同视觉维度上各有所长。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.04811v1/2606.04811v1/x2.png" alt="视觉评估结果"></p>
+<blockquote>
+<p><strong>图3</strong>：视觉质量评估结果表。展示了各模型在不同难度级别和评估维度上的得分，揭示了模型在视觉表现上的差异。</p>
+</blockquote>
+<ol start="2">
+<li><p><strong>轨迹评估</strong>：如表2所示，在末端执行器轨迹相似性上，Wan 2.7和Kling 3.0等通用模型表现优异，甚至能与CosmosPolicy竞争。而在被操作物体轨迹相似性上，CosmosPolicy-BenchCam领先（HSD: 0.629， DYN: 0.873）。这表明大规模通用视频预训练足以生成适合的机器人轨迹。</p>
+</li>
+<li><p><strong>执行评估</strong>：</p>
+<ul>
+<li><strong>轨迹可执行性</strong>：如表3所示，不同模型在严格检查点可执行率（E-SR）、跟踪误差（nDTW， Pos95， Rot95）和平滑度（Smth）上表现各异。例如，在Level 3任务中，Hailuo 2.3的E-SR最高（0.689），而Kling 3.0的位置跟踪误差（Pos95）最低（2.180 cm）。</li>
+<li><strong>任务成功率</strong>：如表4所示，这是最关键的指标。<strong>首先，多个模型取得了可测量的执行成功率</strong>（SR-B），例如在Level 1任务中，Wan 2.7的成功率为12.5%，CosmosPolicy-BenchCam为10.0%，这表明从互联网规模数据中学到的生成先验确实编码了有意义的物理知识。<strong>其次，视觉质量是可执行性的不良预测指标</strong>。例如，在视觉评估中表现出色的Veo 3.1和LTX 2.3，其任务成功率（SR-B Overall）分别仅为1.0%和2.0%。<strong>第三，机器人专用策略模型并未持续优于通用生成器</strong>，例如CosmosPolicy-BenchCam的总体成功率（4.0%）与Wan 2.7（4.0%）相当，且在某些指标上不如后者。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.04811v1/2606.04811v1/x3.png" alt="任务执行评估结果"></p>
+<blockquote>
+<p><strong>图4</strong>：任务级执行评估结果表。报告了二进制成功率（SR-B）、连续进度得分（SR-P）以及各子目标完成度，直接反映了从生成视频中提取的轨迹能否真正完成物理任务。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.04811v1/2606.04811v1/x4.png" alt="成功率对比"></p>
+<blockquote>
+<p><strong>图5</strong>：各模型在不同难度级别上的二进制成功率（SR-B）对比图。直观展示了模型在物理可执行性上的表现分布。</p>
+</blockquote>
+<p>消融实验方面，论文通过微调Wan 2.2（Wan 2.2-LoRA 2K/7K）发现，增加领域内机器人视频数据并未显著提升执行成功率，甚至可能因过拟合而损害性能。同时，比较CosmosPolicy的两种相机配置（DefaultCam vs BenchCam）表明，使用基准特制的主视角能带来性能提升，突出了输入视角对模型性能的影响。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1）提出了首个以物理可执行性（模拟器中任务成功率）为核心评估标准的视频生成模型基准Dream.exe；2）设计了一套包含视觉评估、轨迹提取与评估、闭环执行评估的三轨评估协议；3）对8个不同类型的视频生成模型进行了全面实证分析，揭示了视觉质量与物理可执行性之间的脱节，以及通用模型在轨迹生成上可与专用模型媲美等关键发现。</p>
+<p>论文自身提到的局限性包括：评估完全在模拟器中进行，虽然可控但可能与真实世界存在差距；视频到轨迹的提取管道依赖于多个组件（如跟踪、深度估计），其误差会影响最终评估；基准任务范围虽经策划，但尚未涵盖所有复杂的物理交互类型。</p>
+<p>这项研究对后续工作的启示在于：它强调了在视频生成模型评估中引入物理 grounding 信号的重要性，将推动社区开发更注重物理真实性的生成模型。同时，它展示了从生成视频中提取可执行指令的可行性，为利用大规模视频先验进行机器人技能学习提供了新的评估工具和见解。Dream.exe的开源将有助于未来在视频生成与机器人学习交叉领域的研究。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文研究视频生成模型是否内化了物理规律，能否生成可执行的机器人操作。为此，作者提出了Dream.exe评估框架，通过“视频生成-轨迹转换-物理模拟执行”的流程，将生成视频转化为可衡量的机器人行为。该框架在包含101个任务的基准上评估了8个模型。核心结论是：部分模型取得了可测量的执行成功率，表明生成先验已编码物理知识；但模型的视觉质量与其可执行性关联微弱，揭示了现有视觉评估指标的局限。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.04811" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

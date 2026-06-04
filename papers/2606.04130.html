@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>CLAW: Learning Continuous Latent Action World Models via Adversarial Latent Regularization - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>CLAW: Learning Continuous Latent Action World Models via Adversarial Latent Regularization</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.04130" target="_blank" rel="noreferrer">2606.04130</a></span>
+        <span>作者: Matthew R. Walter Team</span>
+        <span>日期: 2026-06-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人学和强化学习领域，能够预测动作如何影响环境状态的“世界模型”对于规划、控制和高效学习至关重要。当前主流的世界模型通常依赖于明确的动作标签来预测未来状态，这限制了模型在不同实体（embodiment）间的泛化与迁移能力，因为动作往往是特定于智能体的。此外，对动作标签的依赖也阻碍了利用海量无标签原始视频数据进行规模化学习。</p>
+<p>近期一些方法尝试直接从视觉观察中学习潜在动作世界模型，以摆脱对动作标签的依赖。然而，一个核心挑战在于如何学习到具有语义意义的连续潜在动作表示，即确保在不同上下文和实体中产生相似状态转移效果的动作能被映射到潜在空间中相近的位置。这种结构对于仅需少量监督就能将潜在动作落地到机器人可执行动作至关重要。现有方法容易导致潜在表示泄露未来观察信息，让世界模型走捷径而绕过学习动作语义，或者坍缩为无信息的表示。</p>
+<p>本文针对从无标签视频中联合学习连续潜在动作表示和世界模型这一具体痛点，提出了一种新视角：通过对抗性潜在正则化来防止信息泄露，并利用扩散模型进行视频生成，从而端到端地学习结构化的潜在动作。核心思路是引入一种互惠监督方案，让世界模型指导潜在动作模型，同时潜在动作模型也为世界模型提供信息，并通过对抗性训练促使潜在动作编码动作语义而非未来视觉内容。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>CLAW是一个完全端到端、自监督的框架，旨在直接从无动作视频中联合学习世界模型和连续的潜在动作表示。</p>
+<p><img src="https://arxiv.org/html/2606.04130v1/2606.04130v1/figs/model_diagram.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：CLAW框架概述。左侧为潜在动作模型，编码紧凑、归一化的动作表示。右侧为对抗性潜在正则化部分，采用两个权重共享的扩散世界模型，其中仅第一个接收初始帧和动作作为条件。</p>
+</blockquote>
+<p>整体流程如下：给定一个无动作标签的视频数据集，模型处理连续观察帧对 <code>(o_i, o_{i+1})</code>。首先，潜在动作模型（LAM）将这对帧编码为一个连续的潜在动作表示 <code>z_i</code>。然后，扩散世界模型以初始帧 <code>o_i</code> 和潜在动作序列 <code>{z_j}</code> 为条件，预测未来帧序列 <code>{o_{j+1}}</code>。训练过程是端到端的，联合优化LAM和世界模型。</p>
+<p><strong>核心模块1：潜在动作模型</strong><br>LAM是一个逆动力学模型，其作用是推断出导致连续观察之间状态转移的动作。它使用ViT主干网络将观察对 <code>(o_i, o_{i+1})</code> 映射到一个连续的潜在动作表示 <code>z_i ∈ R^n</code>。生成的潜在动作通过L2归一化被约束在单位球面上。LAM的输出通过一个MLP进行投影，以匹配世界模型的嵌入维度。</p>
+<p><strong>核心模块2：扩散世界模型</strong><br>世界模型负责以初始帧和潜在动作为条件预测未来帧序列。它采用UViT作为主干，建模为一个去噪扩散模型。输入由扩散时间步嵌入 <code>t_τ</code>、来自LAM的潜在动作令牌 <code>{z_j}</code>、条件帧 <code>o_i</code> 的 patches 以及来自加噪目标帧 <code>{x_j}</code> 的 patches 拼接而成。为了防止信息泄露并保持因果一致性，模型使用了改进的因果注意力掩码，确保每个加噪的目标帧令牌只能关注到同一帧的其他令牌、初始帧令牌以及截至该目标帧时间步之前对应的动作令牌。训练目标是优化一个评分网络 <code>s_φ</code>，使其预测在前向扩散过程中添加的噪声ε，损失函数为噪声预测的均方误差。</p>
+<p><strong>核心创新：对抗性潜在正则化</strong><br>这是CLAW防止潜在动作 <code>z_i</code> 编码未来观察信息 <code>o_{i+1}</code> 的关键机制。具体做法是，在训练时，同时用两组输入让世界模型预测 <code>o_{i+1}</code>：一组是正常的 <code>(o_i, z_i)</code>，另一组是仅 <code>z_i</code>（不提供 <code>o_i</code>）。如果 <code>z_i</code> 没有泄露 <code>o_{i+1}</code> 的信息，那么仅凭 <code>z_i</code> 的预测应该非常差。为了利用这一点，在仅 <code>z_i</code> 作为条件的分支中，在潜在动作 <code>Z_i</code> 和世界模型第一层之间插入了一个梯度反转层。在反向传播时，该层将梯度缩放并取反：<code>∂L/∂z ← -α ∂L/∂z</code>。这样，仅 <code>z_i</code> 分支的预测准确性会对LAM产生对抗性惩罚，鼓励 <code>z_i</code> 不编码未来视觉信息；而正常的 <code>(o_i, z_i)</code> 分支则鼓励 <code>z_i</code> 编码关于真实底层动作的有用信息。对抗信号的强度由一个按Sigmoid调度逐渐增加的权重δ控制，确保训练初期以准确预测为主，后期逐渐加大对信息泄露的惩罚。</p>
+<p>与现有方法相比，CLAW的主要创新点在于：1）首次提出了端到端联合学习连续潜在动作和世界模型的方法；2）引入了对抗性潜在正则化来无监督地防止未来信息泄露，无需依赖离散化（如VQ-VAE）或任何动作标注；3）利用扩散模型生成高质量的未来预测，支持更精确的规划和动作推理。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>论文在多样化的任务和实体上进行了广泛评估，使用了以下基准和数据集：</p>
+<ul>
+<li><strong>模拟环境</strong>：VP2（Robosuite, RoboDesk）、OGBench、Crafter、Procgen Benchmark（Climber, Jumper, Ninja）。</li>
+<li><strong>真实世界</strong>：基于UR5机器人的桌面操作任务（Push Duck, Cover Duck, Push and Cover Duck）。训练数据包括大规模人类视频数据集（Something-Something V2）和机器人/人类玩耍的无动作交互数据集。</li>
+<li><strong>对比基线</strong>：AdaWorld（使用β-VAE）、LAPO（使用VQ-VAE离散化）、LAPA（大规模离散化方法）以及从头开始训练的基准（Scratch）。</li>
+</ul>
+<p><strong>关键实验结果</strong></p>
+<ol>
+<li><p><strong>潜在动作策略学习（模仿学习）</strong>：在Crafter和OGBench任务中，使用CLAW的LAM从专家视频中提取潜在动作，然后训练行为克隆策略。如表1所示，CLAW在Crafter的“贪婪木材收集”任务中取得了86%的成功率和平均4.46个木材，显著优于基线（AdaWorld: 43.5%, 1.60）。在OGBench的开门、关门、按按钮任务上也取得了最高或接近最高的成功率。</p>
+</li>
+<li><p><strong>真实世界潜在动作预训练</strong>：在真实机器人任务中，使用CLAW在人类视频上预训练的LAM来为ACT策略提供潜在动作监督，然后使用少量动作标注数据进行微调。如表3所示，所有潜在动作预训练方法都大幅优于从头训练，而CLAW在长时程组合任务“Push and Cover Duck”上取得了最佳性能（1.7 vs. AdaWorld的1.5）。</p>
+</li>
+<li><p><strong>视觉规划</strong>：使用学习到的世界模型和潜在动作进行基于MPC的规划。在Procgen任务中（表2），CLAW在4个任务中的3个上取得了最佳成功率，平均表现最优。在VP2的Robosuite和RoboDesk任务中（表4），CLAW在6个任务中的4个上取得了最高成功率，特别是在“Slide”、“Red Button”、“Upright Block”任务上优势明显。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.04130v1/2606.04130v1/figs/main_retrieval.png" alt="检索对比"></p>
+<blockquote>
+<p><strong>图2</strong>：最近邻潜在动作检索定性对比。查询动作为“推动”。CLAW检索到的近邻（底部）在末端执行器运动模式（光流）上与查询高度相似，而AdaWorld和LAPO的检索结果则混淆了动作与非动作（如物体外观）信息。这表明CLAW学习的潜在空间更能捕捉动作语义。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.04130v1/2606.04130v1/figs/action_optical_flow_fixed.png" alt="动作转移"></p>
+<blockquote>
+<p><strong>图3</strong>：潜在动作转移实验。将源视频的潜在动作序列应用于目标视频的初始帧。结果显示，转移后的末端执行器运动光流（第5行）与源视频（第3行）高度一致，而物体运动光流（第6行）则因场景不同而与源视频（第4行）有差异。这证明CLAW成功解耦了动作与场景特定内容，学习到了可转移的、基于动作的动力学。</p>
+</blockquote>
+<p><strong>消融实验分析</strong><br>论文虽未展示独立的消融实验表格，但对抗性潜在正则化作为核心创新，其有效性通过以下方式体现：1) 在最近邻检索中，CLAW的潜在动作能更好地基于运动语义进行聚类，而非视觉外观，这直接得益于对抗正则化防止了未来视觉信息泄露；2) 在动作转移任务中，CLAW能成功地将源动作的动力学转移到新场景，说明其潜在动作编码的是通用的动作效果，而非特定像素内容。这些定性结果强有力地支持了对抗正则化模块的关键贡献。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了第一个完全端到端、自监督的框架（CLAW），能够直接从无动作标签的视频中联合学习连续潜在动作表示和扩散世界模型。</li>
+<li>引入了对抗性潜在正则化技术，有效防止了潜在动作编码未来观察信息，从而学习到更具语义结构和可转移性的动作表示，无需依赖离散化或任何动作监督。</li>
+<li>展示了学习到的潜在动作世界模型在模仿学习（ILfO）和基于模型的视觉规划等多种下游任务中的有效性，并在模拟和真实世界任务上超越了现有方法。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文指出，CLAW的世界模型在预测时仅基于最近一帧和潜在动作，没有保留过去生成帧的记忆。这可能导致在部分可观察环境或需要长期一致性的任务中产生误差累积和不一致性。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li>CLAW证明了对抗性训练在无监督学习结构化、连续潜在动作方面的潜力，未来可探索更复杂或层次化的潜在动作先验。</li>
+<li>将记忆机制（如递归神经网络或Transformer的长期上下文）整合到扩散世界模型中，是解决当前局限性、提升长时程预测和规划能力的重要方向。</li>
+<li>该方法为利用海量无标签互联网视频进行机器人技能学习提供了新途径，特别是在跨实体迁移和零样本学习场景下具有广阔前景。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出CLAW框架，旨在从无动作标签的视频中联合学习世界模型与连续潜在动作表示，解决现有方法难以学习语义结构化、可迁移的潜在动作的问题。关键技术包括对抗潜在正则化与扩散视频生成，通过同时训练潜在动作模型与世界模型，使模型能仅从视觉观察中推理动作如何引发环境状态转移。实验表明，CLAW能生成语义有意义的潜在动作，支持有效的动作迁移、目标导向规划与模仿学习，性能优于现有方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.04130" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

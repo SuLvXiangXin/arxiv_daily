@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Instant-Fold: In-Context Imitation Learning for Deformable Object Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Instant-Fold: In-Context Imitation Learning for Deformable Object Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.04269" target="_blank" rel="noreferrer">2606.04269</a></span>
+        <span>作者: Edward Johns Team</span>
+        <span>日期: 2026-06-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在可变形物体操作（DOM）领域，主流方法主要依赖于参数化的动作基元（如抓取、放置）结合从视觉观察中预测抓取点或功能，或使用语言指令来指定任务。这些方法存在关键局限性：基于基元的方法通常将任务分解为顺序、开环的执行，适应性有限；而语言指令难以精确、简洁地指定涉及复杂变形序列和中间状态的长期操作过程。人类在教授此类技能时，往往通过演示（如视频）来传达时间结构、中间目标和细微的空间惯例。</p>
+<p>本文针对DOM中存在的“多种有效操作模式”（例如折叠衣服的不同方式）这一具体痛点，提出将单次人类演示作为比语言更丰富的任务接口的新视角。其核心思路是：通过在大规模多样化的操作模式数据集上训练，模型能够从单次未见过的演示中，通过上下文学习（ICL）涌现出推断并复现相同操作模式的能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Instant-Fold的整体框架分为两个阶段：1) 变形感知的时态对比预训练，学习保持对应关系的视觉令牌；2) 上下文策略学习，基于演示上下文生成动作。其输入是当前观察（视觉状态和机器人本体感觉）以及从单次演示中提取的上下文关键帧序列；输出是未来一段时间内的双臂动作轨迹。</p>
+<p><img src="https://arxiv.org/html/2606.04269v1/2606.04269v1/x1.png" alt="方法总览图"></p>
+<blockquote>
+<p><strong>图2</strong>：Instant-Fold方法总览。(1) 首先使用时态对比监督预训练一个变形感知的令牌生成器，将掩码RGB-D观测提升为几何语义3D布料令牌。(2) 在策略学习阶段，共享编码器对演示和当前观测进行令牌化，聚合密集的时空演示上下文，并条件化一个流匹配去噪变换器，以从噪声中重建干净的双臂动作轨迹。</p>
+</blockquote>
+<p><strong>核心模块1：变形感知表示与预训练</strong><br>该方法采用几何优先的可变形物体表示。给定掩码RGB-D观测，将有效深度像素反投影到相机坐标系下的3D点云，并使用最远点采样（FPS）选择N个覆盖衣物表面的点。这些3D点被投影回图像平面，通过预训练的图像编码器在投影像素位置处使用双线性插值提取视觉特征。每个布料令牌由3D位置及其关联的语义特征组成。</p>
+<p>为了学习对拓扑变化敏感且对纹理、光照等干扰鲁棒的视觉表示，论文提出了<strong>时态对比预训练</strong>。其关键是利用基于粒子的模拟器几何定义视觉令牌的对应目标，使得对应于同一物理布料位置的令牌在跨越时间的非刚性变形下，在特征空间中保持接近。</p>
+<p><img src="https://arxiv.org/html/2606.04269v1/2606.04269v1/x2.png" alt="预训练示意图"></p>
+<blockquote>
+<p><strong>图3</strong>：时态对比预训练示意图（批次大小为2条轨迹）。(a) 同布料匹配使用最近粒子分配，为同一布料的不同帧和轨迹提供密集的对应监督。(b) 跨布料匹配使用稀疏语义关键点，为不同布料实例提供监督。</p>
+</blockquote>
+<p>损失函数包含两部分：同布料对比损失（ℒ_same）和跨布料对比损失（ℒ_cross）。同布料损失使用软加权的监督对比损失，正样本是分配给同一模拟器粒子的令牌，负样本来自比较集中的其他有效令牌。跨布料损失则利用稀疏语义关键点在不同衣物实例间建立对应关系。总预训练目标为 ℒ_pretrain = 1/2 ℒ_same + 1/2 ℒ_cross。编码器基于冻结的DINOv3主干，使用LoRA进行适配。</p>
+<p><strong>核心模块2：上下文策略学习</strong><br>该框架将DOM建模为上下文轨迹生成问题。策略学习基于一个<strong>流匹配变换器</strong>架构，包含上下文编码器和动作解码器。</p>
+<ul>
+<li><strong>上下文编码器</strong>：将上下文关键帧映射为中间几何和双臂交互的结构化表示。每个关键帧通过共享的冻结视觉令牌生成器转换为布料令牌，并与关键姿势的机器人状态令牌拼接。采用“先空间后时间”的主干网络：首先应用每帧空间注意力建模局部布料-机器人交互，然后通过密集的时空自注意力跨所有关键帧混合令牌。引入了三种机制：3D ALiBI偏置使空间注意力偏向附近的布料-机器人对；学习的摘要令牌将演示压缩为紧凑的全局令牌；状态-事件令牌保留末端执行器夹爪事件。</li>
+<li><strong>流匹配动作解码器</strong>：解码器首先通过交叉注意力融合编码后的演示上下文和当前场景令牌，产生演示条件化的场景令牌。噪声轨迹令牌随后交叉关注于由这些场景令牌与状态-事件令牌拼接形成的场景上下文，并通过联合自注意力进一步细化。去噪时间步和当前本体感觉状态由独立的MLP编码，并通过AdaLN注入，使解码器同时条件化于扩散时间和当前双臂状态。采用一个辅助的关键姿势预测任务来监督短视距子目标。</li>
+</ul>
+<p>训练目标基于修正流匹配（rectified flow matching）和二元交叉熵损失。</p>
+<p><strong>创新点</strong>：与现有方法相比，Instant-Fold的创新主要体现在：1) 将DOM明确表述为ICIL问题，并设计了专用于长期、双臂可变形上下文操作的流匹配变换器架构；2) 提出了针对ICIL的时态对比预训练方法，以学习拓扑一致的表示；3) 实现了无需任何真实世界数据的模拟到真实迁移。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在FleX模拟器中生成数据，使用360个Cloth3D网格（300个训练，60个留出）。定义了19种折叠模式及其有效顺序变体，共生成80K条轨迹。领域随机化覆盖相机、外观、初始夹爪姿势等。策略基准在8种模式上训练，并在留出的模式（7, 8, 10）上评估。在模拟（FleX和Isaac Lab）和真实世界（8件未见过的真实衣物）的双臂机器人平台上进行评估。</p>
+<p><strong>对比方法</strong>：在策略学习中，比较了语言条件化和演示条件化策略在不同预训练设置下的表现。还与先前的衣服折叠方法进行了对比：ClothFunnels、UniFolding和UniGarmentManip。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>表示预训练效果</strong>：如图4所示，学习到的编码器能有效地从模拟迁移到真实世界设置，产生的表示比原始DINOv3和对比方法更具时间一致性和空间连贯性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.04269v1/2606.04269v1/figures/self-match.png" alt="预训练可视化"></p>
+<blockquote>
+<p><strong>图4</strong>：预训练的布料编码器在真实世界演示上的可视化。将令牌特征投影到共享的PCA基上并映射回衣物上，显示了其变形感知特性。</p>
+</blockquote>
+<ol start="2">
+<li><p><strong>策略学习结果（表1）</strong>：</p>
+<ul>
+<li><strong>演示 vs. 语言</strong>：在留出折叠上，即使没有预训练，演示条件化策略的C-SR@95（42.3）也几乎是语言条件化（20.2）的两倍，几何误差（Geom. 2.24 vs. 3.36）也更低，表明演示提供了超越任务意图的有用几何结构。</li>
+<li><strong>预训练的作用</strong>：预训练提升了语言和演示条件化策略的性能，对留出折叠的提升最大。完整预训练结合演示条件化取得了最佳留出折叠性能：Ctx. Acc. 95.8， C-SR@95 58.3， Geom. 1.89。</li>
+</ul>
+</li>
+<li><p><strong>消融实验（表2）</strong>：移除任何设计组件都会降低策略性能。在留出折叠上，影响最大的是移除上下文编码器（C-SR@95下降37.1%）、关键姿势辅助任务（下降39.4%）和摘要令牌（下降33.7%），突出了结构化上下文聚合和显式动作阶段监督的重要性。</p>
+</li>
+<li><p><strong>上下文多样性扩展（图5）</strong>：增加下游训练中的上下文多样性主要改善了留出泛化能力。留出C-SR@95从4种上下文时的38.7提升到16种上下文时的63.7。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.04269v1/2606.04269v1/x3.png" alt="扩展曲线"></p>
+<blockquote>
+<p><strong>图5</strong>：性能随上下文多样性扩展的变化。增加训练中上下文模式的数量显著提升了在留出模式上的泛化性能（C-SR@95）。</p>
+</blockquote>
+<ol start="5">
+<li><strong>与先前工作对比</strong>：<ul>
+<li><strong>模拟对比（表3）</strong>：在FleX和Isaac Lab模拟器中，Instant-Fold在共享的折叠模式（模式1）上的成功率（99.7%， 92.5%）均优于所有基线方法（ClothFunnels, UniFolding, UniGarment）。</li>
+<li><strong>零样本模拟到真实迁移（表4）</strong>：在8件未见过的真实衣物上，给定单次人手演示，Instant-Fold取得了60.9%的平均成功率，优于所有需要真实世界数据收集或微调的基线方法。</li>
+</ul>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>将可变形物体操作（DOM）形式化为上下文模仿学习（ICIL）问题，并引入了一种用于长期可变形上下文操作的流匹配变换器架构。</li>
+<li>提出了一种针对ICIL的时态对比预训练方法，用于学习拓扑一致的表示。</li>
+<li>在无需任何真实世界训练数据或微调的情况下，实现了成功的零样本模拟到真实迁移。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到的局限性包括：1) 假设可靠的物体分割；2) 实验从可折叠流形内的状态开始，而非从皱褶配置开始；3) 仅研究了单一物体类别（上衣类衣物）。</p>
+<p><strong>启示</strong>：本研究结果表明，ICIL是捕捉DOM中多种有效操作模式多样性的一个有前景的范式。将演示作为条件为指定复杂的变形过程提供了更自然、信息更丰富的接口。其两阶段框架（表示学习 + 上下文策略学习）以及针对变形特性设计的对比损失，为更广泛的可变形物体操作乃至其他高维、部分可观测状态的长时程任务提供了参考。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对可变形物体操纵（DOM）中高维、部分可观测状态及多种有效操纵模式的挑战，提出Instant-Fold框架。该方法通过时间对比预训练学习变形感知视觉表示，并采用基于演示的流匹配变换器策略预测动作，实现从单次人类演示中推断并执行多样操纵模式。核心实验表明，模型在模拟中训练后，能泛化到多种折叠模式，并零样本迁移到真实世界，无需额外数据收集或微调。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.04269" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

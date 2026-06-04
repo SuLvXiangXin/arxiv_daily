@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Preference-Calibrated Human-in-the-Loop Reinforcement Learning for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Preference-Calibrated Human-in-the-Loop Reinforcement Learning for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.03949" target="_blank" rel="noreferrer">2606.03949</a></span>
+        <span>作者: Ziwei Wang Team</span>
+        <span>日期: 2026-06-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，人机协作强化学习通过在线人类干预来提升真实机器人操控任务的样本效率。然而，现有的HIL-RL方法（如HIL-SERL）通常对所有状态-动作转移应用一致的信用分配原则，即在稀疏终端奖励下，将最终成功信号均匀地折扣传播至整个轨迹。这忽略了包含干预的成功轨迹内部的异质性：此类轨迹通常包含导致任务执行路径偏离、迫使人类干预的次优动作段。均匀的信用分配会高估这些次优段对任务成功的实际贡献，导致Critic的Q值被高估，并间接误导Actor更新，使其强化类似的次优行为模式，从而降低样本效率和收敛速度。</p>
+<p>本文针对HIL-RL中由于轨迹异质性导致的信用错配问题，提出将包含干预的成功轨迹视为结构化异质数据，并在训练中进行细粒度处理的新视角。核心思路是利用干预所诱导的隐式偏好信号，定位轨迹中的次优段，对Critic学习进行定向信用校正，同时直接引导Actor策略向人类偏好的纠正动作对齐。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>PACT框架的整体流程如下：在在线RL训练中收集包含人类干预的成功轨迹；使用一个轻量级进度模型定位轨迹中的次优段；基于人类干预点构建的偏好对，计算反事实优势来惩罚次优段的Bellman目标，实现Critic侧的信用校准；同时，利用同一偏好对直接优化Actor策略，使其靠近人类纠正动作并远离触发干预的策略动作。最终，通过校正后的Critic损失和结合了偏好对齐的Actor损失来更新网络。</p>
+<p><img src="https://arxiv.org/html/2606.03949v1/2606.03949v1/x1.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图2</strong>：PACT框架总览。框架将包含干预的轨迹转化为经过偏好校准的Critic和Actor更新。首先，一个进度模型定位次优段（红色）。然后，利用干预状态的人类动作和策略动作构建偏好对，一方面用于计算反事实优势来校正次优段的Bellman目标，另一方面直接用于对齐Actor策略。</p>
+</blockquote>
+<p><strong>核心模块1：轻量级进度模型与次优段定位</strong><br>该模块旨在无额外标注成本下定位次优段。首先，设计一个进度模型 $f_{\psi}: \mathcal{O} \rightarrow [0,1]$，它将观测映射为一个标量进度值。观测 $o_t$ 由相对于初始帧的腕部相机图像残差、侧部相机图像残差以及机器人本体感觉位移编码拼接而成。模型使用仅来自示范数据集 $\mathcal{D}<em>{\text{demo}}$ 的自监督方式进行训练，损失函数结合了均匀进度伪标签回归和最终段基于折扣蒙特卡洛回报的强化监督（公式4）。在推理时，对包含干预的成功轨迹进行进度预测，通过检测未来窗口内进度值异常下降（低于当前进度一个阈值 $\delta</em>{\text{reg}}$）来定位回归锚点 $t_a$，并寻找其后的连续进度增长点作为恢复点 $t_r$，区间 $[t_a, t_r]$ 即被识别为候选次优段用于后续Critic校正。</p>
+<p><strong>核心模块2：偏好感知的反事实校正（Critic侧校准）</strong><br>此模块利用干预点隐含的偏好信号校正次优段的Q值估计。在干预状态 $s_{t_h}$，人类纠正动作 $a^{\text{human}}<em>{t_h}$ 应优于策略动作 $a^{\pi}</em>{t_h}$。为此，引入一个反事实优势 $A_{\text{cf}}$（公式7），它衡量在当前目标Critic下，策略动作值超过人类动作值的部分（经$\max(\cdot,0)$和停止梯度处理），为正则表示违反了偏好，需被抑制。$A_{\text{cf}}$ 作为段级校正信号，通过一个位置感知的指数权重 $\omega(t)$ 加权后，从次优段 $[t_a, t_r]$ 中每个时间步的标准Bellman目标 $\hat{y}^{\text{std}}_t$ 中减去，得到校正后的目标 $\hat{y}^{\text{corr}}_t$（公式8）。权重 $\omega(t)$ 使校正强度随着接近恢复点 $t_r$ 而增加，对段内早期不确定性动作进行保守校正，而对后期高置信度的次优动作施加更强校准。Critic最终通过最小化与校正后目标之间的时序差分误差进行更新（公式9）。</p>
+<p><strong>核心模块3：偏好辅助策略优化（Actor侧校准）</strong><br>除了通过Critic间接引导，干预信号也直接用于策略分布学习。对于每个干预状态 $s$ 及其对应的人类动作 $a^{\text{human}}$ 和策略动作 $a^{\pi}$，构造一个零成本的偏好对。为避免连续动作空间中基于对数概率的偏好优化不稳定，PACT在受限的平均动作空间 $\bar{a}<em>{\theta}(s) = \tanh(\mu</em>{\theta}(s))$ 中施加偏好（公式10）。损失函数包含两项：第一项拉近策略均值与人类动作的距离；第二项推远策略均值与触发干预的策略动作的距离（分母加 $\epsilon$ 防止数值奇点）。最终的Actor目标（公式11）是标准RLPD Actor损失与该项偏好校准损失的加权和。</p>
+<p><strong>创新点</strong></p>
+<ol>
+<li><strong>轨迹异质性处理</strong>：首次在HIL-RL中明确处理包含干预的成功轨迹的异质性，提出对其进行结构化分解和细粒度学习。</li>
+<li><strong>零成本偏好利用</strong>：创新性地利用干预点自然产生的“人类动作优于策略动作”这一隐式偏好信号，无需额外人工标注。</li>
+<li><strong>双路校准机制</strong>：同时从Critic（信用重分配）和Actor（直接策略对齐）两侧进行偏好校准，形成互补。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在五个真实机器人操控任务（Press按钮、Insertion插入、Pick抓取、Pick &amp; Place抓放、Assembly装配）上评估。使用Galaxea A1X 6-DoF机械臂。每个任务收集20条示范轨迹用于进度模型训练和RL早期稳定。以HIL-SERL作为主要基线。评估指标包括最终成功率（SR）、训练时间（分钟）和平均人类干预率（IR）。</p>
+<p><strong>对比实验结果</strong>：<br>PACT在五个任务上均一致优于HIL-SERL。平均成功率从58.0%提升至82.5%，平均干预率从47.1%降低至32.3%，平均训练时间从80.7分钟缩短至63.0分钟，实现了约1.3倍的更快收敛。在最具挑战性的Assembly任务上，PACT在122分钟内达到62.5%的成功率，而HIL-SERL在140分钟内仅达到10.0%。</p>
+<p><img src="https://arxiv.org/html/2606.03949v1/2606.03949v1/x2.png" alt="训练动态曲线"></p>
+<blockquote>
+<p><strong>图3</strong>：PACT与HIL-SERL在五个任务上的训练动态（干预率和成功率随时间变化）。PACT能更快地降低干预率并提升成功率，表明其政策学习效率更高，而非单纯依赖人类恢复。</p>
+</blockquote>
+<p><strong>进度模型分析</strong>：<br>定性可视化（图4）显示，进度模型定位的次优段（红色）与典型的失败模式（如插入犹豫、错误抓取、方向偏离）吻合。定量分析使用路径效率 $\eta$ 和方向偏差 $\Delta\theta$ 两个任务无关的运动质量指标。如表2所示，被识别为次优的段相比正常段，具有更低的路径效率和更大的方向偏差，验证了定位的有效性。</p>
+<p><img src="https://arxiv.org/html/2606.03949v1/2606.03949v1/x3.png" alt="次优段定位可视化"></p>
+<blockquote>
+<p><strong>图4</strong>：基于进度的次优段定位示例。红色段表示识别出的次优部分，与RL rollout中的错误行为相对应。</p>
+</blockquote>
+<p><strong>Q值校正分析</strong>：<br>通过比较学习到的Critic与蒙特卡洛回报 $G_t$（作为诊断参考），评估Q值高估是否被抑制。如图5(a)所示，在Insertion任务训练过程中，HIL-SERL的目标Q值快速上升，而PACT的估计更为保守。图5(b)单条轨迹剖面图显示，在检测到的校正段内，HIL-SERL的Q值估计高于MC参考，而PACT显著降低了估计值。图5(c)及表3的聚合数据表明，在次优段上，HIL-SERL的Critic存在一致的正偏差（高估），而PACT成功抑制了这种高估，甚至出现了负偏差。</p>
+<p><img src="https://arxiv.org/html/2606.03949v1/2606.03949v1/x5.png" alt="Q值校正分析"></p>
+<blockquote>
+<p><strong>图5</strong>：Q值校正分析。(a) 训练阶段目标Q值演化。(b) 单条轨迹的价值剖面。(c) 在包含干预的成功回合上归一化的Critic偏差。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>在Insertion任务上对两个核心组件进行消融：C1（Critic侧校正，含进度定位与Q值校正）和C2（Actor侧偏好损失）。如表4所示，移除C1导致成功率大幅下降，移除C2主要导致干预率上升。完整的PACT取得了最佳效果，说明Critic侧的信用校正和Actor侧的偏好学习具有互补作用。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了PACT框架，首次在HIL-RL中通过处理轨迹异质性来解决信用错配问题。</li>
+<li>设计了一个自监督的进度模型来定位次优段，并利用干预诱导的零成本偏好信号，同时实现了Critic侧的定向信用重分配和Actor侧的直接策略对齐。</li>
+<li>在五个真实机器人任务上验证了PACT能显著提高成功率、降低干预率并加速训练，且无需推理开销。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>进度模型依赖有限示范数据的自监督和非单调轨迹的假设，在非单调或重复执行模式的任务中可能受影响，定位误差会传播至Critic学习。</li>
+<li>反事实优势提供的是基于偏好的方向性校正，而非精确的逐步价值目标，更适合抑制系统性高估，而非细粒度的价值校准。</li>
+</ol>
+<p><strong>后续启示</strong>：</p>
+<ol>
+<li>可以探索结合更鲁棒或语义更丰富的进度估计器（如VLM辅助的进度推理、预训练的进度表征）来提升次优段定位的准确性，以应对更复杂的长周期任务。</li>
+<li>PACT利用隐式偏好进行双路校准的思路，可扩展至其他存在自然偏好信号或可定义对比关系的交互式学习场景。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对人机协同强化学习（HIL-RL）中成功轨迹包含次优动作、导致信用分配不均并误导策略学习的问题，提出PACT框架。该框架通过进度模型识别次优段，利用干预信号构建偏好对进行定向信用校准，并直接对齐策略与人类纠正动作。实验表明，在五个真实机器人操作任务中，PACT将平均成功率提升24.5%，收敛速度加快1.3倍。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.03949" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
