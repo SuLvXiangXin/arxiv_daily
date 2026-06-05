@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SPADE: Sketch-guided Path Planning Augmented with Diffusion Experts - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>SPADE: Sketch-guided Path Planning Augmented with Diffusion Experts</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.03512" target="_blank" rel="noreferrer">2606.03512</a></span>
+        <span>作者: Anthony Rizk Team</span>
+        <span>日期: 2026-06-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在自主移动机器人（AMR）领域，路径规划至关重要。传统规划算法（如A*、RRT）擅长在几何约束下寻找最优路径，但难以将操作员复杂的偏好（如保持特定间距、偏好特定走廊、平滑转弯）编码为简单的目标函数。模仿学习（IL）为此提供了一种解决方案，它允许机器人直接从专家演示中学习行为。特别是，SKIPP框架允许非专业操作员通过在地图上绘制期望路径的草图来指导机器人，并使用基于U-Net的行为克隆（BC）模型进行学习。然而，该方法面临两个关键局限性：1) 对未见过的环境泛化能力有限；2) 演示数据收集的鲁棒性低（其依赖的仿真平台已过时）。本文旨在解决SKIPP框架的扩展性和泛化性问题，核心思路是引入一个基于ROS 2的全新开源数据注释工具，并提出一种扩散模型增强的行为克隆（DBC）训练策略，特别是引入了图像条件扩散模型作为专家，以提升轻量级BC模型的泛化能力和性能。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>SPADE框架是对SKIPP的增强，主要包括两个核心部分：一个改进的数据注释工具和一个扩散专家增强的训练框架。</p>
+<p><img src="https://arxiv.org/html/2606.03512v1/2606.03512v1/images/annotationTool.png" alt="数据注释工具"></p>
+<blockquote>
+<p><strong>图1</strong>：改进的数据注释工具工作流程。从2D全局占据栅格（最右）开始，转换为3D Gazebo仿真环境，通过ROS 2的Nav2框架和RViz2进行交互式路径定义与执行，并记录多模态数据。</p>
+</blockquote>
+<p>整体流程是：操作员使用基于ROS 2的新工具绘制路径→工具在仿真中执行并记录轨迹（路径、终点、机器人位姿）→对路径进行样条平滑处理→使用扩散增强的BC框架训练模型。模型的输入是一个<code>3×128×128</code>的张量，包含局部占据栅格、起点和终点（均为二值图像）。输出是预测的路径。</p>
+<p>核心训练框架基于扩散模型增强的行为克隆（DBC）。与SKIPP仅使用BC损失（像素级二元交叉熵）不同，SPADE引入一个预训练的高容量扩散模型作为“专家”，为BC网络的训练提供额外的监督信号。具体而言，本文扩展了原始DBC，用<strong>图像条件扩散模型</strong>替代了原本学习联合分布<code>p(a, s)</code>的无条件扩散模型。该条件模型以占据栅格、起点和终点为条件输入，学习条件分布<code>p(a|s)</code>，通过FiLM层将条件信息注入扩散网络。</p>
+<p><img src="https://arxiv.org/html/2606.03512v1/2606.03512v1/images/dbc.png" alt="训练框架"></p>
+<blockquote>
+<p><strong>图2</strong>：条件扩散增强的行为克隆（Cond-DBC）训练流程图。BC模型π根据状态s预测动作â，与专家动作a计算BC损失。同时，专家动作a和预测动作â分别被加噪后，输入到以状态s为条件的扩散模型φ中。通过最小化两者扩散重建损失之间的差值（扩散边际损失），使BC模型的输出更接近专家数据分布。</p>
+</blockquote>
+<p>训练时，总损失函数为：<code>ℒ_total = ℒ_BC + λℒ_DM</code>。其中<code>ℒ_BC</code>是标准的行为克隆损失。<code>ℒ_DM</code>是扩散边际损失，计算公式为<code>ℒ_DM = E[max(L_diff,agent - L_diff,expert, 0)]</code>，即鼓励智能体预测路径的扩散重建损失不大于专家路径的损失。λ是平衡两项的权重。</p>
+<p>与现有方法相比，创新点体现在：1) <strong>训练策略</strong>：将条件扩散模型作为“专家”融入BC训练流程，为轻量级策略网络提供了强大的、与环境状态相关的生成先验，从而提升了泛化能力。2) <strong>工具链</strong>：提供了可维护、可扩展的开源数据收集工具，解决了SKIPP的数据采集瓶颈。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>数据集与实验设置</strong>：使用新开发的注释工具，生成了20,000个训练实例（L形和U形路径各半），基于10张开源占据栅格地图。此外，使用一张工业地图生成了2,000个测试实例。数据被编码为<code>4×128×128</code>的二值图像（通道：占据栅格、起点、终点、路径）。</p>
+<p><img src="https://arxiv.org/html/2606.03512v1/2606.03512v1/images/input_encoding.jpg" alt="数据编码"></p>
+<blockquote>
+<p><strong>图3</strong>：输入编码示例。每个数据实例由四张128x128的二值图像组成，分别代表占据栅格（黑色未探索，灰色可通行，白色障碍）、起点、终点和路径。</p>
+</blockquote>
+<p><strong>基线方法</strong>：对比了三种BC模型（小型、中型、大型）及其在SPADE框架下的变体：1) <strong>BC</strong>：原始行为克隆基线。2) <strong>DBC</strong>：使用无条件扩散专家增强的BC。3) <strong>Cond-DBC</strong>：使用条件扩散专家增强的BC。同时还训练了独立的无条件DDPM和条件DDPM模型作为参考。</p>
+<p><strong>评估指标</strong>：1) <strong>FID</strong>：衡量生成路径与真实路径分布之间的相似度，越低越好。2) <strong>APE</strong>：平均绝对位姿误差，衡量路径点与真实点的平均偏差（厘米），越低越好。3) <strong>Hd19</strong>：基于豪斯多夫距离的指标，统计测试集中距离大于19的样本数，用于检测路径中的伪影（如断开），越低越好。</p>
+<p><strong>关键实验结果</strong>：如表1所示（论文中Table 1），在所有模型规模下，扩散增强方法（DBC和Cond-DBC）在FID和APE上均优于纯BC基线。以中型模型为例，对于L形路径，Cond-DBC将FID从31.25降至13.58（降低56.5%），将APE从3.48厘米降至1.46厘米（降低58.0%）。条件扩散增强（Cond-DBC）在多数情况下取得了最佳或接近最佳的FID和APE，同时保持了较低的Hd19（即伪影少）。独立的条件DDPM模型取得了最低的APE（L形1.42厘米，U形2.74厘米），但其推理速度慢（约45秒），无法实时部署。而SPADE框架训练出的轻量BC模型（如中型Cond-DBC）在获得接近扩散模型性能的同时，保持了实时边缘部署的能力。</p>
+<p><img src="https://arxiv.org/html/2606.03512v1/2606.03512v1/images/bad_fid_4.png" alt="FID对比示例"></p>
+<blockquote>
+<p><strong>图4</strong>：高FID生成示例（左1、2）。这些路径质量差，对应较高的FID分数（如路径FID 72）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.03512v1/2606.03512v1/images/good_fid_1.png" alt="良好FID示例"></p>
+<blockquote>
+<p><strong>图5</strong>：低FID生成示例（右1、2）。这些路径质量高，与专家数据分布接近，对应较低的FID分数（如路径FID 8）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.03512v1/2606.03512v1/images/evo_output.png" alt="APE可视化"></p>
+<blockquote>
+<p><strong>图6</strong>：U形路径的APE颜色编码轨迹分析。实线为预测路径，虚线为真实路径。平均APE为0.0035米，最大APE为0.012米，显示出高精度。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.03512v1/2606.03512v1/images/hausdorf.png" alt="豪斯多夫距离示例"></p>
+<blockquote>
+<p><strong>图7</strong>：豪斯多夫距离示例。左：真实轨迹。中：包含伪影的预测（豪斯多夫距离54.5）。右：对齐良好的预测（豪斯多夫距离1.0）。</p>
+</blockquote>
+<p><strong>消融实验</strong>：实验本身对比了不同增强组件（无条件DBC vs. 条件Cond-DBC）的效果。结果表明，引入扩散专家（无论是无条件还是条件）都能显著提升性能。条件扩散专家（Cond-DBC）通常能取得更好的FID，并且在抑制伪影（Hd19）方面表现更稳定，这得益于其明确地对<code>p(a|s)</code>进行建模，提供了更具针对性的指导。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 提出了一个基于ROS 2的、开源且可维护的草图路径数据注释工具，解决了演示收集的鲁棒性问题。2) 提出了SPADE训练框架，将图像条件扩散模型作为专家集成到行为克隆中，显著提升了轻量级规划模型在未见环境中的泛化能力和路径质量（如中型Cond-DBC模型相比基线BC，FID降低56.5%，APE降低58.0%）。3) 在保持模型轻量（参数量少，可实时边缘部署）的同时，达到了接近扩散模型水平的生成质量。</p>
+<p><strong>局限性</strong>：论文提到，独立的扩散模型（如DDPM）虽然生成质量高，但其迭代去噪过程导致推理速度慢（约45秒），无法满足实时机器人部署的需求。SPADE通过将其作为训练阶段的专家来规避此问题。</p>
+<p><strong>对后续研究的启示</strong>：本工作展示了如何将大容量生成模型（扩散模型）的知识蒸馏到轻量级策略网络中，以实现性能与效率的平衡。这种“专家增强”的训练范式可扩展到其他机器人学习任务。此外，条件扩散模型提供的结构化、与环境相关的指导信号，为从有限演示中学习复杂、多模态行为开辟了新途径。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出SPADE框架，旨在解决自主移动机器人路径规划中有效融入人类偏好的核心问题，克服现有模仿学习方法在未见环境泛化能力有限和演示收集鲁棒性低的缺陷。关键技术包括基于ROS 2的改进注释工具，以及集成扩散增强的行为克隆训练策略。实验表明，该方法绝对姿态误差降低39.1%，Fréchet起始距离降低33.5%，可训练参数减少93.8%，并实现扩散级泛化同时保持实时边缘计算性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.03512" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
