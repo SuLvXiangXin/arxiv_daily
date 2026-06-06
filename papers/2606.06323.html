@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VOLT: Vision and Language Trajectory Segmentation for Faster-than-Demonstration Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>VOLT: Vision and Language Trajectory Segmentation for Faster-than-Demonstration Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.06323" target="_blank" rel="noreferrer">2606.06323</a></span>
+        <span>作者: Siddarth Jain Team</span>
+        <span>日期: 2026-06-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>模仿学习使机器人能够通过模仿人类专家来掌握复杂任务，但其性能受限于演示质量。为确保演示准确，操作者往往以较慢的速度进行演示，这导致训练出的策略执行速度也较慢。然而，机器人在自主执行时具备超越人类的加速潜力，这在工业应用中极具价值。现有加速方法主要分为两类：一是在策略执行（测试时）加速，例如通过高频控制器或对输出动作序列进行下采样；二是在训练时加速，例如对演示数据进行重采样或数据增强。这些方法面临两个关键问题：如何高效加速策略，以及如何判断轨迹中的哪些部分适合加速。简单地全程加速会导致在需要精细操作的子任务（如抓取、插入）中失败。因此，本文的核心痛点是需要一种智能的轨迹分割方法，能够根据任务上下文识别哪些部分可以安全加速，哪些部分需要保持原始谨慎速度。本文提出 VOLT，其核心思路是：利用视觉语言模型（VLM）对整个演示视频进行高层次分析，智能地将轨迹分割为“保持速度”和“加速”两类区段，然后仅对“加速”区段进行下采样，从而在维持高性能的同时实现超越演示速度的策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>VOLT 的整体流程是一个离线的数据处理与策略训练框架，其目标是为标准的模仿学习算法（如扩散策略）生成一个经过速度优化的演示数据集。<br><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法简图"></p>
+<blockquote>
+<p><strong>图1</strong>：问题与方法示意图。左侧：人类小心演示倒水任务。中间：全程加速（绿色）会导致溢出；不完美的分割加速（红色）仍可能在持水阶段错误加速。右侧：VOLT 利用整个视频的上下文线索，仅在相关部分加速。</p>
+</blockquote>
+<ol>
+<li><strong>收集演示</strong>：首先，以标准方式（例如，20Hz 遥操作）收集人类演示数据集 𝒟，每个轨迹 ξ 包含观测-动作对序列 (o_t, a_t)，其中 o_t 包含了机器人状态 x_t 和 RGB 图像 y_t。</li>
+<li><strong>VLM轨迹分割</strong>：核心模块是视觉语言轨迹分割器。将每个演示的视频序列 V = {y_0, y_1, ..., y_T} 连同描述分割目标的文本提示 p 一起输入到 VLM（论文中使用 Qwen3-VL-32B-Instruct-FP8）。提示 p 包含任务无关的通用指导原则和少量多样任务的上下文示例（不包括目标任务），以增强模型的推理能力。VLM 被要求为视频生成一个有序的非重叠分段集合 { (τ_0, l_0), ..., (τ_k, l_k) }，其中 τ 表示分段的起止索引，标签 l ∈ {“speed-up”， “maintain-speed”} 标识该段应加速还是保持原速。VLM 会先进行简短的推理，再输出标签。</li>
+<li><strong>选择性下采样</strong>：在获得带标签的数据集后，用户选择一个下采样因子 n。在训练策略之前，对数据集进行重采样：对于标签为 “speed-up” 的观测-动作对，应用下采样（例如，每隔 n 个点取一个），从而在时间上压缩该片段；对于标签为 “maintain-speed” 的片段，则保留原始数据点。这相当于在训练数据层面创建了一个“更快”的演示版本。</li>
+<li><strong>策略训练</strong>：将经过 VOLT 处理后的新数据集输入到标准的模仿学习算法中进行训练。论文中实例化的策略 π 为扩散策略，它根据最近的观测历史 O_t 预测一个未来动作序列 A_t。采用 Denoising Diffusion Implicit Models 以减少推理时的迭代次数，并通过异步推理和 Error-Adaptive-Guidance 来促进加速。</li>
+</ol>
+<p>与现有方法相比，VOLT 的主要创新在于：它不依赖于人工定义的中间特征（如抓取距离），而是直接利用 VLM 对原始视频演示进行端到端的高层次上下文推理，以判断何时加速是安全的。这使其能够捕捉更广泛、更复杂的任务语义（如与可变形体的交互），从而更准确地分割轨迹。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<ul>
+<li><strong>实验平台与数据集</strong>：实验在 Franka Emika 机械臂上进行，使用 GELLO 系统以 20Hz 遥操作收集演示数据。观测包括关节位置、三个 RealSense D435 摄像头的 RGB 图像（两个环境固定，一个安装在末端执行器上）。<table>
+<thead>
+<tr>
+<th align="center"><img src="https://arxiv.org/html/2606.06323v1/2606.06323v1/Figures/tasks.png" alt="实验任务"></th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">&gt; <strong>图2</strong>：实验中使用的真实世界操作任务。任务中操作的物体位置随机初始化，目标位置固定。（上）抓放和推杯子任务操作杯子；塔块转移任务操作方块堆。（下）插头插入是具有挑战性的装配任务；桌面分类是长视野任务，机器人需将水果放到盘子里、容器放到篮子里。</td>
+</tr>
+<tr>
+<td align="center">...<a href="https://arxiv.org/html/2606.06323v1/2606.06323v1/Figures/tasks.png">原始论文中“Figure 2”即提供的“图2”链接，内容为展示任务，故插入此处。</a></td>
+</tr>
+</tbody></table>
+</li>
+<li><strong>Baseline方法</strong>：<ol>
+<li><strong>Normal Speed</strong>：在原始演示数据上训练的策略，作为性能和速度的基线。</li>
+<li>**Action Downsampling (Action-D)**：在策略执行时，对扩散策略预测出的动作序列 A_t 进行均匀下采样（跳过中间动作）。</li>
+<li>**Demonstration Downsampling (Demo-D)**：在训练时，对整个演示轨迹进行均匀下采样。</li>
+</ol>
+</li>
+<li><strong>关键实验结果</strong>：<br>  <img src="https://arxiv.org/html/2606.06323v1/2606.06323v1/x1.png" alt="对比结果"><blockquote>
+<p><strong>图3</strong>：不同加速方法在抓放和推杯子任务上的成功率与任务完成时间对比（n为下采样因子）。Action-D（执行时加速）随着n增大成功率显著下降。Demo-D（训练时全程加速）在n=4时成功率也急剧下降。VOLT 在两种加速倍率下均能保持接近基线的高成功率，同时显著缩短任务时间。虚线时间为 VOLT 的理想加速时间下限。* 表示统计显著性，误差线为标准误。<br> ...<a href="https://arxiv.org/html/2606.06323v1/2606.06323v1/x1.png">原始论文中“Figure 3”即提供的“图3”链接，内容为方法对比结果，故插入此处。</a><br>  实验结果（图3）表明：</p>
+</blockquote>
+<ol>
+<li><strong>Action-D</strong>：随着下采样因子 n 增大（加速越多），任务时间缩短，但成功率显著下降，尤其在需要精细动作的任务中（如抓取前对齐）。</li>
+<li><strong>Demo-D</strong>：可大幅缩短执行时间，性能优于同倍率的 Action-D，但当 n=4 时成功率也大幅下降，因为机器人尝试过快完成所有动作导致关键步骤出错。</li>
+<li><strong>VOLT</strong>：在 n=2 和 n=4 时，均能在保持高成功率（甚至在抓放任务中高于基线）的同时，显著减少任务时间，实现了超越演示（比 Normal Speed 快）且可靠的政策。论文指出 VOLT 在一些任务上实现了最高达 <strong>2.57倍</strong> 的加速，同时保持相似的成功率。</li>
+</ol>
+</li>
+<li><strong>消融实验与极限分析</strong>：<br>  <img src="https://arxiv.org/html/2606.06323v1/2606.06323v1/x2.png" alt="消融实验"><blockquote>
+<p><strong>图4</strong>：增大下采样因子 n 对 VOLT 性能的影响（VOLT xLarge）。当 n 过大时，低层控制器无法准确跟踪高层策略输出的快速动作序列，导致成功率大幅下降（抓放任务下降29.7%，推杯子下降29.2%），且由于需要纠错，时间节省并不显著。<br> ...<a href="https://arxiv.org/html/2606.06323v1/2606.06323v1/x2.png">原始论文中提及了关于 VOLT 加速极限的讨论及“VOLT xLarge”结果，此图应为其对应的具体数据图，故根据内容判断并插入。</a><br>  实验还探讨了 VOLT 加速的极限（图4）。当过度增大下采样因子 n（VOLT xLarge）时，由于低层控制器无法跟踪过快的目标位置，以及机器人失去闭环纠错能力（动作间间隔太大），成功率会显著下降。这表明加速存在实际限制，并非越大越好。</p>
+</blockquote>
+</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<ul>
+<li><strong>核心贡献</strong>：<ol>
+<li>提出了 <strong>VOLT 算法</strong>，首次利用高层 VLM 对整个人类演示视频进行无需显式特征定义的 holistic 分析，以分割出可安全加速和需保持精准执行的区域。</li>
+<li>通过系统性实验，验证了在<strong>训练时</strong>对演示数据进行下采样（特别是结合智能分割后）是获得更快且高性能策略的有效且一致的方法，其效果优于在<strong>执行时</strong>加速。</li>
+<li>在多种真实世界操作任务上验证了 VOLT 的有效性，证明其能在实现显著加速（最高2.57倍）的同时，维持与原始演示训练策略相当甚至更高的成功率。</li>
+</ol>
+</li>
+<li><strong>局限性</strong>：论文自身提到 VOLT 的加速能力受限于：1) <strong>策略推理延迟</strong>：扩散策略的推理时间限制了可用的控制频率。2) <strong>闭环控制 vs. 开环执行</strong>：过度加速会增大动作间隔，削弱机器人对环境变化的实时响应与纠错能力，从而可能引发失败。3) <strong>低层控制器性能</strong>：过快的目标指令可能超出底层控制器的跟踪能力。</li>
+<li><strong>后续研究启示</strong>：VOLT 展示了利用大规模 VLM 理解任务语义以优化模仿学习过程的潜力。未来的工作可以探索：如何将此类高层次推理更紧密地与策略学习和动作生成相结合；如何自动化地确定最优的加速程度（n）；以及该方法在更广泛、更复杂的长期任务中的应用。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人模仿学习中，策略执行速度无法超越人类演示的问题，提出VOLT方法。核心在于：通过视觉与语言信息对演示轨迹进行语义分割，区分可加速的无约束运动段与需保持慢速精确操作的交互段，并对前者进行选择性下采样。实验表明，该方法相比现有技术，能在保证任务成功率的同时，显著提升机器人执行速度。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.06323" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

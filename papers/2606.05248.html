@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Inverse Manipulation through Symbolic Planning and Residual Operator Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Inverse Manipulation through Symbolic Planning and Residual Operator Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.05248" target="_blank" rel="noreferrer">2606.05248</a></span>
+        <span>作者: Alberto Finzi Team</span>
+        <span>日期: 2026-06-03</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人技能逆向操作在协作与装配/拆卸任务中至关重要。现有方法主要包括轨迹级反转和时间反转模型，前者通过回放正向技能的电机轨迹实现，但仅限于抓取类等可简单回退的操作；后者利用物理或几何耦合关系，但其依赖于时间可逆的假设。对于非抓取类操作（如推动），由于执行过程中物体未被抓持，简单的轨迹回退无法使物体恢复原位，这构成了一个“跨类别反转”问题，需要任务级规划与连续控制来恢复世界状态。</p>
+<p>本文针对符号逆向规划在连续交互动态下无法完全恢复执行效果这一具体痛点，提出了一种混合框架：将技能反转变为一个由符号规划与残余操作符学习共同解决的恢复问题。核心思路是：从演示中自动提取符号化的正向操作符，并据此推导出逆向恢复目标；首先使用符号规划与脚本化的动作基元尝试满足该目标；对于未满足的残余目标，则通过强化学习进行精调。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>所提出的系统整体框架包括三个阶段：符号操作符提取、符号规划生成前缀动作序列、残余目标强化学习。输入为机器人技能演示，输出为可执行的逆向技能（即动作序列）。</p>
+<p><img src="https://arxiv.org/html/2606.05248v1/2606.05248v1/flow.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：所提出系统的概览。技能演示用于提取符号操作符。确定操作符的逆目标后，计算奖励的各个组成部分，并使用强化学习（RL）进行优化。</p>
+</blockquote>
+<p><strong>核心模块技术细节</strong>：</p>
+<ol>
+<li><strong>符号操作符提取</strong>：系统构建场景图记录物体和机器人的连续状态。使用一组预定义的<strong>软谓词</strong>来评估场景，每个谓词 <code>p</code> 输出一个软分数 <code>V_p(s) ∈ [0,1]</code>，通过带符号边缘 <code>m_p(s)</code> 和温度参数 <code>T_p</code> 的 Sigmoid 函数计算。从演示中提取的 STRIPS 操作符定义为元组 <code>o = ⟨Pre, Add, Del⟩</code>。通过比较技能执行前后各谓词的平均分数变化，决定其属于前提集 <code>Pre</code>、添加集 <code>Add</code> 还是删除集 <code>Del</code>。</li>
+<li><strong>逆向目标生成</strong>：对于提取的正向操作符 <code>o</code>，其逆向目标 <code>ℐ(o)</code> 定义为恢复世界到正向技能执行前状态所需满足的条件，具体为 <code>ℐ(o) = Pre ∪ Del ∪ ¬Add</code>。这意味着需要满足前提条件、恢复被删除的效果并否定被添加的效果。</li>
+<li><strong>符号规划与交接状态</strong>：使用有限的脚本化动作基元（如抓取、放置）和广度优先搜索（BFS）规划器，生成一个动作序列 <code>π_sym</code> 来尝试满足逆向目标 <code>ℐ(o)</code>。规划执行后到达的状态 <code>s_h</code> 称为<strong>交接状态</strong>。基于此状态，逆向目标中已被满足（即 <code>V_p(s_h) ≥ θ</code>）的谓词构成<strong>围栏集 ℱ</strong>，需在后续过程中保持；未满足的谓词构成<strong>主动残差集 𝒜</strong>，是后续学习的目标。</li>
+<li><strong>残余操作符学习</strong>：对于 <code>ℐ(o)</code> 中的每个谓词，定义其符号 <code>σ_p ∈ {+1, -1}</code>（表示需满足或否定）和尺度 <code>c_p</code>。其奖励贡献通过 <code>m̃_p(s) = σ_p · tanh(m_p(s)/c_p)</code> 计算，值域为 [-1, +1]。最终的残余奖励 <code>R(s)</code> 由两部分组成：主动残差集中所有谓词的 <code>m̃_p(s)</code> 之和（鼓励恢复），加上围栏集中所有谓词的 <code>min(0, m̃_p(s))</code> 之和（单边惩罚，防止已满足条件被破坏）。基于此奖励，使用 Soft Actor-Critic (SAC) 算法学习一个残余策略 <code>π_res</code>。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.05248v1/2606.05248v1/x1.png" alt="奖励函数示意图"></p>
+<blockquote>
+<p><strong>图2</strong>：残余强化学习的奖励构成。主动谓词的贡献通过 tanh() 计算，而对已满足谓词的违反则会受到惩罚。</p>
+</blockquote>
+<p><strong>创新点</strong>：</p>
+<ul>
+<li>将技能反转形式化为一个从符号正向操作符推导出的混合<strong>符号-连续恢复问题</strong>。</li>
+<li>引入了<strong>残余操作符学习</strong>框架，仅当符号规划无法完全满足目标时，才激活强化学习。</li>
+<li>从符号计划中<strong>自动推导</strong>强化学习的奖励信号，无需针对每个任务进行人工奖励工程。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在模拟环境 ManiSkill3 的 PushCube 任务中评估，使用 Franka Panda 机械臂。正向技能为一个脚本化的推动操作，使立方体在桌面上沿 +x 方向移动到目标位置。</p>
+<p><strong>对比方法</strong>：</p>
+<ul>
+<li>**Symbolic prefix (no RL)**：仅使用符号规划前缀 <code>π_sym</code>。</li>
+<li><strong>Symbolic + random action</strong>：符号规划后接随机动作。</li>
+<li>**Symbolic + RL (ours)**：本文提出的完整方法（符号规划 + 残余强化学习）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>从10个不同随机种子评估的结果如表1所示。本文方法在1厘米容差下的成功率达到<strong>90%<strong>，平均精度为</strong>1.4 ± 3.2 mm</strong>。相比之下，仅使用符号前缀的成功率仅为10%，且留下了<strong>16.6 ± 6.6 mm</strong>的平均残余误差。符号规划加随机动作的方法有50%的成功率，但标准差很大（17.2 mm），说明是偶然成功。</p>
+<p><img src="https://arxiv.org/html/2606.05248v1/2606.05248v1/run0.png" alt="实验过程截图"></p>
+<blockquote>
+<p><strong>图3</strong>：单次评估的截图：(a) 立方体位于初始位置，(b) 正向执行后，(c) 符号前缀执行后，(d) 应用RL策略后。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>对奖励函数设计的消融研究结果如表2所示。关键发现是：若对围栏谓词也使用常规的 tanh 奖励，智能体会因“保持不动”而获得奖励，导致策略饱和，成功率降至10%。若完全移除 tanh 函数（即使用无界边缘值），奖励会发散，导致策略无法收敛（成功率0%）。本文采用的对围栏谓词使用 <code>min(0, tanh(...))</code> 的单边惩罚设计，提供了必要且充分的约束，取得了90%的最佳成功率。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种解决机器人技能反转的<strong>混合符号-连续框架</strong>，通过从演示中提取的符号操作符自动推导逆向恢复目标。</li>
+<li>设计了<strong>残余操作符学习</strong>机制，在符号规划部分完成任务的基础上，使用基于谓词的通用奖励指导强化学习完成精细调整。</li>
+<li>在 PushCube 任务上验证了方法的有效性，实现了高成功率与高精度，并证明了其相对于纯符号方法和随机基线方案的优越性。</li>
+</ol>
+<p><strong>局限性</strong>（论文自述）：</p>
+<ul>
+<li>目前依赖于<strong>手工设计的谓词</strong>以及相关的边缘和尺度参数，未能从观察中学习。</li>
+<li>执行符号计划依赖于<strong>脚本化的低层动作基元</strong>（如特定的抓取-放置基元），而非习得的技能。</li>
+<li>仅在<strong>单一任务系列</strong>上进行了评估。</li>
+</ul>
+<p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li>未来工作可探索从演示中<strong>学习谓词及其参数</strong>，以提升系统的通用性和可扩展性。</li>
+<li>可以利用<strong>模仿学习</strong>等方法将动作基元也替换为可学习的模块，构建完全数据驱动的逆向技能生成管道。</li>
+<li>需要在更广泛、更复杂的任务族上进行测试，以验证框架的泛化能力。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决机器人操纵任务中的逆操作问题，即符号逆计划在连续交互动态下难以完全恢复前向执行效果。方法结合符号规划与残余操作学习：首先从演示中提取STRIPS-like符号操作符并构建逆恢复目标，用任务规划尝试满足；未解决的符号谓词则通过强化学习（如Soft Actor-Critic策略）学习残余操作进行精细调整。在ManiSkill3 PushCube任务中，符号逆实现粗略拾取放置恢复，残余策略细化立方体姿势，成功将近似符号逆转变为物理接地的逆技能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.05248" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

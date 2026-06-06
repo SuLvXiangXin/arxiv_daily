@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>TempoVLA: Learning Speed-Controllable Vision-Language-Action Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>TempoVLA: Learning Speed-Controllable Vision-Language-Action Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.06491" target="_blank" rel="noreferrer">2606.06491</a></span>
+        <span>作者: Mingyu Ding Team</span>
+        <span>日期: 2026-06-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型已成为通用机器人操作的主流范式。然而，现有VLA模型在执行速度上存在一个关键局限：它们只能“沉默地”继承训练演示数据中的单一固定速度。机器人实际操作需要在低风险移动阶段快速执行，在高风险接触阶段缓慢精确，这种动态速度需求未得到满足。现有方法试图通过模型压缩、KV缓存重用或强化学习来加速VLA，但这些方法仅仅是将策略从一个固定速度转移到另一个固定速度，且几乎未探索减速能力。本文针对“赋予单一VLA模型显式的、双向的（加速和减速）按需速度控制”这一痛点，提出了一个新视角：观察到预测动作的幅度已经控制了机器人的移动速度，这为实现可控执行速度提供了直接途径。本文核心思路是通过数据侧的可变速度轨迹增强和模型侧的速度条件化机制，构建一个无需重新训练基础架构的、速度可控的VLA框架。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>TempoVLA的整体框架包含数据侧和模型侧两个耦合组件，目标是训练一个接收标量速度输入s的条件策略π_θ(o_t, s)，其预测的动作幅度会根据s进行缩放（s&gt;1加速，s&lt;1减速，s=1为默认速度），而下游的低层控制器保持不变。</p>
+<p><img src="https://arxiv.org/html/2606.06491v1/2606.06491v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：TempoVLA框架。(a) VSTA通过将每个运动一致的段从q个动作重新分割为p个动作来实现<code>s = q/p</code>，其中<code>s</code>和块起始偏移量<code>r</code>在线重采样。(b) 速度<code>s</code>通过文本前缀、软提示或MLP驱动的调制三种方案之一注入策略。(c) 部署时，VLM调度器观察场景并为TempoVLA分派每个动作块的速度。</p>
+</blockquote>
+<p><strong>核心模块1：可变速度轨迹增强</strong> 该模块旨在在线重定时任何演示数据到目标速度<code>s</code>，包含三个步骤：</p>
+<ol>
+<li><strong>运动一致分割</strong>：根据平移/旋转幅度阈值将演示轨迹分割为运动模式（静止、平移、旋转、平移且旋转）内部一致的段，并在运动方向反转或夹爪开/关事件处进一步划分子边界，以防止重采样模糊离散状态切换。</li>
+<li><strong>块级速度变换</strong>：在每个段内，将目标速度<code>s</code>表示为互质整数比<code>s = q/p</code>。将段划分为长度为<code>q</code>的连续帧非重叠块。对于每个块，累加其总运动量<code>Δ = Σa_i</code>，然后将<code>Δ</code>线性插值为<code>p</code>个等幅度的步骤。这保证了块的整体运动被精确保留，仅改变了块内运动的形状。此操作适用于笛卡尔平移、关节速度、轴角向量等可加空间中的动作表示。</li>
+<li><strong>在线块起始采样</strong>：为避免丢弃数据，在每个段采样一个随机偏移量<code>r ∈ {0, …, q-1}</code>，使得块从第<code>r, r+q, r+2q, …</code>帧开始。VSTA在训练期间在线运行，每次采样演示时都会重新绘制偏移量，确保每个源帧最终都能作为块起点贡献训练数据。</li>
+</ol>
+<p><strong>核心模块2：速度条件化机制</strong> 在VSTA生成的多速度数据集上，通过以下三种轻量级方案之一将速度<code>s</code>注入VLA模型：</p>
+<ol>
+<li><strong>文本前缀</strong>：在原始语言指令<code>ℓ</code>前添加短句（如“以<code>&lt;s&gt;</code>倍速执行任务”），无需改动模型架构。</li>
+<li><strong>速度调制RMSNorm</strong>：用一个小型两层MLP <code>φ_mod(s)</code>嵌入标量速度，将其输出加到动作专家每个Transformer块已有的流匹配时间步嵌入<code>σ_ts</code>上，驱动每一层的RMSNorm进行自适应缩放。</li>
+<li><strong>带速度锚点的软提示</strong>：维护一个可学习的张量<code>P ∈ R^(K×P×d_emb)</code>，为K个训练速度锚点<code>s_k</code>中的每一个存储P个软提示令牌。训练时，将当前速度对应的P个令牌插入编码器的图像和语言令牌之间；推理时，使用与请求速度最接近的锚点的令牌。</li>
+</ol>
+<p><strong>创新点</strong>：与现有仅能切换固定速度或专注于加速的方法相比，TempoVLA的创新在于：1) 提出了一种保留运动语义的数据侧在线轨迹重定时方法（VSTA），可同时生成加速和减速的演示数据；2) 引入了极其轻量化的模型侧速度条件化机制，使单一策略获得连续的、双向的速度控制能力；3) 两者结合无需重新收集数据或改动基础模型架构。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在仿真环境（LIBERO基准测试，含Spatial、Object、Goal、Long四个任务套件，共40个任务）和真实世界（7自由度Franka机械臂，5个操作任务）上进行。基线方法为在原始数据上训练的单速度VLA（π_0.5）。关键实验结果如下：</p>
+<p><strong>VSTA的可行性验证</strong>：将LIBERO演示数据通过VSTA重定时到不同目标速度<code>s</code>并回放。如表1所示，实际数据比率（Data Ratio）紧密跟踪目标速度，重定时导致的集成末端执行器位移误差（Motion Err.）极小（低于5e-8）。回放成功率（SR）在接近1×时很高，随着目标速度离1×越远（双向）而单调下降，证明了VSTA作为数据处理原语的可靠性。<br><img src="https://arxiv.org/html/2606.06491v1/2606.06491v1/x3.png" alt="VSTA可行性"></p>
+<blockquote>
+<p><strong>表1</strong>：VSTA在LIBERO上的可行性。重定时的演示在各个目标速度<code>s</code>下回放。蓝色下标为数据比率与<code>s</code>的差距。可见运动误差可忽略，成功率随速度偏离1×而下降。</p>
+</blockquote>
+<p><strong>速度集成方案消融</strong>：比较了三种速度注入方案。如表2所示，文本前缀（96.8%）、调制（96.8%）和软提示-8（96.5%）的整体成功率（Avg. SR）相当，表明速度控制可以轻松植入VLA，且很大程度上与具体机制无关。文本前缀因无需架构修改且最灵活，被选为默认方案。<br><img src="https://arxiv.org/html/2606.06491v1/2606.06491v1/x4.png" alt="速度方案消融"></p>
+<blockquote>
+<p><strong>表2</strong>：速度集成方案消融。SR：平均成功率（%）；Steps：成功回合的平均长度。三种方案性能相当，文本前缀胜在简单。</p>
+</blockquote>
+<p><strong>训练速度范围的影响</strong>：研究了训练速度集合对策略的影响。关键发现：1) VSTA训练保持或提升了1×成功率（相对基线96.7%最高达97.4%），因为速度条件化迫使策略提取更精细的特征；2) 性能峰值出现在1.25×或1.5×而非1×，表明VSTA压缩了演示数据中的节奏冗余，使策略执行更果断；3) 更细粒度（0.25间隔）且包含极端速度（0.5×, 2×）的训练范围（七速）获得了最佳权衡。<br><img src="https://arxiv.org/html/2606.06491v1/2606.06491v1/x5.png" alt="速度范围影响"></p>
+<blockquote>
+<p><strong>表3</strong>：训练速度范围对LIBERO的影响。与单速度基线相比，速度条件化训练提升了1×性能，且性能峰值出现在加速档（1.25×或1.5×）。七速范围效果最佳。</p>
+</blockquote>
+<p><strong>真实世界结果</strong>：在Franka机械臂上的实验显示，TempoVLA将默认1×成功率从单速度基线的80.0%提升至88.0%。同时，策略在滚落中实现的速度比率（Model Ratio）紧密跟踪命令速度（如1.29×对应1.25×命令）。<br><img src="https://arxiv.org/html/2606.06491v1/2606.06491v1/x2.png" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>图3</strong>(b)(c)：真实世界结果。(b) TempoVLA将1×成功率从80%提升至88%，且GPT-4o调度的变体达到96%最高成功率。(c) 实现的模型比率紧密跟踪命令比率。</p>
+</blockquote>
+<p><strong>与VLM结合的动态速度控制</strong>：使用GPT-4o作为调度器，根据当前观察为接下来的动作块分派速度。动态调度的TempoVLA达到了96%的平均成功率（优于88%的最佳固定速度配置），且平均实现了1.21×的速度提升，成功实现了在低风险阶段加速、高风险阶段减速的自动化行为。<br><img src="https://arxiv.org/html/2606.06491v1/2606.06491v1/x1.png" alt="动态控制图示"> <em>(此部分对应框架图c)</em></p>
+<blockquote>
+<p><strong>图2</strong>(c)：动态速度控制的VLM调度器。VLM观察场景并为TempoVLA分派每个动作块的速度，实现自动化动态调速。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) 提出了VSTA数据增强与速度条件化机制这对轻量的数据-模型组合，使现有VLA无需新数据即可获得双向速度控制能力；2) 发现妥善重定时的数据使速度控制易于植入，且可变速度训练本身作为一种有效的数据增强，能一致地提升仿真和真实世界中的默认1×性能；3) 展示了该设计可扩展至VLM驱动的动态速度调度，将执行速度转变为高层推理器的新控制通道。</p>
+<p>论文提到的局限性在于：在速度范围的高端，实际速度提升会逐渐饱和，因为策略的每步目标开始超过固定的低层控制器的跟踪带宽。</p>
+<p>本文对后续研究的启示在于：首先，为机器人操作引入了“执行速度”作为一个显式、可控的维度；其次，证明了通过精心设计的数据变换（如VSTA）可以低成本地赋予模型新能力并提升基础性能；最后，验证了简单如文本前缀的条件化方式在特定任务上即可达到复杂注入方案的效果，这为模型设计提供了简洁高效的思路。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有视觉-语言-动作模型执行速度单一、无法动态适应高风险/低风险任务阶段的问题，提出TempoVLA框架。其核心技术包括：数据侧的变量速度轨迹增强方法，通过合并或分割动作调整演示速度；模型侧通过显式速度条件输入控制动作幅度。实验表明，该方法能灵活实现双向速度控制，且数据增强提升了基础性能，最终实现对不同风险阶段的自适应调速。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.06491" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

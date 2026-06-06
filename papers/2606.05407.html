@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MoDex: A Diffusion Policy for Sequential Multi-Object Dexterous Grasping - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>MoDex: A Diffusion Policy for Sequential Multi-Object Dexterous Grasping</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.05407" target="_blank" rel="noreferrer">2606.05407</a></span>
+        <span>作者: Danica Kragic Team</span>
+        <span>日期: 2026-06-03</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前大多数灵巧抓取方法在为单个物体生成抓取姿态或轨迹时，会消耗整个灵巧手的所有自由度，这导致其高自由度的潜力被浪费，也无法为后续抓取预留冗余。灵巧手的高自由度优势因此未能得到充分发挥，以至于其抓取成功率有时甚至比不上使用低自由度平行夹爪的方法。现有的连续多物体抓取方法通常依赖于已知物体模型、解耦的抓取生成与执行规划，或物体位置接近固定的假设，难以直接从原始感知信息进行连续的抓取决策。本文针对现有方法未能有效利用灵巧手自由度进行连续作业的痛点，引入了“对立空间”和“抓取历史”的新视角。核心思路是训练一个扩散模型策略，在抓取历史和对立空间条件（指定当前抓取中哪些手指参与）的约束下，直接从点云等观测映射到连续的抓取动作，从而让手每次只用部分自由度抓起一个新物体，为后续抓取保留自由度。</p>
+<h2 id="方法详解">方法详解</h2>
+<p><img src="https://arxiv.org/html/2606.05407v1/2606.05407v1/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：MoDex方法整体框架图。左下方展示了策略的输入（点云、机器人状态、当前阶段的对立空间指示器 $f_i$ 和抓取历史 $h_{i-1}$）。这些信息经过PointNet编码器和上下文编码器后，与带噪声的动作块一同输入到一个扩散U-Net中进行迭代去噪，以预测下一步的抓取动作（手臂底座位姿+手部关节角度）。抓取序列产生后，已执行抓取的对立空间会被追加到历史中。右上方展示了训练pipeline：先通过模仿学习在专家演示上进行预训练，再通过基于专门设计的密集奖励的强化学习进行微调。</p>
+</blockquote>
+<p>MoDex是一种从观测 $o_{t,i}$ 到未来 $T_p$ 步动作块 $A_t$ 的扩散策略。观测 $o_{t,i}$ 包含四个部分：1）用于指定第 $i$ 次抓取所用手指的“对立空间”向量 $f_i$（一个4维二元指示向量）；2）记录了前 $i-1$ 次抓取所使用OS的“抓取历史”上下文 $h_{i-1}$（为之前所有 $f$ 向量的拼接）；3）机器人本体感知 $q_t$；4）环境的部分物体点云 $P_t$。输出的动作 $a_t$ 包含了手部基座的6自由度位姿和16个手部关节角度。</p>
+<p>MoDex的核心创新在于引入了两个条件信号来指导策略。第一个是<strong>对立空间</strong>，它明确指出了当前抓取需要用到哪几个手指（例如 $f_1 = [1, 1, 0, 0]$ 表示仅使用拇指和食指），而未指定的手指则保持自由状态，以便用于后续抓取。在实现上，$f_i$ 被在时间维度上广播并拼接到带噪声的动作块 $A_t^k$ 的每一步动作上，形成增广的动作块 $\tilde{A}<em>t^k$ 输入网络。第二个是<strong>抓取历史上下文</strong> $h</em>{i-1}$，它让策略能够感知到哪些手指已经被之前的抓取占用，从而在新抓取计划中避开这些手指的运动，确保已抓物体的稳定性。</p>
+<p>策略的网络架构基于DP3，采用一维卷积U-Net沿动作时间维度进行去噪。U-Net的输入为增广的带噪声动作块 $\tilde{A}<em>t^k$，以及由点云编码器和上下文编码器（处理 $h</em>{i-1}$ 和 $q_t$）生成的全局条件 $c_t$，外加去噪步数 $k$ 的正弦位置编码。MoDex采用两阶段训练：第一阶段，使用行为克隆损失在专家演示数据集上进行<strong>预训练</strong>；第二阶段，使用DPPO框架进行<strong>强化学习微调</strong>。</p>
+<p>与现有方法相比，MoDex的创新点体现在：1）首次将扩散策略应用于连续多物体灵巧抓取任务；2）创造性地引入对立空间和抓取历史作为条件，显式地引导策略分配和保留自由度；3）采用“模仿学习预训练+强化学习微调”的两阶段范式，在保留数据分布内高性能的同时，提升了策略对分布外状态的鲁棒性。</p>
+<p>强化学习微调的关键是一个精心设计的密集奖励 $r_t^{base}$。该奖励鼓励策略：建立对当前目标物体的对立空间接触；保持所有已抓物体被稳固抓持；避免非必要的接触（如非指定手指过早接触目标物体）和手与桌面的碰撞。奖励函数包含多个子项：$r_t^{grasp}$ 引导指定手指接近并接触目标物体；$r_t^{maintain}$ 确保已抓物体不被丢失或移动；$r_t^{avoid}$ 惩罚碰撞和无效接触；当成功抓起当前物体并稳固保持所有已抓物体时，会给予一个大的常数成功奖励 $r_{succ}$。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在仿真和真实世界两个平台上进行。仿真平台基于MuJoCo的Robosuite，使用Franka Panda手臂搭配Allegro Hand。评估使用了包含15个不同物体的集合（涵盖球体、圆柱、方盒三种基础几何形状）。真实世界使用相同的机器人硬件和Kinect v3深度相机进行评估，测试对象包含3个日常物体和2个3D打印物体，其中4个在训练中未见过。</p>
+<p>对比的基线方法包括：<strong>BC-RNN</strong>（基于RNN的行为克隆）、<strong>PPO</strong>（从零开始的强化学习）、<strong>SeqDiffuser</strong>（一个依赖完整物体点云和运动规划器的抓取姿态生成方法）、<strong>MoDex-BC</strong>（仅经过模仿学习预训练、未经RL微调的DP3版本）。</p>
+<p><img src="https://arxiv.org/html/2606.05407v1/2606.05407v1/x2.png" alt="模拟实验结果表"></p>
+<blockquote>
+<p><strong>图3</strong>：仿真实验中各方法在不同抓取阶段（Stage 1/2/3）的平均成功率（%）对比表格。MoDex在所有阶段均取得了最高的成功率（Stage 1: 75.00%， Stage 2: 49.58%， Stage 3: 45.00%， 平均: 56.53%），显著优于所有基线方法。其中，MoDex-BC（未经RL微调）的性能在后续阶段明显下降，说明了RL微调的重要性。PPO和SeqDiffuser在阶段2和3的成功率极低，反映了高维度动作空间探索和分离式规划的困难。</p>
+</blockquote>
+<p>关键实验结果总结如下：在仿真中，MoDex在抓取第1、2、3个物体时的成功率分别为75.00%、49.58%和45.00%，平均成功率为56.53%，相对于表现最好的基线（MoDex-BC）提升了约2.92–17.92%。BC-RNN和MoDex-BC在第一阶段表现尚可，但在后续阶段性能急剧下降，这说明缺乏显式的对立空间条件会导致手指使用混乱，影响连续抓取。PPO未能学到有效策略，SeqDiffuser则因解耦规划在复杂场景中失效而表现不佳。在真实世界实验中，MoDex在三个阶段的成功率分别为57.78%、26.67%和20.00%，相较于模拟结果有所下降（这是模拟到现实迁移的典型现象），但依然比未经RL微调的MoDex-BC版本（40.00%、20.00%、6.67%）高出6.67–17.78%，验证了RL微调对于提升策略在真实世界鲁棒性的关键作用。</p>
+<p><img src="https://arxiv.org/html/2606.05407v1/2606.05407v1/x2.png" alt="消融实验结果表"> <em>(注：此图片链接引用的是论文中的Table 2，但在提供的图片链接中未单独列出，此处引用原文中描述该表的图片位置)</em></p>
+<blockquote>
+<p><strong>表2</strong>：消融研究结果。移除“对立空间”条件对阶段2和3的性能造成最大损害（从50.00%和42.08%下降至未报告的低值），证实了其对于连续抓取的必要性。移除“抓取历史”上下文导致阶段3性能显著下降（从45.00%降至33.75%）。移除DPPO微调（即使用MoDex-BC）在所有阶段的性能均低于完整版MoDex。在RL微调中，移除引导接触的奖励项 $r_t^{grasp}$ 或维持已抓物体的奖励项 $r_t^{maintain}$ 都会导致性能下降。</p>
+</blockquote>
+<p>消融实验总结了每个核心组件的贡献：1）<strong>对立空间条件</strong>是连续抓取成功的关键，移除它会导致后续阶段性能崩溃；2）<strong>抓取历史上下文</strong>对于在复杂场景（阶段3）中规划避让已占用手指至关重要；3）<strong>DPPO强化学习微调</strong>带来了全阶段的性能一致提升，特别是显著改善了模拟到现实的迁移能力；4）在RL奖励中，<strong>接触引导奖励</strong>和<strong>维持抓持奖励</strong>都对最终性能有积极作用。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献有三点：1）提出了<strong>MoDex</strong>，首个用于连续多物体灵巧抓取的扩散策略；2）提出了一种自动化生成连续多物体抓取专家演示数据集的算法；3）在仿真和真实硬件上进行了广泛的实验评估，证明了MoDex相对于多种基线的优越性以及各设计组件的有效性。</p>
+<p>论文自身提到的局限性包括：由于所使用的Allegro Hand的机械结构限制，最多只能连续抓取3个物体。此外，实验场景相对简单（桌面上的孤立物体）。</p>
+<p>这项工作对后续研究的启示在于：它验证了将高容量生成模型（如扩散模型）与明确的任务条件（对立空间）以及两阶段训练范式相结合，是解决复杂连续操作任务的有效途径。这种“条件化设计+模仿学习初始化+强化学习微调”的模式，有望推广到其他需要精细自由度分配和长期序列规划的操作任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出MoDex方法，旨在解决灵巧手在不释放已抓握物体的情况下，连续抓取多个物体的核心难题。其关键技术是基于扩散策略的网络，通过引入“对立空间”条件来指定参与抓取的手指子集，从而保留部分自由度用于后续操作。方法采用模仿学习预训练与强化学习微调的两阶段训练策略。在仿真与真实机器人实验中，MoDex相比基线方法，成功率分别提升2.92-17.92%与6.67-17.78%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.05407" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

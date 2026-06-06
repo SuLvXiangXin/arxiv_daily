@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Auditing Demonstration Curation Metrics: Action-Only Scorers Fail on the Structural Defects That Degrade Imitation Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Auditing Demonstration Curation Metrics: Action-Only Scorers Fail on the Structural Defects That Degrade Imitation Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.05588" target="_blank" rel="noreferrer">2606.05588</a></span>
+        <span>作者: Aarav Bedi Team</span>
+        <span>日期: 2026-06-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在模仿学习中，策略的性能继承自其训练的演示数据质量。尽管收集到的大规模演示数据集往往质量参差不齐，但行为克隆策略会不加区分地模仿所有数据。数据筛选（Curation）因此成为一个显而易见的解决方案，即通过某种质量评估指标对演示进行评分，并过滤掉低分样本。文献中提出了多种评估指标，例如轨迹平滑度（如频谱弧长）或特征空间中的异常值检测（如隔离森林）。然而，这些方法存在两个关键问题：第一，每种指标都在不同的数据上和不同的协议下进行验证，缺乏一个统一的基准来比较它们孰优孰劣；第二，更重要的是，一个指标擅长于识别“看起来异常”的演示，但这与识别“会损害策略性能”的演示是两个不同的问题。当前缺乏研究来验证这些指标在后者上的有效性。</p>
+<p>本文旨在填补这一空白，提出了一个控制实验的测试平台，核心思路是：在已知缺陷类型和位置的情况下，向演示数据注入缺陷，然后系统性地审计多种筛选指标在两个维度上的表现——一是检测缺陷的准确性，二是使用该指标筛选后的数据训练出的行为克隆策略在下游任务中的实际成功率提升。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文构建了一个轻量化的测试平台，旨在分离并评估筛选指标在“缺陷检测”和“下游策略提升”两个方面的性能。整体流程如下：</p>
+<p><img src="https://arxiv.org/html/2606.05588v1/2606.05588v1/x1.png" alt="方法框架图"></p>
+<blockquote>
+<p><strong>图1</strong>：方法整体评估框架。左侧为数据生成流程：先由脚本控制器生成干净的成功演示，然后通过缺陷注入器产生有缺陷的演示，形成被污染的数据集。右侧为审计流程：首先，各个筛选指标（仅能访问状态和动作序列）为每个演示计算质量分数；其次，根据分数保留排名靠前的演示子集；最后，使用固定数量的演示训练行为克隆策略，并评估其下游任务成功率。</p>
+</blockquote>
+<p><strong>1. 环境与任务：</strong><br>使用基于NumPy的轻量级模拟器，模拟单臂ALOHA设置的抓取放置任务。状态观测为11维，包括末端执行器位置和姿态、夹爪状态、带噪声的物体位置估计以及归一化的时间索引。动作为7维。任务目标是抓取物体并将其移动到固定目标区域。</p>
+<p><strong>2. 缺陷注入机制：</strong><br>首先由可访问特权状态的脚本控制器生成100%成功的“干净”演示。然后，通过注入缺陷产生“有缺陷”的演示，缺陷类型被记录但不提供给任何筛选指标。研究两种缺陷范式，各以40%的污染率注入：</p>
+<ul>
+<li><strong>细微扰动</strong>：包括：(i) <strong>动作噪声</strong>：向动作添加时间相关的AR(1)噪声，模拟摇晃的遥操作；(ii) <strong>震颤</strong>：向动作添加高频正弦波；(iii) <strong>截断</strong>：将回合长度截断至约一半；(iv) <strong>绕路</strong>：在回合中段反向插入一段轨迹，形成循环。</li>
+<li><strong>结构性错误</strong>：<strong>提早释放</strong>：在携带阶段命令夹爪打开，导致物体在半途掉落。这不是噪音，而是在状态空间特定部分的系统性错误动作。</li>
+</ul>
+<p><strong>3. 被审计的筛选指标：</strong><br>评估了七种仅基于状态和动作序列计算每个演示质量分数的指标：</p>
+<ul>
+<li><strong>纯动作指标</strong>：<code>平滑度</code>（动作速度频谱的弧长）、<code>熵</code>（动作序列的标准差）、<code>长度</code>（轨迹长度）、<code>隔离森林</code>与<code>集成</code>（两者都在从动作导出的汇总特征向量上进行操作）。</li>
+<li><strong>状态轨迹感知指标</strong>：<code>kNN</code>：根据演示在包含状态轨迹摘要的轨迹级特征空间中到其最近邻居的距离进行评分，偏离数据流形的演示得分低；<code>轨迹对齐</code>：根据演示的状态轨迹与数据集聚合行为的一致性进行评分。<br>此外，使用基于隐藏缺陷标签进行筛选的<code>Oracle</code>作为理论上完美筛选的性能上界。</li>
+</ul>
+<p><strong>4. 评估协议：</strong></p>
+<ul>
+<li><strong>检测轴</strong>：计算每个指标的质量分数与隐藏的缺陷/干净标签之间的ROC曲线下面积（AUROC）。</li>
+<li><strong>下游轴</strong>：根据每个指标的评分，保留排名靠前的演示子集，然后从一个<strong>固定大小（N=150）</strong> 的保持池中采样，训练一个三层MLP行为克隆策略，并在50次新的模拟运行中测量任务成功率。固定训练集大小是为了隔离数据质量的影响，排除数据数量的干扰。所有结果均报告3个随机种子（42, 0, 7）下的均值和标准差。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在构建的测试平台上进行，对比了上述七种筛选指标以及Oracle和未筛选的污染全集基线。</p>
+<p><strong>关键实验结果：</strong></p>
+<p><img src="https://arxiv.org/html/2606.05588v1/2606.05588v1/x2.png" alt="缺陷检测AUROC对比"></p>
+<blockquote>
+<p><strong>图2</strong>：不同指标在两种缺陷范式下的缺陷检测AUROC。没有指标在两个范式中都可靠；<code>熵</code>和<code>集成</code>指标在一个或两个范式中出现“倒置”（AUROC低于0.5，即错误地将缺陷演示评为更高质量）。</p>
+</blockquote>
+<ul>
+<li><strong>检测能力截然不同</strong>：如表I和表II所示，没有指标在两个缺陷范式中都表现良好。对于细微扰动，多变量<code>隔离森林</code>检测能力最强（AUROC 0.968），<code>kNN</code>次之。而对于结构性错误，<code>隔离森林</code>退化至随机水平（0.543），只有关注状态轨迹的<code>kNN</code>（0.863）和<code>轨迹对齐</code>（0.762）能够检测。<code>平滑度</code>和<code>熵</code>指标在结构性错误上的AUROC甚至低于0.5，意味着它们倾向于将缺陷演示评为更高质量。在细微扰动范式中，<code>熵</code>指标也完全倒置（AUROC 0.000），因为相关噪声和震颤都会增大动作方差，使其将缺陷演示误判为“更具探索性”的高质量演示。</li>
+</ul>
+<p><strong>表I：细微扰动范式的检测AUROC（3个种子）</strong></p>
+<table>
+<thead>
+<tr>
+<th align="left">Metric</th>
+<th align="left">AUROC</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">isolation forest</td>
+<td align="left">0.968 ± 0.004</td>
+</tr>
+<tr>
+<td align="left">kNN</td>
+<td align="left">0.871 ± 0.003</td>
+</tr>
+<tr>
+<td align="left">length</td>
+<td align="left">0.625 ± 0.000</td>
+</tr>
+<tr>
+<td align="left">trajectory alignment</td>
+<td align="left">0.528 ± 0.044</td>
+</tr>
+<tr>
+<td align="left">smoothness</td>
+<td align="left">0.478 ± 0.005</td>
+</tr>
+<tr>
+<td align="left">ensemble</td>
+<td align="left">0.002 ± 0.001</td>
+</tr>
+<tr>
+<td align="left">entropy</td>
+<td align="left">0.000 ± 0.000</td>
+</tr>
+</tbody></table>
+<p><strong>表II：结构性错误范式的检测AUROC（3个种子）</strong></p>
+<table>
+<thead>
+<tr>
+<th align="left">Metric</th>
+<th align="left">AUROC</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">kNN</td>
+<td align="left">0.863 ± 0.025</td>
+</tr>
+<tr>
+<td align="left">trajectory alignment</td>
+<td align="left">0.762 ± 0.025</td>
+</tr>
+<tr>
+<td align="left">isolation forest</td>
+<td align="left">0.543 ± 0.031</td>
+</tr>
+<tr>
+<td align="left">length</td>
+<td align="left">0.500 ± 0.000</td>
+</tr>
+<tr>
+<td align="left">entropy</td>
+<td align="left">0.469 ± 0.028</td>
+</tr>
+<tr>
+<td align="left">ensemble</td>
+<td align="left">0.291 ± 0.028</td>
+</tr>
+<tr>
+<td align="left">smoothness</td>
+<td align="left">0.244 ± 0.020</td>
+</tr>
+</tbody></table>
+<ul>
+<li><strong>下游策略性能</strong>：<ul>
+<li><strong>细微扰动可恢复</strong>：如表III所示，在细微扰动范式中，未筛选的污染集训练的策略成功率为55.3%，Oracle上界为72.0%。<code>隔离森林</code>筛选恢复了大部分差距（策略成功率71.3%）。但此范式中不同种子的下游结果方差较大（高达±20%），因此作者建议将检测轴的稳定结果作为主要判断依据。</li>
+</ul>
+</li>
+</ul>
+<p><strong>表III：细微扰动范式的下游成功率（N=150, 50次运行, 3个种子）</strong></p>
+<table>
+<thead>
+<tr>
+<th align="left">Training set</th>
+<th align="left">Success (%)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">oracle clean only</td>
+<td align="left">72.0 ± 4.9</td>
+</tr>
+<tr>
+<td align="left">isolation forest</td>
+<td align="left">71.3 ± 10.9</td>
+</tr>
+<tr>
+<td align="left">smoothness</td>
+<td align="left">70.0 ± 9.1</td>
+</tr>
+<tr>
+<td align="left">length</td>
+<td align="left">56.7 ± 15.5</td>
+</tr>
+<tr>
+<td align="left">ensemble</td>
+<td align="left">56.0 ± 16.1</td>
+</tr>
+<tr>
+<td align="left">full contaminated</td>
+<td align="left">55.3 ± 0.9</td>
+</tr>
+<tr>
+<td align="left">entropy</td>
+<td align="left">41.3 ± 20.2</td>
+</tr>
+</tbody></table>
+<p><img src="https://arxiv.org/html/2606.05588v1/2606.05588v1/x3.png" alt="结构性错误下游成功率"></p>
+<blockquote>
+<p><strong>图3</strong>：结构性错误范式的下游策略成功率。虚线标明了Oracle（绿色）和无筛选基线（灰色）。只有<code>kNN</code>显著改善了有污染的基线；纯动作指标与之持平或更低（如<code>平滑度</code>）。</p>
+</blockquote>
+<pre><code>- **结构性错误难以修复**：如表IV所示，结构性错误造成的下游差距更大（污染集36.0% vs. Oracle 62.7%，相差26.7%），但筛选帮助有限。只有`kNN`恢复了约三分之一的差距（48.0%）。**没有任何纯动作指标带来改善**，其中`平滑度`、`集成`、`熵`的点估计甚至低于未筛选基线（尽管由于种子方差，这种下降未构成统计上显著的尖锐效应）。
+</code></pre>
+<p><strong>表IV：结构性错误范式的下游成功率（N=150, 50次运行, 3个种子）</strong></p>
+<table>
+<thead>
+<tr>
+<th align="left">Training set</th>
+<th align="left">Success (%)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">oracle clean only</td>
+<td align="left">62.7 ± 4.7</td>
+</tr>
+<tr>
+<td align="left">kNN</td>
+<td align="left">48.0 ± 4.3</td>
+</tr>
+<tr>
+<td align="left">length</td>
+<td align="left">38.7 ± 5.0</td>
+</tr>
+<tr>
+<td align="left">trajectory alignment</td>
+<td align="left">37.3 ± 5.0</td>
+</tr>
+<tr>
+<td align="left">full contaminated</td>
+<td align="left">36.0 ± 4.3</td>
+</tr>
+<tr>
+<td align="left">isolation forest</td>
+<td align="left">35.3 ± 2.5</td>
+</tr>
+<tr>
+<td align="left">ensemble</td>
+<td align="left">32.0 ± 5.7</td>
+</tr>
+<tr>
+<td align="left">entropy</td>
+<td align="left">30.7 ± 3.4</td>
+</tr>
+<tr>
+<td align="left">smoothness</td>
+<td align="left">27.3 ± 6.8</td>
+</tr>
+</tbody></table>
+<ul>
+<li><strong>高检测精度不等于高下游恢复</strong>：</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.05588v1/2606.05588v1/x4.png" alt="检测AUROC与下游成功率关系"></p>
+<blockquote>
+<p><strong>图4</strong>：结构性错误范式中，检测AUROC与下游成功率的关系。检测能力相近的指标（<code>kNN</code>和<code>轨迹对齐</code>）产生了显著不同的下游恢复效果。</p>
+</blockquote>
+<p>如图4所示，在结构性错误范式中，<code>kNN</code>和<code>轨迹对齐</code>的检测AUROC相近（0.86 vs. 0.76），但下游性能相差11个百分点。这表明，检测准确性是必要的，但并不充分；指标筛选时具体剔除了哪些演示，以及错误地丢弃了哪些干净演示作为附带损害，与其排名质量同等重要。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<ol>
+<li><p><strong>核心贡献</strong>：</p>
+<ul>
+<li><strong>审计框架与测试平台</strong>：提供了一个可控的实验框架，明确分离并评估了筛选指标在“缺陷检测”与“下游策略提升”两个通常被混淆的目标上的表现。</li>
+<li><strong>揭示了纯动作指标的局限性</strong>：研究发现，对于关键的结构性错误（如提早释放），所有纯动作指标（平滑度、熵等）均无法检测，其中一些甚至具有“倒置”效应，错误地将缺陷演示评为更高质量，用于筛选可能导致策略性能不如不筛选。</li>
+<li><strong>强调了状态轨迹信息的重要性</strong>：只有那些考察状态轨迹的指标（如kNN）才有机会检测结构性错误，但也仅能部分恢复下游性能差距。同时，研究指出高缺陷检测精度并不能保证策略性能的相应提升。</li>
+</ul>
+</li>
+<li><p><strong>论文提到的局限性</strong>：</p>
+<ul>
+<li>实验环境为轻量级模拟器，任务单一（单臂抓放），感知以带噪声的物体位置估计替代原始像素，缺陷为人工注入而非来自真实操作者，且仅测试了行为克隆策略。这些设计选择牺牲了真实性以换取清晰的对照实验。</li>
+<li>仅使用了3个随机种子，且细微扰动范式的下游结果方差较大，因此下游成功率的具体数值应被视为初步结果，而检测结果更为稳定。</li>
+<li>由于缺陷是特意设计的，两种范式被有意安排来跨越动作/状态边界，因此纯动作指标对结构性错误的“失明”部分是由于设计本身。研究的实质发现在于下游差距的大小以及“检测到缺陷不等于能从中恢复”的结论。</li>
+</ul>
+</li>
+<li><p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li><strong>评估方式的转变</strong>：评估筛选方法时，应以训练出的策略性能为最终判断标准，而非仅仅报告其缺陷检测的准确率。</li>
+<li><strong>指标的选择</strong>：实践中应根据预期缺陷类型选择筛选指标。多变量异常检测适用于细微扰动，但面对结构性错误时，必须使用状态轨迹感知的指标。</li>
+<li><strong>未来方向</strong>：需要在更多随机种子、接触丰富的物理仿真环境（如robosuite）、真实多人演示数据集、更多任务和缺陷类型以及超越行为克隆的策略上进行扩展研究，以验证定性结论的普适性并获取更稳健的定量结果。</li>
+</ul>
+</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文审计模仿学习中示范数据筛选指标的有效性。核心问题是揭示现有指标能否识别真正损害策略性能的示范缺陷，尤其关注仅基于动作的评分器（action-only scorers）的局限性。研究方法是在仿真环境中构建受控测试平台，注入已知类型和位置的缺陷，然后从缺陷检测能力和对下游行为克隆策略性能的改善两方面，评估七个筛选指标。
+
+实验发现：对于细微扰动（如相关动作噪声），采用多变量异常值检测的方法可有效识别，移除后能完全恢复下游策略性能；但对于结构性错误（如在关键节点执行错误动作），所有被测试的仅动作指标均失效，其中两个指标甚至反向评分，误将缺陷示范评为高质量，导致筛选后策略性能不增反降。只有检查状态轨迹的指标能检测此类错误，但最佳指标也只能挽回约三分之一的下游性能损失。研究明确指出高检测精度不等于能带来下游性能提升。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.05588" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
