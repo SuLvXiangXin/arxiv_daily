@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>GenPO++: Generative Policy Optimization with Jacobian-free Likelihood Ratios - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>GenPO++: Generative Policy Optimization with Jacobian-free Likelihood Ratios</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.06967" target="_blank" rel="noreferrer">2606.06967</a></span>
+        <span>作者: Ye Shi Team</span>
+        <span>日期: 2026-06-05</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在连续控制任务的强化学习中，主流方法是使用简单的高斯策略配合稳定的基于似然比的更新算法。然而，高斯策略表达能力有限，通常只能表示单峰动作分布，在处理多峰动作选择、接触丰富的动力学或不连续动作流形等任务时面临困难。基于扩散模型和流模型的生成式策略为此提供了有前景的替代方案，能够表达丰富的条件动作分布。然而，将此类生成式采样器转化为有效的上策略学习面临核心障碍：评估已执行动作在新策略下的概率（即状态-动作似然比）非常困难，这导致生成式策略的表达力与维持上策略学习稳定的似然比机制之间存在鸿沟。</p>
+<p>现有方法在解决此问题上存在局限性：流策略优化通过ELBO构建代理似然比，但这可能与真实的动作密度比存在偏差，导致有偏更新；GenPO则通过虚拟动作扩增来构建完全可逆的生成式策略，但这会扩增动作空间、引入冗余探索变量并增加计算开销。本文针对“如何在保持策略表达能力的同时，实现精确且高效的似然比计算”这一具体痛点，提出了利用高阶ODE求解器中自然产生的历史状态作为辅助记忆，以替代独立虚拟动作的新视角。核心思路是设计一个伴侣形式的可逆流策略求解器，其逆变换可以闭式求解，并且其对数行列式（决定似然比）仅由固定的求解器系数决定，从而在保持原始动作维度的前提下，实现精确且雅可比无关的似然比计算。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>GenPO++的整体框架旨在构建一个可逆的高阶流策略，用于基于似然比的上策略强化学习。该方法首先从噪声分布中采样一个增广的初始状态对，然后通过一系列可逆的转移步骤生成终端状态对，最终执行的仅是其中的第一个动作分量。</p>
+<p><img src="https://arxiv.org/html/2606.06967v1/2606.06967v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：GenPO++ 与 GenPO 的流程对比。GenPO 通过虚拟动作扩增实现可逆性，这会使动作空间翻倍并引入冗余探索；而 GenPO++ 在可逆高阶流求解器中使用求解历史状态替代虚拟动作，实现了精确反转和雅可比无关的似然比计算，同时保持了原始动作维度。</p>
+</blockquote>
+<p>方法的核心模块是可逆的高阶策略求解器。具体而言，在每一步 <code>i</code>，不再仅演化单个流变量 <code>x_i</code>，而是维护一个增广的状态对 <code>(x_i, x_{i-1})</code>。其前向转移定义为伴侣形式：<code>x_{i+1} = (1-σ) x_i + σ x_{i-1} + (1+σ) Δ_t v_θ(x_i, t_i|s)</code>。该变换在 <code>x_i</code> 上通过速度场 <code>v_θ</code> 是非线性的，但在历史状态 <code>x_{i-1}</code> 上是线性的，常系数为 <code>σI</code>。正是这种结构使得其逆变换可以闭式求出：<code>x_{i-1} = σ^{-1} [x_{i+1} - (1-σ)x_i - (1+σ) Δ_t v_θ(x_i, t_i|s)]</code>。由于在逆过程中 <code>x_i</code> 已知，因此可以直接计算速度场，而无需非线性求解或近似。</p>
+<p>该方法的关键创新点在于其雅可比无关的似然计算。前向映射关于增广变量 <code>z_i = (x_i, x_{i-1})</code> 的雅可比矩阵行列式是一个常数：<code>det J_i = (-1)^d σ^d</code>，其中 <code>d</code> 是动作空间的维度。这意味着整个生成过程的对数行列式之和仅取决于固定的系数 <code>σ</code> 和步骤数，而与神经速度场的具体参数无关。因此，精确的似然比 <code>r~(θ)</code> 最终仅取决于反向映射回噪声空间的初始状态对 <code>z_0</code>，而与复杂的前向生成过程脱钩。该方法通过增广的KL散度作为保守估计来监控策略变化，并用于自适应学习率控制，最终使用标准的PPO裁剪替代目标进行策略更新。</p>
+<p>与现有方法相比，GenPO++的创新点具体体现在：1) 避免了虚拟动作扩增，保持了预训练流模型或扩散策略的原始动作表示，这对微调任务尤为重要；2) 避免了重复的神经网络雅可比行列式计算，降低了学习时的计算开销；3) 使用精确的似然比而非代理目标，在代理目标可能与真实执行动作分布发生偏离的场景下提升了训练稳定性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了三个层面的任务进行评估：1) 大规模模拟控制基准（IsaacLab中的8个任务）；2) 从模仿学习到在线RL的微调任务；3) 真实世界机器人灵巧手操作任务（转动手柄和翻转物件）。</p>
+<p>对比的基线方法包括：高斯策略PPO（PPO）、扩散策略微调（DPPO）、流策略优化（FPO）以及前代方法GenPO。</p>
+<p>在IsaacLab大规模模拟基准测试中，GenPO++在大部分任务上取得了优于或与当前最佳方法相当的性能。</p>
+<p><img src="https://arxiv.org/html/2606.06967v1/2606.06967v1/x2.png" alt="学习曲线"></p>
+<blockquote>
+<p><strong>图3</strong>：在8个IsaacLab基准任务上的学习曲线。X轴为迭代次数，Y轴为平均回合回报。GenPO++在大部分任务中表现出更快的学习速度或更高的最终性能。</p>
+</blockquote>
+<p>在从模仿学习到RL的微调任务中，GenPO++在保持高初始性能（继承模仿学习策略）的同时，能够稳定地进一步提升。</p>
+<p><img src="https://arxiv.org/html/2606.06967v1/2606.06967v1/x4.png" alt="微调性能"></p>
+<blockquote>
+<p><strong>图5</strong>：在“立方体堆叠”微调任务中的成功率。左侧：学习曲线；右侧：最终性能统计。GenPO++展现了最稳定的学习过程和最高的最终成功率（约95%）。</p>
+</blockquote>
+<p>在真实世界灵巧手操作任务中，GenPO++在任务成功率上显著优于其他生成式策略优化方法。</p>
+<p><img src="https://arxiv.org/html/2606.06967v1/2606.06967v1/x7.png" alt="真实世界成功率"></p>
+<blockquote>
+<p><strong>图8</strong>：真实世界“转动手柄”任务的成功率。GenPO++取得了最高的平均成功率（约70%），而其他方法（FPO， GenPO）成功率较低或极不稳定。</p>
+</blockquote>
+<p>消融实验分析了可逆更新和历史辅助两个组件的重要性。</p>
+<p><img src="https://arxiv.org/html/2606.06967v1/2606.06967v1/x9.png" alt="消融研究"></p>
+<blockquote>
+<p><strong>图10</strong>：IsaacLab任务上的消融研究。移除非可逆更新（Non-Reversible）或历史辅助（No-History）均会导致性能显著下降，表明两者均为GenPO++成功的关键。</p>
+</blockquote>
+<p>此外，实验表明GenPO++在训练稳定性和一致性方面优于FPO和GenPO，这体现在回报方差更小、对超参数敏感性更低。</p>
+<p><img src="https://arxiv.org/html/2606.06967v1/2606.06967v1/x11.png" alt="稳定性分析"></p>
+<blockquote>
+<p><strong>图12</strong>：不同随机种子下的学习曲线展布。GenPO++（右二）在不同运行间展现出更高的稳定性（曲线束更紧凑）。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) 提出了一种利用高阶ODE求解器中历史状态作为辅助记忆来构造可逆生成式策略的方法，实现了精确且雅可比无关的似然比计算；2) 避免了现有精确似然比方法所需的虚拟动作空间扩增，保持了策略的原始动作维度，更适合微调等场景；3) 通过理论分析和大量实验验证了该方法在模拟和真实世界任务中，在性能、稳定性和效率上的优势。</p>
+<p>论文本身并未明确阐述局限性，但从其方法论出发，可推测其性能可能在一定程度上依赖于所选ODE求解器的阶数和系数（如σ），对不同问题可能需要调整。其对“历史状态”的使用也增加了单步计算的内存占用（虽然未扩增动作维度）。</p>
+<p>本文工作对后续研究的启示在于：为生成式模型应用于需要精确似然比的上策略学习提供了一个新颖且高效的解决方案框架；其利用求解器内部状态（而非外部扩增）来实现可逆性的思路，可能启发其他需要可逆映射的生成模型应用；同时，该方法在真实世界机器人任务中展示的有效性，推动了表达力强的生成式策略走向更复杂的实际应用。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出GenPO++，解决生成式流策略在强化学习中难以精确计算动作概率比的问题。方法采用可逆ODE求解器，以历史状态作为辅助记忆实现精确反转，保持原始动作维度，从而通过固定求解器系数实现无雅可比矩阵的精确似然比计算。实验表明，该方法在模拟控制、微调及机器人操作任务中性能优于主流在线RL算法，同时提升了训练稳定性和计算效率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.06967" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LARA: Latent Action Representation Alignment for Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>LARA: Latent Action Representation Alignment for Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.07100" target="_blank" rel="noreferrer">2606.07100</a></span>
+        <span>作者: Siyuan Huang Team</span>
+        <span>日期: 2026-06-05</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>视觉-语言-动作（VLA）模型让机器人能够根据观测和语言指令直接预测动作，但其性能严重依赖大规模高质量的机器人动作数据。然而，机器人数据的收集成本高昂且难以泛化到不同机器人本体，导致数据稀缺，现有的先进VLA模型存在过拟合、难以泛化到新任务和环境的问题。为克服数据瓶颈，一个思路是利用丰富的、易于获取的无标注人类视频。潜在动作模型（LAM）通过学习视觉动态来压缩出潜在动作表示，从而为VLA学习提供额外的监督。然而，主流方法通常将LAM和VLA分开训练：LAM只在无标注视频上进行预训练，其学习过程未利用VLA训练时已知的真实动作轨迹进行“接地”；而VLA模型则被预训练好的、固定的LAM表示所约束，无法自适应地优化动作表示。</p>
+<p>本文针对LAM与VLA训练解耦的关键局限性，提出了通过潜在动作表示对齐来实现两者联合优化的新视角。核心思路是设计一个轻量级的对齐机制，让LAM在VLA训练过程中“接地”于真实动作以减少对虚假视觉变化的建模，同时让VLA模型受到LAM前向动态预测的约束以减少生成功能无效的动作轨迹。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LARA是一个即插即用的框架，旨在通过潜在动作表示的显式对齐来联合优化LAM和基于扩散的VLA模型。</p>
+<p><img src="https://arxiv.org/html/2606.07100v1/2606.07100v1/x1.png" alt="方法框架对比"></p>
+<blockquote>
+<p><strong>图2</strong>：LAM-based VLA模型的对比。传统方法（左）中，LAM作为VLA学习的伪标签提供者，两者训练解耦；LARA方法（右）则通过显式对齐其潜在表示来联合优化LAM和VLA模型。</p>
+</blockquote>
+<p>整个流程始于一个标准的LAM模块，它包含三个组件：<strong>逆动态模型（IDM）</strong> 根据当前帧和未来帧预测连续的潜在动作 <code>z_t</code>；<strong>矢量量化器</strong> 将 <code>z_t</code> 离散化为码本中的token <code>z_t^q</code>；<strong>前向动态模型（FDM）</strong> 根据当前帧和量化后的潜在动作重建未来帧。LAM通过VQ-VAE目标进行训练，结合了重建损失、量化器损失和承诺损失。与此同时，一个扩散基的VLA模型从视觉观测、语言指令和机器人本体感受中提取条件输入，并通过流匹配目标学习生成未来多步的动作序列。其网络（如DiT）可视为一个编码器-解码器结构，在中间层会产生特征表示 <code>h_t^θ</code>。</p>
+<p><img src="https://arxiv.org/html/2606.07100v1/2606.07100v1/x2.png" alt="LARA方法概览"></p>
+<blockquote>
+<p><strong>图3</strong>：LARA方法概览。在联合训练阶段，LARA将对齐损失施加于扩散VLA模型的中间层特征 <code>h_t^θ</code> 和LAM的连续潜在动作 <code>z_t</code> 之间，从而以端到端方式共同优化两个模型。</p>
+</blockquote>
+<p>LARA的核心创新在于引入了一个潜在动作表示对齐损失 <code>L_LARA</code>，促使VLA模型的中间特征 <code>h_t^θ</code> 与LAM的连续潜在动作 <code>z_t</code> 在余弦相似度上对齐。一个可学习的投影头 <code>f_ψ</code> 用于适配两个表示空间。该对齐损失与VLA的动作生成损失 <code>L_ACT</code> 和LAM的重建损失 <code>L_LAM</code> 共同构成总损失进行联合优化。这种设计产生了双向正则化效应：</p>
+<ol>
+<li><strong>对LAM的逆动态正则化</strong>：对齐约束使LAM的潜在动作空间更关注与控制相关的视觉变化，抑制光照、阴影等与动作执行无关的虚假因素，学习更具动作中心性的表示。</li>
+<li><strong>对VLA的前向动态接地</strong>：将VLA的生成过程锚定在LAM学习到的、具有前向预测能力的潜在动作上，为动作策略注入了对未来状态演变的显式建模，有助于减少生成运动学上合理但功能无效的“幻觉”轨迹。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p>论文在3个仿真基准和1个精心设计的真实世界机器人操作基准上验证了LARA。仿真基准包括<strong>LIBERO</strong>（空间/物体/目标/长时任务）、<strong>SIMPLER-ENV</strong>（拾取/移动/开关抽屉任务）和**GR1-Sim-24(30)<strong>（24项双手仿真任务）。真实世界基准</strong>G1-Real(50)**在Unitree G1人形机器人上测试了“拾放”和“抓取倾倒”两个复合任务。</p>
+<p>实验设置了两种对比模式：<strong>OXE约束对比</strong>（所有模型仅使用Open-X-Embodiment数据集进行预训练）以凸显模型设计本身的效果；<strong>无约束对比</strong>（不限制预训练数据）以对比最先进模型的性能极限。Baseline方法包括OpenVLA、Octo、Moto-GPT、LAPA、SpatialVLA、CoT-VLA、π0-FAST、GR00T-N1.6 等。</p>
+<p><img src="https://arxiv.org/html/2606.07100v1/2606.07100v1/x3.png" alt="任务可视化"></p>
+<blockquote>
+<p><strong>图4</strong>：GR1仿真和G1真实世界评估的任务示意图。左图为GR1仿真中的一个代表性双手任务；右图展示了G1机器人上执行的“拾放”和“抓取倾倒”两个真实世界任务。</p>
+</blockquote>
+<p><strong>关键实验结果总结如下：</strong></p>
+<ol>
+<li><strong>作为完整VLA训练框架</strong>：在OXE约束对比下，LARA (full) 在LIBERO和SIMPLER-ENV上的平均成功率分别达到88.6%和65.2%，相比最佳的基线方法（Moto-GPT和SpatialVLA）总体提升了约12%和4%。相较于没有对齐的LARA (DiT-only) 基线，提升约为5%和16.8%。</li>
+<li><strong>作为后训练增强模块</strong>：在无约束对比下，将LARA应用于预训练好的GR00T-N1.6模型进行后训练，得到的GR00T-N1.6-LARA在所有基准测试上均一致超越了原始模型。例如，在LIBERO和SIMPLER-ENV上平均分别提升了0.6%和1.3%，在GR1-Sim-24上从47.0%提升至48.5%，在G1-Real上平均从72.0%提升至76.0%。</li>
+<li><strong>作为潜在动作优化器</strong>：当将经过LARA联合训练优化后的LAM作为伪标签用于下游VLA学习（如LAPA框架）时，相比使用原始LAM，性能平均提升了约15%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.07100v1/2606.07100v1/x4.png" alt="仿真与真实世界定量结果"></p>
+<blockquote>
+<p><strong>表1</strong>：在LIBERO和SIMPLER-ENV基准上的性能对比。LARA (full) 在OXE约束对比中显著优于现有方法，并在无约束对比中作为后训练模块提升了先进模型GR00T-N1.6的性能。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.07100v1/2606.07100.v1/x5.png" alt="GR1与G1评估结果"></p>
+<blockquote>
+<p><strong>表2</strong>：在GR1仿真和G1真实世界基准上的定量结果。LARA在两种设置下均带来了显著提升，特别是在真实世界的复杂任务上。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：论文通过对比LARA (full) 和 LARA (DiT-only) 的显著性能差距，验证了表示对齐核心组件的有效性。实验表明，对齐的层数、损失权重 <code>w1</code> 和 <code>w2</code> 的选择对最终性能有重要影响，最佳对齐位置通常在DiT的倒数第二层。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了LARA，一个通过潜在动作表示对齐来联合优化LAM与VLA模型的新颖框架，解决了二者训练解耦的问题；2）展示了LARA的多种应用方式，既可作为一个强大的VLA训练流程，也可作为即插即用的后训练增强模块，还能用于优化LAM的表示质量；3）在多个仿真和真实机器人基准上进行了全面验证，平均在完整训练、后训练增强和LAM优化三种场景下分别带来了约10%、5%和15%的性能提升。</p>
+<p>论文自身提到的局限性主要在于联合训练LAM和VLA需要一体化的训练流程，计算成本相对较高。这项工作对未来研究的启示在于：首先，证明了在机器人学习中实现不同模型组件（动态模型与策略模型）表示对齐的有效性；其次，其即插即用的设计思路为增强现有大规模VLA模型提供了一种轻量级途径；最后，启发后续工作可以探索更高效、更通用的跨模态表示对齐机制，以更好地利用海量无标签视频数据。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作（VLA）模型因真实机器人动作数据稀缺而性能受限，且潜在动作模型（LAM）与VLA分开训练导致表示未对齐的问题，提出潜在动作表示对齐（LARA）框架。该方法通过联合优化LAM和VLA的表示对齐，使LAM学习动作轨迹以避免虚假视觉变化，VLA则通过LAM的前向动力学正则化减少无效轨迹幻觉。实验表明，在3项模拟和1项真实机器人操作基准上，LARA在预训练、后训练增强和LAM细化中分别实现约10%、5%和15%的平均性能提升。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.07100" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

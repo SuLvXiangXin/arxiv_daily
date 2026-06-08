@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RhinoVLA Technical Report - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>RhinoVLA Technical Report</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.07383" target="_blank" rel="noreferrer">2606.07383</a></span>
+        <span>作者: Yuxi Liu Team</span>
+        <span>日期: 2026-06-05</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型已成为机器人操作和具身决策的有力工具。主流方法采用预训练的视觉-语言模型作为语义骨干，结合专门的动作模块生成连续控制指令。然而，在真实机器人上进行实时闭环部署面临巨大挑战。关键在于，模型规模并非唯一的瓶颈，VLA的标记结构如何映射到边缘硬件上才是核心问题。分析表明，在典型VLA推理流程中，VLM骨干和动作专家占据了超过90%的运行时延。更细致的算子级分析揭示，VLM的大部分延迟来自MLP投影算子。这些以通用矩阵乘法为主的运算，在模型维度固定时，其计算量随输入标记（尤其是视觉标记和上下文标记）的数量线性增长，导致即使参数量相近的VLA模型也可能因视觉标记组织形式不同而产生悬殊的推理速度。</p>
+<p>针对上述部署瓶颈，本文提出了RhinoVLA，一个面向部署、并与灰犀R1边缘SoC协同设计的VLA模型。本文的核心思路是：通过采用标记高效的Qwen3-VL骨干显著降低VLM侧的标记与计算负担，同时引入一个统一的接口框架来解决跨机器人学习时观测与动作模式异构的关键痛点，最终通过算法-系统的协同优化实现满足实时控制要求的边缘推理速度。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RhinoVLA沿用了类似π_0.5的“VLM骨干 + 动作专家”的两模块分解设计：</p>
+<ol>
+<li><p><strong>视觉-语言骨干</strong>：负责编码机器人视觉观测和语言指令。RhinoVLA采用参数为2.13B的Qwen3-VL作为骨干。在常见的224×224图像设置下，Qwen3-VL通过空间合并，将每张图像表示为约64个视觉标记，这相较于π_0.5使用的PaliGemma-224骨干所需的256个图像标记减少了4倍，从而从源头降低了后续MLP GEMM运算的计算量，同时保留了强大的预训练多模态能力。</p>
+</li>
+<li><p><strong>连续动作专家</strong>：负责生成连续的动作片段。其参数量（0.40B）与π_0.5的动作专家（约0.43B）相当，但围绕Qwen3-VL接口进行了重新设计，使用了兼容的Transformer组件。在每个降噪步骤中，动作专家接收以下条件输入：Qwen3-VL的最后18层KV缓存、当前72维机器人状态、状态/动作掩码、带噪声的动作片段、流匹配时间和机器人实例索引，并预测在统一的72维动作槽位空间上的流速度，无效维度会被掩码屏蔽。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.07383v1/2606.07383v1/x1.png" alt="RhinoVLA整体架构"></p>
+<blockquote>
+<p><strong>图3</strong>：RhinoVLA整体架构概述。该架构通过三个接口机制对齐异构机器人数据集：视图注册表、统一的72D物理槽位空间和机器人实例LoRA。动作专家以Qwen3-VL的视觉-语言记忆为条件，并预测有效动作槽位上的掩码流速度。</p>
+</blockquote>
+<p>为了支持跨异构机器人平台学习共享策略，RhinoVLA引入了三个核心对齐机制：</p>
+<ul>
+<li><strong>视图注册表</strong>：一个显式的映射机制，在预处理阶段将数据集特定的相机字段映射到固定的“角色-模态”词汇表（如<code>[head|rgb]</code>）。相应的标签被插入到图像内容之前，作为提示的一部分输入给Qwen3-VL。这使得相机身份与数据集特定的图像顺序解耦，确保了跨数据集观测的可比性。</li>
+<li><strong>统一的72D物理状态-动作槽位空间</strong>：一个为所有机器人定义的共享“契约”。其中每个槽位都有固定的物理意义（如手臂关节弧度、夹持器闭合比例、基座速度命令等），详见表2。通过附加的二进制状态掩码和动作掩码来指明每个样本中哪些槽位是有效/存在的。在训练时，无效的动作槽位会被排除在流匹配监督之外，防止引入虚假的监督信号。</li>
+<li><strong>机器人实例LoRA</strong>：在动作专家内部插入机器人特定的LoRA适配器。共享的动作专家从所有数据集学习通用的视觉-运动结构，而每个样本则根据其<code>instance_id</code>激活对应的LoRA模块，学习一个小的、机器人特定的残差修正。这种设计保持了统一的72D输出接口和部署计算图，同时能以低成本扩展新机器人。</li>
+</ul>
+<p>在训练策略上，RhinoVLA首先将来自Open X-Embodiment和AgiBotWorld等异构机器人演示数据源的数据，统一转换到上述视图注册表和72D槽位空间的接口中。在预训练阶段，模型同时优化三个可训练组件：VLM LoRA、共享的动作专家以及动作专家内部的机器人实例LoRA。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与数据集</strong>：部署测试在Huixi R1边缘SoC（7nm工艺，500 TOPS INT8算力）上进行。训练数据使用了Open X-Embodiment和AgiBotWorld等多个机器人演示数据源的联合空间子集。<br><strong>Baseline方法</strong>：主要对比对象为参数量相近的π_0.5模型，并参考了GR00T N1等模型在边缘硬件上的性能分析。<br><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>推理速度</strong>：RhinoVLA在Huixi R1上实现了11.69 Hz的端到端推理频率，满足了10 Hz的实时闭环控制目标。</li>
+<li><strong>任务性能</strong>：在下游任务准确性上，RhinoVLA达到了与π_0.5相当的水平。</li>
+<li><strong>性能瓶颈分析</strong>：<ul>
+<li>屋顶线分析表明，π_0.5和RDT等模型在5Hz目标频率下已接近或超过NVIDIA Jetson Orin的边缘算力极限，在10Hz时显著超出硬件能力。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.07383v1/2606.07383v1/x2.png" alt="VLA延迟分析"></p>
+<blockquote>
+<p><strong>图（补充）</strong>：VLA模型屋顶线分析，展示了不同模型在不同控制频率下对边缘硬件算力的需求。</p>
+</blockquote>
+<pre><code>- 延迟分解显示，在π_0.5的端到端延迟（~858.3 ms）中，VLM骨干和动作专家共占90%以上，是主要瓶颈。
+- VLM骨干内部的算子级延迟分解表明，MLP模块中的`gate_proj`、`up_proj`、`down_proj`三个线性投影算子共同占据了约74.7%的VLM延迟。
+</code></pre>
+<p><img src="https://arxiv.org/html/2606.07383v1/2606.07383v1/x3.png" alt="推理延迟分解"></p>
+<blockquote>
+<p><strong>图（补充）</strong>：VLM骨干内部算子级延迟分解，突显了MLP投影算子的主导地位。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.07383v1/2606.07383v1/x4.png" alt="下游任务性能对比"></p>
+<blockquote>
+<p><strong>图（补充）</strong>：下游任务性能对比，显示RhinoVLA在多个任务上与基线模型π_0.5性能相当。</p>
+</blockquote>
+<ol start="4">
+<li><strong>消融与特性分析</strong>：<ul>
+<li>论文通过消融实验验证了不同训练阶段（如仅训练动作专家、加入VLM LoRA、加入机器人实例LoRA）对模型性能的影响。结果显示，分阶段引入这些组件能有效提升策略成功率。<br><img src="https://arxiv.org/html/2606.07383v1/2606.07383v1/fig/rhynix_vla_stage1_stage2_loss_panels.png" alt="训练阶段消融实验"><blockquote>
+<p><strong>图（补充）</strong>：不同训练阶段的损失曲线与成功率变化，展示了各训练组件的贡献。</p>
+</blockquote>
+</li>
+<li>对机器人实例LoRA的嵌入向量进行分析，发现不同机器人的LoRA嵌入在向量空间中形成了有区分度的聚类，证明了LoRA成功学习到了与机器人实例相关的特征。<br><img src="https://arxiv.org/html/2606.07383v1/2606.07383v1/fig/rhynix_vla_instance_lora_embedding_analysis.png" alt="LoRA嵌入分析"><blockquote>
+<p><strong>图（补充）</strong>：机器人实例LoRA嵌入的PCA可视化，显示出不同机器人对应的嵌入形成了分离的簇。</p>
+</blockquote>
+</li>
+</ul>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li><strong>识别并解决了VLA的部署瓶颈</strong>：指出VLM视觉与上下文标记数量是边缘部署延迟的关键来源，并通过采用标记高效的Qwen3-VL骨干，在保持模型能力的同时实现了比同类模型更快的推理速度。</li>
+<li><strong>提出了统一的跨机器人训练框架</strong>：通过视图注册表、72D物理槽位空间和机器人实例LoRA三大机制，有效对齐了异构机器人的观测与动作模式，使得学习跨平台的共享视觉-运动策略成为可能。</li>
+<li><strong>实现了算法-系统的协同优化</strong>：结合高效的算法设计与针对Huixi R1 SoC的硬件感知编译、混合精度执行等优化手段，使RhinoVLA在边缘设备上达到了满足实时控制要求的推理性能（11.69 Hz）。</li>
+</ol>
+<p>论文也提及了其<strong>局限性</strong>：当前的72D槽位空间和训练数据未包含对腿部或脚部关节的监督，因此模型不具备移动导航能力。这为后续研究指明了方向，例如扩展槽位空间以支持更广泛的机器人形态，或进一步优化硬件与算法的协同设计以实现更高频率的闭环控制。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对VLA模型因视觉和上下文标记过多导致的边缘硬件部署延迟问题，提出部署导向的RhinoVLA模型。其关键技术包括：采用标记高效的Qwen3-VL骨干网络，以降低计算量；利用连续动作专家改进动作生成；并通过统一的界面（视图注册、72D物理状态-动作槽和LoRA适配）支持跨机器人策略迁移。在部署上，结合硬件感知编译、混合精度执行和并行视觉编码进行优化。实验表明，RhinoVLA在保持与π0.5相当性能的同时，在Huixi R1芯片上实现了11.69 Hz的端到端推理频率，满足了10 Hz的实时控制目标。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.07383" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
