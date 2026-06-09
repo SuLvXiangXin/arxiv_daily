@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Latent Diffusion Policy: Shaping Latent Spaces for Diffusion-Based Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Latent Diffusion Policy: Shaping Latent Spaces for Diffusion-Based Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.08657" target="_blank" rel="noreferrer">2606.08657</a></span>
+        <span>作者: Jie Mei Team</span>
+        <span>日期: 2026-06-07</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于扩散的视觉运动策略（如Diffusion Policy， DP3）在机器人操作领域表现出色，它们通过在原始动作空间中直接去噪生成动作序列，有效规避了行为克隆中的模式平均问题。然而，这些方法在单一的去噪过程中耦合了两个相互交织的任务：理解当前场景以确定目标动作分布，以及生成精确轨迹以实现该目标。这种耦合增加了速度场的有效复杂度。对于需要多臂间精确时序协调的操作任务，这种复杂性尤为突出，学习负担加重。</p>
+<p>本文针对扩散策略在原始动作空间中学习复杂度高这一痛点，提出了通过塑造潜在空间来简化生成任务的新视角。核心思路是引入一个两阶段的潜在扩散策略（LDP）：第一阶段使用观察条件化的CVAE编码器将场景理解吸收到潜在空间编码中，集中每个观察的条件分布；第二阶段则在由此塑造出的、分布更集中、速度场更平滑的潜在空间中进行流匹配生成，从而降低下游生成模型的复杂度。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Latent Diffusion Policy (LDP) 整体上是一个冻结的两阶段流水线，旨在解耦场景理解与轨迹生成。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法总览图"></p>
+<blockquote>
+<p><strong>图1</strong>：Latent Diffusion Policy (LDP) 概述。条件CVAE首先将动作序列压缩为潜在令牌，其中观察特征与轨迹令牌拼接以塑造潜在分布。随后，扩散Transformer通过带逐令牌扩散强制的流匹配学习生成潜在令牌。推理时，阶梯采样在不同令牌间错开去噪进度，冻结的CVAE解码器将生成的潜在映射回动作。</p>
+</blockquote>
+<p><strong>第一阶段：通过条件VAE塑造潜在空间</strong><br>LDP采用一个条件变分自编码器（CVAE）来学习一个结构化的潜在空间，供后续的流模型操作。给定动作序列和通过基于PointNet的编码器提取的观察特征，CVAE编码器将动作映射为一系列潜在令牌。具体而言，编码器首先通过一个带残差块的时间卷积分词器将归一化的动作投影为隐藏序列，将时间跨度压缩为K个潜在令牌。场景上下文通过将观察特征与轨迹令牌表示拼接来注入，使得后验网络能够同时以动作结构和场景上下文为条件。一个轻量级的解码器将潜在令牌映射回动作，且解码过程不依赖于观察条件，从而确保所有场景依赖的信息都通过编码器被编码到潜在结构中。在将潜在传递给流模型之前，对每个维度进行单位方差归一化。CVAE使用复合损失进行训练，包括重建损失（含速度和加速度平滑性惩罚）和KL散度（具有线性warmup调度），其中先验是一个学习的条件先验，用于将后验正则化到观察依赖的目标。</p>
+<p><strong>核心创新：观察条件化编码</strong>。无条件的编码器将所有动作通过相同的函数映射，而不考虑场景上下文，导致来自不同观察的潜在令牌混杂在一起。而观察条件化的编码器，通过接收场景特征作为额外输入，可以为每个观察专门定制其映射，将相同场景的潜在聚类到紧凑的区域中。这种分布重组使每个观察的条件潜在分布变得集中，从而简化了下游流模型需要逼近的条件速度场。</p>
+<p><strong>第二阶段：带扩散强制的潜在去噪</strong><br>在获得来自第一阶段的潜在空间后，LDP训练一个扩散Transformer（DiT）通过流匹配生成潜在令牌。观察特征和时间步信息通过自适应层归一化（adaLN）注入网络以进行条件生成。</p>
+<p><strong>核心创新1：逐令牌扩散强制</strong>。标准的流匹配为所有令牌分配共享的噪声水平，忽略了潜在令牌的序列结构。LDP采用逐令牌扩散强制：训练时，每个令牌j接收一个独立的噪声水平tj～U(ε, 1-ε)。这迫使模型利用处于不同去噪阶段的邻居令牌的上下文来预测部分去噪令牌的速度，从而学习利用跨段的时间依赖关系。相应的训练目标变为对每个令牌的预测误差求平均。</p>
+<p><strong>核心创新2：阶梯采样</strong>。逐令牌扩散强制引入了训练-推理的分布不匹配：标准的ODE推理对所有令牌使用共享的去噪调度，呈现出训练分布中从未见过的统一噪声配置。为解决此问题，LDP提出阶梯采样：每个令牌的去噪进度以一个固定的步长偏移δ错开，因此在每个推理步骤中，K个令牌跨越不同的噪声水平，重现了训练期间看到的逐令牌多样性。一个启发式的范围匹配准则预测最优偏移δ*=2，这与经验最优值吻合。</p>
+<p>与现有方法相比，LDP的创新点体现在：1）不是简单地将潜在空间视为压缩的副产品，而是通过观察条件化编码主动塑造其条件分布结构以简化生成；2）在序列潜在空间上使用逐令牌扩散强制来捕获时间依赖性；3）设计了阶梯采样推理方案以解决由此产生的分布不匹配问题。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在RoboTwin 2.0基准上进行，使用3D点云观察和双7自由度机械臂动作。每个任务使用50个专家演示进行训练，并使用100个回合进行评估。LDP将H=8步动作压缩为K=4个潜在令牌（dz=32）；DiT有L=6层；推理使用10步ODE和阶梯偏移δ=2（共16次模型调用）。对比基线包括DP（100步DDPM）、ACT（CVAE+Transformer解码器）、DP3（10步DDIM）和Flow Policy（1步一致性流匹配）。</p>
+<p><strong>关键实验结果</strong>：在主实验中，LDP在11个协调密集型任务上取得了65.7%的平均成功率，显著优于DP3的50.1%，并在9个任务上取得最佳结果。在需要精确臂间时序的任务上（如<code>stack_blocks_two</code>和<code>handover_block</code>）提升最大。</p>
+<p><img src="https://arxiv.org/html/2606.08657v1/2606.08657v1/x1.png" alt="结果对比与消融图"></p>
+<blockquote>
+<p><strong>图2</strong>：左图：在10个单模态任务上，rFID与下游成功率呈强负相关（r=-0.78），表明较低的rFID（更好的分布集中性）能强烈预测更高的成功率。右图：在3个任务上平均的阶梯偏移δ消融，δ*=2（由范围匹配启发式预测）实现了最高的平均成功率，而δ=0（同步采样）则大幅下降。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.08657v1/2606.08657v1/x2.png" alt="消融实验表"></p>
+<blockquote>
+<p><strong>图3</strong>：关键消融实验结果表。在三个关键任务上，移除观察条件化或阶梯采样会导致性能严重下降（分别下降35.0%和15.4%），证明了这两个组件的必要性。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：</p>
+<ol>
+<li><strong>阶梯采样</strong>：移除阶梯偏移（δ=0）使平均成功率从88.7%下降至73.3%。</li>
+<li><strong>观察条件化</strong>：从编码器中移除观察输入会严重损害协调任务性能，同时几乎不影响简单任务，这支持了“条件化在任务复杂度高时集中了流模型生成目标”的观点。</li>
+<li><strong>扩散强制</strong>：不使用逐令牌噪声的标准流匹配在所有5个测试任务上都表现不佳，尤其是在需要臂间时序的任务上。</li>
+<li><strong>潜在质量诊断</strong>：论文提出了重建FID作为轻量级诊断指标。如图2左所示，rFID与下游任务成功率呈强负相关，证实了潜在空间分布集中性对生成质量的关键作用。观察条件化编码比无条件基线降低了3到478倍的rFID。</li>
+<li><strong>潜在压缩权衡</strong>：LDP在协调任务上表现出色，但在高精度任务上表现不如DP3，这反映了4令牌潜在压缩的权衡：保留了轨迹级结构但平滑了子步修正。将潜在维度加倍（dz=64）会严重降低性能，表明在50演示的设定下，紧凑的128维表示是最佳的。</li>
+</ol>
+<p><strong>其他图表</strong>：<br><img src="https://arxiv.org/html/2606.08657v1/2606.08657v1/figures/staircase_ablation.png" alt="阶梯采样消融详情"></p>
+<blockquote>
+<p><strong>图4</strong>：阶梯采样消融的详细结果（对应论文附录表9）。展示了在12个任务上，使用阶梯采样（δ=2）相比同步采样（δ=0）带来的成功率提升，进一步验证了阶梯采样的普遍有效性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.08657v1/2606.08657v1/figures/real_setting.png" alt="真实世界设置"></p>
+<blockquote>
+<p><strong>图5</strong>：真实世界实验设置示意图。LDP部署在真实的Aloha-AgileX双臂机器人上，仅使用单个Intel RealSense D455相机和50次遥控演示。</p>
+</blockquote>
+<p><strong>真实世界实验</strong>：在没有模拟预训练的情况下，仅使用每个任务50次遥控演示，LDP在四个时序协调任务上进行了50次试验/任务，平均成功率达到76.5%（见表3），证明了其从有限演示中有效迁移到真实世界的能力。</p>
+<p><img src="https://arxiv.org/html/2606.08657v1/2606.08657v1/x3.png" alt="真实世界结果表"></p>
+<blockquote>
+<p><strong>图6</strong>：真实世界实验结果表（对应论文表3）。在四个任务上，LDP取得了76.5%的平均成功率。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>观察条件化潜在空间塑造</strong>，证明将场景理解吸收到编码器中可以集中每个观察的条件潜在分布，从而简化下游流生成任务，并引入了rFID作为无需完整流程训练的潜在架构诊断指标。</li>
+<li>设计了<strong>用于扩散强制的阶梯采样</strong>，通过将逐令牌扩散强制与阶梯推理调度相结合，恢复了训练与推理间的分布一致性，其启发式偏移推导与经验发现吻合。</li>
+<li>在<strong>协调任务性能</strong>上取得了显著提升，LDP在RoboTwin 2.0的协调密集型任务上大幅超过DP3，并能仅凭有限的遥控演示有效迁移到真实世界双臂操作。</li>
+</ol>
+<p><strong>局限性</strong>（论文自身指出）：</p>
+<ol>
+<li><strong>潜在压缩平滑了细粒度修正</strong>：将动作序列压缩为少量令牌会平滑细微的子步调整，导致在需要高精度操作（非强协调依赖）的任务上性能下降。</li>
+<li><strong>阶梯采样延迟较高</strong>：与单步流方法相比，阶梯采样需要更多前向传播次数，导致更高的推理延迟。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>注重表征而非仅压缩</strong>：为生成模型设计潜在空间时，应主动优化其条件分布结构以简化生成，而不仅仅是追求高重建精度。</li>
+<li><strong>序列生成的分布匹配</strong>：在使用逐元素条件扩散技术处理序列数据时，必须仔细考虑并解决由此引发的训练-推理分布不匹配问题。</li>
+<li><strong>自适应性与蒸馏</strong>：未来工作可以探索自适应的压缩粒度、对阶梯采样模型进行步数缩减蒸馏，以及开发能够服务多任务生成的CVAE。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>论文针对扩散策略在原始动作空间耦合场景理解与轨迹生成、导致学习复杂且多臂协调任务性能受限的问题，提出Latent Diffusion Policy (LDP)。该方法采用两阶段框架：通过观察条件化CVAE编码器塑造潜在空间以集中条件分布，简化流匹配；并利用逐令牌扩散强迫与阶梯推理采样处理时间依赖。实验表明，在RoboTwin 2.0协调任务上，LDP性能显著优于DP3，并能有效迁移至现实世界双臂部署。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.08657" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

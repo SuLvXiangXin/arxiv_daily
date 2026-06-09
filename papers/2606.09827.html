@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MemoryVLA++: Temporal Modeling via Memory and Imagination in Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>MemoryVLA++: Temporal Modeling via Memory and Imagination in Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.09827" target="_blank" rel="noreferrer">2606.09827</a></span>
+        <span>作者: Gao Huang Team</span>
+        <span>日期: 2026-06-08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前主流的视觉-语言-动作模型，如OpenVLA和π0，主要依赖于当前的单帧观测和语言指令来预测动作。然而，这种反应式策略忽略了任务中的时序依赖性，导致其在长时程、需记忆或需预测未来的任务上表现不佳。现有扩展时序信息的方法存在关键局限性：直接拼接连续历史帧会导致自注意力计算成本二次增长，且引入大量时序冗余，限制了上下文长度；而显式预测未来视频帧则计算开销巨大，且可能将像素级预测误差传播到动作生成中。</p>
+<p>本文针对VLA模型在完整时序建模上的不足，提出了结合记忆与想象的新视角。具体而言，受启发于人类的认知机制（如工作-情景记忆系统和内部模型），本文旨在为VLA模型同时赋予对过去经验的记忆能力和对未来状态的想象能力。本文的核心思路是：设计一个结合记忆库与世界模型的端到端框架，通过紧凑的表示来高效编码历史信息，并通过隐空间的去噪过程来捕获与决策相关的未来动态，从而实现对过去、现在、未来的全时序建模。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>MemoryVLA++的整体流程如图3所示：给定当前RGB观测<code>I</code>和语言指令<code>L</code>，首先由视觉-语言-认知模块编码为感知token（<code>p</code>）和认知token（<code>c</code>），形成工作记忆。接着，工作记忆查询一个感知-认知记忆库来检索相关的历史上下文信息，并通过门控机制进行自适应融合，得到记忆增强的表示<code>p̃</code>和<code>c̃</code>。同时，一个基于Stable Video Diffusion改造的世界模型对当前观测和指令进行部分去噪，生成未来想象的隐变量<code>z_img</code>。随后，一个记忆引导的想象集成模块将<code>z_img</code>与记忆增强的表示进行融合，形成完整的时序感知token。这些最终的token被用来条件化一个扩散动作专家，预测未来T步的7自由度机器人动作序列。</p>
+<p><img src="https://arxiv.org/html/2606.09827v1/2606.09827v1/x2.png" alt="Overall architecture"></p>
+<blockquote>
+<p><strong>图3</strong>：MemoryVLA++的整体架构。当前观测与指令被一个7B参数的VLM编码为感知和认知token（工作记忆）。工作记忆查询感知-认知记忆库以检索历史上下文。一个世界模型在隐空间中进行未来想象。记忆增强token与未来想象token被整合后，用于条件化扩散动作专家以预测动作序列。</p>
+</blockquote>
+<p>核心模块主要包括：</p>
+<ol>
+<li><strong>视觉-语言-认知模块</strong>：基于Prismatic VLM构建，使用DINOv2和SigLIP编码器并行提取原始视觉token。感知分支通过一个SE瓶颈压缩模块生成感知token <code>p</code>；认知分支将视觉token投影到语言嵌入空间并与指令拼接，输入LLaMA-7B，取EOS位置输出作为认知token <code>c</code>。</li>
+<li><strong>感知-认知记忆建模</strong>：包含一个感知-认知记忆库，分别存储低层细节和高层语义。其工作流程如图4所示：<strong>a)</strong> <strong>记忆检索</strong>：当前token <code>p</code> 和 <code>c</code> 作为查询，对带有时间步位置编码的记忆库进行交叉注意力计算，检索历史表示 <code>H^p</code> 和 <code>H^c</code>。<strong>b)</strong> <strong>门控融合</strong>：通过一个由当前和检索表示计算的门控向量 <code>g^x</code>，自适应地融合当前与历史信息（<code>x̃ = g^x ⊙ H^x + (1 - g^x) ⊙ x</code>）。<strong>c)</strong> <strong>冗余感知合并</strong>：当记忆库条目数超过容量 <code>L</code> 时，计算相邻条目的余弦相似度，将最相似的一对条目进行平均合并，以保持记忆紧凑。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.09827v1/2606.09827v1/x3.png" alt="Details of memory module"></p>
+<blockquote>
+<p><strong>图4</strong>：记忆模块细节。(a) 检索：当前token查询PCMB以获取相关历史背景。(b) 门控融合：当前token与检索到的历史表示通过门控机制自适应融合。(c) 合并：将最相似的相邻记忆条目合并以保持记忆库紧凑。</p>
+</blockquote>
+<ol start="3">
+<li><strong>基于世界模型的想象建模</strong>：如图5所示。首先，在机器人操作视频数据上对Stable Video Diffusion进行微调，以学习机器人中心的未来状态演化先验。在VLA训练时，<strong>a) 想象生成</strong>：冻结的世界模型对加噪的未来视频隐变量进行部分去噪，提取多尺度UNet中间特征 <code>{U_s}</code>，通过FPN聚合为隐token <code>z</code>，添加可学习时间嵌入后，使用想象转换器（包含查询空间注意力和时间注意力）进行压缩，输出紧凑的未来想象表征 <code>z_img</code>。<strong>b) 记忆引导的想象集成</strong>：记忆增强后的token <code>p̃</code> 和 <code>c̃</code> 通过交叉注意力机制关注 <code>z_img</code>，然后通过另一个门控机制自适应地集成未来想象信息，形成完整的时序感知token。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.09827v1/2606.09827v1/x4.png" alt="Details of imagination module"></p>
+<blockquote>
+<p><strong>图5</strong>：想象模块细节。(a) 想象生成：世界模型对当前观测和指令进行部分去噪，生成多尺度未来隐token，并通过空间和时间注意力进行压缩。(b) 记忆引导的想象集成：记忆增强的token与想象隐token进行注意力交互并自适应融合。</p>
+</blockquote>
+<p>本文的创新点具体体现为：1）首次在VLA模型中同时集成记忆与想象机制，实现覆盖过去、现在、未来的完整时序建模；2）设计了感知与认知并行的记忆库，并引入冗余感知合并机制，高效存储长时程上下文；3）提出基于视频扩散模型的隐空间想象生成与记忆引导集成，避免了昂贵的像素级预测，并抑制了决策无关的想象噪声。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了5个仿真基准（Libero, SimplerEnv, Mikasa-Robo, Calvin, Libero-Plus）和3类真实机器人任务（通用操作、长时程记忆依赖任务、长时程想象依赖任务），共涉及近200个任务和3种机器人平台（单臂UR5e、单臂Franka、双臂ARX5）。对比的基线方法包括OpenVLA、π0、CogACT、ContextVLA、TTF-VLA、TraceVLA等。</p>
+<p>关键实验结果如下：在仿真中，MemoryVLA++在Libero上的成功率为<strong>98.4%<strong>，在SimplerEnv上为</strong>74.0%<strong>。在长时程和时序任务上，Mikasa-Robo的成功率为</strong>44.4%<strong>（比基线提升15.0个百分点），Calvin得分为</strong>4.29</strong>。在评估鲁棒性与泛化的Libero-Plus上，成功率达到<strong>82.7%<strong>。在真实机器人实验中，其在通用操作、长时程记忆依赖、长时程想象依赖三类任务上的得分分别为</strong>85%<strong>、</strong>83%<strong>、</strong>77%<strong>，相比基线分别提升了</strong>9</strong>、<strong>26</strong>、<strong>28</strong>个百分点。</p>
+<p><img src="https://arxiv.org/html/2606.09827v1/2606.09827v1/x5.png" alt="Success rates and scores on various simulation benchmarks"></p>
+<blockquote>
+<p><strong>图6</strong>：在多个仿真基准上的成功率/得分对比。MemoryVLA++在Libero、SimplerEnv、Mikasa-Robo、Calvin和Libero-Plus上均超越了所有基线方法。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.09827v1/2606.09827v1/x6.png" alt="Real-world evaluation results on three categories of tasks"></p>
+<blockquote>
+<p><strong>图7</strong>：在三类真实机器人任务上的评估结果。MemoryVLA++在通用操作、长时程记忆依赖和长时程想象依赖任务上均取得最高分数，尤其在两类长时程任务上优势显著。</p>
+</blockquote>
+<p>消融实验（论文表VIII）验证了各核心组件的贡献：移除PCMB分别导致三个基准的性能下降10.8%、4.0%和14.4%；移除世界模型想象分别导致性能下降5.3%、3.5%和15.1%；移除记忆引导的想象集成分别导致下降2.9%、2.5%和10.1%。这证明了记忆与想象模块对于不同任务的重要性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1）提出了首个为VLA模型同时配备记忆与想象能力以实现完整时序建模的框架MemoryVLA++；2）设计了一种存储低层感知细节和高层认知语义的双流记忆库，并引入冗余感知合并机制来保持记忆的长期有效性；3）开发了基于世界模型的隐空间想象生成与记忆引导集成机制，高效地捕获与决策相关的未来动态。</p>
+<p>论文自身提到的局限性包括：感知-认知记忆库的容量是一个预设的超参数，需要权衡存储能力与计算效率；世界模型的适应需要高质量的机器人操作视频数据，且其泛化能力依赖于基础视频模型的先验。</p>
+<p>对后续研究的启示在于：将认知科学中的记忆与预测机制系统地引入到具身AI模型中是一个富有前景的方向；如何设计更高效的记忆压缩与检索算法，以及如何将大语言模型的推理能力更深度地整合到时序建模过程中，是值得进一步探索的问题；此外，探索能够同时学习记忆、想象和行动策略的完全端到端联合训练框架也是一个有潜力的未来方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有视觉-语言-动作模型依赖当前观测、难以处理长时程时序任务的问题，提出MemoryVLA++框架。方法核心是引入工作记忆和感知-认知记忆库以保存及检索历史信息，并利用世界模型在去噪潜在空间中想象未来状态，最终通过扩散动作专家预测时序一致的动作序列。实验在多个仿真与真实机器人任务中验证了其有效性，在真实机器人任务中，通用操作性能提升9%，依赖记忆的长时程任务提升26%，依赖想象的任务提升28%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.09827" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Targeting World Models to Compromise Robot Learning Pipelines - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Targeting World Models to Compromise Robot Learning Pipelines</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.09499" target="_blank" rel="noreferrer">2606.09499</a></span>
+        <span>作者: Eugene Bagdasarian Team</span>
+        <span>日期: 2026-06-08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，机器人学习主流方法主要分为基于大规模演示数据的行为克隆（BC）方法，如视觉-语言-动作（VLA）模型，以及基于环境交互的深度强化学习（DRL）。这些方法都需要大量高质量训练数据。世界模型因其能以低成本生成高质量合成数据，正被快速集成到机器人学习流程中，成为机器人策略学习和评估的关键组件。然而，现有针对机器人学习的安全攻击通常需要直接向数据集植入危险轨迹或深度访问训练环境，这在实践中要么易被检测，要么难以实现。</p>
+<p>本文针对世界模型作为机器人学习供应链中新引入的环节，发现其构成了一个隐蔽且高效的数据投毒攻击入口。攻击者可以通过操控输入世界模型的数据，间接毒害下游机器人策略，即使原始训练数据看起来安全。核心思路是：利用对世界模型的白盒访问，通过在人眼不易察觉的范围内轻微扰动看似安全的遥操作数据帧（如视频图像），将恶意提示或受损的状态转移动态“嵌入”其中；当这些被污染的数据通过世界模型生成合成轨迹或模拟环境时，毒害效果才被激活，最终导致训练出不安全或被劫持的机器人策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>攻击的目标流程是：恶意数据提供商向被污染、但肉眼看来安全的遥操作数据集，该数据集随后用于训练或微调世界模型。攻击者通过扰动数据集中的图像帧，使得世界模型在特定“触发器”出现时，其输出行为发生恶意改变。</p>
+<p><img src="https://arxiv.org/html/2606.09499v1/2606.09499v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：威胁模型可视化。通过针对机器人学习管道中的世界模型，恶意数据提供商可以将危险行为或改变的转移动态植入原本安全的机器人遥操作数据中，从而绕过数据集级别的安全检查，毒害下游机器人策略。</p>
+</blockquote>
+<p>本文针对两类主流世界模型提出了两种攻击方法：</p>
+<ol>
+<li><strong>视觉提示劫持</strong>：针对文本条件世界模型，旨在让用户给定的安全文本提示 <code>t</code> 被恶意提示 <code>t_δ</code> “覆盖”。</li>
+<li><strong>视觉转移劫acking</strong>：针对动作条件世界模型，旨在操控模型，使其在智能体未选择预定目标动作 <code>a^+</code> 时，未来状态预测完全“崩溃”。</li>
+</ol>
+<p><strong>视觉提示劫持攻击</strong>：其核心目标是找到扰动后的图像帧集合 <code>x→_δ</code>，使得世界模型在处理这些帧和安全提示 <code>t</code> 时的“语义编码” <code>S_θ(x→_δ， t)</code>，与处理原始帧和恶意提示 <code>t_δ</code> 时的编码 <code>S_θ(x→， t_δ)</code> 尽可能接近。攻击通过优化以下目标实现，同时约束扰动在LAB颜色空间的 <code>l_p</code> 范数球内以保证视觉不可感知性：<br><code>min_{x→_δ} E_{t∼T_safe, t_δ∼T_δ}[D(S_θ(x→_δ, t) || S_θ(x→， t_δ))]</code>，约束为 <code>||x→ - x→_δ||^{LAB}_p ≤ β</code>。</p>
+<p><strong>视觉转移劫持攻击</strong>：其核心是操纵世界模型的潜在编码器 <code>E_θ</code>。无条件攻击的目标是使扰动帧 <code>x→_δ</code> 的潜在编码与原始帧 <code>x→</code> 的编码尽可能不同（余弦相似度最小化），从而导致预测崩溃。为实现针对特定动作的后门攻击，作者修改了目标，使其对动作条件化：当输入动作 <code>a&#39;</code> 远离目标动作 <code>a^+</code> 时，世界模型预测崩溃；当输入动作接近 <code>a^+</code> 时，世界模型预测恢复正常。攻击通过优化以下目标实现（公式5简化表述）：<br><code>min_{x→_δ} E_{a&#39;, ε}[cos(θ(x→_δ, a&#39;), θ(x→, a&#39;)) + (1 - cos(θ(δ(x→_δ), a^+ + ε), E(x→)))]</code>，同样受 <code>l_p</code> 范数约束。这样，在训练中，强化学习智能体只有选择目标动作 <code>a^+</code> 时才能在受污染的观察中避免惩罚（预测崩溃），从而学会在触发出现时执行该动作。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了多个基准和模型：</p>
+<ul>
+<li><strong>VPH攻击</strong>：主要针对在Libero任务套件上微调的 <strong>Cosmos-Predict 2.5</strong>（文本条件世界模型）。评估了三个新设计的安全关键拾放任务（“礼品盒”、“炉灶”、“微波炉”），每个任务包含需要避免的危险目标。</li>
+<li><strong>VTH攻击</strong>：<ul>
+<li>完整DRL管道测试：使用 <strong>Dino World Model</strong>（动作条件）和PPO算法，在“单墙”任务环境中训练和评估。</li>
+<li>概念验证：在 <strong>Cosmos-Predict 2.5 AC</strong>（动作条件版本）上测试预测崩溃效果。</li>
+</ul>
+</li>
+</ul>
+<p><strong>关键实验结果总结</strong>：</p>
+<ol>
+<li><strong>视觉提示劫持攻击效果</strong>：如表1所示，在<strong>分布外摄像头角度</strong>和<strong>模糊提示</strong>设置下，VPH攻击成功率显著提高（例如，“礼品盒”场景中“枪”的危险目标成功率在模糊提示下达100%）。这表明世界模型在分布外和高不确定性场景下更易受攻击。攻击未引发危险行为时，也常导致预测崩溃使任务失败。论文也指出，当前文本条件世界模型及其逆动力学模型生成的轨迹质量尚不足以直接训练出可靠的VLA策略，因此该攻击链的完整验证目前更多是概念证明。</li>
+</ol>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="攻击示例"></p>
+<blockquote>
+<p><strong>图1</strong>：视觉提示劫持攻击示例，针对文本条件世界模型，用恶意提示（如“将炸弹放入礼品盒”）覆盖用户的安全提示。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.09499v1/2606.09499v1/x4.png" alt="VPH结果"></p>
+<blockquote>
+<p><strong>表1</strong>：Visual Prompt Hijacking攻击在分布内/分布外摄像头角度以及模糊/具体用户提示下的成功率。数据表明，在分布外和高不确定性（模糊提示）设置下攻击更易成功。</p>
+</blockquote>
+<ol start="2">
+<li><strong>视觉转移劫持与DRL后门攻击效果</strong>：在Dino WM环境中，与“无毒化”基线相比，使用VTH攻击污染5%初始状态训练出的PPO策略，在遇到触发器时选择目标动作的成功率和与目标动作的余弦相似度均大幅提升（具体数值见图中“攻击成功”与“攻击余弦相似度”指标）。同时，在没有触发器时，中毒策略与基线策略在原始任务上的性能相当，证明了后门的隐蔽性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.09499v1/2606.09499v1/x2.png" alt="VTH结果"></p>
+<blockquote>
+<p><strong>图3</strong>：在Dino WM“单墙”任务中，比较无攻击策略与受VTH后门攻击策略的性能。左图显示中毒策略在触发时成功选择目标动作；右图显示两种策略在无触发时的正常任务性能相当。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.09499v1/2606.09499v1/figures/app/dino.png" alt="DRL训练曲线"></p>
+<blockquote>
+<p><strong>图19</strong>：PPO在Dino WM“单墙”任务中的训练曲线。黑色实线为无攻击基线，红色虚线为VTH后门攻击策略。上方子图显示累积奖励，下方子图显示攻击成功率（触发时执行目标动作的比例）。可见中毒策略能正常学习任务，同时成功植入后门。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：论文通过在不同任务（分布内/分布外）、对象（易识别/难识别）、提示类型（模糊/具体）和摄像头角度下测试VPH攻击，分析了影响攻击成功的关键因素。核心结论是：世界模型对任务、对象或观察视角的<strong>不确定性越高</strong>（即越“分布外”或“模糊”），攻击就越容易成功。这为防御研究提供了方向，也表明攻击与防御的博弈超出了传统对抗样本中 <code>l_p</code> 范数约束的范畴。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：</p>
+<ol>
+<li><strong>揭示了新型安全漏洞</strong>：首次系统性地指出世界模型作为机器人学习供应链中的关键组件，引入了一个隐蔽的数据投毒入口，攻击者可通过仅操控输入数据（图像）来间接毒害下游BC或DRL策略。</li>
+<li><strong>发现了模型脆弱性条件</strong>：通过实验证明，文本条件世界模型在<strong>分布外</strong>或面对<strong>模糊提示</strong>（高不确定性）时，对视觉提示劫持攻击的脆弱性显著增加，这拓展了可信AI研究中对模型鲁棒性挑战的理解。</li>
+<li><strong>实现了新型攻击范式</strong>：提出了“视觉提示劫持”和“视觉转移劫ack”两种新颖攻击方法，并首次演示了通过<strong>仅操纵世界模型输入</strong>，就能成功将后门植入下游DRL策略的完整攻击链。</li>
+</ol>
+<p><strong>论文自身提到的局限性</strong>：作者指出，当前最先进的文本条件世界模型及其配套的逆动力学模型仍不够精确和鲁棒，生成的合成轨迹存在物体被不可能的方式抓取或凭空出现等问题，导致难以直接用于训练高性能的VLA策略。因此，针对VLA的完整后端攻击链目前更多是概念证明，其完全实现有待于世界模型管道的进一步成熟。</p>
+<p><strong>对后续研究的启示</strong>：这项工作强烈呼吁对世界模型的<strong>安全性和鲁棒性</strong>进行深入研究。未来的防御研究不仅需要关注对抗样本的 <code>l_p</code> 范数鲁棒性，还需考虑模型在语义、分布泛化层面的不确定性管理。同时，在机器人学习流程中集成世界模型时，必须重新评估其安全边界，考虑引入数据来源验证、生成内容审计、以及对不确定性输入的监测等安全机制。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本论文揭示了世界模型在机器人学习管道中引入的安全威胁。核心问题是，恶意攻击者可通过隐蔽的数据中毒手段，在看似安全的遥操作数据集中注入恶意提示或篡改过渡动态，这些恶意内容仅在世界模型处理时激活，从而生成危险的合成训练轨迹，最终导致部署不安全或受控的机器人策略。关键技术方法为新型攻击，针对动作条件和文本条件世界模型进行设计。实验表明，攻击对先进模型有效，成功实现了下游DRL策略的端到端后门攻击，并在VLA设置中完成了概念验证。
+
+（字数：140）</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.09499" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

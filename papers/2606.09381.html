@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>ReGIL: Retrieval-Guided Imitation Learning from a Single Demonstration - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>ReGIL: Retrieval-Guided Imitation Learning from a Single Demonstration</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.09381" target="_blank" rel="noreferrer">2606.09381</a></span>
+        <span>作者: Ville Kyrki Team</span>
+        <span>日期: 2026-06-08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人从单次演示中学习复杂的操作技能是一个根本性挑战。当前主流方法主要有两类：一类是基于检索的模仿学习，它们通过将当前观察与演示进行匹配来重放相应的动作，但这种方法通常将检索视为静态监督或直接行为重放，限制了其在真实世界扰动下的在线适应能力；另一类是在线强化学习，虽然允许机器人通过交互进行适应，但在仅有稀疏奖励和有限交互时间的情况下，无引导的探索效率低下，学习缓慢。本文针对单次演示下模仿学习监督信号有限、在线学习样本效率低的痛点，提出了一个新视角：将单次演示视为在整个训练过程中可反复查询的<strong>外部记忆</strong>，从而融合离线检索的稳健性与在线参数化学习的适应性。本文的核心思路是：在在线交互的每一步，基于当前状态轨迹从演示中检索相关片段，并利用该片段同时引导早期探索、生成正则化数据以及构建密集奖励信号。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>ReGIL的整体框架将单次专家演示 $\tau^e$ 作为外部记忆，整个在线学习过程围绕查询和利用这个记忆展开。框架主要包括三个核心组件：专家片段检索、检索引导的探索和检索引导的策略优化。其pipeline如下图所示。</p>
+<p><img src="https://arxiv.org/html/2606.09381v1/2606.09381v1/imgs/regil.jpg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：ReGIL概览。整个框架将单次演示作为在线机器人学习的外部记忆。在每一个在线交互步骤，智能体基于其当前轨迹检索任务相关的专家片段。检索到的片段用于引导探索，并通过局部时间对齐为策略优化构建密集的片段级奖励。在检索引导的探索阶段获得的成功回合被加入到成功缓冲区，以增加正则化数据的多样性。</p>
+</blockquote>
+<p><strong>1. 专家片段检索</strong><br>给定当前观察 $o_t$，检索过程采用“由粗到细”的策略。首先，利用一个冻结的视觉基础模型（VFM，如DINOv3）将观察映射到嵌入空间，计算距离 $d(o_t, o_i^e)$。<strong>候选选择</strong>：找出演示中与当前观察视觉距离最小的前 $k$ 个邻居索引集合 $\mathcal{N}<em>k(o_t)$，并选择其中最大的索引 $q_t^* = \max,\mathcal{N}<em>k(o_t)$ 作为候选片段的终点。这确保了检索到的状态不仅在视觉上相似，而且在任务时间线上是向前推进的，避免了陷入局部相似但无进展的状态。<strong>局部时间对齐</strong>：为了减少单帧匹配的歧义性，将最近 $H$ 步的智能体观察历史 $\tau</em>{t-H:t}$ 与演示轨迹片段 $\tau^e</em>{0:q_t^*}$ 进行比较。不同于标准动态时间规整（DTW），这里采用子序列动态时间规整（S-DTW），它允许智能体轨迹与专家轨迹的任意一个子序列对齐。通过动态规划计算对齐成本矩阵 $D$，最优对齐终点 $j_t^*$ 由 $D(H+1, j)$ 的最小值决定，同时得到对齐成本 $d_{\text{s-dtw}}$。最终检索到的专家片段是匹配上的演示子序列。</p>
+<p><strong>2. 检索引导的探索</strong><br>在训练早期，随机探索效率低下。因此，在固定步数内，ReGIL使用检索阶段对齐的专家动作 $a_t = a^e_{j_t^*-1}$ 来引导智能体探索，使其朝向成功方向前进。在此引导探索阶段获得的成功回合（轨迹）会被存入<strong>成功缓冲区</strong> $\mathcal{B}<em>{\text{suc}}$。该缓冲区在后续策略优化中作为正则化数据集，以增加监督数据的多样性、减少演示与在线数据之间的分布偏移，并提供超出原始演示的自适应监督。$\mathcal{B}</em>{\text{suc}}$ 初始时包含原始演示 $\tau^e$。</p>
+<p><strong>3. 检索引导的策略优化</strong><br>智能体与环境交互，目标是最大化基于检索的奖励，并辅以衰减的正则化项。<br><strong>基于检索的片段级奖励代理</strong>：在每个时间步，奖励基于智能体最新轨迹与检索到的专家片段之间的对齐度计算：$r_{t+1} = -\frac{1}{H+1} d_{\text{s-dtw}}(\tau_{t-H+1:t+1}, \tau_{0:q_{t+1}^*}^e)$。该奖励通过对齐成本负值并归一化得到，提供了密集、逐步且保留时间一致性的反馈，且<strong>无需访问未来轨迹信息</strong>。为了稳定奖励估计，使用了冻结的视觉编码器，将奖励计算与表示学习解耦。<br><strong>带衰减正则化的优化</strong>：采用TD3风格的演员-评论家框架。评论家通过标准贝尔曼更新训练。演员的目标是最大化期望Q值，同时以行为克隆的方式正则化其输出，使其接近成功缓冲区 $\mathcal{B}<em>{\text{suc}}$ 中的动作：<br>$\mathcal{L}</em>{\pi}(\theta) = -\mathbb{E}<em>{(o_t)\sim\mathcal{B}}\left[Q</em>{\min}(o_t,\pi_{\theta}(o_t))\right] + \lambda(t)\cdot \mathbb{E}<em>{(o_i,a_i)\sim\mathcal{B}</em>{\text{suc}}}\left[-\log\pi_{\theta}(a_i \mid o_i)\right]$<br>其中 $\lambda(t)$ 是随时间衰减的正则化权重。这种设计使得策略能够<strong>逐渐从模仿学习过渡到强化学习</strong>，最终实现超越演示的性能。</p>
+<p><strong>创新点</strong>：与现有方法相比，ReGIL的创新在于：(1) 将单次演示作为在整个<strong>在线训练过程</strong>中持续查询的动态记忆，而非一次性使用的静态数据；(2) 奖励计算基于<strong>局部轨迹片段</strong>对齐，无需全局轨迹匹配或未来信息，更高效且适合在线学习；(3) 通过检索引导探索构建并动态扩展<strong>成功缓冲区</strong>，为正则化提供了更丰富、更多样化的数据来源。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>仿真基准</strong>：使用Meta-World和LIBERO基准中的多种机器人操作任务。策略仅使用RGB图像观察，并从每个任务的单次演示中学习。</li>
+<li><strong>真实机器人平台</strong>：在Franka Panda机器人上进行三个任务实验：Reach（定位）、Insert（高精度插入）、Open（富含接触动力学的开门）。观察为84x84 RGB图像，动作为4维末端执行器命令。每个任务只用一次遥操作演示，在线训练时间限制在一小时以内。实验设置了初始状态随机化，并在固定目标位置和随机目标位置两种设置下评估。</li>
+<li><strong>对比基线</strong>：包括行为克隆（BC）、基于Transformer的模仿学习（BAKU）、带正则化的轨迹匹配逆强化学习（ROT）、时域轨迹匹配逆强化学习（TOT）等代表性方法。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2606.09381v1/2606.09381v1/x1.png" alt="仿真对比结果"></p>
+<blockquote>
+<p><strong>图2</strong>：与基线方法在仿真任务上的对比。所有方法均在单次演示下训练。曲线显示平均成功率，阴影区域为5个种子下的±1标准差。ReGIL在大多数任务上学得更快，最终成功率更高（除Hammer任务外），证明了其优越的样本效率和性能。</p>
+</blockquote>
+<p><strong>仿真任务对比</strong>：如图2所示，ReGIL在Meta-World和LIBERO的大多数任务上，学习速度和最终成功率均优于基线方法。对于监督学习方法（BC、BAKU），ReGIL显示出明显改进，特别是在长视界的LIBERO任务上，凸显了离线单次模仿学习难以获得鲁棒策略。与轨迹匹配方法（ROT、TOT）相比，ReGIL用更少的环境交互达到了更高的成功率，表明其检索框架提供了更强的学习信号。</p>
+<p><img src="https://arxiv.org/html/2606.09381v1/2606.09381v1/x2.png" alt="组件消融实验"></p>
+<blockquote>
+<p><strong>图3</strong>：对ReGIL主要组件的消融研究。ReGIL w/o Retrieval（BC_RL）在LIBERO上失败，在Meta-World上学习缓慢；ReGIL w/o Regularization（ReG_RL）收敛变慢；ReGIL w/o RL（ReG_BC）有良好的初始性能但可被进一步优化。这表明检索和正则化都至关重要，而RL微调能进一步超越检索轨迹。</p>
+</blockquote>
+<p><strong>消融实验-组件贡献</strong>：如图3所示，分别移除了检索引导（BC_RL）、行为正则化（ReG_RL）、RL优化（ReG_BC）以及两者（RL）。结果显示：(1) <strong>检索至关重要</strong>：没有检索（BC_RL）时，策略在LIBERO上失败，在Meta-World上学习缓慢。(2) <strong>正则化加速稳定训练</strong>：没有正则化（ReG_RL）会导致收敛变慢。(3) <strong>RL微调提升性能</strong>：仅使用检索和BC（ReG_BC）虽然表现良好，但RL微调（ReGIL）能达到最高成功率。</p>
+<p><img src="https://arxiv.org/html/2606.09381v1/2606.09381v1/x3.png" alt="奖励机制消融实验"></p>
+<blockquote>
+<p><strong>图4</strong>：不同奖励机制的消融比较。基于单状态余弦相似度的奖励（COS）表现最差。基于时域掩码最优传输的奖励（TOT）与ReGIL的片段级奖励表现优于COS，在复杂任务上两者相当，而在某些任务上ReGIL的奖励更有优势，体现了局部时间对齐奖励的有效性。</p>
+</blockquote>
+<p><strong>消融实验-奖励机制</strong>：如图4所示，将ReGIL的片段级S-DTW奖励与基于单状态余弦相似度的奖励（COS_Reward）和基于时域掩码最优传输的全局轨迹奖励（TOT_Reward）进行比较。结果表明：(1) 状态级相似度奖励不足以引导优化。(2) 虽然TOT_Reward能捕捉全局对齐，但计算更复杂且对局部进展响应较弱。(3) ReGIL提出的奖励在Meta-World任务上更具优势，在LIBERO上与TOT_Reward表现相当，实现了局部有效性与计算效率的平衡。</p>
+<p><strong>真实机器人实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2606.09381v1/2606.09381v1/imgs/real_result.png" alt="真实机器人任务与结果"></p>
+<blockquote>
+<p><strong>图5</strong>：真实机器人任务可视化及性能对比。条形图展示了在固定目标（Fix）、随机目标（Random）以及两者平均（Average）设置下的成功率。表格数据显示了详细数值。ReGIL在随机目标设置下获得了最高的平均成功率（80%），展现了其优异的泛化能力。</p>
+</blockquote>
+<p>如表2和图5所示，在真实机器人任务中，ReGIL在随机目标设置下取得了最高的成功率（80%），同时在固定目标设置下保持高性能（96.7%）。其随机目标与固定目标成功率比率（82.7%）也是最高的，表明其不仅复现了缓冲区中的轨迹，还获得了更好的泛化鲁棒性。对比方法中，仅有检索引导的BC（ReG_BC）能生成额外成功轨迹，但ReGIL通过在线微调进一步提升了精度和鲁棒性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个<strong>检索引导的单次模仿学习框架（ReGIL）</strong>，通过在整个训练过程中反复查询单次演示作为记忆，统一了探索引导、正则化与奖励生成，显著提高了学习效率。</li>
+<li>设计了一种<strong>基于检索的片段级奖励代理</strong>，利用局部时间对齐（S-DTW）计算密集、逐步的奖励，无需全局轨迹匹配或未来信息，适合在线学习。</li>
+<li>在<strong>仿真和真实机器人</strong>上进行了全面的实证验证。ReGIL在多个基准上优于现有方法，并能在真实世界中仅用一次演示和一小时的在线训练学习到有效的操作技能。</li>
+</ol>
+<p><strong>论文指出的局限性</strong>：</p>
+<ol>
+<li><strong>对视觉模糊性敏感</strong>：在如Insert任务中，相似的视觉模式可能导致检索失败和次优引导。</li>
+<li><strong>依赖纯视觉观察</strong>：在处理非刚性物体（如Open任务中门把手变形）时，缺乏接触或力觉信息可能导致失败。</li>
+<li><strong>引导能力有限</strong>：在更复杂环境中，仅靠检索引导可能不足以引导出成功行为，从而限制了成功缓冲区的多样性收益。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li>可以探索结合<strong>多模态感官输入</strong>（如触觉、力反馈）以提高在接触丰富或视觉模糊任务中的鲁棒性。</li>
+<li>考虑将检索与<strong>更强的先验</strong>（如预训练策略或模型预测控制）结合，以应对更复杂的环境引导挑战。</li>
+<li>研究<strong>自适应检索策略</strong>或扩展到利用<strong>免动作演示</strong>（如人类视频），进一步提升方法的通用性和数据效率。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对从单个演示学习机器人操作策略时偏差易累积、在线数据收集成本高的核心难题，提出了ReGIL（检索引导模仿学习）框架。该方法将单演示视为外部记忆，通过持续检索该记忆来引导探索、生成正则化缓冲区，并利用当前轨迹与检索片段的局部时间对齐构建逐步奖励。实验显示，在LIBERO和Meta-World基准的单演示设置下，ReGIL在成功率和训练效率上均优于基线；真实机器人实验中，仅用一个演示和不到一小时训练，便在初始姿态和目标位置随机的三个任务中取得超过75%的成功率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.09381" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

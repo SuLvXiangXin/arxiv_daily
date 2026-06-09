@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Dream-Tac: A Unified Tactile World Action Model for Contact-Rich Robot Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Dream-Tac: A Unified Tactile World Action Model for Contact-Rich Robot Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.08737" target="_blank" rel="noreferrer">2606.08737</a></span>
+        <span>作者: Shanghang Zhang Team</span>
+        <span>日期: 2026-06-07</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人操作领域，世界动作模型通过预测未来观测来指导动作生成，已成为主流范式。然而，这些方法主要依赖视觉模态，在需要精细物理交互的接触丰富操作任务中存在关键局限。纯粹的视觉感知常常难以准确捕捉接触状态、局部几何和物体细粒度属性等关键物理交互线索，导致在插入、切割、剥离等任务中性能受限。触觉感知能够提供直接的接触和局部交互信号，但目前的研究要么将触觉作为末端反馈融入策略，要么专注于触觉表征学习，尚未有工作将触觉信号系统地整合到世界模型的未来状态预测框架中。</p>
+<p>本文针对“如何将稀疏且瞬变的触觉信号以选择性、交互感知的方式融入世界动作模型”这一具体痛点，提出了一个新的视角：构建一个统一的生成式模型，共同预测未来的视觉观测、触觉观测和机器人动作。本文的核心思路是，在预训练的视频扩散Transformer基础上，通过引入接触感知的注意力偏置机制和共享潜在空间编码，实现对视觉、触觉和动作的联合建模，从而更直接地捕获接触动态，实现预测式的接触感知操作。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Dream-Tac的整体框架是一个基于扩散Transformer的统一触觉-世界-动作模型。其输入为当前视觉观测 <code>o</code>、当前触觉观测 <code>x</code> 和语言指令 <code>l</code>，输出为未来 <code>T</code> 步的视觉观测 <code>v{1:T}</code>、未来 <code>T</code> 步的触觉观测 <code>x{1:T}</code> 以及未来 <code>H</code> 步的机器人动作块 <code>a{1:H}</code>。模型在共享的潜在空间中联合对这些目标进行去噪生成。</p>
+<p><img src="https://arxiv.org/html/2606.08737v1/2606.08737v1/x1.png" alt="Dream-Tac架构总览"></p>
+<blockquote>
+<p><strong>图2</strong>：Dream-Tac方法概述。模型输入多种模态信息（视觉-触觉观测、视觉观测、机器人状态、动作标记），通过预训练的VAE编码到联合潜在表征，由共享的扩散Transformer骨干（DiT块）处理。右侧展示了核心的接触感知自注意力（CASA）模块，它根据帧间触觉变化计算接触门控 <code>g_t</code>，并用于重新缩放触觉注意力偏置，从而在显著的交互事件中强调触觉信息。</p>
+</blockquote>
+<p>模型建立在预训练的视频扩散Transformer骨干上，复用了其T5文本编码器和视频VAE。机器人状态和动作遵循Cosmos-Policy的方法，被表示为填充的潜在帧标记并插入到视频骨干中进行联合去噪。关键创新在于将触觉观测也通过同一个预训练VAE映射到相同的潜在空间，形成一个统一的潜在表征。这使得动作标记可以通过双向自注意力同时关注未来的视觉和细粒度的触觉信号变化。</p>
+<p>核心创新模块是<strong>接触感知自注意力</strong>。由于触觉信号在操作中通常是稀疏和瞬态的（长时间静止后出现短暂的接触、滑动等事件），对称的注意力机制会使非接触时刻仍关注触觉标记，稀释关键的接触变化信号。为此，Dream-Tac引入了一个门控的、结构化的对数偏置。对于第 <code>t</code> 个时间步，模型计算一个接触门控 <code>g_t</code>，该门控基于左右指尖触觉传感器图像与上一帧的归一化平均绝对差的最大值 <code>ρ_t</code>，并通过一个固定的鲁棒归一化函数映射到 <code>[g_min, g_max]</code> 区间。在注意力计算中，对数偏置 <code>α * g_t * (1-M_i) * M_j</code> 仅当非触觉查询 (<code>M_i=0</code>) 关注触觉键 (<code>M_j=1</code>) 时激活，其中 <code>α</code> 控制偏置强度。这种非对称的归纳偏置鼓励动作、本体感觉和视觉标记在接触动态显著时更多地访问触觉信息，同时保持触觉-触觉交互不变。</p>
+<p>另一个核心模块是 <strong>双级加速系统</strong> 。为了应对引入触觉和扩散 Transformer 带来的计算负担，Dream-Tac 在训练和推理层面进行了优化。训练时，基于 FlashBias 用低秩偏置公式重新实现了接触感知门控偏置注意力，在 NVIDIA H200 GPU 上将每次迭代的训练延迟从 97ms 降低到 29ms，实现了高达 2.94 倍的训练加速。推理时，采用<strong>基于缓存的扩散加速策略</strong>，将有效推理步数减少到 2 步，在 A800 GPU 上实现了 1.8 倍的推理加速，这对需要高频执行的实时机器人控制至关重要。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在真实世界的弗兰卡·艾米卡 Panda 机器人上进行，使用两个 Intel RealSense D435i RGB 相机（固定第三人称和腕戴式）和两个 Xense Photon 触觉传感器。评估了六个语言条件化的接触丰富操作任务：1) 拿起法棍，2) 插入 USB，3) 清洁白板，4) 削黄瓜皮，5) 打麻将，6) 切香蕉。</p>
+<p>对比的基线方法包括：1) <code>π_0</code>: 用于通用机器人控制的 VLA 流模型；2) <code>π_0.5</code>: 增强的 VLA 流模型；3) ForceVLA: 集成力-扭矩感知的多模态 VLA 模型；4) Cosmos Policy: 利用物理常识的世界动作模型。</p>
+<p><img src="https://arxiv.org/html/2606.08737v1/2606.08737v1/x2.png" alt="不同方法在六个任务上的成功率对比"></p>
+<blockquote>
+<p><strong>图3</strong>：Dream-Tac与基线方法在六个真实世界接触丰富操作任务上的成功率对比。Dream-Tac在五个任务上取得了最高成功率，平均成功率达到83.3%，显著优于所有基线。</p>
+</blockquote>
+<p>关键实验结果显示，在20次真实世界试验的平均成功率上，Dream-Tac达到83.3%，显著优于Cosmos-Policy (51.7%)、ForceVLA (50.8%)、<code>π_0.5</code> (45.0%)和<code>π_0</code> (30.8%)。Dream-Tac在五个任务上取得了最高成功率，特别是在需要精确接触交互的任务（如插入USB，成功率35%；切香蕉，成功率90%）上优势明显。在“打麻将”任务中，研究者故意构建了视觉完全遮挡的场景，Dream-Tac仍能保持100%的成功率，显示了其对触觉反馈的强依赖性和鲁棒性。</p>
+<p><img src="https://arxiv.org/html/2606.08737v1/2606.08737v1/x4.png" alt="消融实验：触觉融合与注意力偏置的贡献"></p>
+<blockquote>
+<p><strong>图5</strong>：消融研究结果（左：训练效率对比；右：成功率对比）。Visuo-tactile WAM（仅融合触觉）相比Visual WAM（仅视觉）将平均成功率从51.7%提升至74.2%。进一步引入接触感知注意力偏置后，成功率进一步提升至83.3%。</p>
+</blockquote>
+<p>消融实验分析了触觉融合和接触感知注意力偏置的贡献。三个对照设置分别为：Visual WAM（仅视觉）、Visuo-tactile WAM（融合触觉，但使用标准注意力）和 Visuo-tactile WAM + Bias（融合触觉并使用CASA）。结果显示，引入触觉融合是性能提升的主要来源，将平均成功率从51.7%提升至74.2%。进一步的接触感知注意力偏置带来了额外的增益，将成功率提升至最终的83.3%，验证了该机制在稀疏触觉信号处理中的有效性。</p>
+<p><img src="https://arxiv.org/html/2606.08737v1/2606.08737v1/x5.png" alt="训练与推理加速效果"></p>
+<blockquote>
+<p><strong>图6</strong>：双级加速策略的效果。左图显示基于FlashAttention的优化显著降低了训练延迟；右图显示缓存策略在几乎不损失性能的情况下（FVD分数相近）大幅提升了推理速度。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.08737v1/2606.08737v1/x3.png" alt="模型生成的未来视觉与触觉预测可视化"></p>
+<blockquote>
+<p><strong>图4</strong>：Dream-Tac生成的未来视觉（左）和触觉（右）预测可视化示例。模型能够生成连贯且物理合理的未来场景和对应的触觉信号变化。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：第一，提出了首个统一的生成式触觉世界动作模型Dream-Tac，能够联合预测未来视觉观测、触觉信号和机器人动作；第二，设计了接触感知自注意力机制，通过数据驱动的门控自适应地强调交互事件中的触觉信号；第三，开发了包含训练和推理优化的双级加速系统，使得模型能够满足实时机器人部署的需求。</p>
+<p>论文自身提到的局限性主要在于计算效率方面，尽管进行了加速优化，但基于扩散Transformer的模型在实时控制中仍面临计算挑战。此外，触觉传感器的校准和信号处理在实际部署中也可能带来复杂性。</p>
+<p>这项工作对后续研究的启示是多方面的：首先，它展示了将多模态感知，特别是触觉，整合到世界模型预测框架中的巨大潜力，为更拟人化的精细操作提供了新思路。其次，接触感知的注意力机制为解决模态间信号稀疏性与重要性不匹配问题提供了一个可借鉴的范式。最后，系统级的效率优化工作表明，将算法创新与工程优化紧密结合，是推动前沿AI模型走向实际机器人应用的关键。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文旨在解决依赖视觉的世界动作模型在接触丰富的精细操作任务中表现不佳的问题。为此，提出了统一触觉世界动作模型Dream-Tac，其核心技术包括**接触门控的视觉触觉融合**和**接触感知注意力偏置**。为支持实时部署，模型采用了双级加速策略。实验表明，该模型在六项接触丰富操作任务上的平均动作准确率提升31.7%，同时实现训练与推理速度分别最高加速2.9倍和1.8倍。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.08737" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

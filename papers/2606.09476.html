@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Goal Sets, Not Goal States: Queryable Robot Goals through Goal-Set Hindsight Relabeling - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Goal Sets, Not Goal States: Queryable Robot Goals through Goal-Set Hindsight Relabeling</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.09476" target="_blank" rel="noreferrer">2606.09476</a></span>
+        <span>作者: Jorge Pomares Team</span>
+        <span>日期: 2026-06-08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前离线目标条件强化学习的主流方法是基于完整状态的事后经验回放。具体而言，智能体从无奖励的离线轨迹中学习，并通过事后经验回放将未来达到的状态重新标记为早期状态的目标。为了做到领域无关和无监督，近期的基准（如OGBench）通常将整个状态空间作为目标空间，即要求智能体精确匹配未来的完整状态。该方法存在一个关键局限性：它假设任务成功意味着精确重现整个未来状态。然而在机器人操作等场景中，成功往往仅取决于状态的一个子集（如物体位置），而机器人配置、夹爪状态、速度等其他变量是任务无关的“干扰变量”。完整状态HER将对这些无关变量的精确匹配也变成了人为约束，从而过度约束了学习过程。</p>
+<p>本文针对“完整状态目标因干扰变量而过约束”这一具体痛点，提出了目标集而非目标状态的新视角。其核心思路是：一个已实现的状态不仅证明了其自身可达，而且证明了任何包含它的目标集也是可达的；因此，可以将事后经验回放泛化为对查询定义的目标集（而非单一状态）的证明，使目标谓词成为推理时的输入，而无需改变底层的离线学习算法。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>GS-HER的整体框架是一个不依赖于底层具体算法的重标记包装器。其输入是离线数据集中的一条轨迹和一个从中采样的过渡<code>(s_t, a_t, s_t+1)</code>，输出是用于训练基础GCRL算法的、经过GS-HER重标记的过渡。底层的GCRL算法可以是基于行为克隆、价值函数、对比学习或距离学习的，GS-HER不改变其优化目标，仅改变重标记时“目标”的语义和条件输入。</p>
+<p>核心模块是**目标查询<code>q</code>**。它是一个D维二进制向量（D为状态维度），<code>q_i=1</code>表示第i个状态坐标在本次任务的成功谓词中是“活跃的”，即需要与目标值匹配；<code>q_i=0</code>则表示该坐标是干扰变量。给定一个参考状态<code>g</code>，查询<code>q</code>诱导出一个等价关系<code>s ≡_q g</code>，当且仅当<code>q ⊙ s = q ⊙ g</code>（⊙为逐元素乘）。由此定义出目标集<code>G(g,q) = {s‘ ∈ S: q ⊙ s’ = q ⊙ g}</code>。在连续控制中，使用查询条件的归一化平方距离<code>d_q(s’, g)</code>来衡量是否成功，并设置一个容忍阈值<code>ε_q</code>。因此，成功谓词<code>c_g,q(s’)</code>定义为<code>s’</code>与<code>g</code>在活跃坐标上的距离是否小于阈值。</p>
+<p><img src="https://arxiv.org/html/2606.09476v1/2606.09476v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：从多目标状态到多目标谓词。HER-Full支持无标注重标记，但将成功固定为完整状态匹配。HER-Task通过固定的预言投影φ专注于任务学习，但在训练前就固定了任务语义。GS-HER避免了预言投影，同时以查询q为条件，允许同一个模型在推理时恢复完整状态目标、任务聚焦目标以及组合谓词。</p>
+</blockquote>
+<p>另一个核心模块是<strong>查询条件的条件输入构建</strong>。为了将查询暴露给底层学习者，GS-HER构建条件输入<code>ψ_GS(s, g, q) = [s¯_q, g¯_q, q]</code>。其中，<code>s¯_q = q ⊙ s + (1-q) ⊙ e_s</code>，<code>g¯_q = q ⊙ g + (1-q) ⊙ e_g</code>。这里<code>e_s</code>和<code>e_g</code>是用于填充被掩码（干扰）坐标的嵌入向量，其作用是移除非任务相关值，同时查询<code>q</code>明确声明了哪些坐标定义成功。原始状态<code>s</code>仍以常规方式作为控制输入提供给基础策略或价值函数。</p>
+<p>与现有方法（HER-Full和固定投影的HER-Task）相比，GS-HER的核心创新点在于：1. 将事后重标记的语义从“证明单一状态可达”泛化为“证明一个查询定义的目标集可达”；2. 通过引入查询接口，使任务语义（即“什么算成功”）成为推理时的输入参数，从而允许一个训练好的模型在不改变权重的情况下应答多种不同的目标谓词。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了<strong>OGBench</strong>基准中的多个任务进行评估，包括操作任务（<code>cube-single-play-v0</code>, <code>cube-single-noisy-v0</code>, <code>cube-double-play-v0</code>, <code>cube-double-noisy-v0</code>, <code>scene-play-v0</code>）和导航任务（<code>pointmaze-medium-navigate-v0</code>, <code>pointmaze-large-navigate-v0</code>, <code>antmaze-medium-navigate-v0</code>）。</p>
+<p><strong>对比的基线方法</strong>包括：1. <strong>HER-Full</strong>：标准完整状态重标记。2. <strong>HER-Task</strong>：使用固定、预知的、仅包含任务相关坐标的投影进行重标记（预言基线）。3. <strong>GS-HER Blockwise</strong>：GS-HER的默认领域无关变体，查询从完整状态、随机坐标和连续坐标块查询中采样。4. <strong>GS-HER Semantic</strong>：GS-HER的预言查询变体，查询激活预定义的物理因子（如物体位置）。</p>
+<p>实验包裹了五种<strong>底层离线GCRL算法</strong>：目标条件行为克隆、对比RL、目标条件隐式V学习和Q学习，以及目标条件距离学习。</p>
+<p><img src="https://arxiv.org/html/2606.09476v1/2606.09476v1/x2.png" alt="实验结果对比"></p>
+<blockquote>
+<p><strong>图2</strong>：完整状态事后重标记受到干扰维度的制约。GS-HER Blockwise相较于HER-Full，在绝大多数任务和基础学习器上都带来了性能提升（绿色连线），尤其是在操作任务上提升显著。总览所有操作任务-学习器组合，GS-HER将平均成功率从24.5提高到55.0，接近了预言方法HER-Task的60.6。而PointMaze作为低干扰对照任务，三者性能接近。</p>
+</blockquote>
+<p>关键实验结果总结如下：GS-HER显著提升了在官方任务指标（通常只关注部分状态变量）上的性能。在操作任务上，GS-HER Blockwise将平均成功率从HER-Full的24.5提升至55.0（满分100），接近了预言方法HER-Task的60.6。在干扰较少的PointMaze任务上，三者性能相近（47.2/47.5/47.6）。</p>
+<p><img src="https://arxiv.org/html/2606.09476v1/2606.09476v1/figures/qualitative_plots/d2g_cube-single-noisy_0.png" alt="距离估计对比"></p>
+<blockquote>
+<p><strong>图3</strong>：GS-HER学习到了与任务对齐的距离估计。在一次成功的<code>cube-single-noisy-v0</code> rollout中，当查询设置为官方任务（方块位置）时，GS-HER预测的距离值紧密跟踪了预言任务距离（HER-Task）的下降趋势，而HER-Full由于仍需匹配干扰变量（如机器人构型），其预测距离在整个过程中始终饱和在高位。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.09476v1/2606.09476v1/x3.png" alt="多谓词评估"></p>
+<blockquote>
+<p><strong>图4</strong>：一个模型，多种目标谓词。在<code>cube-single-noisy-v0</code>任务上，同一个训练好的GS-HER（包裹GCIQL）检查点，仅通过改变推理时的查询q，即可应答多样化的目标谓词，包括方块位置、方块偏航角、方块位姿、空中方块位置以及机器人末端执行器位置等。而HER-Full和HER-Task均不具备这种灵活性。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：论文通过比较不同任务上HER-Task（预言投影）相对于HER-Full的收益，来衡量完整状态重标记的过约束程度，并将此与GS-HER相对于HER-Full的收益进行对比。如图5所示，两者呈现强相关性，这表明GS-HER的收益主要来自于缓解了因干扰维度导致的过约束问题。GS-HER在那些预言投影收益大的任务上提升最明显。</p>
+<p><img src="https://arxiv.org/html/2606.09476v1/2606.09476v1/x4.png" alt="收益相关性"></p>
+<blockquote>
+<p><strong>图5</strong>：当精确状态重标记过度约束时，GS-HER帮助最大。横轴为预言投影（HER-Task）相对于HER-Full的收益，纵轴为GS-HER相对于HER-Full的收益。各数据点代表不同的OGBench任务。两者呈现强正相关，表明GS-HER的收益在本质上缓解了与预言投影相同的问题（即干扰维度的瓶颈）。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1. 明确指出了完整状态离线GCRL中“精确状态匹配”与“任务相关投影成功”之间的目标不匹配问题。2. 形式化提出了目标集事后经验回放（GS-HER），将事后重标记的语义从单一目标状态泛化为查询定义的目标集。3. 将GS-HER实例化为一个适用于向量状态环境的、查询条件的重标记包装器，使现有离线GCRL算法能够学习可查询的目标语义，而无需改变其学习目标。</p>
+<p>论文自身提到的局限性包括：当前方法局限于基于状态的环境，其中目标谓词可以表示为坐标查询。将其扩展到视觉或真实机器人环境，需要将坐标掩码替换为可查询的潜在因子、物体槽或语言接地状态抽象。同时，其有效性也依赖于查询分布、模型容量和离线数据覆盖。</p>
+<p>该工作对后续研究的启示是：在事后经验回放和目标条件学习中，明确区分“实现了哪个状态”和“该状态证明了哪个等价类（目标集）可达”是至关重要的。将任务语义（成功谓词）作为推理时的灵活接口，而非训练时的固定参数，是一个提升模型通用性和复用性的有前景的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>该工作针对离线目标条件强化学习中，传统事后经验重放（HER）因将完整未来状态作为精确目标而过度约束学习的问题，提出目标集事后经验重演（GS-HER）。其核心技术是引入二进制查询，由用户指定定义任务成功的关键状态变量，从而将目标扩展为包含该状态的“目标集”而非单一“目标状态”，实现了在算法不变的情况下，于推断阶段灵活定义目标谓词。该方法在多个基准任务上验证有效，能提升存在任务无关变量时的性能，并使一个训练好的模型无需重新训练即可响应多种不同的目标查询，提高了策略的复用性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.09476" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>TORL-VLA: Tactile Guided Online Reinforcement Learning for Contact-Rich Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>TORL-VLA: Tactile Guided Online Reinforcement Learning for Contact-Rich Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.09337" target="_blank" rel="noreferrer">2606.09337</a></span>
+        <span>作者: Baoxu Liu Team</span>
+        <span>日期: 2026-06-08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型已成为机器人操作的重要范式。为了处理接触密集型任务（如门闩操作、杯具放置、易碎物体抓取），现有研究将触觉或力反馈引入VLA模型，以增强策略对细粒度物理交互状态的感知。然而，这些方法大多训练和部署为离线策略。当执行过程遇到训练分布之外的接触状态时（如局部位姿误差、摩擦变化、物体形变），离线策略无法进行在线适应，可能导致不当的接触力、效率低下的重复尝试等问题。因此，本文提出，接触密集操作不仅需要策略能感知接触状态，更需能在关键物理瓶颈处在线适应和修正离线动作参考。基于此，本文提出<strong>TORL-VLA</strong>，其核心思路是：使用一个能预测动作和未来力矩序列的触觉感知VLA作为参考模型，并通过一个轻量化的在线强化学习模块来精炼这些参考动作，从而实现接触自适应。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架分为三个阶段，如下图所示。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：TORL-VLA框架概览。<strong>阶段I</strong>：触觉导出的力矩序列通过MoE路由与视觉-语言编码特征融合，以预测动作参考和未来力矩序列。<strong>阶段II</strong>：冻结的力矩感知VLA提供视觉语义令牌、参考动作和预测力矩；一个轻量化的行动者-评论家模块通过力矩条件和阶段路由在线精炼动作。<strong>阶段III</strong>：在长视野接触密集任务上评估性能。</p>
+</blockquote>
+<p><strong>1. 作为动作与力矩参考模型的触觉感知VLA</strong></p>
+<ul>
+<li><strong>触觉导出力矩表示</strong>：使用安装在夹爪指面内的压电触觉垫，将原始的6×8触觉阵列映射为紧凑的6维力矩（力和扭矩），便于复用。对每个时间步t，完整触觉观测为来自左右指尖的12维力矩。</li>
+<li><strong>时序力矩编码</strong>：使用轻量MLP编码器将最近J个时间步的力矩序列编码为一个固定大小的力矩令牌，以便与后续架构融合。</li>
+<li><strong>力矩条件参考生成</strong>：VLM处理图像、语言和机器人状态前缀令牌后得到隐藏状态。力矩令牌不直接与视觉/语言令牌一同输入VLM，而是在视觉-语言编码后通过自注意力与之融合，以保留预训练的视觉-语言语义。借鉴混合专家设计，使用软路由器计算权重，对融合特征进行加权求和。为了调节动作生成，将路由后的特征投影到动作视野，并与一个<strong>零初始化的力矩令牌旁路</strong>相加。</li>
+<li><strong>联合动作-力矩预测</strong>：输出头联合预测未来 H 步的动作序列和力矩序列。动作序列提供运动参考，力矩序列提供期望的接触指导。使用流匹配目标进行训练，损失函数分离为动作和力矩维度。</li>
+</ul>
+<p><strong>2. 阶段特定的在线参考适应</strong></p>
+<ul>
+<li><strong>阶段特定的力矩条件动作精炼</strong>：在策略查询时，冻结的力矩感知VLA预测一个H步的动作参考序列和未来力矩序列。在线执行器仅执行前 K 步后进行重规划。在线行动者利用精炼上下文信息，包括：冻结VLA提取的紧凑视觉语义令牌、机器人本体感受、当前测量力矩、近期的测量力矩历史、对齐的预测力矩参考以及VLA动作参考。一个阶段估计器预测当前接触阶段<code>g_t</code>，并选择对应的阶段特定行动者头<code>π_φ_gt</code>来输出精炼后的可执行动作块。</li>
+<li><strong>干预审查的行动者-评论家学习</strong>：训练数据包含策略生成和人类干预的动作。标准任务评论家可能错误地将干预后取得的成功归功于干预前较差的策略动作。为解决此信用分配偏差，除了任务评论家<code>Q_task</code>，本文引入了**干预审查评论家<code>Q_ic</code>**。该方法通过存储在回放缓冲区中的控制源标签识别“人类-策略”边界（即主要由策略生成的动作块后紧跟着主要由干预主导的动作块）。对于审查边界的转换，<code>Q_ic</code>的目标值公式会移除自举项并施加干预代价，从而阻止干预后的成功信号向前传播到先前的策略动作上。</li>
+<li><strong>行动者优化</strong>：行动者的损失函数包含三部分：行为克隆损失（根据控制源，对策略生成步骤锚定到VLA参考，对人类干预步骤模仿已执行的修正动作）、任务价值改进项（最小化任务评论家对精炼动作的估计值）和干预审查价值惩罚项（仅当精炼动作的干预审查价值低于VLA参考动作时施加惩罚）。</li>
+</ul>
+<p>与现有方法相比，创新点具体体现在：</p>
+<ol>
+<li>提出了“力矩感知的在线精炼”框架，将离线VLA的接触感知能力升级为在线自适应。</li>
+<li>设计了“干预审查评论家”，有效解决了混合人机协作数据中的价值学习偏差问题。</li>
+<li>采用了“阶段特定”和“力矩条件”的轻量化行动者设计，集约而高效。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与基准</strong>：在真实的机器人“门闩盒”平台上进行评估，该平台配备多视角视觉和双指尖触觉传感（见下图）。测试了三个接触密集型子任务：咖啡杯放置（紧密插入）、门闩操作（机械啮合）和鸡蛋处理（易碎物体抓放）。</p>
+<p><img src="https://arxiv.org/html/2606.09337v1/2606.09337v1/x2.png" alt="实验平台"></p>
+<blockquote>
+<p><strong>图3</strong>：真实机器人实验平台。配备多视角视觉和双指尖触觉感知的门闩盒设置。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.09337v1/2606.09337v1/x4.png" alt="任务可视化"></p>
+<blockquote>
+<p><strong>图5</strong>：任务可视化。门闩盒操作中具有代表性的接触密集子任务，包括咖啡杯放置、门闩上锁和鸡蛋放置。</p>
+</blockquote>
+<p><strong>对比的Baseline方法</strong>：</p>
+<ul>
+<li><code>π_0.5</code>：基础VLA策略。</li>
+<li><code>TA-VLA</code> 与 <code>ForceVLA</code>：重新实现的触觉/力感知VLA方法。</li>
+<li><code>TORL-VLA w/o RL</code>：仅执行学习到的力矩感知参考模型，无在线精炼。</li>
+<li><code>RLT</code>：标准的、无干预审查的参考引导在线精炼方法。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>如下表所示，离线基线（<code>π_0.5</code>, <code>TA-VLA</code>, <code>ForceVLA</code>）在接触状态推理不可靠时性能受限。<code>TORL-VLA w/o RL</code>（仅参考模型）已优于离线基线，说明力矩感知参考模型提供了更强的先验。<code>RLT</code>（标准在线精炼）进一步提升，但在鸡蛋任务中因抓握过于激进导致3次失败。<strong>TORL-VLA取得了近乎完美的子任务成功率（30/30, 29/30, 30/30），并将全任务成功率从<code>π_0.5</code>的40%提升到93%。</strong></p>
+<blockquote>
+<p><strong>表1</strong>：真实机器人性能。报告了三个接触中心子任务和全任务的成功率；全任务平均时间在成功的试验中计算。</p>
+</blockquote>
+<p>此外，下图展示了全任务可靠性和时间限制内的吞吐量评估。<strong>TORL-VLA在成功率和60分钟完成的任务数量（吞吐量）上均表现最佳</strong>，表明其在接触偏差下具有更可靠、高效的执行能力。</p>
+<p><img src="https://arxiv.org/html/2606.09337v1/2606.09337v1/x3.png" alt="全任务可靠性与吞吐量"></p>
+<blockquote>
+<p><strong>图4</strong>：全任务可靠性与吞吐量。比较了不同方法的成功率与60分钟吞吐量。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：</p>
+<ol>
+<li><strong>力矩感知参考模型消融</strong>（下表左）：移除MoE融合模块导致性能下降最大，凸显了路由力矩特征与视觉-语言表征的重要性；移除零初始化物理旁路（Bypass）也显著降低成功率，说明其保留了细粒度接触信息；移除力矩历史令牌或未来力矩预测目标影响较小。</li>
+<li><strong>在线适应消融</strong>（下表右与下图）：移除力矩上下文（测量力矩与预测力矩提示）会降低所有子任务性能；移除干预审查评论家也会降低性能，在需要频繁干预的门闩任务上影响最显著。下图进一步表明，干预审查评论家能够带来更快的在线数据利用效率和适应速度。</li>
+</ol>
+<blockquote>
+<p><strong>表2</strong>：消融研究。左：力矩感知参考模型消融。右：在线适应消融。IC评论家指干预审查评论家。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.09337v1/2606.09337v1/x5.png" alt="在线适应曲线"></p>
+<blockquote>
+<p><strong>图6</strong>：门闩任务上的在线适应。左：随着在线数据增加，每10分钟测量的吞吐量。右：每个数据检查点的成功率。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了TORL-VLA框架，通过结合力矩感知的VLA参考模型和轻量化在线RL精炼器，将离线接触感知策略转变为在线接触自适应策略。</li>
+<li>设计了干预审查评论家，解决了从混合人机协作数据中进行在线强化学习时的信用分配偏差问题。</li>
+<li>在真实机器人长视野接触密集任务上系统验证了方法的有效性，在成功率与执行效率上显著优于多个强基线。</li>
+</ol>
+<p><strong>论文提到的局限性</strong>：</p>
+<ol>
+<li>评估局限于包含少数接触瓶颈的门闩盒操作场景，需要在更多物体、接触模式、环境和机器人实体上进行更广泛的验证。</li>
+<li>依赖可靠的手指力矩测量，传感器噪声、校准误差、坐标系失准或硬件漂移可能影响反馈和预测质量。</li>
+<li>基于干预的学习需要人类干预数据，并假定人类干预能够可靠地指示自主执行何时即将失败。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：<br>本工作表明，将具身先验模型（如VLA）与面向特定瓶颈的在线自适应能力结合是提升机器人操作鲁棒性的有前景的路径。后续研究可探索如何将此类框架扩展到更广泛的接触场景，研究对力矩预测误差更鲁棒的学习方法，以及开发自监督或半监督的干预信号检测机制以减少对人类监督的依赖。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>论文针对接触丰富操作任务中，现有触觉VLA模型离线部署、无法在线适应接触条件变化导致接触力不当和效率低下的问题，提出了TORL-VLA框架。关键技术包括触觉衍生的力矩感知VLA预测参考动作和未来力矩序列，轻量级在线强化学习模块细化动作，以及干预审查批评器稳定混合数据学习。真实机器人实验在闩锁操作、咖啡杯放置和鸡蛋处理等任务中，TORL-VLA在子任务和全任务成功率及时间限制执行效率上均优于基线方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.09337" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
