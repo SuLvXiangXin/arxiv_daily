@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LAFP: Preserving Latent Action Structure in Latent Policy Learning via Flow Matching - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>LAFP: Preserving Latent Action Structure in Latent Policy Learning via Flow Matching</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.10517" target="_blank" rel="noreferrer">2606.10517</a></span>
+        <span>作者: Wei Li Team</span>
+        <span>日期: 2026-06-09</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，从大规模无标签视频数据中学习高质量潜在动作，再结合少量真实交互数据训练动作解码器的范式，已成为扩展潜在策略学习的一种前景广阔的方法。该领域主流方法通常遵循一个三阶段流程：预训练阶段通过逆向动力学模型（IDM）和正向动力学模型（FDM）在重构目标下联合优化，学习一个潜在的、具有时间动态性的动作表示空间；蒸馏阶段训练一个潜在策略来预测由冻结的IDM生成的潜在动作；后训练阶段使用有限的真实动作标注数据学习一个动作解码器，将潜在动作映射回可执行的物理动作。</p>
+<p>然而，现有方法在关键的蒸馏阶段普遍采用行为克隆（BC）来从IDM学习潜在策略，这倾向于将本质上多模态的动作分布塌缩成单模态的，从而损害了预训练阶段学到的潜在动作结构。流匹配（FM）为建模多模态分布提供了潜在的替代方案，但直接应用会因学习到的策略的随机性，导致后训练阶段潜在动作与物理动作之间的不对齐，从而降低动作解码器的效果。</p>
+<p>本文针对上述“行为克隆破坏潜在动作分布的多模态性”与“流匹配的随机性导致潜在动作与物理动作不对齐”这两个具体痛点，提出了一个新视角：利用流匹配进行潜在策略学习以保持预训练的潜在动作结构，并引入推理时插值机制来减轻随机性带来的不对齐。核心思路是：在蒸馏阶段用条件流匹配策略替换行为克隆，以完整建模和保持潜在动作的多模态分布；在后训练阶段通过插值约束采样的随机性，稳定动作解码器的训练。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LAFP框架遵循潜在动作学习范式，包含三个阶段：预训练（学习潜在动作空间）、蒸馏（学习潜在流策略）和后训练（学习动作解码器）。整体框架如下图所示。</p>
+<p><img src="https://arxiv.org/html/2606.10517v1/2606.10517v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：LAFP框架概览。与采用行为克隆的标准LAOM流程相比，LAFP在蒸馏阶段用流匹配替换行为克隆以更好地保持潜在动作的多模态结构。在后训练阶段，学习到的潜在流策略被冻结，仅优化动作解码器。</p>
+</blockquote>
+<p><strong>1. 预训练：潜在动作学习</strong><br>该阶段沿用LAOM框架，通过联合训练IDM、FDM和一个动作解码器来学习潜在动作空间。IDM将连续观测 ((o_t, o_{t+1})) 编码为潜在动作 (z_t)，FDM则从 (o_t) 和 (z_t) 重构 (o_{t+1})。潜在空间使用矢量量化变分自编码器进行离散化，构建一个通过指数移动平均更新的离散动作码本。训练损失包括矢量量化损失 (\mathcal{L}<em>{\text{vq}} = |z_t - e|^2)（其中 (e) 为最近的码本条目）、重构损失 (\mathcal{L}</em>{\text{reconstruction}} = |\hat{o}<em>{t+1} - o</em>{t+1}|^2)，以及一个使用约10%真实动作标注数据的动作解码器损失 (\mathcal{L}<em>{\text{ad}} = |\hat{a}<em>t - a_t|^2)。总损失为 (\mathcal{L} = \mathcal{L}</em>{\text{vq}} + \mathcal{L}</em>{\text{reconstruction}} + \lambda \cdot \mathcal{L}_{\text{ad}})，通常设 (\lambda = 0.1)。</p>
+<p><strong>2. 蒸馏：流匹配策略学习</strong><br>LAFP以条件流匹配策略 (\pi_{\text{flow}}) 替换LAOM中的行为克隆。该策略学习一个从简单先验分布（高斯噪声）到给定当前观测 (o_t) 的条件下潜在动作分布的传输过程。训练时，采样高斯噪声 (z_0) 和时间步 (\tau \sim U(0,1))，构造插值状态 (z_{t,\tau} = z_t \cdot \tau + z_0 \cdot (1-\tau))。策略以 ((z_{t,\tau}, \tau, o_t)) 为输入，预测目标 (\hat{z}_{\text{target}})。</p>
+<p><img src="https://arxiv.org/html/2606.10517v1/2606.10517v1/x20.png" alt="训练流程"></p>
+<blockquote>
+<p><strong>图2</strong>：LAFP的训练与推理流程。上方展示了流匹配的两种训练目标（潜在动作预测和矢量场预测）。右侧说明了后训练中的核心挑战及插值采样解决方案。下方展示了推理时的迭代更新流程。</p>
+</blockquote>
+<p>论文探索了两种训练目标（见图2上方）：</p>
+<ul>
+<li><strong>潜在动作预测</strong>：模型直接回归到 (z_t)，损失为 (\mathcal{L} = \mathbb{E}[|z_t - \hat{z}_{\text{target}}|_2^2])。</li>
+<li><strong>矢量场预测</strong>：模型估计位移 (v_t = (z_t - z_0))，损失为 (\mathcal{L} = \mathbb{E}[|v_t - \hat{z}<em>{\text{target}}|<em>2^2])。<br>在推理时进行迭代更新：给定预测目标和当前插值状态，计算更新方向 (v) 并执行 (z</em>{t,\tau+\Delta\tau} = z</em>{t,\tau} + v \cdot \Delta\tau)。根据实验，在高维潜在空间中，潜在动作预测能提供更稳定的优化并更好地保持学习到的结构，因此LAFP最终采用此目标。</li>
+</ul>
+<p><strong>3. 后训练：基于流匹配的动作解码</strong><br>流匹配策略的本质随机性导致在相同观测 (o_t) 下可能生成不同的潜在动作 (\hat{z}<em>t)，这使得与唯一对应的真实动作标签 (a_t^{\text{gt}}) 之间的一一对应关系被打破，从而使解码器训练变得困难。LAFP提出了两种训练动作解码器 (g_\phi) 的策略。解码器训练损失均为 (\mathcal{L}</em>{\text{mapping}}(\phi) = \mathbb{E}_t[|a_t^{\text{gt}} - \hat{a}_t|_2^2])。</p>
+<ul>
+<li><strong>直接使用潜在动作标签</strong>：假设学习的策略大致保持了IDM诱导的潜在结构，使用IDM编码的真实潜在动作 (z_t) 作为解码器输入。</li>
+<li><strong>推理时插值机制</strong>（LAFP采用）：此方法约束流匹配中的源分布，使其在高斯噪声和 (z_t) 之间进行插值，从而减少随机性并鼓励 (\hat{z}_t \approx z_t)。解码器对生成的样本 (\hat{z}_t) 进行解码：(\hat{a}_t = g_\phi(\hat{z}_t))。在此阶段，流匹配策略可以冻结，作为一个稳定的动作先验。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准</strong>：在PROCGEN的16个程序生成环境中进行评估，每个环境都有独立的策略。</li>
+<li><strong>基线</strong>：以LAOM作为主要基线，评估其两个变体：<code>LAOM</code>（后训练时联合微调潜在策略和解码器）和<code>LAOM(Frozen)</code>（冻结潜在策略）。LAFP在相同设置下评估为<code>LAFP(Fine-tuned)</code>和<code>LAFP</code>。</li>
+<li><strong>指标</strong>：主要评估指标为模仿学习的成功率。</li>
+</ul>
+<p><strong>关键结果</strong>：</p>
+<ul>
+<li><strong>下游性能</strong>：在16个环境中，LAFP在大多数情况下都优于LAOM，平均成功率提升了8.1%，相对提升达23.0%。提升归因于流匹配更好地保持并利用了IDM预训练阶段学到的潜在动作分布结构。在少数简单策略即最优的环境中，LAFP略低于LAOM，但仍具有竞争力。对比微调和冻结设置发现，<code>LAFP(Fine-tuned)</code>相比<code>LAFP</code>性能明显下降，而<code>LAOM</code>则从微调中略有受益，这表明后训练微调会破坏流匹配所保持的潜在结构。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.10517v1/2606.10517v1/x2.png" alt="性能对比"></p>
+<blockquote>
+<p><strong>图3</strong>：LAOM与LAFP在四个代表性环境及16个环境平均水平上的成功率对比。LAFP在多数环境中表现更优。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.10517v1/2606.10517v1/x3.png" alt="潜在空间可视化"></p>
+<blockquote>
+<p><strong>图4</strong>：IDM与各下游策略在四个环境中的潜在动作空间UMAP投影对比。LAFP（第5列）的潜在结构与IDM（第6列，参考）最为相似，说明其有效保持了预训练阶段的潜在空间结构。</p>
+</blockquote>
+<p><strong>消融与深入分析</strong>：</p>
+<ol>
+<li><strong>预训练中动作解码器正则化的影响</strong>：引入动作解码器约束能产生更具结构性和可分性的潜在动作分布，这对依赖准确建模潜在空间几何结构的流匹配策略尤为重要。</li>
+<li><strong>解码器训练策略与采样一致性</strong>：使用直接噪声采样训练动作解码器会导致性能下降，因为解码器被迫将多个不一致的潜在表示映射到单一动作标签。而插值采样通过鼓励 (\hat{z}_t \approx z_t) 减少了潜在变异性，保留了与IDM结构的一致性，从而实现了更可靠的解码器训练和更强的下游性能。</li>
+<li><strong>推理步数权衡</strong>：增加流匹配推理步数初期能提升性能，但收益很快饱和，而推理时间单调增长。使用三个推理步骤能在性能和效率之间达到最佳平衡，以不到1倍的额外推理开销，取得相比行为克隆显著的性能提升。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.10517v1/2606.10517v1/x4.png" alt="推理步数"></p>
+<blockquote>
+<p><strong>图5</strong>：不同推理步数的流匹配策略与行为克隆在性能和单次推理时间上的对比。步数标记为LAFP-k（k为步数）。三个推理步骤提供了最佳权衡。</p>
+</blockquote>
+<ol start="4">
+<li><strong>潜在维度与预测目标</strong>：比较潜在动作预测与矢量场预测。直接预测潜在动作在所有维度上都表现稳定，并在较低维度（32-128）上略微优于矢量场预测。矢量场预测随着维度增加（如256）变得更加不稳定，性能下降。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>证明了通过流匹配学习潜在策略可以显式地保持预训练潜在动作空间的内在结构，从而在下游模仿学习中带来一致的性能提升。</li>
+<li>提出了一种推理时插值机制，用于在流匹配推理范式下训练动作解码器，有效缓解了策略随机性导致的潜在动作与物理动作不对齐问题。</li>
+<li>通过消融研究确定了最优推理步数，能以不到1倍的额外训练和推理开销，实现高达10-15%的成功率提升。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>尽管LAFP仅需少量推理步数即可获得强大性能，但其迭代特性相比一步式策略仍会引入额外的计算开销。</li>
+<li>研究在离散动作环境的离线模仿学习下进行，将其扩展到连续控制和在线学习仍有待探索。</li>
+</ol>
+<p><strong>启示</strong>：</p>
+<ol>
+<li>研究结果表明，有效潜在策略蒸馏的关键在于在策略优化过程中保持预训练潜在空间的结构，而非让潜在空间去适应下游监督。性能与潜在表征本身的稳定性和语义一致性密切相关。</li>
+<li>计算开销的考虑激励未来研究通过蒸馏或捷径学习技术，将多步生成过程压缩为一步或近一步策略，进一步提升部署效率。</li>
+<li>性能依然依赖于潜在空间的质量，这推动了对更好的表示学习以及潜在建模与策略优化之间更紧密结合的进一步研究。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出LAFP方法，解决潜在策略学习中行为克隆导致多模态动作分布坍缩为单模态、破坏预训练潜在动作结构，以及直接应用流匹配因策略随机性引发潜在动作与实际动作错位的问题。LAFP采用流匹配进行策略学习，并引入推理时间插值机制减轻错位。实验表明，在下游模仿学习任务中，LAFP成功率比先前方法提升10–15%，推理开销额外小于1倍。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.10517" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

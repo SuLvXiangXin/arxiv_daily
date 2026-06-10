@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SARM2: Multi-Task Stage Aware Reward Modeling for Self Improving Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>SARM2: Multi-Task Stage Aware Reward Modeling for Self Improving Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.10305" target="_blank" rel="noreferrer">2606.10305</a></span>
+        <span>作者: Mac Schwager Team</span>
+        <span>日期: 2026-06-09</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作（VLA）模型已成为机器人操作领域主流策略学习范式。然而，要使预训练的VLA模型适应长时程操作任务，通常需要领域内数据微调。主流的监督微调（SFT或行为克隆BC）严重依赖大量高质量人类演示，且策略难以突破演示数据分布。现有方法试图利用奖励模型来过滤或重新加权演示数据，以提取更多价值，但这类离线方法被演示数据的分布所限，无法从自主运行（rollout）中实现自我改进。另一类在线方法依赖于稀疏奖励或需要昂贵的人机交互监督。</p>
+<p>具体到奖励模型本身，现有方法分为两类：1) <strong>任务特定的奖励模型</strong>（如SARM）：虽然通过阶段建模提升了长时程任务的准确性，但其阶段估计器依赖任务特定的密集标注，每新增一个任务都需重新训练，缺乏泛化能力。2) <strong>通用的VLM奖励模型</strong>（如TOPReward, Robometer）：基于大规模视觉语言模型，具有良好的跨任务泛化性能，但其预测往往是粗粒度的，在每一步（step-level）上噪声较大，不适合作为长时程操作的密集监督信号。</p>
+<p>本文旨在解决的核心痛点是：<strong>如何构建一个能同时满足密集、准确、泛化三个要求的奖励模型，以支持大规模、可自我改进的VLA-强化学习（RL）</strong>。本文的核心思路是：提出SARM2——一个多任务阶段感知奖励模型，它通过一个基于共享动作原语的可泛化阶段估计器，结合一个多门混合专家（MMoE）值解码器，在一个模型中为不同的长时程操作任务生成密集、准确的奖励；并在此基础上，构建了一个名为SPIRAL的奖励对齐自改进框架，利用SARM2的密集奖励实现策略的持续自主优化。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>SARM2方法的整体流程是：输入当前的多视角图像和本体感知状态，通过一个共享的、冻结的SigLIP-2编码器提取特征；这些特征随后并行输入两个因果Transformer网络——阶段估计器和MMoE值解码器。阶段估计器预测当前片段对应的动作原语，该预测结果用于选择MMoE解码器中对应的门控网络；最终，值解码器输出一个密集的、阶段感知的目标距离估计值（作为奖励信号）。</p>
+<p><img src="https://arxiv.org/html/2606.10305v1/2606.10305v1/x1.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图2</strong>：SARM2方法总体框架。三个相机视角和本体感知状态由一个共享的、冻结的SigLIP-2编码器处理，其缓存的特征分别馈送到两个独立训练的因果Transformer中：一个任务无关的阶段估计器（用于将当前片段分类到K+1=22个候选类别中），和一个多门MoE值解码器（其门控选择由预测的原语类别决定，并通过Top-K路由共享专家池产生密集的进展估计）。</p>
+</blockquote>
+<p><strong>核心模块一：动作原语阶段估计器</strong>。 为了构建一个可泛化、无需任务特定标注的阶段估计器，本文使用“动作原语”作为中间表示。作者从一个包含100个任务、200小时的真实操作数据集中，归纳出K=21个覆盖了超过90%任务时长的核心动作原语（如抓取、推动、折叠等），并额外添加一个<code>null</code>类别处理不确定或低频行为。阶段估计被形式化为一个对K+1=22个类别的时序分类任务。模型输入为步长Δ=30的最近N=6帧图像和本体状态，使用一个4层的因果Transformer后接线性分类头进行预测，并在平衡构建的动作原语数据集上使用交叉熵损失进行训练。</p>
+<p><strong>核心模块二：多门混合专家值解码器</strong>。 该模块负责输出密集的阶段感知奖励。由于不同原语对应的视觉动态和进展信号差异很大，一个单一路由的混合专家模型容易产生干扰或对尾部类别欠拟合。因此，SARM2采用了基于预测原语类别的<strong>多门MoE</strong>设计。首先，将K+1个原语按视觉/运动模式分为M+1个语义组。对应每个语义组，都有一个独立的门控网络，但它们共享一个包含E个专家（3层MLP）的池子。在每一步，根据阶段估计器预测的原语<code>y~t</code>确定其所属的语义组m，并激活对应的门控<code>Gm</code>进行Top-K路由。模型输入除了视觉和本体信息，还包括任务名称的文本嵌入和预测原语的嵌入。为了鼓励路由多样性，训练时加入了基于负载均衡和熵的辅助损失。最终的价值预测目标是归一化的剩余步数<code>r* = -(T-t)/T ∈ [-1, 0]</code>，总损失函数为MSE损失与辅助损失的加权和。</p>
+<p><strong>创新点</strong>：1) <strong>泛化的阶段表示</strong>：用可跨任务复用的动作原语替代任务特定的阶段标签，解决了SARM等模型需要逐任务密集标注的问题。2) <strong>原语条件化的多门MoE</strong>：将阶段预测直接映射到值解码器的门控选择，为不同原语组激活不同专家组合，在共享模型容量的同时实现专业化，解决了单一模型在多任务上精度不足和路由崩溃的问题。</p>
+<p><strong>SPIRAL框架</strong>： 基于SARM2提供的密集奖励，本文进一步提出了SPIRAL（Self-Policy Improvement via Reward-Aligned Learning）自改进框架。</p>
+<p><img src="https://arxiv.org/html/2606.10305v1/2606.10305v1/x2.png" alt="自改进框架"></p>
+<blockquote>
+<p><strong>图3</strong>：SPIRAL自改进框架。(1)在演示数据上BC微调得到初始策略π1。(2) 并行进行 (a) 一次性的、由人工标注约100个π1产生的运行轨迹，将奖励模型从RM1适配到RM2；(b) 使用预训练的RM1进行离线的SPIRAL更新，得到策略π2。(3) 随后进入自主循环：收集新轨迹，用RM2重新标记，再进行SPIRAL更新，无需额外人工监督。</p>
+</blockquote>
+<p>SPIRAL以残差RL为底层，采用了DICE-RL的分布收缩RL微调方案。其关键改进在于：使用来自SARM2的<strong>密集每步奖励</strong><code>rt_dense</code>来驱动TD3目标，并结合基于稀疏最终奖励的蒙特卡洛目标。演员（策略）更新采用TD3+BC风格的目标，通过增加一个BC正则项（权重β=30）来保持对预训练策略的接近。框架采用“多样本期望训练”：在每个状态，从流先验中采样κ个潜变量，生成κ个候选动作，并基于这些候选动作计算平均的评论家TD目标和演员目标；执行时采用“最佳of-κ”动作选择。SPIRAL流程包含四个阶段：BC初始化、离线SPIRAL更新、一次性奖励模型适配、自主循环迭代更新。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：奖励模型评估在一个包含10个操作任务的基准上进行，这些任务分为经典任务集𝒮1（如拾放、折叠布料）和非传统/组合任务集𝒮2（如使用工具的任务）。对比的基线包括：最强的单任务基线ReWiND、通用VLM奖励模型TOPReward和Robometer（及其LoRA微调变体RM-FT）。还设置了多种消融变体。策略学习评估选择了两个代表性任务：𝒮1中的“折叠短裤”（变形物体操作）和𝒮2中的“擦拭白板”（多阶段组合任务）。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>奖励模型精度</strong>：如表1所示，SARM2在两个方面（𝒮1， 𝒮2）和总体的演示MSE上均取得最低值（分别为0.006， 0.031， 0.020），比最强基线ReWiND（0.036）降低了约80%。在策略运行轨迹的分类评估指标ρ上，SARM2在更难的“擦拭白板”任务上也达到最高（0.667）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.10305v1/2606.10305v1/x3.png" alt="奖励模型评估结果表"></p>
+<blockquote>
+<p><strong>表1</strong>：奖励模型在10任务基准上的评估结果。SARM2在演示MSE和运行轨迹分类指标上均优于所有基线及消融变体。MoE密度指标显示SARM2的路由器最为健康（值接近0）。w/o SE和w/o MG的消融实验表明阶段估计器和多门设计均有效且具有协同作用。</p>
+</blockquote>
+<ol start="2">
+<li><strong>策略学习与自改进效果</strong>：如表2所示，在仅使用演示数据的离线方法中，使用SARM2密集奖励的SPIRAL（RL-Dense）效果最好（折叠短裤“平整”子任务成功7/12，擦拭白板平均进度81.3%）。在使用自主运行数据进行自改进后，配备SARM2的SPIRAL进一步提升至接近完美性能：折叠短裤“平整”子任务12/12成功，“褶皱”子任务8/12成功，擦拭白板任务18/20成功、平均进度97.5%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.10305v1/2606.10305v1/x4.png" alt="策略学习结果表"></p>
+<blockquote>
+<p><strong>表2</strong>：自改进三轮后的策略评估结果。基于运行的SARM2方法在所有指标上均超过所有仅用演示的基线，也大幅优于使用稀疏奖励或微调VLM奖励模型的其他自改进方法。</p>
+</blockquote>
+<ol start="3">
+<li><strong>自改进趋势</strong>：图4显示了在多轮迭代中不同奖励来源的自改进趋势。使用SARM2密集奖励的方法在两项任务的所有指标上均呈现单调提升。而使用稀疏奖励的方法在最难的“褶皱”子任务上性能下降，使用微调VLM奖励模型的方法则很快达到平台期。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.10305v1/2606.10305v1/x5.png" alt="自改进趋势图"></p>
+<blockquote>
+<p><strong>图4</strong>：三轮自改进中的趋势图。所有曲线从相同的RL-Dense检查点开始。SARM2奖励能带来持续稳定的性能提升，而稀疏奖励和微调VLM奖励（RM-FT）效果有限甚至倒退，验证了高质量密集奖励对稳定数据飞轮的关键作用。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：1) <strong>阶段估计器的重要性</strong>：去除阶段估计器的变体（w/o SE）演示MSE从0.020上升至0.034，MoE路由器也趋于崩溃（密度0.87）。2) <strong>多门设计的重要性</strong>：去除多门设计的变体（w/o MG）MSE上升至0.026，路由器健康度（0.42）低于SARM2（0.10）。3) <strong>训练数据多样性</strong>：仅在简单任务集𝒮1上训练的变体（𝒮1 Var.），在𝒮1上的MSE（0.010）也差于使用全数据集训练的SARM2（0.006），说明了任务间的正向迁移。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 提出了<strong>SARM2</strong>，一个整合了可泛化动作原语阶段估计器和多门MoE值解码器的<strong>多任务阶段感知奖励模型</strong>，能在一个模型中为多样化的长时程操作任务生成密集且准确的奖励。2) 基于SARM2，提出了<strong>SPIRAL</strong>，一个<strong>奖励对齐的随轨策略自改进框架</strong>，利用密集奖励实现自主运行的策略迭代优化，构建了一个最小化人工干预的机器人数据飞轮。3) 在包含10个任务的基准和两个真实机器人长时程任务上进行了全面验证，证明了SARM2在奖励建模精度和支撑策略自我改进方面的显著优势。</p>
+<p><strong>局限性</strong>：论文提到，SPIRAL框架的启动需要一次<strong>人类监督</strong>，即对约100个初始策略的自主运行轨迹进行人工状态标注，以将奖励模型从演示数据分布（RM1）适配到初始策略的自主运行分布（RM2）。尽管这是一次性操作且后续循环完全自主，但这仍是引入人工环节。</p>
+<p><strong>后续研究启示</strong>：1) <strong>高质量密集奖励是关键瓶颈</strong>：研究再次证实，对于长时程任务的自我改进，仅仅提供稀疏的终点奖励或使用噪声大的通用奖励模型是不够的；<strong>准确、密集的进展评估</strong>是驱动稳定、正向数据飞轮的核心。2) <strong>动作原语作为跨任务中间表示的潜力</strong>：研究展示了将复杂的操作任务分解为有限、可复用的动作原语集合，可以为跨任务的知识迁移和泛化提供一个有效桥梁。未来可以探索更大规模、更细粒度的原语词典，以及更自动化的原语发现方法。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人长时程操作任务中奖励模型依赖昂贵标注或过于粗糙的问题，提出SARM2多任务阶段感知奖励模型。该方法结合动作原语阶段估计器与多门混合专家（MMoE）值头，实现跨任务的密集每步奖励估计。基于SARM2进一步提出SPIRAL框架，通过奖励对齐学习实现策略自改进。实验显示，在10任务基准上SARM2将价值估计MSE降低80%；应用于SPIRAL后，任务成功率大幅提升，如折叠短裤从58%提高至100%，清洁白板从50%提升至90%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.10305" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

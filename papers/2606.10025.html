@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>GHOST: Hierarchical Sub-Goal Policies for Generalizing Robot Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>GHOST: Hierarchical Sub-Goal Policies for Generalizing Robot Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.10025" target="_blank" rel="noreferrer">2606.10025</a></span>
+        <span>作者: David Held Team</span>
+        <span>日期: 2026-06-08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前机器人模仿学习的主流范式是通过大量机器人遥操作演示数据来训练端到端的视觉运动策略。虽然能学习复杂行为，但要想泛化到新物体和环境，需要海量的机器人数据，收集成本高昂且难以扩展。本文针对这一泛化数据效率低下的痛点，提出利用任务固有的<strong>层级结构</strong>作为新的解决视角。具体而言，许多操作任务可自然分解为多个阶段（如抓取、移动、放置），将高层级的子目标规划与低层级的动作执行分离，有望提升鲁棒性和数据效率。本文的核心思路是学习一个分层策略：高层策略预测下一子目标（定义为3D末端执行器姿态），低层策略根据该目标执行具体动作，并通过一种空间目标表示（热图投影）将两者桥接，从而利用少量人类视频实现跨形态的技能泛化。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>GHOST框架将控制分解为高层目标预测策略 <code>π_hi</code> 和低层目标条件策略 <code>π_lo</code>。训练时，从演示数据中提取的子目标边界用于监督 <code>π_hi</code>，而完整的机器人轨迹用于监督 <code>π_lo</code>。测试时，<code>π_hi</code> 根据多视角RGB-D观测和语言指令预测下一个子目标（一个分布），<code>π_lo</code> 则根据该子目标的表示执行目标条件下的控制。</p>
+<p><img src="https://arxiv.org/html/2606.10025v1/2606.10025v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：GHOST高层子目标预测架构。多相机RGB-D观测经DINOv3编码器处理，其图像块（patch）令牌被3D坐标增强。其他上下文（夹爪状态、语言嵌入、形态名称）通过独立的MLP编码。一个仅解码的Transformer处理所有令牌，每个图像块预测末端执行器关键点3D子目标分布的高斯混合模型（GMM）参数。</p>
+</blockquote>
+<p><strong>高层目标预测策略 <code>π_hi</code><strong>：其核心是预测子目标时刻 <code>s</code> 的末端执行器姿态 <code>e_s</code> 的分布。末端执行器姿态统一表示为4个3D关键点（对于平行夹爪，是夹爪底座、两个指尖和抓取中心；对于人手，是手掌、拇指尖、食指尖和抓取中心）。<code>π_hi</code> 采用仅解码的Transformer架构。输入包括：1) 来自C个相机的RGB-D图像，每个图像经冻结的DINOv3编码为K个图像块令牌，每个令牌用其3D中心坐标 <code>[x, y, z]</code> 增强；2) 当前夹爪姿态、任务语言嵌入（Flan-T5编码）、以及表示演示来自人还是机器人的可学习令牌。所有令牌通过独立的MLP投影到Transformer特征维度。<br>为处理演示数据的多模态性，该方法将目标分布建模为</strong>密集的逐图像块高斯混合模型（Dense GMM）</strong>。每个图像块令牌 <code>i</code> 预测：一个混合权重 <code>w_i</code>，以及4个3D残差向量 <code>{δ_i,1, δ_i,2, δ_i,3, δ_i,4}</code>（相对于该图像块的3D中心 <code>p_i</code>）。全局目标分布是由 <code>K×C</code> 个各向同性高斯（每个图像块一个）组成的混合分布，其均值 <code>μ_i = p_i + δ_i</code>。训练损失是子目标 <code>e_s</code> 相对于该GMM的负对数似然。推理时，根据混合权重 <code>{w_i}</code> 采样一个图像块 <code>i</code>，并使用其对应的均值预测 <code>μ_i</code> 作为预测的末端执行器姿态。</p>
+<p><img src="https://arxiv.org/html/2606.10025v1/2606.10025v1/x2.png" alt="GMM预测可视化"></p>
+<blockquote>
+<p><strong>图2</strong>：推理时高层策略GMM预测的可视化。展示了GMM的混合分量，透明度编码混合权重 <code>w_i</code>，箭头表示3D残差 <code>δ_i</code> 从图像块中心 <code>p_i</code> 的投影。</p>
+</blockquote>
+<p><strong>低层目标条件策略 <code>π_lo</code><strong>：实例化为一个Diffusion Policy。其关键创新在于如何将 <code>π_hi</code> 预测的3D子目标 <code>e_s</code> 作为条件输入到这个基于图像的政策中。具体方法是将 <code>e_s</code> 中的每个3D关键点投影到每个相机的图像平面上，得到稀疏的2D坐标 <code>p_i</code>，然后将每个坐标转换为一个</strong>密集的末端执行器热图</strong>通道。热图值计算为像素坐标 <code>x_xy</code> 到目标关键点 <code>p_c</code> 的归一化距离场的平方根：<code>H_xy^(c) = sqrt(||x_xy - p_c||_2 / d_max)</code>，其中 <code>d_max</code> 为图像对角线长度。最终得到热图张量 <code>H ∈ R^(3×h×w)</code>。选择三个非共线关键点（如夹爪腕部点和两个指尖点）对应的热图通道，通过标准的3通道图像编码器处理，然后与观测图像编码特征、本体感知输入等拼接，共同作为Diffusion Policy的全局条件向量。训练使用标准的扩散损失，仅在机器人数据 <code>D_robot</code> 上训练 <code>π_lo</code>。</p>
+<p><img src="https://arxiv.org/html/2606.10025v1/2606.10025v1/x3.png" alt="低层策略架构"></p>
+<blockquote>
+<p><strong>图3</strong>：GHOST低层目标条件策略架构。来自每个相机的图像和投影的末端执行器热图图像分别用ResNet编码器处理，然后与本体感知输入一起拼接成Diffusion Policy的全局条件向量。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.10025v1/2606.10025v1/x4.png" alt="热图生成"></p>
+<blockquote>
+<p><strong>图4</strong>：目标条件化的末端执行器热图生成过程。预测的3D关键点被投影到2D坐标，然后转换为编码与每个关键点空间邻近度的密集距离场热图。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>基准与数据集</strong>：实验在多个操作任务上进行，包括Pick-and-Place（盘/杯放置）、布折叠（连体衣、衬衫、毛巾）和敲钉子。使用机器人演示数据训练分布内（ID）任务，并可选地使用人类演示数据（通过离架手部姿态估计器获取）来适应分布外（OOD）任务变体，如新物体组合、新实例或新类别。<br><strong>对比方法</strong>：1) **Diffusion Policy (DP)**：平坦策略基线；2) <strong>MimicPlay</strong>：基于人类游戏数据学习潜在轨迹表示的层次方法；以及3) **GHOST (Robot Only)**：仅用机器人数据训练的本文方法，用于分离层次结构本身带来的收益。<br><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>分布内性能提升（仅用机器人数据）</strong>：在简单任务（plate-on-table）上，所有方法性能接近。但在复杂的长视野任务上，层次分解带来了显著提升。例如，在 <code>fold-onesie</code>（叠连体衣）任务中，GHOST (Robot Only) 的最终成功率（完成所有5次折叠）达到80.0%，远超DP的10.0%（表III）。在 <code>hammer-pin</code>（敲钉子）任务中，GHOST (Robot Only) 成功率为50.0%，也显著高于DP的16.7%（表V）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.10025v1/2606.10025v1/x5.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图5</strong>：GHOST框架在各种任务上的定性结果可视化。每一行代表一个任务（如新物体组合的“杯子上桌”）。通过在每时刻叠加 <code>π_hi</code> 目标预测投影的色彩图来展示 rollout 过程。</p>
+</blockquote>
+<ol start="2">
+<li><strong>利用人类演示实现分布外泛化</strong>：加入人类演示后，GHOST 能有效迁移技能到新场景。例如，在机器人未见过的新物体组合任务 <code>mug-on-table</code> 上，成功率达到63.3%（表II）。在新物体实例任务 <code>fold-onesie-ood</code> 上，最终成功率为56.7%，高于仅用机器人数据的43.3%（表III）。在最难的泛化到新物体类别且组合技能的任务 <code>fold-towel</code> 上，GHOST 取得了36.7%的成功率，而 MimicPlay 为16.7%（表IV）。</li>
+<li><strong>消融实验分析</strong>：附录中的消融实验表明，层次结构本身（即使使用从头训练的小型ViT编码器）已能大幅超越平坦DP策略，而DINOv3预训练编码器在长视野任务上提供了额外的性能提升。另一个关键发现是，在 <code>fold-towel</code> 任务上，一个“预言机”消融实验显示：如果 <code>π_hi</code> 使用少量（而非零）的该任务机器人演示（而非人类视频）进行训练，同时 <code>π_lo</code> 保持不变（从未见过叠毛巾数据），最终成功率可从40%跃升至90%。这表明低层控制器 <code>π_lo</code> 在获得准确子目标时，能<strong>零样本泛化</strong>到新物体类别，而OOD泛化的主要瓶颈在于高层策略 <code>π_hi</code> 所面临的人与机器人视觉观测之间的<strong>领域差距</strong>。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个基于3D末端执行器关键点子目标和热图目标条件化的分层模仿学习框架，该框架即使在仅使用机器人数据时，也能在复杂的长视野任务上持续提升分布内性能。</li>
+<li>证明了该因子分解天然支持<strong>无需动作重定向的跨形态迁移</strong>：通过在人机混合数据上训练高层策略 <code>π_hi</code>，同时将低层策略 <code>π_lo</code> 严格限定在机器人演示上，实现了利用人类视频进行技能泛化。</li>
+<li>引入了<strong>末端执行器热图</strong>作为空间接口，将3D子目标投影并表示为密集的2D距离场，从而有效实现了基于图像策略的目标条件化。</li>
+</ol>
+<p><strong>局限性</strong>：性能受限于离架手部姿态估计器的质量；子目标提取依赖于启发式方法（夹爪开合状态）或人工标注，对于连续操作任务（如倾倒、搅拌）可能不适用；在处理更长的任务视野时，由于人与机器人视觉观测的领域差距，性能下降显著。</p>
+<p><strong>启示</strong>：本文工作表明，清晰地分离任务级“做什么”（子目标）和形态级“怎么做”（动作）是提升策略鲁棒性和数据效率的有效途径。未来研究方向包括：从演示数据中自动发现子目标，以及学习更具形态不变性的视觉表示以进一步缩小人与机器人观测之间的领域差距，从而增强泛化能力。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本论文针对机器人操控策略难以泛化到新环境和对象的问题，提出了GHOST分层子目标策略。该方法将控制分解为高层策略（从多视角RGB-D观测预测3D末端执行器位姿子目标）和低层目标条件控制器（执行具体动作），并引入空间接口将3D目标投影为图像热图以实现目标条件化。实验显示，相比平铺的Diffusion Policy，该分层设计在一系列操控任务中一致提升性能与鲁棒性，且能通过少量人类演示适应新对象和任务变体。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.10025" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
