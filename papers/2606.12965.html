@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>EmbodiSteer: Steering Embodiment-Agnostic Visuomotor Policies with Joint-Space Guidance for Zero-Shot Cross-Embodiment Deployment - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>EmbodiSteer: Steering Embodiment-Agnostic Visuomotor Policies with Joint-Space Guidance for Zero-Shot Cross-Embodiment Deployment</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.12965" target="_blank" rel="noreferrer">2606.12965</a></span>
+        <span>作者: Xiang Li Team</span>
+        <span>日期: 2026-06-11</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前的模仿学习依赖于大规模异构机器人数据或“无身体”数据采集系统。为了统一这些数据，笛卡尔末端执行器位姿被广泛用作一种与具体机器人“本体”形态无关的统一动作表示。这种表示方式虽然促进了跨本体策略学习的可扩展性，但其纯粹的末端抽象方式也带来一个关键局限：训练出的策略对将要部署的具体机器人身体结构一无所知。这使得策略在面对机器人特有的约束（例如在杂乱场景中需要全身避障）时表现得十分脆弱。训练关节空间策略能引入本体感知，但关节动作是形态特异的，且无法从UMI等无身体演示中获得，导致缺乏机器人特定调优数据时难以进行零样本跨本体部署。本文聚焦于如何在推理时间，将已训练好的、本体形态无关的笛卡尔策略，在不同机器人手臂上可行且安全地执行。核心思路是在训练阶段保持策略对末端执行器动作的学习，而在推理阶段将扩散模型的采样过程“提升”到目标机器人的关节空间，并引入机器人本体及障碍物引导，实现零样本的、全身碰撞感知的跨本体部署。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的EmbodiSteer框架是一种无需训练的推理时引导方法。整体流程为：一个预先在笛卡尔空间训练好的扩散策略保持冻结。在面向目标机器人的推理部署时，采样过程被提升至该机器人的关节空间进行。具体而言，在每个去噪步骤，模型首先通过前向运动学将关节状态映射回笛卡尔动作空间以供策略网络预测，然后将预测的末端执行器更新残差通过机器人的（阻尼）雅可比伪逆映射回关节空间，最后施加一个基于控制屏障函数思想的全身碰撞感知引导来修正关节轨迹，使其远离障碍物，同时最小化对末端执行器预定运动的干扰。</p>
+<p><img src="https://arxiv.org/html/2606.12965v1/2606.12965v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：EmbodiSteer整体框架概述。(a) 将训练好的笛卡尔策略提升至目标机器人的关节空间进行推理时采样。(b) 基于CBF的引导使采样的关节轨迹避开全身碰撞，同时保留末端执行器行为。(c) 在受限操作任务中，跨不同机器人本体进行真实世界部署的可视化。</p>
+</blockquote>
+<p>核心模块包含<strong>关节空间去噪</strong>和<strong>基于CBF的全身碰撞感知引导</strong>。</p>
+<ol>
+<li><strong>关节空间去噪</strong>：该方法不采用每次去噪后求解逆运动学的高昂代价，而是将笛卡尔去噪更新视为局部任务空间残差，利用雅可比矩阵映射到关节空间。算法从初始关节位姿(q^{\mathrm{start}})开始，通过雅可比伪逆将初始笛卡尔噪声(a_{T,i})扰动转换为初始关节噪声状态(q_{T,i})（公式3）。在每一步去噪中，策略网络在关节映射的笛卡尔动作上预测噪声，得到目标笛卡尔动作(A_{t-1})后，计算其与(A_t)之间的相对位姿变化（表示为“twist” (\xi_{t,i})），并使用阻尼雅可比伪逆(J_{\mathcal{E}}^{+}(q))更新关节状态（公式4）。</li>
+<li><strong>CBF启发式全身碰撞感知引导</strong>：为了在去噪过程中引入避障约束，EmbodiSteer在每一步关节状态(q_{t-1,i}^{\mathrm{diff}})更新后，求解一个优化问题来获取一个修正量(\Delta q_{t-1,i}^{\mathrm{cbf}})。优化目标兼顾两点：一是最小化修正后的末端执行器位姿相对于修正前的偏离（由权重矩阵(W)和雅可比矩阵线性化近似），二是对关节空间修正量进行正则化（权重(\lambda_{\mathrm{cbf}})）。优化约束为一个线性不等式，确保施加修正后，机器人构形(q_{t-1,i})的符号距离场值(h(q))不低于安全阈值(d_{\mathrm{safe}})（公式5）。该约束在修正点处线性化，从而将问题转化为一个单约束的二次规划（公式6）。由于只有单约束，该QP可以高效求解。最终，通过裁剪约束修正量的大小得到引导后的关节状态（公式7）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.12965v1/2606.12965v1/x7.png" alt="算法伪代码"></p>
+<blockquote>
+<p><strong>图9</strong>：EmbodiSteer的算法伪代码。核心步骤包括关节空间状态的初始化和迭代去噪（Joint Space Denoising），以及在每一步对关节状态应用碰撞感知引导（Whole-Body Collision-Aware Guidance）。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：论文在ManiSkill模拟器中设计了三个挑战性操作任务（PlaceToast, TurnOnFaucet, MakeCoffee），这些任务需要精确的末端控制并引入了需要对全身（如机械臂肘部、前臂）进行避障的障碍物。使用浮动夹爪收集了200个无障碍演示来训练一个本体无关的笛卡尔扩散策略，随后在<strong>9个不同形态的模拟机器人</strong>上进行零样本部署。此外，在<strong>两个物理机器人</strong>（UR5和Franka Panda）和三个桌面任务上进行了真实世界实验，策略使用UMI手持夹爪收集的无障碍演示进行训练。</p>
+<p><strong>对比基线</strong>：</p>
+<ol>
+<li><strong>EE</strong>：直接执行笛卡尔策略预测的末端执行器动作，无避障。</li>
+<li><strong>Joint</strong>：将笛卡尔采样提升到关节空间，但无碰撞引导。</li>
+<li><strong>后处理修正</strong>：<strong>EE w/ Sampling</strong>（采样多个动作选最安全的）和<strong>EE w/ CBF</strong>（求解IK后做一次性CBF-QP修正）。</li>
+<li><strong>关节空间引导</strong>：<strong>Joint w/ CG</strong>（基于成本梯度的引导）和提出的<strong>EmbodiSteer</strong>（任务感知的CBF-QP引导）。</li>
+</ol>
+<p><strong>关键实验结果</strong>：<br>在模拟实验中，无障碍环境下，仅使用EE和Joint方法的平均任务成功率（TSR）均超过90%。加入障碍物后，EE方法的成功率骤降至35.7%，碰撞率（COR）高达57.6%。<br>提出的EmbodiSteer方法在所有障碍物感知方法中取得了最佳的综合性能：平均任务成功率为**64.2%<strong>，比EE提高了</strong>28.5%<strong>；平均碰撞率为</strong>11.5%<strong>，比EE降低了</strong>46.1%**。后处理方法EE w/ CBF在避障上表现次优（碰撞率17.9%），但成功率（57.0%）不及EmbodiSteer。基于梯度的Joint w/ CG方法在某些任务上避障有效，但在需要精细操作的任务上会严重干扰末端轨迹，导致成功率显著下降。</p>
+<p><img src="https://arxiv.org/html/2606.12965v1/2606.12965v1/x3.png" alt="定量结果表"></p>
+<blockquote>
+<p><strong>图4</strong>：PlaceToast任务在五个代表性机器人本体上的结果对比。左侧显示EmbodiSteer在各机器人上的任务成功率均显著高于基线；右侧显示其碰撞率远低于EE甚至EE w/ CBF，证明其跨本体的有效性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.12965v1/2606.12965v1/x4.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图5</strong>：引导约束强度(\gamma)在TurnOnFaucet任务上的消融实验。随着(\gamma)增大（从0到3），碰撞率下降，任务成功率呈现先升后降的趋势，表明需要在安全性和任务保持之间权衡。</p>
+</blockquote>
+<p>在真实世界实验中，无障碍时基础策略在两个机器人上49/60成功。加入障碍物后，基础策略成功率降至25/60，碰撞达58/60次。而EmbodiSteer将成功率恢复至<strong>47/60</strong>，碰撞大幅减少至<strong>4/60</strong>，实现了<strong>90.0%的碰撞率降低</strong>和<strong>36.7%的成功率提升</strong>。</p>
+<p><img src="https://arxiv.org/html/2606.12965v1/2606.12965v1/x5.png" alt="真实世界部署"></p>
+<blockquote>
+<p><strong>图6</strong>：真实世界部署示例。无引导时，基础策略尽管有任务意图，但机械臂常与障碍物（黄色区域）碰撞；EmbodiSteer引导下的关节轨迹则能成功避障并完成任务。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>EmbodiSteer</strong>，一个无需训练的推理框架，将本体无关的笛卡尔策略的推理时采样过程提升到目标机器人的关节空间，在保持笛卡尔策略学习可扩展性的同时，实现了零样本的跨本体部署。</li>
+<li>引入了<strong>CBF启发式的全身碰撞感知引导机制</strong>，通过求解一个任务空间保留和关节空间正则化的二次规划问题，能够在避障的同时最小化对学习到的末端行为的干扰。</li>
+<li>设计了系统的仿真和真实世界跨本体部署基准，证明了EmbodiSteer能在多种本体上实现零样本的全身碰撞感知执行，并显著优于纯笛卡尔执行和其他引导基线。</li>
+</ol>
+<p><strong>论文所述局限性</strong>：</p>
+<ol>
+<li>引导机制是基于约束的局部线性化，并提供剪切的关节修正，因此是高效的碰撞避免可行方向搜索，但不能保证生成全局无碰撞的运动轨迹。</li>
+<li>引导仅在机器人进入SDF安全边界时才激活，是一个局部修正机制，而非可以提前规划最优无碰撞运动模式的全局规划器。</li>
+<li>过强的引导可能将机器人驱动到训练分布之外的状态，导致任务执行失败，表明更广泛、更多样化的演示对于鲁棒部署仍然重要。</li>
+</ol>
+<p><strong>后续研究启示</strong>：<br>论文展示了一条清晰的路径：在训练阶段最大化利用本体无关数据实现策略泛化，在部署阶段再高效地注入部署环境的特定约束（如本体几何、障碍物）。这启示后续研究可以探索其他类型的部署时约束（如动力学约束、关节限位）或更高效的全局-局部结合引导策略。同时，如何更好地衡量和权衡引导强度与策略性能的损失，也是一个有价值的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本论文针对具有泛化能力的笛卡尔空间视觉运动策略在实际部署时，因忽视具体机器人身体结构而导致碰撞的问题，提出无需重新训练的推理框架EmbodiSteer。其核心是在推理时将采样过程通过正向运动学和雅可比矩阵更新“提升”至目标机器人的关节空间，并在每步去噪后施加考虑全身碰撞的指导。实验表明，该方法在多个机器人的零样本部署中，显著降低了碰撞率并提升了任务成功率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.12965" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
