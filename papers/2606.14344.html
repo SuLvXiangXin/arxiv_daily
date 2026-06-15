@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>More with LESS – Local Scene Representations for Tactile Imaging - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>More with LESS – Local Scene Representations for Tactile Imaging</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.14344" target="_blank" rel="noreferrer">2606.14344</a></span>
+        <span>作者: Aviv Tamar Team</span>
+        <span>日期: 2026-06-12</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>触觉成像旨在通过触觉感知重建软物体的内部结构，在医疗诊断和机器人操作中具有应用前景。目前主流方法是基于自监督学习（SSL）的方法，如Rimon等人[34]的工作，其使用一个单一的、非结构化的全局向量来编码整个触觉场景，并依赖机器人进行精准控制的感知。这种方法存在两个关键局限性：首先，全局表示忽略了物理对象的组合性质，泛化能力受限，需要针对“所有可能的物体组合”进行训练，成本高昂；其次，该方法必须在测试时由机器人操作，无法作为手持设备使用，限制了其实用性。</p>
+<p>本文针对上述两个痛点，提出了新的视角。核心洞察是，触觉本质上是局部的：物体某位置的内部结构对远处位置感知到的力的影响微乎其微。因此，本文将触觉场景建模为一个由局部感受野循环编码器组成的网格，提出了名为“局部空间感知编码器（LESS）”的以物体为中心的表示。通过这种组合式设计，模型可以实现强大的零样本泛化能力，并支持空间不确定性估计。此外，本文通过引入外部姿态跟踪和仿人触诊数据，实现了手持式触觉成像，并将成像范围从2D扩展到全3D。概括而言，本文的核心思路是利用触觉的局部特性构建组合式表示，以解决全局表示泛化能力不足的问题，并通过技术改进实现手持式3D成像。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LESS方法的整体流程如下：输入是传感器在一段时间内采集的位姿-力序列 <code>{x_t， f_t}</code>；核心的LESS编码器将该序列处理为一组分散在空间网格上的局部表示 <code>z_bar_t</code>；最后，图像重建模块将这些局部表示融合，重建出描述物体内部结构的2D或3D图像。</p>
+<p><img src="https://arxiv.org/html/2606.14344v1/2606.14344v1/images/3D/Pipeline.jpg" alt="LESS方法整体流程"></p>
+<blockquote>
+<p><strong>图 25</strong>: LESS方法整体流程。左侧：触觉数据采集（机器人或手持）。中间（蓝色框）：LESS编码器将触觉序列处理为分散的局部表示。右侧（绿色框）：图像重建模块将局部表示融合为2D或3D图像。</p>
+</blockquote>
+<p>LESS方法包含两个核心模块：序列编码-解码模块和图像重建模块。</p>
+<p><strong>LESS序列编码器</strong> 负责生成局部表示。对于空间中每个预先定义好的位置 <code>x_bar_i</code>（称为“粒子”）：</p>
+<ol>
+<li><strong>感受野滤波</strong>：每个粒子只处理与其欧几里得距离小于阈值β的触觉测量数据，滤除感受野外的输入。</li>
+<li><strong>中心化</strong>：将感受野内的每个传感器位姿 <code>x_j</code> 减去 <code>x_bar_i</code> 进行中心化。</li>
+<li><strong>力-位姿编码（FLE）</strong>：对中心化后的位姿进行正弦位置编码（PE），同时对力 <code>f_j</code> 应用一个多层感知机（MLP），并将PE和MLP的输出相加，得到每个时间步的编码。</li>
+<li>​<strong>循环神经网络</strong>：将上述编码序列输入一个门控循环单元（GRU），GRU的隐藏状态即为该粒子的局部表示 <code>z_bar_t^{x_bar_i}</code>。所有粒子的GRU权重是共享的。</li>
+</ol>
+<p>除了编码，每个局部表示还配备一个<strong>力解码器</strong>，用于自监督学习训练。该解码器通过另一个MLP，可根据局部表示 <code>z_bar^{x_bar_i}</code> 预测在任意（相对）位置 <code>x</code> 处期望的力 <code>f_hat</code>。</p>
+<p><strong>LESS图像重建模块</strong> 负责将局部表示映射为图像。对于2D重建：</p>
+<ol>
+<li>每个局部表示 <code>z_bar^{x_bar}</code> 通过一个转置卷积神经网络，被解码为一个以 <code>x_bar</code> 为中心的 <code>N_p × N_p</code> 像素图像块的概率对数（logits）<code>p(x_bar)</code>。所有图像块的解码器权重共享。</li>
+<li>为了合成完整图像，将所有图像块的对数在空间上相加，然后对每个像素位置应用Softmax函数，得到最终的类别概率（背景、水凝胶、硅胶包块）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.14344v1/2606.14344v1/x1.png" alt="LESS图像重建示意图"></p>
+<blockquote>
+<p><strong>图 2</strong>：LESS图像重建示意图。每个学到的局部表示通过转置卷积映射为一个局部图像块。所有图像块被缝合在一起，通过对数平均和应用Softmax产生最终图像。</p>
+</blockquote>
+<p>对于<strong>3D重建</strong>，方法类似，但每个局部表示被解码为一个 <code>N_p × N_p × N_z</code> 像素的立体图像柱（voxel column），最终组合成3D体素网格。</p>
+<p>与现有方法相比，LESS的创新点具体体现在：</p>
+<ol>
+<li><strong>组合式局部表示</strong>：取代单一的全局向量，使用一组具有空间局部感受野的表示。这直接启发了零样本的组合泛化能力。</li>
+<li><strong>硬阈值感受野</strong>：与卷积神经网络不同，LESS粒子对感受野外的数据应用硬性滤除，更符合触觉的物理局部性。</li>
+<li><strong>支持手持成像的技术改进</strong>：引入外部位姿估计（基于标记点）和仿人触诊动作数据采集。</li>
+<li><strong>扩展到3D成像与不确定性估计</strong>：图像重建模块支持3D输出，并且局部表示的结构天然支持基于像素熵的局部不确定性可视化。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>数据集与实验平台</strong>：实验使用了多个数据集。<code>data-v1</code> 是Rimon等人[34]使用的旧数据集。本文新收集了三个数据集：<code>data-poke</code>（类似垂直戳刺但传感器方向可变）、<code>data-primitive</code>（通过遥操作记录的仿人运动基元）和 <code>data-handheld</code>（用于测试的手动运动数据）。所有数据均使用Xela uSCu ALHA触觉传感器采集，并使用Franka Panda机械臂或手动操作。物体模型（仿体）采用3D打印模具制造，其真实内部结构通过3T MRI（西门子Prisma）扫描获得作为地面真实（GT）。实验还制造了专门的“多包块”和“大基底”仿体用于测试泛化能力。</p>
+<p><strong>对比方法</strong>：主要对比基线是Rimon等人[34]的全局表示方法，在本文中被称为 <strong>GLOBAL</strong>。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><p><strong>3D成像提升2D精度</strong>：即使评估2D切片指标，使用3D标签训练GLOBAL模型也比仅使用2D标签训练效果更好。例如，包块直径误差从2.7±0.1 mm降至1.8±0.0 mm，F1分数从79.9±0.8%提升至85.2±0.8%。这表明3D重建提供了有益的几何先验。</p>
+</li>
+<li><p><strong>零样本组合泛化</strong>：LESS在仅使用单包块仿体训练的情况下，在包含多个包块或更大基底的“分布外”仿体上表现显著优于GLOBAL。</p>
+<ul>
+<li>在<strong>多包块</strong>仿体上，LESS的F1分数达到71.1±0.0%，远高于GLOBAL的44.6±1.3%；包块中心误差（CoM）从7.4±0.4 mm降低至4.0±0.0 mm。</li>
+<li>在<strong>大基底</strong>仿体上，LESS的优势更加明显：F1分数从1.1±0.5%跃升至71.3%，中心误差从26.8±2.8 mm大幅降至2.3±0.2 mm。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.14344v1/2606.14344v1/images/prediction_comparison/global_local_comp.jpg" alt="LESS与GLOBAL在分布内外仿体上的重建对比"></p>
+<blockquote>
+<p><strong>图 9</strong>：LESS与GLOBAL方法在分布内（第一行）和分布外（后三行）仿体上的3D重建对比。LESS在合成多个包块（第二、三行）和适应更大物体（第四行）方面表现出优异的泛化能力，而GLOBAL方法失败。</p>
+</blockquote>
+<ol start="3">
+<li><strong>局部不确定性估计</strong>：实验展示了LESS可以实时计算并可视化重建图像中每个像素的不确定性（熵）。在触诊过程中，不确定性高的区域（通常对应采样不足的区域）可以被识别，从而潜在指引操作者进行补充测量。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.14344v1/2606.14344v1/x3.png" alt="LESS与GLOBAL在重建过程及置信度上的对比"></p>
+<blockquote>
+<p><strong>图 10</strong>：LESS与GLOBAL在重建过程及置信度上的对比。左侧四列展示了触诊序列中四个不同时间点的重建图像（上排：LESS，下排：GLOBAL）。右侧展示了LESS（上）和GLOBAL（下）对应的置信度图（蓝色表示高置信度，红色表示低置信度/高不确定性）。LESS的不确定性图更清晰地区分出已探索和未探索区域。</p>
+</blockquote>
+<ol start="4">
+<li><strong>手持式触觉成像概念验证</strong>：通过结合外部位姿跟踪（误差&lt;1mm， &lt;0.1rad）和使用 <code>data-primitive</code> 进行训练，系统首次实现了基于SSL的手持式触觉成像。LESS架构支持在测试时动态扩展粒子网格以适应不同尺寸的物体。</li>
+</ol>
+<p><strong>消融实验</strong>：虽然没有一个独立的消融研究表格，但论文中的实验结果本身构成了对不同组件贡献的验证：</p>
+<ul>
+<li><strong>局部表示vs全局表示</strong>：表II的结果直接证明了局部表示（LESS）在组合泛化能力上的巨大优势。</li>
+<li><strong>3D标签vs 2D标签</strong>：表I的结果表明，即使在GLOBAL模型上，使用3D标签也能提升2D成像精度。</li>
+<li><strong>仿人运动数据</strong>：收集和使用 <code>data-primitive</code> 是实现手持成像的关键前提，使模型能泛化到非结构化的手动运动模式。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为以下三点：</p>
+<ol>
+<li><strong>提出LESS表示</strong>：一种新颖的、以物体为中心的局部触觉场景表示，通过一组具有空间感受野的循环编码器实现，显著提升了模型的组合泛化能力。</li>
+<li><strong>实现手持式3D触觉成像</strong>：通过引入外部位姿跟踪、采集仿人触诊数据以及对LESS架构的适配，首次展示了基于自监督学习的手持式触觉成像系统的概念验证，并扩展到全3D重建。</li>
+<li><strong>提供局部不确定性估计</strong>：利用LESS的局部特性，实现了对重建图像的空间不确定性量化，为操作者提供潜在引导，以减少对操作人员的依赖性。</li>
+</ol>
+<p>论文自身提到的局限性在于，当前方法主要处理物体内部属性在平面上变化的情况（因此使用2D网格），更一般的场景可能需要3D粒子网格并考虑传感器方向的影响。</p>
+<p>对后续研究的启示包括：LESS的局部组合式表示思想可推广至其他需要处理物理交互与场景理解的领域；将触觉成像与视觉等信息融合可能进一步提升性能与鲁棒性；如何将系统进一步小型化、低成本化以用于临床或家用场景是未来的重要方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本论文针对触觉成像技术中，因依赖**全局、非结构化表示**而导致泛化能力有限、实用性受限的核心问题，提出了一种名为**LESS（Local Encoder for Spatial Sensing）**的以物体为中心的局部触觉表示方法。该方法的核心在于**利用触摸的局部性**，将触觉场景建模为一个**由具有局部感受野的循环编码器构成的网格**，通过融合这些局部状态来重构物体内部结构的2D或3D图像。这种**组合式设计带来了强大的泛化能力**：实验表明，在仅使用**单一内含物模型**训练后，LESS模型能够准确地对具有**多个内含物和不同尺寸**的物体进行成像，并支持空间不确定性估计。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.14344" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
