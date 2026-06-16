@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Acting While Understanding: Asynchronous Semantic-Action Decoupling for Real-Time Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Acting While Understanding: Asynchronous Semantic-Action Decoupling for Real-Time Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.15285" target="_blank" rel="noreferrer">2606.15285</a></span>
+        <span>作者: Yatong Han Team</span>
+        <span>日期: 2026-06-13</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，视觉-语言-动作模型（VLAs）在机器人操作中展现出强大的任务理解和泛化能力。然而，昂贵的全模型推理计算成本限制了其在需要低延迟、高频率闭环控制的实际部署。为解决高频控制与低频推理间的矛盾，现有方法普遍采用动作分块策略：单次推理生成未来一段时长的动作序列，由底层控制器以固定频率执行。尽管这增加了执行的连续性，但并未真正解耦语义理解与动作控制，因为在分块执行期间，模型对任务和场景的语义判断通常保持不变，当环境变化或任务已然进展时，机器人仍可能依赖过时的语义和动作意图。</p>
+<p>本文针对现有VLA在实时部署中“语义理解与动作生成强同步耦合”这一痛点，提出通过在现有VLA内部“语义-动作接口”处进行解耦的新视角。核心思路是将一个同步VLA拆分为一个低频异步更新的语义理解模块和一个接收最新语义缓存、结合当前状态与历史动作的高频动作模块，从而实现“边理解边执行”的高频闭环控制，无需以控制频率运行昂贵的全模型推理。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>论文提出的整体框架将标准VLA模型抽象为两部分计算：<code>z_t = U_θ(o_t, l, s̃_t)</code>（语义理解）和<code>A_t = G_φ(z_t, s_t)</code>（动作生成）。框架的核心创新在于异步执行这两个角色。</p>
+<ul>
+<li><strong>低频理解模块</strong>：周期性（低频）处理视觉观测<code>o_t</code>和语言指令<code>l</code>，更新一个可复用的语义条件<code>z_(τ_k)</code>（例如VLM最后一层隐藏状态或KV缓存）并存入缓存。</li>
+<li><strong>高频动作模块</strong>：在每一个控制步（高频），读取缓存中的最新语义条件<code>z_(τ_k)</code>、当前机器人状态<code>s_t</code>以及一个最近动作历史窗口<code>h_t = [a_(t−m), …, a_(t−1)]</code>，连续生成动作<code>Â_t = G_φ(z_(τ_k), s_t, h_t)</code>。</li>
+</ul>
+<p>与现有异步方法相比，本文的创新点在于：第一，解耦发生在模型内部的语义-动作接口，而非对推理后输出的动作流进行处理；第二，复用的是中间语义条件而非未来动作序列；第三，核心挑战在于如何处理语义过时的问题，方案是结合当前状态反馈并引入历史动作条件反射和显式的时滞训练。</p>
+<p><img src="https://arxiv.org/html/2606.15285v1/2606.15285v1/image/cover.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图2</strong>：提出的异步语义-动作解耦框架概览。低频理解模块异步刷新语义缓存；高频动作模块基于最新的缓存语义条件、当前机器入状态和近期动作历史重新规划；时滞感知训练使动作模块暴露于过时语义；ACT风格的时间整合合并重叠的重新规划预测。</p>
+</blockquote>
+<p><strong>历史动作条件反射</strong>：为解决语义条件<code>z_(τ_k)</code>相对于当前时间<code>t</code>可能过时（<code>τ_k ≤ t</code>）所带来的执行进度模糊问题，动作模块额外接收一个长度为<code>m</code>的近期已执行动作历史<code>h_t</code>。这为动作生成提供了短期执行轨迹和局部时间上下文，有助于在语义过时的情况下消歧。具体实现上，对UniVLA添加一个额外的投影层，对π₀.₅则将其作为额外条件提供给流匹配动作头。</p>
+<p><img src="https://arxiv.org/html/2606.15285v1/2606.15285v1/image/async_pipeline.png" alt="时间冗余与动作变化"></p>
+<blockquote>
+<p><strong>图3</strong>：连续VLA推理中的时间冗余和动作变化。相邻观测通常共享相似的视觉语义焦点，而动作预测会随着执行进度和局部状态而变化，这启发了在缓存语义条件下进行高频重新规划的思路。</p>
+</blockquote>
+<p><strong>时滞训练</strong>：为了使动作模块适应部署时语义过时的情况，在训练阶段显式地模拟时间失准。对于时间<code>t</code>的动作预测，并不总是使用对齐的语义条件<code>z_t</code>，而是以一定概率使用来自更早时间<code>t - Δ</code>的过时语义条件<code>z_(t-Δ)</code>，其中Δ从<code>{0， …， H-1}</code>中采样（H为动作分块长度）。动作模块的训练目标是在原始VLA的损失函数<code>ℓ_base</code>下，学习<code>G_φ(z_(t-Δ), s_t, h_t)</code>来预测目标动作<code>A_t</code>。</p>
+<p>在推理时，理解模块以较低频率异步刷新语义缓存；动作模块在每一步控制中，基于最新语义缓存、当前状态和真实执行历史重新规划一个动作分块，并通过ACT风格的时间整合方式合并重叠的预测，产生最终执行的动作。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在仿真环境LIBERO以及真实机器人平台（SO100和Kinova Gen2）上进行，评估了基于π₀.₅和UniVLA骨干网络的异步变体。对比的基线方法包括同步的UniVLA、π₀.₅，以及高效的VLA模型SmolVLA和动作分块优化方法A2C2。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>LIBERO仿真</strong>：如表1所示，异步解耦方法对UniVLA和π₀.₅均有效。UniVLA-Async得分为93.8，相对于同步UniVLA（95.2）有所折衷。在仅使用15k训练步的缩减预算下，π₀.₅-Async达到了98.1的高分，证明了其鲁棒性。作者推测π₀.₅的鲁棒性部分来自于其复用了完整的KV缓存，而非仅最终隐藏状态。</li>
+<li><strong>真实机器人实验</strong>：如表2所示，在6个跨平台任务中，UniVLA-Async取得了平均93.3%的成功率，优于同步UniVLA（78.3%），甚至接近同步π₀.₅（95.0%）的性能。表3的运行时数据显示，UniVLA-Async将服务器端推理吞吐量从3.4 Hz大幅提升至35.6 Hz，并且在SO100上加权平均任务完成时间从17.4秒缩短至13.1秒，表明其带来了更连续的执行流程。</li>
+</ul>
+<p><strong>表1：主要LIBERO结果</strong></p>
+<table>
+<thead>
+<tr>
+<th align="left">模型</th>
+<th align="left">空间</th>
+<th align="left">物体</th>
+<th align="left">目标</th>
+<th align="left">长时</th>
+<th align="left">平均</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">π₀</td>
+<td align="left">96.8</td>
+<td align="left">98.8</td>
+<td align="left">95.8</td>
+<td align="left">85.2</td>
+<td align="left">94.2</td>
+</tr>
+<tr>
+<td align="left">π₀.₅</td>
+<td align="left">98.8</td>
+<td align="left">98.2</td>
+<td align="left">98.0</td>
+<td align="left">92.4</td>
+<td align="left">96.9</td>
+</tr>
+<tr>
+<td align="left">UniVLA</td>
+<td align="left">96.5</td>
+<td align="left">96.8</td>
+<td align="left">95.6</td>
+<td align="left">92.0</td>
+<td align="left">95.2</td>
+</tr>
+<tr>
+<td align="left">π₀.₅-15k</td>
+<td align="left">97.2</td>
+<td align="left">98.4</td>
+<td align="left">97.2</td>
+<td align="left">91.6</td>
+<td align="left">96.1</td>
+</tr>
+<tr>
+<td align="left"><strong>UniVLA-Async</strong></td>
+<td align="left"><strong>95.2</strong></td>
+<td align="left"><strong>94.0</strong></td>
+<td align="left"><strong>94.8</strong></td>
+<td align="left"><strong>91.2</strong></td>
+<td align="left"><strong>93.8</strong></td>
+</tr>
+<tr>
+<td align="left"><strong>π₀.₅-Async-15k</strong></td>
+<td align="left"><strong>99.2</strong></td>
+<td align="left"><strong>98.0</strong></td>
+<td align="left"><strong>99.0</strong></td>
+<td align="left"><strong>96.0</strong></td>
+<td align="left"><strong>98.1</strong></td>
+</tr>
+</tbody></table>
+<p><strong>表2：主要真实机器人结果</strong></p>
+<table>
+<thead>
+<tr>
+<th align="left">方法</th>
+<th align="left">Kinova Gen2</th>
+<th align="left"></th>
+<th align="left"></th>
+<th align="left">SO100</th>
+<th align="left"></th>
+<th align="left"></th>
+<th align="left">平均</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left"></td>
+<td align="left">捡香蕉</td>
+<td align="left">堆叠方块</td>
+<td align="left">倒水</td>
+<td align="left">捡方块</td>
+<td align="left">移动物体</td>
+<td align="left">打开抽屉</td>
+<td align="left"></td>
+</tr>
+<tr>
+<td align="left">SmolVLA</td>
+<td align="left">70.0</td>
+<td align="left">70.0</td>
+<td align="left">30.0</td>
+<td align="left">70.0</td>
+<td align="left">70.0</td>
+<td align="left">80.0</td>
+<td align="left">65.0</td>
+</tr>
+<tr>
+<td align="left">A2C2</td>
+<td align="left">40.0</td>
+<td align="left">50.0</td>
+<td align="left">0.0</td>
+<td align="left">40.0</td>
+<td align="left">60.0</td>
+<td align="left">50.0</td>
+<td align="left">40.0</td>
+</tr>
+<tr>
+<td align="left">UniVLA</td>
+<td align="left">80.0</td>
+<td align="left">90.0</td>
+<td align="left">70.0</td>
+<td align="left">70.0</td>
+<td align="left">80.0</td>
+<td align="left">80.0</td>
+<td align="left">78.3</td>
+</tr>
+<tr>
+<td align="left"><strong>UniVLA-Async</strong></td>
+<td align="left"><strong>90.0</strong></td>
+<td align="left"><strong>100.0</strong></td>
+<td align="left"><strong>90.0</strong></td>
+<td align="left"><strong>100.0</strong></td>
+<td align="left"><strong>90.0</strong></td>
+<td align="left"><strong>90.0</strong></td>
+<td align="left"><strong>93.3</strong></td>
+</tr>
+<tr>
+<td align="left">π₀.₅</td>
+<td align="left">100.0</td>
+<td align="left">100.0</td>
+<td align="left">90.0</td>
+<td align="left">90.0</td>
+<td align="left">100.0</td>
+<td align="left">90.0</td>
+<td align="left">95.0</td>
+</tr>
+</tbody></table>
+<p><strong>消融实验</strong>：为验证方法核心组件的作用，在LIBERO长时任务上对UniVLA进行了消融研究（表4）。<strong>①</strong> 仅使用朴素缓存复用（无历史、无时滞训练）性能从同步的92.0%显著下降至85.2%，证明仅复用过时语义是不够的。<strong>②</strong> 仅添加历史动作条件反射，性能恢复至86.4%。<strong>③</strong> 仅添加时滞训练，性能恢复至89.0%。<strong>④</strong> 结合历史动作条件反射和时滞训练的完整方法，性能达到91.2%，接近同步基线。这说明本方法的关键在于通过结合当前状态反馈、近期执行上下文和显式的时滞模拟，使动作模块能够在过时语义条件下进行稳定控制。</p>
+<p><strong>表4：LIBERO-Long上针对过时语义条件的消融研究</strong></p>
+<table>
+<thead>
+<tr>
+<th align="left">方法</th>
+<th align="left">LIBERO-长时 (%)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">同步UniVLA</td>
+<td align="left">92.0</td>
+</tr>
+<tr>
+<td align="left">朴素缓存复用</td>
+<td align="left">85.2</td>
+</tr>
+<tr>
+<td align="left">缓存 + 历史</td>
+<td align="left">86.4</td>
+</tr>
+<tr>
+<td align="left">缓存 + 时滞训练</td>
+<td align="left">89.0</td>
+</tr>
+<tr>
+<td align="left"><strong>Ours (完整)</strong></td>
+<td align="left"><strong>91.2</strong></td>
+</tr>
+</tbody></table>
+<p><img src="https://arxiv.org/html/2606.15285v1/2606.15285v1/image/continuous_frame.png" alt="真实世界任务快照"></p>
+<blockquote>
+<p><strong>图4</strong>：Kinova Gen2和SO100平台上的代表性真实世界任务快照。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1. 提出了一种低侵入式的异步语义-动作解耦框架，沿着预训练VLA的内部语义-动作接口进行拆解，无需重新设计视觉-语言骨干网络或引入外部规划器。2. 引入了历史动作条件反射和时滞训练，以提升在过时语义条件下的控制鲁棒性。3. 在π₀.₅、UniVLA以及真实机器人平台上验证了框架的有效性，显著提升了服务器端推理吞吐量（最高达35.6 Hz）。</p>
+<p>论文也指出了自身的局限性：首先，框架依赖于基础VLA存在可复用的中间语义条件，其适用性受限于基座模型的内部接口形式。其次，虽然所提技术缓解了语义过时的影响，但当语义缓存过于陈旧或环境发生剧烈变化时，动作模块的能力仍可能受限。当前固定的语义刷新策略并非总是最优。最后，实验主要集中在单臂操作任务，尚未在快速动态操作、移动操作等更复杂场景中得到验证。</p>
+<p>这项研究为在实时机器人控制中部署大型VLA提供了一条实用路径，其“内部解耦复用+过时鲁棒性训练”的思路，对未来改进VLA的实时性、研究自适应的语义刷新策略以及在更广泛任务和模型架构上的应用具有启发意义。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作（VLA）模型全模型推理计算成本高、难以满足实时机器人控制低延迟高频率要求的问题，提出了一种异步语义-动作解耦框架。该框架核心是将现有VLA模型的内部语义-动作接口分离，让低频的语义理解模块异步更新可复用的语义条件，而高频的动作生成模块则基于缓存语义、当前状态与动作历史持续输出控制指令，并引入历史动作条件化与时间错位训练以提升陈旧语义下的控制鲁棒性。实验表明，该方法在LIBERO基准和真实机器人部署中，使动作模块的服务器端推理吞吐量最高达到35.6 Hz，实现了无需全模型高频推理的高频闭环控制。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.15285" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

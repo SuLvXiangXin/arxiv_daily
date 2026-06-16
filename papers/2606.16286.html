@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FlowMPC: Improving Flow Matching policies with World Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>FlowMPC: Improving Flow Matching policies with World Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.16286" target="_blank" rel="noreferrer">2606.16286</a></span>
+        <span>作者: Chandon Hamel Team</span>
+        <span>日期: 2026-06-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人模仿学习领域，流匹配（Flow Matching, FM）已成为处理连续、多模态动作空间的有力方法，它能够学习专家行为分布，生成丰富的动作轨迹。然而，作为一种纯粹的模仿学习方法，FM策略的训练目标是复现专家行为，而非直接最大化任务回报，因此其性能受限于演示数据的质量和覆盖范围，在遇到分布外状态或需要从微小错误中恢复时可能表现不佳。近期工作试图通过引入强化学习目标来改进流策略，但这改变了FM的训练范式。本文提出了一个不同的问题：能否在不改变FM训练目标的前提下，借助一个学习得到的世界模型来提升FM策略的性能？</p>
+<p>本文的核心思路是：在训练阶段保持使用FM进行行为克隆，在测试推理阶段，利用学习到的世界模型对FM策略生成的多条候选动作轨迹进行评估和优化，通过基于模型的规划来即时提升决策质量。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>FlowMPC框架的训练流程（pipeline）包含五个阶段：1. 训练一个具有特权状态的SAC专家策略以收集演示轨迹；2. 收集包含RGB观测、本体感受状态、动作和奖励的完整轨迹；3. 在这些专家轨迹上训练一个FM策略；4. 使用训练好的FM策略的视觉编码器预处理RGB观测，生成紧凑的视觉潜在表示，供下游世界模型训练使用；5. 利用预加载专家数据的回放缓冲区在线训练世界模型。</p>
+<p>在推理时，FM策略作为MPPI规划器内部的<strong>结构化提议分布</strong>。给定当前观测，规划器采样K条候选动作序列，其中Kπ条由FM策略生成，其余K-Kπ条随机采样。每条轨迹在学习到的世界模型中展开，使用预测奖励和终端价值估计进行评分，并通过MPPI优化后执行第一个动作。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="Planning with a FM policy and learned world model."></p>
+<blockquote>
+<p><strong>图1</strong>：FlowMPC推理时的规划流程。FM策略提议一部分候选动作轨迹，这些轨迹通过基于模型的展开和MPPI进行评估与优化。</p>
+</blockquote>
+<p>本文的FM策略采用<strong>条件1D时序U-Net结构</strong>，输入当前观测和一个流时间步，网络预测的是整个动作序列上的向量场，而非单一动作，这使其擅长生成多模态轨迹。</p>
+<p>核心创新在于对TD-MPC2框架进行了多项关键修改以适应FM策略：</p>
+<ol>
+<li><strong>添加行为克隆动作预测器（πBC）</strong>：该网络将模型状态映射为动作。它在训练和规划阶段都被使用，特别是在规划展开的结束时，为终端价值自举提供了一个符合训练数据分布的“就地”动作，显著提高了规划的稳定性。</li>
+<li><strong>修改表示接口</strong>：世界模型直接接收由FM视觉编码器生成的视觉潜在表示zviz,t，并与本体感受状态st拼接形成模型输入xt = [st, zviz,t]，而非像原始TD-MPC2那样各自编码再拼接。这简化了流程，并充分利用了FM策略预训练好的视觉特征。</li>
+<li><strong>简化奖励与价值预测目标</strong>：由于ManiSkill任务提供二元奖励，本文使用二元交叉熵损失进行奖励预测，并使用标准的均方误差目标进行Q值回归，替代了TD-MPC2中为多任务设计的分箱和symlog变换，使训练目标更简单且与任务更匹配。</li>
+<li><strong>引入状态空间变体世界模型</strong>：除了遵循TD-MPC2设计的潜在空间版本外，本文还实现了一个<strong>状态空间版本</strong>。该版本省略了学习到的潜在编码器，直接在拼接了本体感受状态和FM视觉潜在表示的“状态”空间中进行预测。其动态、奖励、价值和行为克隆网络可以独立优化，无需通过公共编码器回传梯度，并使用基于单步转移元组（xt, at, rt, xt+1）的更简单的一步训练设置。</li>
+</ol>
+<p>世界模型的训练目标包括：动态预测损失（Ldyn， 均方误差）、奖励预测损失（Lrew，二元交叉熵）、Q函数回归损失（LQ，均方误差）和行为克隆损失（LBC，均方误差）。在潜在空间版本中，这些损失在时间连续的切片上计算并沿规划时域进行加权。</p>
+<p>在规划时，每条候选轨迹k通过世界模型展开H步，其评分J(k)为预测奖励之和加上终端状态的价值估计。MPPI根据这些评分对轨迹进行重新加权和优化。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在两个ManiSkill机器人操作任务上进行：PickCube-v1和PickSingleYCB-v1。观测为RGB图像加本体感受状态，动作为连续的机器人控制指令，奖励为二元（成功为1，否则为0）。主要<strong>对比方法</strong>是单纯的模仿学习FM策略与增加了世界模型和MPPI规划的同一FM策略（FlowMPC）。评估指标包括<strong>任意时刻成功率</strong>（episode中任何时间点成功即算）和<strong>终端成功率</strong>（仅episode最后一个时间点成功才算）。</p>
+<p>实验针对不同任务采用了<strong>不同的最佳配置</strong>：对于PickCube，使用状态空间世界模型，规划时域H=1；对于PickSingleYCB，使用潜在空间世界模型，规划时域H=3。</p>
+<p><img src="https://arxiv.org/html/2606.16286v1/2606.16286v1/figures/pickcube_end_success.png" alt="Success rate versus environment steps across 3 random seeds for the FM policy augmented with a learned world model. Dark curves show 0.95 EMA-smoothed trends. Blue lines indicate the FM policy baseline with 95% confidence intervals."></p>
+<blockquote>
+<p><strong>图2</strong>：PickCube任务的终端成功率随环境步数变化曲线。FlowMPC（深色曲线）显著且稳定地超过了FM基线（蓝色区域）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.16286v1/2606.16286v1/figures/pickcube_anytime_success.png" alt="Success rate versus environment steps across 3 random seeds for the FM policy augmented with a learned world model. Dark curves show都比较 0.95 EMA-smoothed trends. Blue lines indicate the FM policy baseline with 95% confidence intervals."></p>
+<blockquote>
+<p><strong>图3</strong>：PickCube任务的任意时刻成功率曲线。FlowMPC相比基线也有提升，但提升幅度小于终端成功率。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.16286v1/2606.16286v1/figures/pickycb_end_success.png" alt="Success rate versus environment steps across 3 random seeds for the FM policy augmented with a learned world model. Dark curves show都比较 0.95 EMA-smoothed trends. Blue lines indicate the FM policy baseline with 95% confidence intervals."></p>
+<blockquote>
+<p><strong>图4</strong>：PickSingleYCB任务的终端成功率曲线。FlowMPC的提升非常明显，成功率的绝对提升接近10个百分点。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.16286v1/2606.16286v1/figures/pickycb_anytime_success.png" alt="Success rate versus environment steps across 3 random seeds for the FM policy augmented with a learned world model. Dark curves show都比较 0.95 EMA-smoothed trends. Blue lines indicate the FM policy baseline with 95% confidence intervals."></p>
+<blockquote>
+<p><strong>图5</strong>：PickSingleYCB任务的任意时刻成功率曲线。FlowMPC相比基线提升较小，两条曲线的置信区间存在重叠。</p>
+</blockquote>
+<p><strong>关键实验结果总结如下：</strong></p>
+<ul>
+<li><strong>终端成功率提升显著</strong>：在PickCube上，从93.14% (±0.77) 提升至97.44% (±0.48)；在PickSingleYCB上，从56.81% (±1.52) 提升至66.41% (±1.45)。</li>
+<li><strong>任意时刻成功率也有提升</strong>：在PickCube上，从95.78% (±0.62) 提升至98.68% (±0.35)；在PickSingleYCB上，从68.77% (±1.42) 提升至69.78% (±1.41)，但提升幅度较小且置信区间重叠。</li>
+<li><strong>结果分析</strong>：世界模型带来的性能增益在终端成功率上最为明显，这表明基于模型的规划特别有助于纠正微小动作误差，并在任务即将完成时维持稳定的控制，而不仅仅是短暂地达到成功状态。FM基线本身已表现出较强的性能（PickCube上超过93%，PickSingleYCB上接近已报告的TD-MPC2水平约60%），FlowMPC在此基础上实现了进一步的提升。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1. <strong>提出了一种混合框架</strong>，将模仿学习得到的强大多模态流匹配策略与基于世界模型的模型预测控制相结合，在不改变FM训练目标的前提下提升测试时性能。2. 在两个具有挑战性的机器人操作任务上<strong>实证表明</strong>，这种结合能有效提升策略性能，尤其是在维持终端稳定控制方面。3. <strong>方法上具有互补性</strong>，与通过强化学习微调FM策略的研究路径不同，本文专注于利用规划改进推理时决策，为提升模仿学习策略提供了新思路。</p>
+<p>论文也指出了自身的<strong>局限性</strong>：1. 目前仅在两个任务上进行了验证，结果的普适性有待在更广泛的任务上检验。2. 最佳配置（状态空间vs潜在空间，规划时域H）因任务而异，尚未找到一个通用的最优设置。</p>
+<p>其<strong>启示</strong>在于：为模仿学习策略引入基于模型的“第二次思考”是一种行之有效的改进路径。未来工作可以探索将这一思路应用于更多样化的任务、研究更鲁棒的世界模型架构和规划算法，以及检验这种结合在现实机器人系统中的表现。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文研究了如何提升流匹配策略在测试时的表现。核心问题是FM作为模仿学习方法，不直接优化回报，在面对非专家数据状态时性能受限。作者提出FlowMPC框架，关键技术是将模仿学习的FM策略作为候选动作序列生成器，利用学习得到的世界模型进行基于MPPI的轨迹评估与规划。实验在ManiSkill的PickCube和PickSingleYCB机器人操作任务上进行，结果表明，引入世界模型的规划显著提升了策略性能，尤其在任务最终成功率上获得明显改善。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.16286" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

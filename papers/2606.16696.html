@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>VENOM: Versatile Embodied Network for Omni-bodied Motion tracking - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>VENOM: Versatile Embodied Network for Omni-bodied Motion tracking</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.16696" target="_blank" rel="noreferrer">2606.16696</a></span>
+        <span>作者: Takato Horii Team</span>
+        <span>日期: 2026-06-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，实现跨机器人（cross-embodiment）的、具有专家级表现力的全身运动跟踪是人形机器人学习中的一个挑战且未被充分探索的领域。现有方法如EAGLE、XHugWBC和LocoGPT等，能够控制多个人形机器人，但主要局限于以移动为基础的任务，表达能力有限。一个关键局限性在于，许多现有模型通过将控制问题解耦为上、下半身来控制，或未能直接在大规模人类运动捕捉数据集（如AMASS）上进行训练。本文针对跨机器人、表达丰富的全身运动跟踪这一具体痛点，提出了一个新视角：利用大规模监督学习，将不同人形机器人的运动跟踪数据统一训练一个模型。本文的核心思路是提出一个基于GPT架构的单一模型VENOM，该模型在多样化和带噪声的多机器人运动数据上进行训练，以实现统一的全身体运动跟踪，而无需将上下半身控制分开。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架包括两大流程：VENOM数据集的构建和VENOM模型的训练，其具体流水线如图所示。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：论文整体流程图。左侧描述了构建VENOM数据集的流程：使用基于强化学习的TWIST2框架为多个人形机器人训练专家策略，收集其生成的成功轨迹（包含状态、动作和奖励）并分割为6秒长的片段。右侧描述了训练VENOM模型的流程：从数据集中为所有机器人提取1秒长的序列作为输入，经过令牌嵌入和位置嵌入后，沿批次维度拼接并输入解码器块，通过动作头计算输出并与目标动作计算MSE损失。推理时，仅激活目标机器人的输入模块和动作头。</p>
+</blockquote>
+<p>VENOM的核心是一个基于Transformer解码器的运动跟踪器，包含与每个人形机器人对应的多个输入嵌入模块和动作输出头（Action Head）。模型中央是核心控制器（Core Controller），包含8个Transformer层，每层有8个注意力头，嵌入维度为768。VENOM与LocoGPT的主要区别在于任务目标：LocoGPT用于自回归运动生成，而VENOM被构建为一个面向全身运动跟踪的政策，并引入了受TWIST2启发的运动编码器（Motion Encoder）、历史编码器（History Encoder）和未来编码器（Future Encoder）来支持此目标。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>编码器</strong>：这些编码器用于将参考运动信息处理成紧凑的潜在表示。<ul>
+<li><strong>运动编码器</strong>：输入为单步参考运动观测，通过一个线性层投影到60维，展平后通过最终层生成128维的潜在运动表示。</li>
+<li><strong>历史编码器</strong>：输入为10步历史参考运动观测，通过一个线性层投影到60维，再经过两个一维卷积层（核大小和步长分别为(4,2)和(2,1)），展平后生成128维的潜在历史表示。</li>
+<li><strong>未来编码器</strong>：输入为单步未来参考运动观测，不使用卷积，通过一个3层MLP（隐藏层维度为256和128）处理，并使用Dropout正则化，生成128维的潜在未来表示。</li>
+</ul>
+</li>
+<li><strong>输入模块与训练过程</strong>：对于每个机器人，观测数据（批次大小B，时间步T=50，观测维度O）通过一个前馈层（令牌嵌入层）处理为令牌嵌入（维度D=768），并与可学习的位置嵌入相加。变换后的数据维度从[B, T, O]变为[B, T, D]。在进入Transformer块之前，所有机器人的输入沿批次维度B拼接成一个批次。Transformer块的输出被分发给各自对应的动作头，每个动作头是一个前馈线性层，输出对应机器人的动作序列。在推理时，只激活目标机器人对应的输入模块和动作头，其余部分被忽略。</li>
+<li><strong>损失与优化</strong>：损失函数为动作预测的均方误差（MSE）损失。优化器使用AdamW，学习率为1e-4，批次大小（每机器人）为8。观测值使用在线计算的滑动平均和标准差进行归一化，动作值被裁剪到-10到10之间。</li>
+</ol>
+<p><strong>创新点</strong>：</p>
+<ul>
+<li>提出了首个在多个人形机器人上进行训练的、基于GPT的全身运动跟踪模型。</li>
+<li>构建了包含噪声数据的大规模、多样性多机器人运动跟踪数据集（VENOM数据集）以提升鲁棒性。</li>
+<li>模型架构统一处理不同机器人的观测和动作空间，无需手动对齐。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>数据集</strong>：VENOM数据集，包含五个仿真人形机器人（Unitree G1、H1、H1 v2、Booster T1 29DoF和Fourier N1）在AMASS运动集上的成功轨迹，总计约6156小时训练数据和1549小时验证数据。</li>
+<li><strong>基准平台</strong>：使用IsaacGym模拟器进行测试和评估。</li>
+<li><strong>对比方法</strong>：<ul>
+<li><strong>TWIST2-clean-G1</strong>：在单个机器人（Unitree G1）的干净数据上训练的MLP基线（结构同TWIST2）。</li>
+<li><strong>TWIST2-clean</strong>：在所有五个机器人的干净数据上训练的MLP基线。</li>
+<li><strong>Experts</strong>：使用TWIST2的非对称行动者-评论家（AAC）强化学习框架训练的各机器人专家策略。</li>
+<li><strong>VENOM变体</strong>：<ul>
+<li>VENOM-clean：在所有机器人干净数据上训练。</li>
+<li>VENOM-noisy：在所有机器人含噪声数据上训练。</li>
+<li>VENOM-clean-reduced：在四分之一（无噪声）数据上训练。</li>
+<li>VENOM-noisy-G1：仅在Unitree G1的含噪声数据上训练。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2606.16696v1/x2.png" alt="多机器人部署演示"></p>
+<blockquote>
+<p><strong>图2</strong>：VENOM-noisy模型在不同机器人上执行不同运动的仿真截图。红色标记为机器人当前关节位置，蓝色标记为局部参考位置，绿色标记为全局参考位置。展示了模型在Unitree G1、H1、H1 v2、Fourier N1和Booster T1 29DoF上的泛化能力。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.16696v1/x3.png" alt="不同训练数据模型对比"></p>
+<blockquote>
+<p><strong>图3</strong>：Booster T1 29 DoF在执行单腿跳跃和转身运动时，不同VENOM模型的仿真截图。VENOM-noisy（左）能够舒适地跟踪运动，而VENOM-clean（中）和VENOM-clean-reduced（右）最终失去平衡摔倒，表明引入噪声数据训练的模型更具鲁棒性。</p>
+</blockquote>
+<ol>
+<li><p><strong>整体性能与规模化效应</strong>：使用相同MLP架构仅在G1上训练（TWIST2-clean-G1）能匹配专家性能。但当训练数据扩展到多个机器人时，MLP基线（TWIST2-clean）出现负迁移（主要由G1数据主导），运动跟踪能力下降，无法稳定机器人。切换到GPT架构后，VENOM模型（VENOM-clean）优于TWIST2-clean。VENOM-clean的性能优于VENOM-noisy-G1，表明增加机器人数据能提升跟踪能力。总体而言，包含噪声数据的VENOM-noisy在所有训练模型中表现出最佳的运动跟踪能力。</p>
+</li>
+<li><p><strong>定量评估</strong>：</p>
+<ul>
+<li><strong>关节跟踪误差</strong>（针对Unitree G1）：如表IV所示，所有VENOM模型的关节均方根误差（RMSE）在0.1052-0.1181弧度之间，优于TWIST2-clean（0.1686弧度）和仅在G1上训练的VENOM-noisy-G1（0.1571弧度），与专家（0.1067弧度）和TWIST2-clean-G1（0.1067弧度）相当。</li>
+<li><strong>关节跟踪准确性与运动跟踪稳定性</strong>（多机器人、多行为测试）：如表V所示，评估了关节跟踪精度（目标与生成关节位置的RMSE）、运动跟踪稳定性（根位置误差变化率的绝对值的95%分位数）和成功率。关键结论：<ul>
+<li><strong>成功率</strong>：所有模型在大多数机器人和行为类别上都达到92%以上的成功率，强化学习专家普遍达到100%。</li>
+<li><strong>跟踪稳定性</strong>：专家在大多数情况下表现出最高的运动稳定性（绝对根误差率的95%分位数较小）。VENOM-noisy在稳定性指标上略逊于专家，但优于其他VENOM变体，且其根误差变化的标准差最小，表明其跟踪漂移更小、更稳定。</li>
+<li><strong>性能对比</strong>：尽管VENOM-noisy在运动跟踪上略优于其他模型，但总体来说，与专家相比，监督学习的模型在与运动稳定性之间做出了权衡：VENOM实现了与专家相近的关节跟踪精度，但在运动稳定性上稍有妥协。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ol>
+<p><strong>消融实验结论</strong>：</p>
+<ul>
+<li><strong>架构重要性</strong>：与MLP（TWIST2-clean）相比，Transformer架构（VENOM-clean）能有效克服多机器人训练中的负迁移问题，显著提升性能。</li>
+<li><strong>数据规模</strong>：减少数据量（VENOM-clean-reduced）会导致性能下降，特别是在稳定性和成功率上（如Booster T1成功率降至76%）。</li>
+<li><strong>噪声注入</strong>：在训练数据中引入参考运动的噪声（VENOM-noisy）能提升模型鲁棒性，使其在动态和复杂运动中表现更佳（如图3所示）。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了VENOM，第一个基于GPT的、能够在多个人形机器人上进行全身运动跟踪的统一模型。</li>
+<li>构建并发布了大规模的多机器人运动跟踪数据集（VENOM数据集），包含状态、动作和奖励，为相关研究提供了宝贵资源。</li>
+<li>通过系统实验证明，在大规模多机器人数据上进行监督学习训练，其性能可以逼近（尽管在稳定性上略有妥协）需要特权信息、通过复杂非对称演员-评论家强化学习训练得到的专家策略，展示了监督学习蒸馏的潜力。</li>
+</ol>
+<p><strong>局限性</strong>：<br>所有模型（包括VENOM和专家）在处理高度动态的运动（如跳跃）或涉及脚部离地的运动时仍然存在困难。覆盖这些行为可能需要不同的训练课程或方法。</p>
+<p><strong>研究启示</strong>：</p>
+<ul>
+<li>大规模、多样化（含噪声）的监督学习数据，对于训练跨机器人的、鲁棒的运动跟踪策略至关重要。</li>
+<li>Transformer架构在处理多机器人、多模态运动数据时，相比传统MLP具有明显优势，能更好地避免负迁移。</li>
+<li>本研究为低级别全身运动跟踪的通用基础模型开发提供了一个起点，未来可向更复杂的动态运动、实体迁移（Sim2Real）等方向探索。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文研究人形机器人**专家级、跨具体对象、全身运动跟踪**的挑战。为解决现有方法需将上下半身控制解耦、泛化能力受限的问题，提出**VENOM模型**，其核心是基于**GPT架构**，可直接在包含状态、动作和奖励的多人物仿真数据集（VENOM数据集）上进行训练，实现无需分割的**端到端全身跟踪**。实验表明，VENOM的性能优于使用监督学习训练的多人物MLP基线模型，并且在无奖励反馈的情况下，其跟踪能力**能接近使用非对称演员-评论家强化学习训练的专家水平**。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.16696" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

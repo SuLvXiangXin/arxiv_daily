@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Training and Evaluating Diffusion Policies with Long Context Lengths - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Training and Evaluating Diffusion Policies with Long Context Lengths</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.16447" target="_blank" rel="noreferrer">2606.16447</a></span>
+        <span>作者: Russ Tedrake Team</span>
+        <span>日期: 2026-06-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人模仿学习领域，当前最先进的方法（如Diffusion Policy）通过基于RGB观测预测机器人动作，实现了灵巧操作。然而，这些策略通常仅根据一个短历史的观测（通常不超过当前帧和最近的历史帧）来条件化动作。这种短上下文的策略无法解决需要记忆的任务，并且可能陷入反复执行相同失败动作的困境。近期一些工作尝试通过辅助损失或基于语言/视觉语言模型的检索机制来扩展策略记忆，但许多方案依赖于在将观测传递给策略之前对历史进行启发式的压缩或过滤。这些方案的一个常见理由是：朴素地扩展观测历史（即直接增加输入策略的帧数）是脆弱的，容易导致性能下降。本文对这一论断提出了质疑：<strong>朴素地扩展上下文长度是否真的如此脆弱？</strong> 本文通过详尽的实验证明，在合适的条件融合架构和数据规模下，朴素扩展上下文长度并不会导致性能灾难性下降。同时，为应对数据有限的场景，本文提出了一种在多种上下文长度课程上联合训练策略的新算法。核心思路是：<strong>系统评估影响长上下文模仿学习的关键因素（数据集大小、任务特性、模型架构），发现朴素扩展的可行性，并提出可变历史训练算法以降低长上下文策略的样本复杂度。</strong></p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文基于最先进的Diffusion Policy框架进行研究。该框架旨在学习一个去噪器，在给定过去观测历史 $\mathbf{o}[t-T_o+1:t]$ 的条件下，采样过去及未来机器人动作块 $\mathbf{a}[t-T_p^{past}+1:t+T_p]$，其中 $T_o$ 为上下文长度，$T_p$ 为预测时域。</p>
+<p><img src="https://arxiv.org/html/2606.16447v1/2606.16447v1/figures/solutions/architecture_compare_plots/title_legend.jpg" alt="Diffusion Policy 架构"></p>
+<blockquote>
+<p><strong>图1（替代框架说明）</strong>：图中标题及图例展示了本文重点比较的三种Diffusion Policy条件融合架构。整体流程分为两阶段：观测编码器将图像序列编码为特征，以及以这些特征为条件的去噪主干网络。左图强调了“Conditioning Method”的比较，右图强调了“Training Algorithm”的比较。</p>
+</blockquote>
+<h3 id="架构比较">架构比较</h3>
+<p>Diffusion Policy架构包含观测编码器和去噪主干网络。本文的核心比较在于<strong>条件融合机制</strong>和<strong>去噪主干网络选择</strong>：</p>
+<ol>
+<li><strong>UNet + FiLM</strong>：当前机器人学习领域的主流选择。使用UNet作为主干，通过FiLM（Feature-wise Linear Modulation）层融合条件信息。</li>
+<li><strong>UNet + Cross-Attention</strong>：提出在UNet主干中使用交叉注意力（Cross-Attention）机制融合观测条件。虽然在计算机视觉中常见，但本文首次将其应用于机器人策略学习。在低数据长上下文场景下显示出优势。</li>
+<li><strong>DiT</strong>：使用Transformer（DiT）作为去噪主干。这是 Torne et al. [32] 采用的架构，但在本文实验中表现不佳甚至出现灾难性失败。</li>
+</ol>
+<p><strong>创新点</strong>：本文首次系统评估了交叉注意力条件融合在机器人模仿学习中的应用，并证明其在低数据长上下文场景下比常用的FiLM条件提供更有利的归纳偏置，降低了样本复杂度。</p>
+<h3 id="可变历史训练算法">可变历史训练算法</h3>
+<p>为改善低数据量下长上下文策略的性能，本文提出了一个联合训练算法，其核心思想是<strong>让模型在一个上下文长度课程上学习，而非固定在单一长度</strong>。这借用了短上下文的训练样本（数据元组）来缓解长上下文训练中的过拟合，同时在有用时仍能受益于记忆。</p>
+<p><strong>算法细节</strong> (Algorithm 1)：输入为数据集 $\mathcal{D}$、最小上下文长度 $c$、目标最长上下文长度 $T_o$。在每一步训练迭代 $i$ 中，从 $\mathcal{D}$ 采样数据后，从训练时变分布 $\rho_i$ 中采样一个上下文长度 $m \in {c, c+1, ..., T_o}$。损失函数计算为采样的动作块与网络预测值之间的L2误差，其中过去的动作预测范围 $T_p^{past}(m)$ 根据采样的 $m$ 进行调整。更新网络参数 $\theta$。</p>
+<ul>
+<li><strong>关键超参数</strong>：过去预测时域 $T_p^{past}$ 和分布 $\rho_i$。</li>
+<li><strong>分布 $\rho_i$ 的设计</strong>：<ul>
+<li>随机洒水：以高概率 $p$ 采样最长长度 $T_o$，以均等概率采样其他长度。$\rho_i$ 在训练中保持不变。</li>
+<li>渐进式：开始时 $\rho_i$ 仅包含最小长度 $c$，随后逐步将更长的长度加入采样空间 $\mathcal{C}_1$，最终切换到随机洒水模式。</li>
+</ul>
+</li>
+</ul>
+<p><strong>创新点</strong>：这一算法允许模型自适应地从不同长度的上下文中学习，在低数据量下有效提升了长上下文策略的性能，在高数据量下也能保持性能，为构建更通用的策略提供可能。本文发现，在数据不足时，渐进式课程和缩短过去预测时域效果更好；数据充足时，随机洒水配合完整的过去预测时域能保持朴素扩展的性能。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>基准/数据集</strong>：实验在多个模拟任务和1个硬件任务上进行。</p>
+<ul>
+<li><strong>短上下文可解任务</strong>：push-T（来自[34]）、robomimic-square、robomimic-lift（来自[14]）。上下文长度$T_o \in {1, 2, 5, 10, 12, 16, 20}$。</li>
+<li><strong>要求长上下文任务</strong>：本文引入的 <code>push-and-return</code> 和 <code>grasp-and-return</code>（原理见图2），以及硬件上的 <code>marshmallows</code> 任务（对标[15]）。上下文长度长达 $T_o=80$ 或 $92$。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.16447v1/2606.16447v1/x1.png" alt="长上下文任务示意图"></p>
+<blockquote>
+<p><strong>图2</strong>：<code>push/grasp-and-return</code> 任务示意图。方块在任一侧生成，机器人需先将其移动到中心，然后回到中性位置，最后将其推/抓回其生成侧的区域以达成“任务成功”。若忽略记忆要求，只需将方块移到任一生成位置即可达成“操作完成”。</p>
+</blockquote>
+<p><strong>数据规模</strong>：每个任务在3个数据规模下实验：<code>$N/2$</code>, <code>$N$</code>, <code>$2N$</code>。<code>$N$</code> 是训练单任务策略的典型数据量。<br><strong>对比方法</strong>：主要对比不同策略架构（UNet+Cross-Attention, UNet+FiLM, DiT）在多种上下文长度和数据规模下的性能。可变历史训练算法与最强的朴素扩展基线（UNet+Cross-Attention）进行比较。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><p><strong>朴素扩展性能趋势</strong>：</p>
+<ul>
+<li><p><strong>短上下文任务</strong>：如图3（a-c）所示，对 <code>lift</code> 任务，长上下文性能无显著下降；对 <code>square</code> 和 <code>push-T</code>，在低数据（$N/2$）时性能随上下文长度增加而下降，但随着数据增多，下降幅度减小甚至消失（<code>square</code> 在高数据$2N$下无统计显著下降）。这表明性能下降是任务和数据依赖的。<br><img src="https://arxiv.org/html/2606.16447v1/2606.16447v1/figures/performance_trends/push_t_cross_data_scaling.jpg" alt=""></p>
+<blockquote>
+<p><strong>(a) Push-T</strong>: 在低数据下（$N/2$），成功率随上下文长度增加而明显下降（从<del>85%降至</del>60%），但在高数据下（$2N$），所有上下文长度均保持约90%的高成功率。<br><img src="https://arxiv.org/html/2606.16447v1/2606.16447v1/figures/performance_trends/square_cross_data_scaling.jpg" alt=""><br><strong>(b) Square</strong>：趋势与Push-T类似，但高数据（$2N$）下，所有上下文长度性能均趋近，朴素扩展有效。<br><img src="https://arxiv.org/html/2606.16447v1/2606.16447v1/figures/performance_trends/lift_cross_data_scaling.jpg" alt=""><br><strong>(c) Lift</strong>：在三个数据尺度下，成功率随着上下文长度增加均保持高位（80-90%），未出现下降，表明对某些任务，朴素扩展非常有效。</p>
+</blockquote>
+</li>
+<li><p><strong>长上下文任务</strong>：如图4、5所示。<br><img src="https://arxiv.org/html/2606.16447v1/2606.16447v1/figures/appendix/additional_push_and_return/push_and_return_strong_cross_task_success_data_scaling.jpg" alt=""></p>
+<blockquote>
+<p><strong>图4 (a) Push-and-return任务成功率</strong>：在低数据($N/2$)下，长上下文策略表现差于短上下文；但当数据增加($N$, $2N$)后，随着上下文长度增加，成功率显著提升（从<del>10%升至</del>60%），符合预期。<br><img src="https://arxiv.org/html/2606.16447v1/2606.16447v1/figures/mem_requirements/grasp_and_return_cross_task_success_data_scaling.jpg" alt=""><br><strong>图5 (a) Grasp-and-return任务成功率</strong>：即使在低数据($N/2$)下，长上下文策略也能在 $T_o=48$ 时达到超过50%的成功率；数据更多时，提升更明显。短上下文策略则完全失败。</p>
+</blockquote>
+</li>
+</ul>
+</li>
+<li><p><strong>架构对比</strong>：<br><img src="https://arxiv.org/html/2606.16447v1/2606.16447v1/figures/solutions/architecture_compare_plots/architecture_compare_combined_pr_uses_strong_stacked.jpg" alt=""></p>
+<blockquote>
+<p><strong>图7 架构对比（低数据$N/2$与标准数据$N$）</strong>：UNet+Cross-Attention 在低数据、长上下文（如$T_o=20$）时表现明显优于 UNet+FiLM，而 DiT 则显示出灾难性失败。随着数据增加，各架构间差距缩小。这表明 Cross-Attention 在低数据下提供了更好的归纳偏置。</p>
+</blockquote>
+</li>
+<li><p><strong>可变历史训练算法效果</strong>：<br><img src="https://arxiv.org/html/2606.16447v1/2606.16447v1/figures/solutions/variable_training_plots/variable_history_combined_pr_uses_strong_halfN.jpg" alt=""></p>
+<blockquote>
+<p><strong>图8 可变历史训练在低数据($N/2$)下的效果</strong>：对于 <code>push-T</code>、<code>square</code> 和 <code>push-and-return</code> 任务，可变历史训练（<code>var-hist</code>）使长上下文策略的性能（黄线）提升至接近或超过最佳的短上下文策略（深蓝线），显著优于朴素扩展基线（橙线）。</p>
+</blockquote>
+</li>
+<li><p><strong>重温过去Token预测</strong>：<br><img src="https://arxiv.org/html/2606.16447v1/2606.16447v1/figures/solutions/ptp_study/frozen_encoder_past_comparison_pr_uses_strong_N_half.jpg" alt=""></p>
+<blockquote>
+<p><strong>图9 编码器冻结与过去动作预测的贡献分析</strong>：比较了可训练的编码器、训练后冻结的编码器等设置。结果表明，过去动作预测和冻结观测编码器共同驱动了 Torne et al. [32] 所报告的成功，但 <code>push-and-return</code> 任务是个例外，此场景下本文的可变历史训练算法表现更优。</p>
+</blockquote>
+</li>
+</ol>
+<p><strong>消融实验总结</strong>：</p>
+<ul>
+<li><strong>架构选择</strong>：交叉注意力在低数据、长上下文下至关重要；数据充足时，架构影响减小。</li>
+<li><strong>可变历史训练</strong>：在数据不足（$N/2$）时，使用渐进式课程和缩短的过去预测时域效果最佳；数据充足（$N$）时，随机洒水课程配合完整过去预测能保持性能。其主要贡献是防止过拟合，并利用短上下文数据元组。</li>
+<li><strong>过去Token预测机制</strong>：实验表明，其有效性与特定的观测编码器冻结策略紧密相关，并非独立起效。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>系统研究</strong>：首次全面评估了数据规模、任务特性和模型架构对长上下文Diffusion Policy性能的相互影响。研究表明，在恰当的架构（UNet+Cross-Attention）和数据规模下，朴素扩展上下文长度<strong>并非如先前宣称的那样脆弱</strong>。</li>
+<li><strong>新训练算法</strong>：提出了可变历史训练算法，通过在一个上下文长度课程上联合训练，在低数据量下显著提升了长上下文策略的性能（提升1.25倍至2倍），在高数据量下维持了性能，为解决长上下文学习的样本复杂度问题提供了有效方案。</li>
+<li><strong>重新评估先前工作</strong>：通过实验分析了 Torne et al. [32] 提出的过去Token预测方法的成功因素，指出观测编码器冻结是关键贡献之一，而非仅仅是节省GPU内存的技巧。</li>
+</ol>
+<p><strong>局限性</strong>：<br>本文主要关注模型架构和训练方法。然而，<strong>推理时因处理长上下文带来的计算开销仍然是一个挑战</strong>。此外，本文提出了在训练时使用可变上下文，但并未深入探索在<strong>推理时动态调节输入上下文长度</strong>的算法。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li>在探索复杂的记忆机制之前，应优先评估朴素扩展的性能，并考虑数据规模和任务特性。</li>
+<li>UNet+Cross-Attention为训练单任务机器人策略提供了更优的基线架构，特别是在低数据长上下文设定下。</li>
+<li>可变历史训练算法为机器人的“代理”能力开辟了道路，未来的工作可以探索如何在推理时灵活运用不同长度的上下文以实现更鲁棒和智能的行为。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本论文针对机器人模仿学习中策略因依赖短期观察历史而难以处理需记忆任务的问题展开研究。核心方法是评估不同条件架构（UNet+交叉注意力）下，简单扩展上下文长度对扩散策略的影响，并提出了一种联合训练多上下文长度策略的课程学习算法。实验发现，采用合适架构时，简单地增加上下文长度在许多任务中并不会导致灾难性失败；在低数据情况下，所提课程学习方法能有效提升策略性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.16447" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

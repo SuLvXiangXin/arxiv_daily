@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SAPS: Shared Autonomy for Policy Steering by Blending Teleoperation with a Pretrained VLA - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>SAPS: Shared Autonomy for Policy Steering by Blending Teleoperation with a Pretrained VLA</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.15568" target="_blank" rel="noreferrer">2606.15568</a></span>
+        <span>作者: Zackory Erickson Team</span>
+        <span>日期: 2026-06-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型在机器人操作中展现出强大的通用能力，但这些策略在面对物体位置、外观和任务规格等分布外扰动时显得脆弱。纯人工遥操作虽然能可靠地应对任务失败，但需要操作者持续的精确控制和高认知负荷。现有的推理时策略引导方法，如ITPS、DynaGuide等，通常需要辅助动力学模型、修改扩散采样器或引入显式推理模块，增加了复杂性。本文旨在解决一个核心矛盾：如何利用人类操作者的纠正性指导来增强通用VLA策略的鲁棒性，同时又无需对预训练模型进行微调或引入复杂的辅助系统。其核心思路是提出一个轻量级的共享自治框架，在推理后的动作层面直接融合人类遥操作命令与VLA策略动作，以稀疏的人为干预引导策略渡过分布外状态。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>SAPS的整体流程是一个实时混合控制循环：在每个控制步骤，预训练的VLA主干策略接收相机图像、机器人状态和语言指令，提出一个自主动作；与此同时，操作者可能通过接口（如键盘、游戏手柄）提供遥操作命令。框架的核心在于如何仲裁这两种并行的动作输入，输出一个最终执行的混合动作。</p>
+<p><img src="https://arxiv.org/html/2606.15568v1/2606.15568v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：SAPS整体框架。在每个控制步，VLA策略 π_θ 与环境交互并提议动作。用户可并行提供遥操作动作。系统评估三种仲裁策略（接管、等权混合、余弦相似度加权）之一，生成仲裁系数 α，并将双方的动作混合后输出执行。</p>
+</blockquote>
+<p>模型使用预训练的 π_0.5 VLA策略，其预测的动作 a_VLA 为7维向量：前6维对应末端执行器的平移和旋转运动，第7维控制夹爪状态（如开闭）。人类操作者的遥操作动作 a_expert 格式相同。最终执行的混合动作 a_blended 对前6维进行线性混合：a_blended^(1:6) = α * a_VLA^(1:6) + (1 - α) * a_expert^(1:6)。α ∈ [0,1] 为仲裁系数，控制自主度。夹爪指令单独处理：a_final^(7) = max(a_VLA^(7)， a_expert^(7))，这使得任何一方都可以触发抓取，并倾向于闭合夹爪以避免指令冲突。</p>
+<p><strong>核心仲裁策略</strong>是SAPS的关键创新，论文提出并对比了三种：</p>
+<ol>
+<li><strong>接管仲裁</strong>：当检测到有效的人类输入时，完全覆盖策略动作。判断基于遥操作动作的L2范数是否超过阈值 ε：若 ∥a_expert^(1:6)∥ &gt; ε，则 α = 0；否则 α = 1。这是一种硬切换策略。</li>
+<li><strong>等权混合仲裁</strong>：在检测到人类输入时，固定地以α=0.5混合策略和人类动作，实现持续的共享控制。即当 ∥a_expert^(1:6)∥ &gt; ε 时 α = 0.5，否则 α = 1。</li>
+<li><strong>余弦相似度置信混合</strong>：这是最核心的动态策略。其α值基于人类动作与策略动作的方向一致性动态计算。首先计算余弦相似度 c = cos(θ) = (a_human · a_VLA) / (∥a_human∥ * ∥a_VLA∥)。然后通过一个缩放因子 k=6 的 sigmoid 函数将其映射为仲裁系数：α = γ = σ(k * c) = 1 / (1 + e^{-k*c})。该函数在动作方向不一致时（余弦相似度接近0或负值）敏感地降低α，赋予人类更高控制权；当动作高度一致时饱和，保持策略主导。</li>
+</ol>
+<p>与现有方法相比，SAPS的创新性体现在：<strong>1. 动作级后处理</strong>：直接在策略推理输出后进行操作混合，无需侵入策略内部（如采样、去噪过程）。<strong>2. 模型无关</strong>：不依赖任何辅助模型，也无需对预训练策略进行任何微调或架构修改。<strong>3. 通用性</strong>：理论上可应用于任何输出连续动作的策略。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>论文在多个模拟基准（LIBERO， LIBERO-PRO， CALVIN）和真实世界的Franka机器人上评估了SAPS。</p>
+<p><strong>基线方法</strong>包括：</p>
+<ul>
+<li>纯自主策略 (<code>π_0.5</code> 或 Diffusion Policy)</li>
+<li>纯人工遥操作</li>
+<li>现有策略引导方法 (<code>ITPS</code>, <code>DynaGuide</code>)</li>
+</ul>
+<p><strong>LIBERO 扰动研究</strong>：在一个单一的拾放任务中，系统性地移动目标物体的位置以制造空间扰动。随着扰动距离增大，纯<code>π_0.5</code>策略的成功率从近距离的80%以上急剧下降（距离≥0.15时成功率降至22.9%）。</p>
+<p><img src="https://arxiv.org/html/2606.15568v1/2606.15568v1/x2.png" alt="LIBERO扰动结果"></p>
+<blockquote>
+<p><strong>图3</strong>：<code>π_0.5</code>在不同空间扰动距离下的任务成功率。趋势线显示其性能随扰动距离增加而显著下降。等权混合（Blending）和余弦混合（Cosine）两种SAPS方法在中等和较大扰动下保持了高成功率（87.9%和90.0%）。</p>
+</blockquote>
+<p><strong>LIBERO-PRO 综合评估</strong>：在10个不同任务上测试策略对任务指令变换和物体位置互换的鲁棒性。纯<code>π_0.5</code>在分布外扰动下平均成功率仅为15.0%，表明其虽具备底层操作能力但对布局和任务描述变化非常敏感。</p>
+<p><img src="https://arxiv.org/html/2606.15568v1/2606.15568v1/x3.png" alt="LIBERO-PRO成功与干预"></p>
+<blockquote>
+<p><strong>图4</strong>：LIBERO-PRO上成功率vs人类干预占比。SAPS方法（Blending， Takeover， Cosine）用远低于纯遥操作（100%干预）的干预率（10.8%， 11.7%， 30.0%），取得了与纯遥操作（98.8%成功）接近的高成功率（92.6%， 93.2%， 97.4%），显著优于纯<code>π_0.5</code>。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.15568v1/2606.15568v1/x4.png" alt="LIBERO-PRO完成时间"></p>
+<blockquote>
+<p><strong>图5</strong>：LIBERO-PRO各任务平均完成时间。SAPS方法（11.1s, 13.0s, 13.2s）比纯<code>π_0.5</code>（30.7s）和纯遥操作（46.0s）都快得多。这得益于人类引导避免了策略的错误恢复行为，而策略的参与又减轻了人类的全程精细控制负担。</p>
+</blockquote>
+<p><strong>CALVIN 长序列任务</strong>：在由5个子任务组成的序列中评估。纯<code>π_0.5</code>（ZSS）表现较强，能完成91.27%的子任务。纯遥操作在规定时间内表现很差（47.37%），即使延长时间后成功率为86.78%。</p>
+<p>表格展示了CALVIN长序列任务上的详细结果，其中Cosine仲裁的SAPS方法在子任务成功率和五任务链完成率（76.67%）上均超过了纯<code>π_0.5</code>（63.33%）和延时的纯遥操作（46.67%），同时仅需13.73%步骤的人类干预。相比之下，ITPS和DynaGuide等纯算法引导方法甚至略微损害了<code>π_0.5</code>的性能。</p>
+<p><strong>CALVIN 单任务上的扩散策略对比</strong>：在性能较弱的扩散策略上，SAPS同样有效。</p>
+<p><img src="https://arxiv.org/html/2606.15568v1/2606.15568v1/x5.png" alt="CALVIN单任务成功"></p>
+<blockquote>
+<p><strong>图6</strong>：在11个CALVIN单子任务上，使用Cosine仲裁的SAPS方法（紫色）在不同类型的任务上都取得了最高的成功率（平均93%），显著优于自主扩散策略（45%）、ITPS（66%）和DynaGuide（80%）。</p>
+</blockquote>
+<p><strong>真实世界实验</strong>：在Franka机器人上执行三项桌面操作任务。纯<code>π_0.5</code>策略表现不稳定（拾放50%， 关抽屉25%， 开柜门5%）。而SAPS方法（Blending和Cosine）将平均成功率提升至93.3%和98.3%，同时显著减少了人类干预（比纯遥操作少30-50%）并缩短了任务完成时间（与纯<code>π_0.5</code>相比）。</p>
+<p><strong>消融实验总结</strong>：论文通过比较三种仲裁策略，验证了动态仲裁（Cosine）在大多数情况下表现最佳或相当，尤其在LIBERO-PRO上取得了最高的97.4%成功率。等权混合和接管策略虽然简单但同样有效，证明了框架的鲁棒性。对夹爪指令的特殊处理（取最大值）也被证明是有效的设计。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献有三点：<strong>1. 提出了SAPS</strong>，一个无需微调、模型无关、在动作层融合人类与策略控制的轻量级共享自治框架。<strong>2. 设计并评估了三种仲裁策略</strong>，特别是基于动态余弦相似度的混合方法，能根据人机动作一致性平滑调整控制权。<strong>3. 在模拟和真实环境中的广泛实验证明</strong>，SAPS能大幅提升预训练VLA策略在分布外扰动下的任务成功率（在模拟和现实中均提升高达82%），同时显著降低完成时间和人类持续干预的需求，其人机合作效率优于纯自主和纯手动的两极。</p>
+<p>论文自身提到的局限性包括：<strong>1. 依赖测试时的人类操作者</strong>，性能受操作者时机、技能和遥操作接口影响。<strong>2. 基于动作混合而非显式的任务进展、意图或不确定性估计</strong>，因此在策略“自信地”执行错误动作时可能失效（尽管Cosine策略可缓解此问题）。<strong>3. 评估任务范围有限</strong>，需扩展到更多任务、策略主干和机器人形态以全面验证。</p>
+<p>这项工作为可靠部署通用机器人策略提供了一个实用且直接的思路：利用稀疏、粗略的人类高层指导来弥补策略的分布外泛化短板，同时保留其学习到的精细操作技能。这启示后续研究可以从更智能的意图推断、更自然的交互接口，以及将SAPS思想与更丰富的环境表征（如触觉、力觉）相结合等方向进行探索，以实现更低负荷、更高效率的人机协同操作。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对Vision-Language-Action模型在分布外扰动下表现脆弱，而纯遥操作负担重的问题，提出了SAPS框架。该方法在动作层面混合人类遥操作与预训练策略动作，无需重训练或额外模型，并引入了动态余弦相似度等仲裁策略平衡控制。实验表明，SAPS在模拟和真实世界中将任务成功率最高提升82%，同时大幅减少人类干预并加快任务完成速度。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.15568" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
