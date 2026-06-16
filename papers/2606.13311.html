@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Rarity-Gated Context Conditioning for Offline Imitation Learning-Based Maritime Anomaly Detection - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Rarity-Gated Context Conditioning for Offline Imitation Learning-Based Maritime Anomaly Detection</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.13311" target="_blank" rel="noreferrer">2606.13311</a></span>
+        <span>作者: Sungil Kim Team</span>
+        <span>日期: 2026-06-11</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>上下文异常检测旨在根据上下文变量（如环境、操作条件）识别异常行为，主流方法通过建模条件分布p(b|c)来实现。然而，当前方法通常对训练后的所有上下文一视同仁，忽略了现实场景中上下文分布高度不平衡的问题，即常见上下文（如温和天气）数据丰富，而安全关键的稀有上下文（如恶劣天气）数据稀少。这导致了“频率偏差”：模型在处理稀有上下文时，容易产生误报或不稳定决策。现有方法（如ROCOD）主要通过回退到上下文无关的基线模型来缓解稀疏上下文问题，但这本质上削弱了稀有上下文的影响。</p>
+<p>本文针对上下文不平衡分布下的频率偏差问题，提出了一个“稀有度感知”上下文调节的新视角。其核心思路是：通过数据驱动的稀有度评分来调控上下文对中间特征表示的调制强度，在稀有上下文下做出更明确的决策，在常见上下文下保持保守，从而减少误报。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架（Pipeline）以一个序列编码器（如RNN或Transformer）处理状态序列（如船舶AIS轨迹），生成潜在状态表示<code>h_t</code>。同时，环境编码器处理上下文变量<code>e_t</code>（如ERA5气象数据），生成用于特征调制(FiLM)的缩放和偏移参数<code>γ_t, β_t</code>，得到上下文调制后的表示<code>~h_t</code>。本文提出的Rarity-Gated FiLM (RGFiLM)模块则计算一个稀有度评分<code>r_t</code>，并以此控制一个门控权重<code>w_t</code>，用于在原始表示<code>h_t</code>和调制后表示<code>~h_t</code>之间进行插值，生成最终表示<code>h_t*</code>，供下游异常评分模型（如基于模仿学习的决策模型）使用。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：RGFiLM模块整体架构。左侧为状态序列编码器，中间为环境编码器和FiLM调制，下方为稀有度提取模块，最终通过稀有度门控产生调制后的表示用于策略预测。</p>
+</blockquote>
+<p>核心模块包含三个部分：</p>
+<ol>
+<li><strong>稀有度提取</strong>：选择上下文变量的一个子集<code>e_t^r</code>（如波高、风速），基于训练集的正常数据估计其均值μ和协方差Σ。计算当前环境向量的马氏距离<code>D_t^2</code>，并通过卡方累积分布函数(CDF)将其映射为<code>[0,1]</code>区间的稀有度评分<code>r_t</code>。<code>r_t</code>越接近1，表示环境越稀有。</li>
+<li><strong>FiLM调制</strong>：环境编码器<code>f_env</code>将完整上下文<code>e_t</code>映射为特征级的缩放γ_t和偏移β_t，通过公式<code>~h_t = γ_t ⊙ h_t + β_t</code>对原始状态表示进行调制。</li>
+<li><strong>稀有度门控</strong>：门控网络<code>g</code>将上下文<code>e_t</code>和稀有度评分<code>r_t</code>拼接后映射为一个中间分数<code>s_t</code>。随后进行稀有度相关的温度缩放：<code>s̃_t = s_t * (1+κ*r_t)/τ</code>，其中<code>τ</code>是基础温度，<code>κ</code>是稀有度敏感度系数。最后通过sigmoid函数得到门控权重<code>w_t = σ(s̃_t)</code>。最终输出为<code>h_t* = w_t * ~h_t + (1-w_t) * h_t</code>。该设计使得在稀有上下文下（<code>r_t</code>大），温度缩放效应更强，<code>w_t</code>倾向于接近0或1，模型必须在调制特征和原始特征间做出明确选择；而在常见上下文中，<code>w_t</code>变化更平滑，混合更柔和。</li>
+</ol>
+<p>创新点体现在：现有上下文调节方法（如直接拼接、标准FiLM）对所有上下文采用统一强度的调制，而RGFiLM创新性地引入了数据驱动的稀有度评分，动态调节上下文调制的“决策力”，从而针对频率偏差进行优化。</p>
+<p>本文方法被集成到离线模仿学习异常检测框架OIL-AD中。训练时，用<code>h_t*</code>替换OIL-AD原始的状态表示<code>h_t</code>，并最小化相同的目标函数（动作损失和单调性损失）。测试时，异常评分也基于<code>h_t*</code>计算。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：研究在自建的“巴斯海峡AIS-ERA5数据集”上评估方法，该数据集包含2020年7月至12月的船舶轨迹与对齐的气象上下文。异常场景为“绕道异常”，即在正常轨迹中注入一段固定的横向偏移（与上下文无关的异常行为），以此模拟在多样环境条件下需检测的上下文相关异常。</p>
+<p><strong>对比的基线方法</strong>：</p>
+<ul>
+<li><strong>OIL-AD</strong>：无上下文的基础序列决策模型。</li>
+<li><strong>OIL-AD + Concat</strong>：将上下文与状态在输入层拼接。</li>
+<li><strong>OIL-AD + FiLM</strong>：使用标准FiLM进行上下文调制。</li>
+<li><strong>OIL-AD + Gated FiLM</strong>：使用无稀有度输入的门控FiLM（消融实验）。</li>
+<li><strong>ROCOD</strong>：经典的上下文异常检测方法。</li>
+<li><strong>CAD for MTS</strong>：面向多元时间序列的上下文异常检测方法。</li>
+<li>**RGFiLM (Ours)**：本文提出的方法。</li>
+</ul>
+<p><strong>关键实验结果</strong>：在绕道异常检测任务上重复20次实验，取平均值与标准差，关键指标（F1， 精确度， 召回率， 误报率FPR）如表1所示（此处用文字转述表格关键数据）。RGFiLM取得了最佳的<strong>平均F1（0.595）和最低的平均误报率FPR（0.097）</strong>。与无上下文的OIL-AD基线相比，F1从0.524提升至0.595，FPR从0.120降至0.097。与标准FiLM相比，F1从0.577提升至0.595，召回率从0.798提升至0.826，FPR保持相当（0.098 vs 0.097）。与无稀有度的门控FiLM相比，F1从0.582提升至0.595，FPR从0.108显著降至0.097（Wilcoxon检验p=0.028）。结果表明，稀有度感知的门控机制在维持或提升检测性能（F1）的同时，能有效降低误报率（FPR）。</p>
+<p><img src="https://arxiv.org/html/2606.13311v1/2606.13311v1/img/rarityBin.png" alt="稀有度分箱消融实验"></p>
+<blockquote>
+<p><strong>图2</strong>：按环境稀有度分箱（常见：后80%，稀有：前20%）的消融实验结果。(a) 各方法在常见和稀有轨迹上的误报率 (FPR)。(b) 各方法在常见和稀有轨迹上的F1分数。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：图2展示了按轨迹稀有度分层后的性能。所有方法在稀有上下文下的F1均低于常见上下文。RGFiLM在两个区段都取得了最高的平均F1（常见0.604， 稀有0.547）和最低的平均FPR（常见0.098， 稀有0.092）。与FiLM相比，RGFiLM在稀有上下文下的F1提升（0.513 → 0.547）比在常见上下文下（0.587 → 0.604）更为明显，说明稀有度感知的收益在数据稀少的区域更为突出。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>明确了上下文异常检测中因数据分布不平衡导致的“频率偏差”问题，并提出了“稀有度感知上下文调节”机制。</li>
+<li>实例化了该机制为**Rarity-Gated FiLM (RGFiLM)**模块，通过稀有度评分动态门控上下文调制强度，提升模型在稀有上下文下的决策鲁棒性。</li>
+<li>在海事轨迹异常检测案例中验证了方法的有效性，表明其能取得最佳的F1-FPR权衡，显著降低误报。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，评估中使用了固定幅度的合成绕道注入，这可能无法覆盖真实世界异常机制的多样性。稀有度评分基于经验上下文分布进行估计。</p>
+<p><strong>启示</strong>：本研究强调了在构建上下文感知模型时考虑数据分布的重要性。RGFiLM作为一种模块化设计，可方便地集成到各类基于表示的异常检测流程中（如重建、预测、密度估计等），为处理现实世界中的不平衡上下文条件提供了一种通用思路。未来工作可探索更复杂的稀有度估计方法，以及在更广泛的异常类型和领域中进行验证。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决上下文异常检测中，因上下文分布高度不均衡（频率偏差）导致在罕见上下文下误报率高、决策不稳定的问题。提出**RGFiLM**方法，它通过经验分布估算上下文罕见性分数，并以此控制一个门控机制，从而在罕见上下文中增强、在常见上下文中保守地应用特征级线性调制。在航海轨迹异常检测实验中，RGFiLM实现了最佳的平均F1-误报率权衡，显著降低了误报。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.13311" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

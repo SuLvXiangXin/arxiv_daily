@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Geometric Action Model for Robot Policy Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Geometric Action Model for Robot Policy Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.17046" target="_blank" rel="noreferrer">2606.17046</a></span>
+        <span>作者: Sunghwan Hong Team</span>
+        <span>日期: 2026-06-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，构建通用机器人操纵策略的主流方法主要基于两大范式：视觉-语言-动作模型和视频世界-动作模型。前者基于大规模视觉-语言模型，将视觉和语言令牌映射到机器人动作；后者则利用预训练的视频生成模型，联合预测未来帧和动作。然而，这两种方法本质上都在2D图像帧或其衍生潜在空间中操作，深度、尺度和遮挡等关键的3D几何线索是隐含的，这导致策略在面对环境变化，特别是机器人初始状态和相机视角变化时，泛化能力有限。本文针对现有方法缺乏显式3D几何推理的痛点，提出直接利用预训练的几何基础模型作为策略共享基底的创新视角。其核心思路是：将一个几何基础模型在中间层分割，浅层作为观测编码器，在分割层插入一个因果未来预测器来预测未来潜在令牌，然后将这些预测的令牌通过剩余的GFM块进行特征传播和解码，从而用单一主干模型同时产生未来几何和动作。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>GAM的整体框架旨在将一个预训练的几何基础模型转化为一个语言条件化的世界动作模型。其pipeline分为三个顺序阶段，均在GFM内部进行：首先，<strong>观察编码器</strong> 重用GFM的浅层从多视角RGB观测中提取潜在几何特征；其次，在分割层插入的<strong>因果未来预测器</strong>，结合语言、本体感知和动作历史，预测未来的潜在几何令牌和一个动作令牌；最后，在<strong>特征传播和动作解码</strong>阶段，预测的未来令牌（包括几何和动作令牌）被路由通过剩余的深层GFM块，由轻量级动作头和原始深度头分别解码为可执行的动作块和对齐的未来深度图。</p>
+<p><img src="https://arxiv.org/html/2606.17046v1/2606.17046v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：GAM的主要架构。(a) GAM将GFM在分割层(L_s)处拆分。观察历史通过浅层编码器进行处理。一个因果未来预测器插入在分割层，它利用语言、本体感知和动作历史来预测未来的几何令牌和动作令牌。这些预测的令牌随后被送入剩余的GFM块（解码器）以共同解码未来的深度和最终动作。(b) 因果未来预测器中的块因果自注意力机制示意图，确保没有未来信息泄漏。</p>
+</blockquote>
+<p><strong>核心模块具体细节</strong>：</p>
+<ol>
+<li><strong>观察编码器</strong>：将预训练GFM的前 L_s 层作为编码器 E_≤L_s。对于上下文窗口中的每个时间步 t&#39;，多视角观测 o_t&#39; 通过GFM的原始补丁嵌入进行令牌化，形成初始令牌序列 Z_t&#39;^(0)，然后经过编码器得到分割层表示 Z_t&#39;^(L_s)。关键设计是分割层 L_s 必须足够深以提取丰富的特征，但又必须浅于GFM中DPT深度头所使用的最早层，以便预测的未来状态能被解码为未来几何。</li>
+<li>**因果未来预测器 (g_φ)**：该模块是一个插入在分割层的因果Transformer。对于每个时间步 t&#39;，将编码后的几何令牌 Z_t&#39;^(L_s)、投影得到的本体感知令牌 p_t&#39; 和上一动作令牌 q_t&#39; 拼接，形成每个时间步的令牌块 U_t&#39;。这些块与语言令牌 L_ℓ 一起组成完整输入序列 X，送入预测器。预测器采用块因果自注意力，防止未来信息泄漏。在其最后一层，与几何令牌对应的隐藏状态被预测为未来一帧的潜在几何令牌 Ẑ_{t‘+1}^(L_s)，同时与指定动作槽对应的隐藏状态被投影产生一个预测的下一动作令牌 ã_t‘。这实现了动作和几何潜在表示的联合预测。</li>
+<li><strong>特征传播与动作解码</strong>：预测的单个动作令牌 ã_t‘ 被复制 V 份（对应V个视角），与预测的未来几何令牌 Ẑ_{v, t‘+1}^(L_s) 拼接后，送入剩余的GFM解码器块 D_&gt;L_s 中进行处理。为防止泄漏，因果掩码策略被扩展到GFM剩余的全局注意力层。最终，传播后的特征由两个头解码：轻量级动作头 h_act 聚合动作令牌以回归最终的动作块 â_t‘，而原始GFM的深度头 h_depth 将几何令牌解码为未来深度图。</li>
+</ol>
+<p><strong>与现有方法的创新点</strong>：</p>
+<ul>
+<li>与仅使用GFM作为静态特征提取器或通过表征对齐进行特征蒸馏的几何感知VLA不同，GAM将GFM的深层结构直接重新用作策略自身的时间和动作生成基底。</li>
+<li>与在2D像素或潜在空间进行预测的视频WAM不同，GAM在编码了丰富3D先验的GFM潜在空间中进行预测。</li>
+<li>动作和未来场景的预测在单个自回归令牌序列中联合建模，而非使用分离的头或扩散过程，并且GFM的深度块被显式地重新用于解码预测的未来令牌，而不仅仅是处理观测到的令牌。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与数据集</strong>：研究在模拟和真实机器人基准上进行了评估。模拟主要使用LIBERO（多样化操纵基准）及其扩展LIBERO-Plus（引入相机视点、光照、背景等受控环境扰动以评估分布外鲁棒性）。真实机器人评估涉及四个操纵任务，使用腕戴式和第三人称相机。训练数据来自RoboCasa365、MimicGen和OpenX-Embodiment的大规模轨迹集合。</p>
+<p><strong>对比的基线方法</strong>：与三大类基线进行了比较：1) VLAs（如 π-0.5, OpenVLA-OFT, RIPT-VLA等）；2) WAMs（如 Cosmos-Policy, Fast-WAM等）；3) 几何感知VLAs（如 π-0.5 + Spatial Forcing， π-0.5 + ROCKET）。</p>
+<p><img src="https://arxiv.org/html/2606.17046v1/2606.17046v1/x3.png" alt="主实验结果"></p>
+<blockquote>
+<p><strong>图4</strong>：真实机器人实验结果。GAM在名义设置和相机扰动设置下均大幅超越基线方法 π-0.5 和 Spatial Forcing，展示了其卓越的鲁棒性和泛化能力。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>模拟结果（表1）</strong>：在标准LIBERO基准上，GAM（成功率97.6%）达到了极具竞争力的性能。在更具挑战性的LIBERO-Plus上，GAM（85.5%）整体表现优于基线，尤其是在相机扰动设置上取得了最先进的83.1%成功率，相比之前最佳结果（73.4%）提升了9.7个百分点，凸显了其几何理解优势。</li>
+<li><strong>真实世界结果（图4）</strong>：GAM在所有任务和设置下均大幅超越基线，在相机扰动环境下优势更为明显，证实了其从模拟到真实世界的有效泛化以及利用GFM所带来的鲁棒性。</li>
+<li><strong>效率对比（表4）</strong>：GAM模型尺寸仅为1.4B参数，远小于多数基线。其单次推理时间仅需6.9ms，比当前最快的VLA基线（29.2ms）快4倍以上，比一些WAM基线（382.4ms）快55倍以上，实现了更快、更轻量的策略。</li>
+</ul>
+<p><strong>消融实验分析</strong>：</p>
+<ul>
+<li><strong>组件消融（表2）</strong>：预训练对于鲁棒性至关重要，省略预训练会严重损害LIBERO-Plus性能。在预训练基础上，移除未来深度损失 ℒ_depth 或未来特征损失 ℒ_feat 对性能影响很小，表明几何动态已充分编码。但若无预训练，这些未来预测损失能提供强有力的几何监督，大幅提升鲁棒性。上下文窗口 H=1 已足够且比更长历史更鲁棒。</li>
+<li><strong>分割层选择（表3）</strong>：实验验证了默认选择 L_s = 12（交替注意力开始处）能获得最佳性能。分割层过早或过晚都会导致性能崩溃，确认了预测的令牌需要足够的空间上下文和足够的深度以供GFM解码器处理。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>本文核心贡献</strong>：</p>
+<ol>
+<li>提出了几何动作模型，这是一种在单一共享主干架构中，将时间世界建模、潜在特征空间预测和几何基础模型基底相结合的操纵策略。</li>
+<li>证明了动作和几何可以在共享的令牌空间中进行预测：单个自回归序列和单次前向传播即可产生动作令牌和未来场景令牌，分别由轻量级头解码。</li>
+<li>在广泛的模拟和真实世界操纵基准上证明，GAM在准确性、鲁棒性、速度和模型轻量化方面均优于当前基于基础模型的替代方案。</li>
+</ol>
+<p><strong>论文所述局限性</strong>：尽管GAM在利用预训练GFM进行几何预测方面具有优势，但未来深度图的监督信号依赖于模拟器中的地面真实深度或现实世界中GFM生成的伪标签。这可能会限制其在无法获得此类监督的新环境中的应用。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li>GAM展示了将强大的几何先验模型深度整合到策略学习中的巨大潜力，为构建更通用、更鲁棒的具身智能体提供了新路径。</li>
+<li>其“拆分-插入-重用”的框架可能启发其他领域如何更充分、更高效地利用大规模预训练模型，而不仅仅是作为特征提取器。</li>
+<li>探索更深入的、自监督的几何目标，以减少对未来几何监督信号的依赖，是一个有价值的研究方向。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>针对通用机器人策略在3D几何信息建模不足的问题，本文提出几何动作模型（GAM）。该方法以预训练的几何基础模型为共享主干，分割其浅层作为观察编码器，并插入因果预测器，基于语言和机器人状态预测未来令牌，再通过后续块同步解码未来几何与动作。实验表明，GAM在仿真与实体机器人操纵基准测试中，相比现有基础模型基线，实现了更高的准确性、鲁棒性、更低的延迟与更小的模型体积。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.17046" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
