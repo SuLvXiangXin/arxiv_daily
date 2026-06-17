@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>GASE: Gaussian Splatting-Based Automated System for Reconstructing Embodied-Simulation Environments - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>GASE: Gaussian Splatting-Based Automated System for Reconstructing Embodied-Simulation Environments</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.17520" target="_blank" rel="noreferrer">2606.17520</a></span>
+        <span>作者: Zhipeng Zhang Team</span>
+        <span>日期: 2026-06-16</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>训练具身智能体需要在真实世界中进行，但成本高昂、操作复杂。模拟环境为此提供了一种可扩展、低成本的替代方案。因此，快速构建高保真、仿真到真实差距小的模拟场景成为了机器人学习的关键目标。目前，基于重建的方法能提供更优的视觉质量，但现有工作流程存在两个关键瓶颈：数据采集效率低下和前景对象提取效果不佳。现有系统大多针对单目视频流设计，扫描大场景费时费力；同时，直接在3D高斯空间分割前景对象会导致边界模糊、产生结构空洞和较差的场景修复效果。</p>
+<p>本文针对这两个痛点，提出了一种新的自动化模拟场景构建系统GASE。其核心思路是：利用全景相机阵列进行快速多视角环境扫描；为避免3D高斯表征的边界模糊问题，在2D图像域先完成前景对象分割与背景修复；最后分别重建前景对象与静态背景，并导入物理模拟器用于策略训练。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>GASE的整体流程旨在从多视角视频流中自动化地分离前景对象与背景场景，并分别进行高质量重建。系统输入为场景图像、从图像中获取的相机位姿以及点云。用户可以通过文本提示或点击交互来指定需要提取的目标物体。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：GASE系统流程图。给定场景图像、相机位姿及点云，利用位姿映射关系和SAM2的跟踪能力，基于用户提供的文本或点击提示在所有帧中定位目标物体并将其从背景中分离。随后，分别使用3DGS和TRELLIS重建场景和物体。</p>
+</blockquote>
+<p>整个流程的核心模块包括：基于相机位姿的2D掩码提取与场景修复、场景重建与网格提取、以及前景对象生成。</p>
+<p><strong>掩码提取与修复</strong>：为了提高跨多视频流的物体跟踪与掩码提取的鲁棒性，GASE提出了一种结合相机位姿的策略。首先在用户选定的帧上使用SAM3提取所有掩码（可结合文本提示）。对于每个点云点 𝐏𝑗 及每帧 𝑓，利用相机外参 (𝑹𝑓, 𝒕𝑓) 将其变换到相机坐标系，再通过内参投影到图像坐标 (𝑢𝑗,𝑓, 𝑣𝑗,𝑓)。为了处理遮挡，使用一个深度容差 τ 来过滤投影点：仅当该点的相机坐标系深度 𝑧𝑗,𝑓𝑐 小于等于该像素处深度图 𝐷𝑓(𝑢𝑗,𝑓, 𝑣𝑗,𝑓) 加上 τ 时，该投影点才被保留。对于每张图像，如果投影到其上的有效点数超过阈值，则选择包含最多投影点的最小掩码作为该图像的初步结果掩码 𝐌_𝑟𝑒𝑠。</p>
+<p>由于物体可能在不同图像中以不同尺度或部分出现，上述步骤可能遗漏部分掩码。因此，GASE进一步利用SAM2的视频传播能力，以每个视频流中已包含结果掩码 𝐌_𝑟𝑒𝑠𝑖 的第一张图像为起点，向前向后传播掩码。对每个视频流重复此过程，直到所有可能的图像都被标记。随后，移除所有提取到的前景对象掩码区域，并使用LAMA对所有图像进行高分辨率修复，完成前景与背景的分离。</p>
+<p><strong>场景重建</strong>：获得修复后的场景图像后，首先利用掩码与点云的映射关系，从点云中删除对应前景物体的3D点。然后将修复后的图像、相机参数（COLMAP格式）及清理后的点云输入<code>gsplat</code>进行3D高斯重建。场景被表示为一系列3D高斯，参数包括中心位置、四元数旋转、对数尺度、对数不透明度以及球谐颜色系数。训练完成后，为后续网格提取，系统会为每个相机视角渲染期望深度图。最后，通过3DGRUT工具将高斯点云转换为可导入Isaac Sim的格式。</p>
+<p>为了给模拟环境提供物理碰撞几何，GASE从高斯重建结果中提取背景网格。方法一是将各视角的RGB-D信息根据相机位姿集成到TSDF体素网格，然后从中提取点云和法线，并进行泊松表面重建以最小化表面空洞。对于细节要求更高的小场景，方法二是直接从TSDF零水平集提取三角网格，再进行孔洞填充、平滑等后处理。</p>
+<p><strong>对象生成</strong>：对于前景物体，GASE将提取到的物体掩码输入支持多视角生成的对象模型TRELLIS，以获得高质量物体网格。为了平衡资源与细节，系统设计了一个加权评分方案（基于归一化物体面积、填充比、中心先验、边界截断惩罚、长宽比规则性和有效分辨率等因子），对所有掩码排序，并贪心地选择评分最高的掩码作为输入，同时要求任意两个被选中的掩码之间至少间隔 d 帧以确保视角多样性。</p>
+<p><strong>创新点</strong>：与现有方法相比，GASE的核心创新体现在：1) <strong>数据采集</strong>：支持全景相机阵列的多视频流输入，极大提升了大规模环境扫描效率；2) <strong>对象分离策略</strong>：首创在2D图像域而非3D高斯空间完成对象分割与背景修复，从根本上避免了3D高斯边界模糊导致的提取质量问题，为实现高质量场景修复和独立对象重建奠定了基础。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了由多个全景相机构建的多视角数据集，包含4个桌面场景和5个尺寸从约10到100平方米不等的室内场景。操作任务在Piper机械臂上测试，导航任务在Anyverse Kitt 15机器人上测试。模拟环境为Isaac Sim 5.1。</p>
+<p><strong>对比方法</strong>：在分割提取任务上，对比了LangSplat、Gaussian Grouping和ObjectGS等基于3D高斯的方法。在场景修复任务上，对比了Gscream、Gaussian Grouping和3DGIC。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>对象提取与场景修复</strong>：在LERF数据集上，GASE的2D掩码提取方法在mIoU和mBIoU上均显著优于所有对比方法，平均提升超过10%（例如在<code>teatime</code>场景，mIoU达95.91%，对比ObjectGS的68.94%）。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.17520v1/2606.17520v1/x1.png" alt="提取与修复结果"></p>
+<blockquote>
+<p><strong>图2</strong>：对象提取与场景修复的定性结果。左列为原始图像与掩码，中间列为GASE的修复结果，右列为对比方法的修复结果（通常存在伪影或结构错误）。显示GASE在2D图像域的处理获得了更清晰、一致的修复效果。</p>
+</blockquote>
+<ul>
+<li><strong>修复质量量化</strong>：在自建<code>杂货</code>场景的修复任务中，GASE在PSNR（27.09）、SSIM（0.94）、LPIPS（0.15）和FID（166.14）等指标上均达到最佳，特别是衡量修复区域质量的m-FID（313.80）显著优于其他方法。</li>
+</ul>
+<p><strong>仿真到真实验证</strong>：</p>
+<ul>
+<li><strong>操作任务</strong>：在<code>杂货</code>场景中进行了抓取可乐罐、将瓶子放入盒子、推倒纸杯三个任务。使用Pi 0.5策略，分别在仿真和真实世界采集50条数据训练。结果（表3）显示，仿真到真实（sim2real）的成功率均超过60%，且与真实到真实（real2real）基线的性能差距在10%以内。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.17520v1/2606.17520v1/x2.png" alt="操作任务实验"></p>
+<blockquote>
+<p><strong>图3</strong>：操作任务实验示意图。展示了Piper机械臂在GASE重建的仿真环境中（左）与在真实世界（右）执行任务（如抓取可乐罐）的场景，验证了策略的迁移能力。</p>
+</blockquote>
+<ul>
+<li><strong>导航任务</strong>：在<code>酒吧</code>场景中进行了寻找微波炉、寻找红色灭火器箱、直行至墙后左转三个任务。使用Uni-NaVid策略，在GASE生成的仿真环境中训练后，模型在真实世界的成功率（sim2real）均达到100%，相比零-shot在真实世界的性能有显著提升（例如寻找灭火器箱任务从0%提升至100%）。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.17520v1/2606.17520v1/x3.png" alt="导航任务实验"></p>
+<blockquote>
+<p><strong>图4</strong>：导航任务实验路径对比。图中对比了同一策略在GASE仿真环境（上排）与真实环境（下排）中执行导航任务的轨迹（成功：绿色，失败：红色），显示在长短距离任务上均有较高的一致性，表明仿真到真实差距小。</p>
+</blockquote>
+<ul>
+<li><p><strong>系统对比</strong>：如表5所示，与PolaRiS、Re3Sim、PLANNING、R2R2R等系统相比，GASE是唯一支持多视频流输入且无需单独扫描前景物体的系统，自动化程度和场景规模适应性更优。</p>
+</li>
+<li><p><strong>消融实验</strong>：如表6所示，在<code>电子游戏</code>、<code>办公室</code>、<code>酒吧</code>三个不同尺度场景验证了掩码提取策略。结果显示，结合相机位姿映射（Colmap）与SAM2视频传播（SAM3）的策略取得了最佳性能（提取成功率分别为79.96%， 82.43%， 67.49%），优于仅使用SAM3逐帧查询（低效且可能内存溢出）或仅使用相机位姿映射。</p>
+</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文核心贡献在于：1) 提出了一个高度自动化的模拟场景构建系统GASE，它利用全景相机阵列输入，输出解耦的、可直接用于仿真的资产；2) 设计了一种在2D图像域操作的、基于相机位姿的对象提取策略，显著提升了分割质量并实现了高保真场景修复；3) 通过广泛的真实机器人操作与导航实验验证了系统的实用性，证明其能有效缩小仿真到真实的差距（性能差距&lt;10%）。</p>
+<p>论文提到的局限性在于：系统依赖纯视觉方法从图像计算点云和相机位姿，这一过程耗时且可能产生稀疏点云或丢失视角；同时，在2D域进行分离处理缺乏实时性。作者指出，未来在3DGS内部进行前馈式重建和语义分割可能解决这些问题，但其当前精度尚不足以实际部署。</p>
+<p>这项研究启示后续工作，将高效的2D感知与高质量的3D重建流程相结合，是构建实用仿真环境的一条有效路径；同时，如何进一步提升多视频流处理的效率和鲁棒性，以及实现实时的场景解耦与重建，是未来重要的研究方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人学习中仿真环境构建效率低、前景对象提取质量差的问题，提出了基于高斯泼溅的自动化系统GASE。该系统利用全景相机阵列快速采集多视角视频，通过基于相机姿态的策略结合SAM2实现跨帧对象定位与分离，并采用3DGS和TRELLIS分别独立重建前景对象与静态背景。实验表明，GASE在分割准确率上超越现有基于3D高斯的方法达10%以上，修复质量达到最先进水平，且在真实机器人部署中，与纯真实数据训练的策略相比性能差距小于10%，有效缩小了仿真与现实的差距。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.17520" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
