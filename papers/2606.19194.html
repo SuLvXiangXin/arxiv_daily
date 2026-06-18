@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Invertible Neural Network Adapter for One-Step Flow Matching in Robot Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Invertible Neural Network Adapter for One-Step Flow Matching in Robot Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.19194" target="_blank" rel="noreferrer">2606.19194</a></span>
+        <span>作者: Long Cheng Team</span>
+        <span>日期: 2026-06-17</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于流匹配（Flow Matching）的策略学习作为一种生成建模范式，在机器人操作任务中展现出相比扩散模型更高的训练效率和竞争力。然而，现有的基于流匹配的策略在应用于复杂的真实世界灵巧操作场景时，仍在效率、鲁棒性和泛化性方面存在局限。具体而言，现有方法难以精准捕捉多指交互的细粒度动态，保持长时序动作序列的一致性，并有效泛化到未见过的环境和物体配置。此外，多数架构缺乏整合视觉、语言和本体感觉等多模态异构观测的原则性机制。</p>
+<p>为了解决这些问题，近期工作如ManiFlow通过引入一致性正则化来稳定从扰动输入到目标分布的映射，从而减少推理步数；而Mean Flow则通过约束速度场的变化来直接学习单步生成的均值流。然而，这些方法依赖于引入多个辅助损失项来近似单步生成，虽然能在训练分布上取得良好拟合，但在部署时，学习到的动态未能忠实地对应于真实的基础速度场，导致在未见场景中的鲁棒性和泛化性下降。</p>
+<p>本文针对上述痛点，提出了一种可逆神经网络（Invertible Neural Network, INN）适配器，旨在约束速度场于一个隐含的可逆隐空间内。其核心思路是：通过可逆神经网络的特性，将整个轨迹映射到隐空间的紧凑表示中并坍缩为单点，从而直接推断出均值速度，以缓解单步推理引入的近似误差，实现高效且高质量的单步动作生成。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法整体框架建立在一步流匹配的基础上，并集成了一个INN适配器。</p>
+<p>首先，给定数据样本𝐱₁和噪声样本𝐱₀，通过线性插值定义加噪状态𝐱_t = (1-t)𝐱₀ + t𝐱₁，其对应的真实速度为𝐯_t = 𝐱₁ - 𝐱₀。流匹配模型的目标是学习一个参数化的速度场𝐯_θ(𝐱_t, t | 𝐨)来预测该速度，其损失函数如论中式(3)所示。</p>
+<p>在此基础之上，本文引入了核心的INN适配器模块。流程如下：首先，基于观测𝐨和加噪样本𝐱_t，通过一步去噪得到初始估计𝐱̂ = 𝐱_t + (1-t)𝐯(𝐱_t, t | 𝐨)。随后，将此估计输入至一个可逆神经网络g(⋅)进行正向变换，得到隐空间表示𝐲 = g(𝐱̂)。接着，将𝐲归一化到球面空间，得到𝐲̃ = 𝐲 / ∥𝐲∥₂。最后，对归一化后的表示进行逆向变换，生成最终用于机器人操作的动作：𝐱_pre = g⁻¹(𝐲̃)。整个过程如论中式(12)所示。这意味着适配器的输出直接是机器人动作，而非标准流匹配输出的速度场。</p>
+<p>INN适配器的具体结构基于耦合层，确保了变换的严格可逆性和雅可比矩阵行列式为1的易计算特性，如论中式(4)-(10)所述。</p>
+<p>适配器的损失函数设计为数据空间重构损失和隐空间对齐损失的加权和，如下所示：<br>ℒ_adapter(θ) = 𝔼[‖𝐱_pre(𝐱_t, t) - 𝐱₁‖² + ‖𝐲̃(𝐱_t, t) - g(𝐱₁)‖²]<br>该损失强制要求正向和逆向过程保持一致，从而提升训练稳定性和性能。</p>
+<p>最终的整体训练目标联合了适配器损失与原始的流匹配损失：ℒ(θ) = ℒ_adapter(θ) + α ℒ_FM(θ)，其中α是控制权重的超参数。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：方法整体框架。基于观测和噪声样本，通过流匹配模型预测速度并进行一步去噪，得到的估计再经由可逆神经网络适配器（INN Adapter）进行正逆变换与归一化处理，最终输出精确的动作。</p>
+</blockquote>
+<p>本方法的主要创新点在于：不同于现有工作通过引入额外损失项来近似单步生成，本文创新性地引入了一个严格可逆的隐空间变换。该变换通过对轨迹的隐式建模和归一化，直接约束了生成过程的几何结构，从而在保持单步推理高效性的同时，有效逼近了真实的均值流动态，提升了动作生成的准确性和鲁棒性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>本文在仿真和真实世界环境中进行了广泛的实验评估。</p>
+<p><strong>仿真实验</strong>使用了两个基准：</p>
+<ol>
+<li><strong>RoboTwin 1.0</strong>：包含五个灵巧操作任务（Pick, Diverse, Dual, Empty, Shoe），分别在2D图像观测和3D点云观测下进行测试。对比基线包括Diffusion Policy（10步）、Flow Matching Policy（10步）和ManiFlow Policy（1步和10步）。</li>
+<li><strong>Libero</strong>：包含四个语言条件操作任务（Spatial, Object, Goal, Long），用于评估大规模视觉-语言-动作学习。基线模型是基于QwenVL-3-4B并配备了Pi-style或Groot-style动作头的流匹配策略。</li>
+</ol>
+<p><strong>真实世界实验</strong>在UR机械臂和OpenArm平台上评估了三个任务：“水果拾取放入篮子”、“积木堆叠”和“双臂瓶子抓取”。以Pi 0.5模型（10步）为基线进行对比。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>RoboTwin (2D图像)<strong>：如表1所示，所提出的方法在</strong>单步推理</strong>下，在Pick、Diverse、Dual、Empty任务上取得了最高成功率（分别为49.0%、47.6%、48.0%、65.3%），平均成功率（47.6%）超过了10步推理的ManiFlow基线（46.1%）。</li>
+<li>**RoboTwin (3D点云)**：如表2所示，所提方法在大多数任务上达到或接近最优性能，例如在Pick和Empty任务上分别取得54.6%和88.3%的成功率，同时保持了单步推理。<br>...............（由于字数限制，此处省略部分实验细节，下文将聚焦关键图表说明）</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.19194v1/2606.19194v1/x1.png" alt="RoboTwin任务图示"></p>
+<blockquote>
+<p><strong>图2</strong>：RoboTwin基准中选用的灵巧操作任务示意图，展示了方法所需处理的任务多样性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.19194v1/2606.19194v1/x2.png" alt="真实世界实验"></p>
+<blockquote>
+<p><strong>图3</strong>：真实世界机器人操作任务快照。从上至下分别为：使用UR平台进行积木堆叠，使用UR平台进行水果拾取放入篮子，以及使用OpenArm平台进行双臂瓶子抓取。</p>
+</blockquote>
+<ul>
+<li><strong>Libero基准</strong>：如表4所示，在QwenVL-3-4B基础上集成流匹配动作头和所提适配器（单步）后，在Spatial（99.0%）、Object（99.6%）、Goal（97.6%）和Long（93.6%）任务上均取得了最佳或并列最佳性能，平均成功率（97.4%）超过了所有基线。</li>
+<li><strong>真实世界任务</strong>：如表5所示，在更具挑战性的“积木堆叠”任务中，所提方法将成功率从80%（8/10）提升至90%（9/10）。在“水果拾取”和“双臂抓瓶”任务上均保持100%成功率。此外，<strong>平均推理延迟从110 ms（10步）大幅降低至61 ms（单步），减少了近45%。</strong></li>
+</ul>
+<p><strong>消融与简化分析</strong>：对于3D点云观测，论文发现将噪声初始化为全零分布并省略时间步嵌入可以简化结构且不牺牲性能（比较表3中的“简化结构”与“常规结构”）。同时，所提方法的训练在300个epoch内收敛，远低于ManiFlow所需的2000个epoch，显著降低了训练成本。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了一个可逆神经网络适配器，用于约束一步流匹配的速度场于结构化的隐空间，从而最小化单步推理的近似误差；2）该方法实现了高效（单步推理，延迟低）且高质量（成功率提升）的灵巧动作生成；3）在涵盖多种观测模态（2D图像、3D点云、语言）、任务类型和策略架构的广泛仿真与真实世界基准上验证了其有效性和泛化性。</p>
+<p>论文自身提到了以下局限性：1）方法假设动作分布可以通过可逆变换映射到结构良好的隐空间，对于高度多模态或不连续的动作分布的适用性尚未验证；2）评估集中于短视界任务（抓取、重定位等），未涉及需要复杂序列推理的长视界任务；3）可逆变换引入了额外的训练时计算和内存开销，在扩展到更大基础模型时可能需要进一步优化。</p>
+<p>这些工作为后续研究提供了启示：如何设计更通用的可逆结构来处理复杂的动作分布，如何将此类单步高效生成范式扩展到长视界规划任务，以及如何进一步优化适配器的计算效率以无缝集成到更大的多模态基础模型中，是未来值得探索的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出了一种用于机器人操作的可逆神经网络适配器，旨在解决多模态观测下高维动作生成的效率与精度问题。其核心技术是基于流匹配框架，通过可逆潜空间约束动作生成轨迹，实现一步去噪生成。该方法大幅降低了推理复杂度。在真实世界实验中，与现有方案相比，模型平均推理延迟从110毫秒显著降至61毫秒，同时保持了良好的任务性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.19194" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

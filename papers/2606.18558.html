@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MolmoMotion: Forecasting Point Trajectories in 3D with Language Instruction - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>MolmoMotion: Forecasting Point Trajectories in 3D with Language Instruction</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.18558" target="_blank" rel="noreferrer">2606.18558</a></span>
+        <span>作者: Ranjay Krishna Team</span>
+        <span>日期: 2026-06-17</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前主流运动预测方法存在以下局限性：像素级视频生成方法（如Wan2.2）生成成本高，且生成的RGB帧难以直接用于下游任务；参数化3D模型（如预测物体6-DoF姿态）通常局限于特定类别（如人、手、刚性物体）；2D点轨迹虽更类别无关，但其图像平面坐标将物体运动与相机运动耦合，难以跨域迁移。本文的核心痛点是缺乏一种通用、视图稳定、紧凑且可直接用于下游任务的运动表示。</p>
+<p>本文提出，附着在物体上的世界坐标系中的3D点是一个合适的通用运动表示。它类别无关，可描述刚性、关节或可变形物体的运动；由于共享世界坐标系，同一物理运动在不同相机和视角下保持稳定；且可直接表达机器人抓取位姿变化等任务相关量。因此，本文正式定义了目标条件下的3D点运动预测任务：给定简短视觉历史、目标物体上的一组初始3D查询点以及描述预期目标的语言指令，模型预测每个查询点未来的3D轨迹。语言指令用于消除合理未来的歧义并减小搜索空间。</p>
+<p>本文核心思路是，构建一个完整的研究栈，包括大规模数据集、预测模型和基准评测，以目标语言的3D点轨迹预测为核心任务，并验证其习得的运动先验在下游任务中的迁移能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体任务定义为：给定参考时刻t0的一组物体上的2D查询点及其对应的相机坐标系下的3D初始位置、一段RGB观测历史以及描述目标动作的语言指令a，模型需要预测所有查询点在后续T个时间步中在世界坐标系（锚定在t0时刻相机）中的3D位置。</p>
+<p><img src="https://arxiv.org/html/2606.18558v1/2606.18558v1/x2.png" alt="方法架构"></p>
+<blockquote>
+<p><strong>图2</strong>：MolmoMotion架构。共享的Molmo2主干输入包括RGB观测的图像token、动作描述的文本token以及从Molmo2视觉编码器采样的2D查询点特征token。自回归变体编码初始3D查询坐标并将未来轨迹解码为量化的坐标文本；流匹配变体则在连续的3D坐标空间中直接表示它们。</p>
+</blockquote>
+<p>论文实现了两类轨迹预测器：自回归目标和流匹配目标。<strong>它们共享相同的输入编码模块</strong>，使用Molmo2作为视觉语言主干。具体地，RGB观测历史经Molmo2视觉编码器得到图像token；动作描述a被token化为文本token；对于每个2D查询坐标，从参考帧特征图上双线性采样得到点特征，形成点token序列。三类token被拼接后送入Molmo2的语言模型组件处理。所有3D坐标均以第一个查询点在t0时刻的位置为锚点，表示为相对坐标δ（单位：米）。</p>
+<p><strong>自回归变体</strong>：遵循Molmo2的坐标表示，将初始3D查询坐标和未来轨迹编码为结构化文本。每个相对坐标被离散化为毫米级整数，并序列化为带时间戳的点坐标元组。输入提示包含视觉-语言条件C和序列化的初始查询坐标。模型以标准的下一个token目标进行训练，在推理时自回归解码轨迹字符串。</p>
+<p><strong>流匹配变体</strong>：在连续3D坐标空间预测。采用类似MolmoBot的设计，使用一个以Molmo2各层特征为条件的DiT解码器，并配有轻量级MLP进行坐标编码和解码。它将干净的初始3D查询坐标与加噪的未来坐标拼接，并投影为点token。使用在点和时间轴上的RoPE来区分点身份和时间戳。解码器使用标准流匹配目标进行训练，学习从加噪轨迹到干净轨迹的速度场。推理时，从高斯噪声开始，通过10步欧拉积分得到预测轨迹。</p>
+<p><strong>与现有方法的创新点</strong>体现在：(1) <strong>预测目标创新</strong>：直接预测世界坐标系下的3D点轨迹，摆脱了类别限制和视角耦合；(2) <strong>建模方式创新</strong>：探索了自回归序列生成与流匹配概率建模两种互补范式；(3) <strong>任务定义创新</strong>：引入语言指令进行目标条件化，使预测更具指向性并减小不确定性。</p>
+<p><img src="https://arxiv.org/html/2606.18558v1/2606.18558v1/x2.png" alt="数据标注流水线"></p>
+<blockquote>
+<p><strong>图3</strong>：数据标注流水线概述。给定动作事件视频及其描述，首先定位运动物体并采样查询点；然后跟踪物体上的密集2D点，将这些轨迹提升到共享的度量3D坐标系，并利用物体级时空一致性先验过滤不可靠轨迹；最后，在物体经历有意义运动的区间周围裁剪视频。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>Benchmark/数据集</strong>：主要使用本文提出的<strong>PointMotionBench</strong>进行评测，该基准包含<strong>742</strong>个视频片段，涵盖<strong>111</strong>个物体类别和<strong>61</strong>种动作/运动类型，由HOT3D、WorldTrack和DAVIS子集构成，具有高精度或人工验证的3D轨迹。训练使用<strong>MolmoMotion-1M</strong>数据集，包含约116万个视频片段。下游任务还使用了<strong>MolmoSpaces</strong>（机器人操作）和<strong>DROID</strong>（真实世界机器人视频）数据集。</p>
+<p><strong>Baseline方法</strong>：对比了四类方法：(1) <strong>非参数基线</strong>：Static（静态）、Extrapolate（线性外推）；(2) <strong>像素空间方法</strong>：Wan2.2-5B、Cosmos Predict，通过生成视频再恢复3D轨迹；(3) <strong>3D模型方法</strong>：ObjectForesight（预测6-DoF物体姿态）、EgoScaler、Robot4DGen（预测场景流）；(4) <strong>2D轨迹方法</strong>：Track2Act（预测2D轨迹后利用真实深度提升到3D）。</p>
+<p><strong>关键实验结果</strong>：在PointMotionBench上的定量结果（见下方表1，自回归变体MolmoMotion-AR表现最佳）显示，MolmoMotion显著优于所有现有基线。例如，在HOT3D数据集上，使用3帧输入的自回归模型ADE为0.109，FDE为0.217，PWT为0.444，全面领先。简单的非参数基线（如Static）甚至优于某些学习型基线（如像素空间方法），表明视觉上合理的RGB未来帧未必能恢复精确的度量点运动。</p>
+<blockquote>
+<p><strong>表1</strong>：PointMotionBench上的3D点轨迹预测结果。报告了以米为单位的3D ADE（平均位移误差）、FDE（最终位移误差）和平均PWT（点在一定阈值内的比例）。MolmoMotion-AR（自回归）和MolmoMotion-FM（流匹配）在大多数设置下优于所有基线。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.18558v1/2606.18558v1/x5.png" alt="定性预测结果"></p>
+<blockquote>
+<p><strong>图6</strong>：MolmoMotion预测的定性示例。MolmoMotion能够根据不同的动作指令，准确预测多种运动模式下的3D运动轨迹。</p>
+</blockquote>
+<p><strong>消融实验</strong>（主要信息位于附录E）：论文探讨了训练策略的影响，包括单阶段训练（预测8帧）与两阶段训练（先8帧后扩展至32帧）的比较，以及视觉历史长度（H=1 vs H=3）的影响。结果表明，两阶段训练策略和更长的历史输入能带来更好的性能。同时还比较了不同的坐标表示（如绝对坐标vs相对坐标）、点token构建方式等。</p>
+<p><strong>下游迁移结果</strong>：</p>
+<ol>
+<li><strong>机器人规划</strong>：在MolmoSpaces抓放任务中，使用MolmoMotion初始化策略相比从头训练，能大幅提升样本效率、闭环成功率以及对未见场景和物体的泛化能力（最终全部分割的成功率从基线的34.8%提升至49.6%）。在DROID数据集的轨迹微调中，预测的3D轨迹L2误差显著低于基线（从0.53降至0.44）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.18558v1/2606.18558v1/x6.png" alt="机器人迁移学习"></p>
+<blockquote>
+<p><strong>图7</strong>：MolmoMotion有效迁移至机器人规划。(a) MolmoSpaces Franka抓放基准上，随微调步数增加的任务成功率（左图）及各分割（SS/SU/US/All）的最终成功率对比（右图）。(b) DROID剪辑上预测3D轨迹的测试L2误差。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.18558v1/2606.18558v1/x7.png" alt="真实世界预测"></p>
+<blockquote>
+<p><strong>图8</strong>：在DROID视频上微调后，MolmoMotion在未见过真实场景中的预测。模型能为各种机器人操作任务规划精确的物体轨迹。</p>
+</blockquote>
+<ol start="2">
+<li><strong>轨迹引导视频生成</strong>：将MolmoMotion预测的3D轨迹作为条件，输入一个轻量级的3D轨迹条件图像到视频模型，生成的视频比直接使用大型图像到视频模型（如Wan2.2）生成的视频运动更真实，并且在多个视频质量定量指标上有所提升。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出新任务与表示</strong>：正式定义了“目标条件下的3D点运动预测”任务，论证了世界坐标系下的物体附着3D点作为一种通用、视图稳定且任务可用的运动表示的优越性。</li>
+<li><strong>构建大规模资源栈</strong>：发布了包含约116万视频片段的<strong>MolmoMotion-1M</strong>数据集、涵盖111个物体类别的<strong>PointMotionBench</strong>基准，以及自动化的数据标注流水线，为大规模3D运动学习奠定了基础。</li>
+<li><strong>开发高性能预测模型并验证下游迁移</strong>：提出了<strong>MolmoMotion</strong>模型，探索了自回归与流匹配两种生成范式，在基准上显著优于现有方法；并实证证明了其学习到的3D运动先验能有效提升机器人规划的样本效率与泛化能力，并能引导生成更逼真的视频。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到的局限性主要在于数据标注流水线依赖于单目深度估计与相机运动估计的准确性，可能引入噪声；此外，将物体运动与相机运动完全分离在复杂场景中仍具挑战性。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>通用运动先验的潜力</strong>：研究表明，从互联网规模视频中学习到的以语言为条件的3D点运动先验，具有良好的跨任务（机器人、生成）和跨领域（仿真到真实）迁移能力，为构建基础运动模型指明了方向。</li>
+<li><strong>表征学习的重要性</strong>：工作强调了为下游任务设计可直接使用的中间表征（如3D点轨迹）的价值，它桥接了感知与动作，避免了从像素到动作的困难映射。</li>
+<li><strong>多范式探索</strong>：同时研究自回归序列生成与基于流的概率建模，为不同需求（确定性轨迹 vs 不确定性建模）的应用场景提供了选择，启发了运动预测模型的多样化发展。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出目标条件的3D点运动预测新任务：根据物体初始3D点集、视觉历史及语言描述的目标，预测每个查询点的未来3D轨迹。
+
+关键技术是构建了一套完整的研究体系：大规模数据集MolmoMotion-1M、涵盖多类别的基准PointMotionBench，以及支持自回归坐标预测与流匹配轨迹生成的模型MolmoMotion。
+
+核心实验结论表明，该模型能根据语言指令准确预测多样运动轨迹，在基准测试中显著优于现有基线，其习得的运动先验能有效提升机器人操作训练效率和视频生成的物体运动真实性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.18558" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
