@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Frequency-Aware Flow Matching for Continuous and Consistent Robotic Action Generation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Frequency-Aware Flow Matching for Continuous and Consistent Robotic Action Generation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.20135" target="_blank" rel="noreferrer">2606.20135</a></span>
+        <span>作者: Simin Li Team</span>
+        <span>日期: 2026-06-18</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人动作生成领域的主流方法是基于流匹配（Flow Matching）或扩散策略（Diffusion Policy）的生成式策略，它们通过预测一个离散的固定长度“动作块”来建模复杂、多模态的动作分布。然而，这类方法存在两个关键局限性：首先，它们依赖离散化的动作块，导致策略难以处理从不同控制频率（如3Hz到50Hz）收集的异构训练数据，容易引发梯度冲突；其次，推理时每个时间步的动作被独立预测，缺乏时间一致性约束，相邻动作可能产生方向冲突，导致动作抖动和不稳定，这在软体操作等精细任务中尤为危险。</p>
+<p>本文针对离散动作块方法在异构频率数据处理和时间一致性上的痛点，提出了一种全新的视角：将动作生成问题从时域转换到频域。核心思路是利用离散余弦变换将离散动作序列映射为频域系数，在频域空间进行流匹配学习，并加入动作一阶导数（速度）的监督，从而实现连续且时间一致的动作生成。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架分为三个核心阶段：1）将离散动作轨迹通过DCT变换至频域，获得与物理时间锚定、与采样频率无关的DCT系数；2）在DCT系数空间执行条件流匹配学习；3）在推理时，通过余弦基函数展开，将预测的系数重建为连续的、可在任意时间分辨率下执行的动作轨迹。</p>
+<p><img src="https://arxiv.org/html/2606.20135v1/2606.20135v1/figure/method_v4.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：FAFM方法整体流程图。左侧：训练时，将不同频率采样的演示轨迹通过DCT映射到频域系数；中间：在系数空间进行流匹配学习，并额外监督一阶导数（速度）；右侧：推理时在系数空间积分ODE，并通过余弦基展开重建为连续动作轨迹。</p>
+</blockquote>
+<p>核心模块具体如下：</p>
+<ol>
+<li><p><strong>频域表示与连续重构模块</strong>：为了解决异构频率训练数据的不可识别性问题，论文将物理轨迹视为定义在时间区间 <code>[0, T_ξ]</code> 上的连续函数 <code>ξ(τ)</code>。使用DCT-II将离散采样点 <code>ξ(n/f_ξ)</code> 转换为DCT系数 <code>ĉ_j</code>。关键的是，系数 <code>ĉ_j</code> 近似等于物理轨迹在余弦基函数 <code>ϕ_j(τ)</code> 上的投影 <code>c_j^*</code>，后者仅依赖于轨迹 <code>ξ</code> 和持续时间 <code>T_ξ</code>，而与采样频率 <code>f_ξ</code> 无关。因此，相同物理运动在不同频率下的演示会产生几乎相同的系数目标。在推理时，通过公式 <code>v̂(τ) = 1/2 ĉ_0 + Σ_{j=1}^M ĉ_j cos(ω_j τ)</code> 将预测的系数重构为连续动作轨迹 <code>v̂(τ)</code>，可在任意<code>τ</code>取值。</p>
+</li>
+<li><p><strong>频域流匹配模块</strong>：论文采用广泛用于机器人基础模型的Conditional Flow Matching范式。FAFM将原来的动作块空间 <code>A</code> 替换为DCT系数空间 <code>ĉ</code>。损失函数变为：<code>ℒ_FM(θ) = E || v_θ(ĉ_t, o, t) - (ĉ^* - ε) ||^2</code>，其中 <code>ĉ_t = t ĉ^* + (1-t)ε</code>。这等价于在解码后的位置序列上施加 <code>ℓ^2</code> 误差。</p>
+</li>
+<li><p><strong>一阶导数正则化模块</strong>：为增强时间一致性，额外引入对动作一阶导数（速度）的流匹配监督。得益于DCT表示的解析性质，速度可以直接从预测的系数通过公式 <code>v̇̂(τ) = - Σ_{j=1}^M ĉ_j ω_j sin(ω_j τ)</code> 精确计算，无需使用有噪声的有限差分近似。速度损失为：<code>ℒ_vel(θ) = E || v̇̂(τ_k) - ξ̇(τ_k) ||^2</code>。总损失为 <code>ℒ_FAFM = ℒ_FM + λ·ℒ_vel</code> (λ=1)。该损失在数学上对应于加权的 <code>H_μ^1</code> Sobolev范数，将系数 <code>j</code> 的预测误差 <code>δ_j</code> 加权为 <code>μ_j δ_j^2</code>，其中 <code>μ_j = 1 + λ ω_j^2</code>。这意味着高频系数（<code>ω_j</code>大）的误差会受到更强的惩罚，从而有效抑制高频抖动（如动作突变），起到平滑作用。</p>
+</li>
+</ol>
+<p>与现有方法相比，FAFM的创新点体现在：1) 引入与采样频率无关的频域（DCT）表示，从根本上解决了混合频率训练中的梯度冲突和不可识别性问题；2) 利用DCT表示的解析特性，实现了对动作一阶导数的精确、稳定监督，这是离散动作块方法难以做到的；3) 整个框架无需引入额外的网络参数，可直接作为插件替换现有流匹配或VLA模型的动作头。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>论文在多个仿真和真实世界基准上进行了评估：</p>
+<ul>
+<li><strong>仿真基准</strong>：合成玩具双模态轨迹、PyBullet障碍物规避、LapGym手术模拟环境（包含绳穿环、抓-举-触等四个任务）。</li>
+<li><strong>VLA基准</strong>：LIBERO多任务长视程操作套件。</li>
+<li><strong>实验平台</strong>：模拟仿真环境及真实的Franka机器人。</li>
+<li><strong>主要评估指标</strong>：任务成功率（SR）和运动平滑度（Log Dimensionless Jerk, LDLJ，值越小越平滑）。在障碍物规避中还评估了解多样性（模式数M）。</li>
+</ul>
+<p>对比的基线方法包括：Diffusion Policy (DP), Flow Matching (FM), Streaming Flow Policy (SFP), FreqPolicy, MPD，以及在VLA设置下的 <code>π0</code> 和 <code>π0.5</code>。</p>
+<p>关键实验结果如下：<br>在合成玩具实验中，FAFM是唯一能清晰分离两种正弦模式并生成平滑轨迹的方法。</p>
+<p><img src="https://arxiv.org/html/2606.20135v1/2606.20135v1/figure/toy_rigorous_v3.png" alt="合成玩具结果"></p>
+<blockquote>
+<p><strong>图3</strong>：合成玩具双模态轨迹实验结果可视化。FAFM（最右列）成功捕获了两种模式并生成了平滑的轨迹，而其他基线方法存在模态混合、抖动或振幅衰减等问题。</p>
+</blockquote>
+<p>在障碍物规避任务中，FAFM在成功率（61%）、平滑度（LDLJ: -5.60）和解多样性（模式数12）上均取得最佳或接近最佳的综合性能。</p>
+<p><img src="https://arxiv.org/html/2606.20135v1/2606.20135v1/figure/obstacle_avoidance_v2.png" alt="规避结果"></p>
+<blockquote>
+<p><strong>图4</strong>：成功的障碍物规避轨迹可视化。FAFM的轨迹（右下）同时展现出多样性和平滑性。</p>
+</blockquote>
+<p>在LapGym手术操作任务上，FAFM在所有四个任务中取得了最高的成功率（在GLT、BTM、LL任务上达到或接近100%）和最佳的平滑度表现。</p>
+<p><img src="https://arxiv.org/html/2606.20135v1/2606.20135v1/figure/lapgym_v2.png" alt="LapGym结果"></p>
+<blockquote>
+<p><strong>图5</strong>：(a) LapGym中的手术操作任务概览。(b) LapGym任务上训练过程中的成功率曲线。FAFM（红色实线）收敛速度最快，且最终性能最好。</p>
+</blockquote>
+<p>消融实验通过在LapGym的绳穿环任务上移除FAFM的不同组件进行：</p>
+<ul>
+<li>移除DCT变换（Ours w/o DCT）：成功率从97%降至约90%，LDLJ从-7.57恶化至-10.69，表明频域建模是性能提升的主导因素。</li>
+<li>移除速度监督（Ours w/o vel）：成功率略有下降至95%，平滑度下降至-10.88，证明速度损失对提升时间一致性有效。</li>
+<li>同时移除两者则退化为基线FM性能。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.20135v1/2606.20135v1/figure/ablation.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图7</strong>：在LapGym Rope Threading任务上的消融研究结果，显示了DCT变换和速度监督各自对成功率和平滑度的贡献。</p>
+</blockquote>
+<p>此外，FAFM整合到VLA骨干（<code>π0.5</code>）上，在LIBERO基准上相比原始版本提高了平滑度；在混合频率（3Hz/50Hz）数据训练中，FAFM显著提升了策略的成功率和对机械偏差的鲁棒性；最终在真实Franka机器人上的部署也验证了其有效性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了频率感知的流匹配方法，通过DCT频域表示解决了异构频率演示数据的训练难题，并实现了连续动作生成；2）引入基于解析一阶导数（速度）的流匹配监督，作为Sobolev型正则化，有效提升了生成动作的时间一致性（平滑度）。</p>
+<p>论文提到的局限性主要在于其理论分析基于轨迹连续且带宽有限的假设，对于包含极高频或突变分量的动作，有限阶DCT表示的逼近能力可能存在不足。</p>
+<p>这项工作为机器人动作生成提供了新的思路，启示后续研究可以进一步探索：1) 频域或其它函数空间表示在更广泛的机器人学习问题中的应用；2) 更高阶动力学约束（如加速度、加加速度）的整合以应对更严苛的平滑性要求；3) 将连续时间动作表示与模型预测控制（MPC）或在线自适应等框架相结合。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有流匹配方法在机器人动作生成中依赖离散动作块、对异构控制频率数据敏感且易产生时间不一致动作的核心问题，提出频率感知流匹配（FAFM）。该方法通过离散余弦变换（DCT）将动作序列转换到频域进行流匹配，并利用余弦基展开重建连续动作；同时引入一阶时间导数正则化（Sobolev型约束）以提升动作平滑性。实验表明，FAFM在合成基准、障碍物避免、LapGym和LIBERO等任务中显著提高了成功率、运动平滑性、收敛速度及对混合频率输入的鲁棒性，并在真实Franka机器人上得到验证。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.20135" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

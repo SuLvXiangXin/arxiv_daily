@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>EquiVLA: A General Framework for Rotationally Equivariant Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>EquiVLA: A General Framework for Rotationally Equivariant Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.19784" target="_blank" rel="noreferrer">2606.19784</a></span>
+        <span>作者: Ngo Anh Vien Team</span>
+        <span>日期: 2026-06-18</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，结合大型预训练视觉语言模型的视觉-语言-动作模型已成为通用机器人操作的强大范式。然而，这些模型缺乏几何归纳偏置：在特定方向训练的策略需要大量额外数据才能泛化到部署中遇到的其他旋转配置。其根本原因在于，当前VLA模型的架构未能利用机器人操作任务内在的旋转对称性（SO(2)结构）。旋转工作空间和其中的物体会产生一个等价的任务，需要相应旋转的动作。现有VLM骨干处理图像时没有旋转结构意识，其编码的视觉内容在固定空间位置，在旋转下含义会改变；而它们的DiT动作头则使用无约束的变换，将旋转相关的观察视为独立输入。结果是模型必须在遇到的每个方向上都独立学习相同的操作技能。</p>
+<p>为解决这一问题，本文提出了EquiVLA。这是首个适用于端到端SO(2)等变VLA模型的通用框架，适用于任何将冻结的视觉语言骨干与流匹配Diffusion Transformer动作头耦合的架构。其核心思路是通过两个可组合的模块（EquiPerceptor和EquiActor），在不修改预训练VLM权重的前提下，建立一条从原始相机图像到预测动作序列的近似SO(2)等变链。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>EquiVLA的框架通过两个核心模块对标准VLA架构施加SO(2)等变性：EquiPerceptor处理视觉感知以产生近似等变的视觉表示，EquiActor则以完全等变的方式生成动作。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：EquiVLA架构。（上部）EquiPerceptor通过令牌级帧平均对冻结VLM的视觉流程进行对称化，产生等变令牌 $\mathbf{z}^{\mathrm{eq}}$ 和不变令牌 $\mathbf{z}^{\mathrm{inv}}$。后者与手腕图像和语言指令一起输入冻结VLM以产生上下文令牌 $\mathbf{z}^{\mathrm{ctx}}$，再通过等变适配器与 $\mathbf{z}^{\mathrm{eq}}$ 融合，形成传递给EquiActor的视觉表示。（下部）EquiActor用SO(2)-等变的Diffusion Transformer替换标准DiT动作头，通过N层等变交叉和自注意力层（以视觉上下文为条件）精炼状态和含噪声的动作令牌，然后通过流匹配解码出动作 $\hat{\mathbf{a}}_{t}$。</p>
+</blockquote>
+<p><strong>EquiPerceptor：等变视觉令牌融合</strong><br>该模块基于一个核心观点：冻结的语言模型可以作为不变特征处理器，前提是只有不变特征被输入其中，而等变信息通过另一条独立流传输。其创新在于将此原则应用于机器人操作的视觉语言流程，包含两个新颖组件。</p>
+<ol>
+<li><strong>令牌级帧平均</strong>：ViT输出的令牌序列中每个令牌都绑定到特定的空间图像块。当输入图像旋转时，图像块会移动到不同的网格位置。简单地对不同群元素上的令牌序列求平均会混合空间未对齐的令牌，破坏操作策略所需的空间定位结构。因此，在平均之前必须应用逆群元素 $h^{-1}$ 来“撤销”每个变换，这同时在两个层面作用：1）将每个移位的令牌映射回其规范图像块位置的空间排列 $\tau(h^{-1})$；2）在群G的正则表示下的特征空间变换 $\rho_{\mathrm{reg}}(h^{-1})$。最终，等变令牌流 $\mathbf{z}^{\mathrm{eq}}$ 和不变令牌流 $\mathbf{z}^{\mathrm{inv}}$ 通过公式1和2计算得出。</li>
+<li><strong>等变适配器</strong>：它将等变的 $\tilde{\mathbf{z}}^{\mathrm{eq}}$ 与来自VLM的上下文令牌 $\mathbf{z}^{\mathrm{ctx}}$ 融合。融合通过一个学习的<strong>不变门</strong>进行，该门基于三个不变摘要（池化后的语言、视觉和等变令牌）计算。该设计确保所有门输入都限制为不变量，从而在混合语义分支和等变分支时保持最终输出的等变性（公式3）。最终输出 $\mathbf{z}^{\mathrm{out}}$ 作为交叉注意力上下文传递给EquiActor。</li>
+</ol>
+<p><strong>EquiActor：SO(2)-等变的流匹配动作头</strong><br>EquiActor接收来自EquiPerceptor的上下文令牌、本体感觉状态嵌入和含噪声的动作令牌，并通过流匹配输出动作块。它用完全SO(2)-等变的对应部分替换了标准DiT动作头：所有线性投影、注意力Q/K/V矩阵、状态/动作编码器和动作解码器都被替换为在规则特征空间中的G-可操纵层。</p>
+<ul>
+<li><strong>动作表示</strong>：采用SO(2)-等变的动作表示，其中末端执行器的位置和方向在场景旋转下作为SO(2)向量变换，夹具宽度是旋转不变量。</li>
+<li><strong>等变注意力</strong>：注意力分数通过几何内积 $\langle\mathbf{q},\mathbf{k}\rangle = \sum_{g}\mathbf{q}[g]\cdot\mathbf{k}[g]$ 计算，该内积是G-不变的。不变分数与等变的V值结合，产生等变的注意力输出。</li>
+</ul>
+<p><strong>创新点</strong><br>与现有方法相比，EquiVLA的创新具体体现在：1) 首次将SO(2)等变性引入结合了预训练VLM骨干和流匹配DiT动作头的大规模VLA模型的完整流程中；2) 提出了适用于ViT空间令牌序列的令牌级帧平均技术，扩展了帧平均方法的应用范围；3) 设计了一个完全等变的流匹配DiT动作头，与仅应用规范化或从头训练紧凑等变架构的现有方法形成对比。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong></p>
+<ul>
+<li><strong>基准/数据集</strong>：LIBERO仿真基准（四个套件：LIBERO-10, -Goal, -Object, -Spatial）、CALVIN ABCD→D仿真基准、在Mobile ALOHA平台上的五个真实机器人操作任务。</li>
+<li><strong>对比方法</strong>：以GR00T N1.5作为非等变基线；比较了仅替换动作头的<strong>GR00T N1.5 + EquiActor</strong>和完整的<strong>EquiVLA</strong>。同时引用了其他VLA模型（$\pi_0$, OpenVLA, SmolVLA）和时空模型（HULC, MoDE）作为参考。</li>
+</ul>
+<p><strong>关键结果</strong></p>
+<ol>
+<li><p><strong>LIBERO基准</strong>：在相对控制下，EquiVLA取得了92.6%的平均成功率，显著优于GR00T N1.5基线（78.1%）以及参考模型。在绝对控制下，EquiVLA达到76.1%，比基线（62.6%）提升13.5个百分点。</p>
+<p><img src="https://arxiv.org/html/2606.19784v1/2606.19784v1/x1.png" alt="LIBERO结果表"></p>
+<blockquote>
+<p>关键要点：EquiVLA在所有套件和两种控制模式下均达到最高性能，且EquiActor贡献了主要提升，EquiPerceptor提供了进一步的增益。</p>
+</blockquote>
+</li>
+<li><p><strong>CALVIN基准</strong>：在零样本评估中，EquiVLA将平均完成序列长度提升至4.03（满分5），优于基线GR00T N1.5（3.45），并接近使用多帧历史的MoDE模型（4.39）。任务链尾部的提升最大（任务5成功率从48.5%提升至64.3%），表明等变性有助于缓解长时程执行中的误差累积。</p>
+<p><img src="https://arxiv.org/html/2606.19784v1/2606.19784v1/x2.png" alt="CALVIN结果表"></p>
+<blockquote>
+<p>关键要点：在没有时序上下文的情况下，等变性显著提升了模型在长序列任务链中的表现。</p>
+</blockquote>
+</li>
+<li><p><strong>真实机器人实验</strong>：在五个桌面操作任务上，EquiVLA平均成功率为72%，高于GR00T N1.5的54%。在需要与方向无关的抓取或放置的任务上提升最大。例如，在“Letter Aligning”（字母对齐）任务中，成功率从65%提升至95%（+30pp）。而在旋转对称性不明显的“Shorts Folding”（短裤折叠）任务上，两者性能相同（85%），表明等变归纳偏置在不需要时不会带来成本。</p>
+<p><img src="https://arxiv.org/html/2606.19784v1/x3.png" alt="真实机器人任务图示"></p>
+<blockquote>
+<p>关键要点：EquiVLA在真实物理系统中有效改善了面向旋转变化的泛化能力，且不损害非对称任务的表现。</p>
+</blockquote>
+</li>
+<li><p><strong>消融实验与分析</strong>：</p>
+<ul>
+<li><strong>等变性误差</strong>：测量了模型对旋转观测输出动作的等变误差。GR00T N1.5误差为7.75；仅添加EquiActor降低至0.84（降低9.3倍）；完整EquiVLA进一步降低至0.28（降低27.3倍），验证了其出色的等变特性。</li>
+<li><strong>组件贡献</strong>：实验结果表明，EquiActor是性能提升的主要来源（LIBERO相对控制91.0%），而EquiPerceptor提供了额外的互补增益（提升至92.6%）。</li>
+</ul>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong></p>
+<ol>
+<li><strong>令牌级帧平均</strong>：将帧平均方法从全局池化向量扩展到空间索引的ViT图像块令牌序列，能够从任何冻结的VLM中产生近似SO(2)-等变的视觉表示。</li>
+<li><strong>等变流匹配DiT</strong>：首个用于机器人策略学习的SO(2)-等变Diffusion Transformer动作头，通过可操纵层实现等变的注意力、状态编码和动作解码。</li>
+<li><strong>端到端等变VLA框架</strong>：结合EquiPerceptor和EquiActor，建立了一条从相机观测到动作序列的近似SO(2)等变链，并在仿真与真实机器人基准上验证了其有效性。</li>
+</ol>
+<p><strong>局限性与未来启示</strong></p>
+<ul>
+<li><strong>局限性</strong>：论文指出，由于可操纵层与无约束的预训练权重结构不兼容，EquiActor动作头需要从头开始训练，无法利用大型预训练动作头的优势。此外，整个流程的等变性依赖于冻结VLM的近似等变性。</li>
+<li><strong>启示</strong>：本研究证明了将几何归纳偏置系统性地整合到大规模、基于预训练模型的VLA架构中是可行且高效的，能够显著提升其在旋转变化下的泛化能力和数据效率。其模块化设计（EquiPerceptor和EquiActor）为将等变性推广至其他VLA变体或更广泛的对称群（如SE(3)）提供了基础框架。未来工作可探索如何将等变性与动作头的预训练相结合，或将其应用于更复杂的多视角、多传感器场景。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本论文针对当前视觉-语言-动作（VLA）模型缺乏几何归纳偏置、在对象旋转场景下泛化能力差并需大量数据的问题，提出了首个SO(2)旋转等变的端到端VLA通用框架EquiVLA。该框架包含两个核心技术：EquiPerceptor（从冻结ViT特征生成近似SO(2)等变的视觉表示）和EquiActor（精确SO(2)等变的流匹配扩散变换器动作头），共同构建从观察到动作序列的近似等变链。实验表明，在LIBERO、CALVIN等基准及真实机器人任务中，EquiVLA显著提升了性能，例如LIBERO平均成功率从78.1%提升至92.6%，真实机器人任务成功率从54%提高到72%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.19784" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

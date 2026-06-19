@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MemoryWAM: Efficient World Action Modeling with Persistent Memory - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>MemoryWAM: Efficient World Action Modeling with Persistent Memory</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.20562" target="_blank" rel="noreferrer">2606.20562</a></span>
+        <span>作者: Huazhe Xu Team</span>
+        <span>日期: 2026-06-18</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，世界动作模型（WAMs）作为机器人操作的一种有前景的范式，通过联合建模视觉前瞻和动作预测，能够基于当前和历史观察进行决策，从而应对非马尔可夫环境中信息被遮挡或具有延迟效应的情况。然而，现有方法面临一个根本性的权衡：滑动窗口只关注最近N帧的观察，推理高效但容易遗忘长期依赖；而缓存所有历史帧的KV（键-值）虽然保留了完整上下文，但其时间和空间开销随轨迹长度N线性增长，导致推理延迟和GPU内存消耗显著上升。</p>
+<p>本文聚焦于这一效率与记忆容量之间的核心矛盾，并受到人类认知记忆结构（短期记忆、事件边界记忆、概要记忆）的启发，提出了一个名为MemoryWAM的模型。其核心思路是引入一种结合近期帧、事件边界锚点帧和压缩长期摘要令牌的混合记忆机制，在保持持久记忆能力的同时，将推理的开销从O(N)降低到O(N/d)（d为压缩比），从而高效地支持依赖记忆的长视距机器人操作。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>MemoryWAM的目标是构建一个具有高效持久记忆的世界动作模型。其整体架构遵循基于扩散Transformer的视频-动作建模范式，在推理时通过一次前向传播更新视频侧的KV缓存，再由动作DiT基于该缓存生成动作。</p>
+<p><img src="https://arxiv.org/html/2606.20562v1/2606.20562v1/x1.png" alt="方法整体框架图"></p>
+<blockquote>
+<p><strong>图2</strong>：MemoryWAM的总体框架。模型采用混合专家（MoT）架构，包含一个视频扩散Transformer（DiT）和一个动作DiT。视频预测仅在训练时为动力学建模提供密集监督，推理时无需生成视频。为实现持久记忆，模型保留了初始锚点帧和最近帧的完整令牌，并将长距离历史压缩为一小组摘要令牌。这种混合记忆设计使得非马尔可夫决策成为可能，同时保持低推理延迟和GPU内存消耗。</p>
+</blockquote>
+<p>MemoryWAM的核心创新在于其混合记忆机制。在时间步t，模型维护的紧凑时态缓存由三部分组成：𝒞_short^v（短期记忆）、𝒞_anchor^v（事件边界记忆）和𝒞_gist^v（概要记忆）。具体如下：</p>
+<ol>
+<li><strong>短期记忆</strong>：以滑动窗口形式缓存最近N_recent帧的完整视觉令牌（在实现中N_recent=4），为需要高保真局部上下文（如物体运动、接触状态）的即时闭环控制提供支持。</li>
+<li><strong>事件边界记忆</strong>：保留任务初始阶段少数几帧（实现中N_init=2）的完整视觉令牌作为“锚点帧”。这些帧通常包含任务指令所基于的关键场景信息，可能在后续交互中被遮挡或移出观察窗口。</li>
+<li><strong>概要记忆</strong>：为了解决长距离历史存储的效率瓶颈，模型为每一帧附加M个可学习的摘要令牌（M≪L，其中L是每帧视觉令牌数，实现中L=120，M=8）。对于既非锚点帧也非最近帧的历史帧f_i，后续的视频和动作令牌不再直接关注其原始视觉令牌f_i，而是关注其对应的摘要令牌g_i。在推理时，模型会逐出f_i的KV缓存，仅保留g_i的缓存，从而将长距离历史的存储和注意力成本从O(NL)压缩到O(NM)。压缩比d=L/M=15。</li>
+</ol>
+<p>模型的注意力掩码设计确保了这种分层的访问模式：近期帧和锚点帧的完整令牌、所有帧的摘要令牌都对后续的令牌可见。动作DiT在生成动作时，统一关注这个混合的视频缓存（公式7）。</p>
+<p><img src="https://arxiv.org/html/2606.20562v1/2606.20562v1/x2.png" alt="注意力掩码示意图"></p>
+<blockquote>
+<p><strong>图3</strong>：MemoryWAM的注意力掩码示例。图中展示了三帧（f）、一个锚点帧、一个最近帧、各帧的摘要令牌（g）以及待去噪的动作（a）之间的注意力关系。待去噪的视频帧被省略，因为它们和动作关注相同的历史上下文。可见，摘要令牌关注其对应的原始帧，而动作/后续帧仅直接关注锚点帧、最近帧和所有摘要令牌。</p>
+</blockquote>
+<p>与现有方法相比，MemoryWAM的创新点在于：1）<strong>系统性混合记忆设计</strong>：将认知心理学中的记忆结构形式化，明确区分并整合了三种互补的记忆形式；2）<strong>基于摘要令牌的压缩</strong>：通过引入少量可学习参数作为每帧的“概要”，在保留长期依赖信息的同时，将序列长度相关的开销降低了d倍（15倍）；3）<strong>高效的注意力机制</strong>：定制的注意力掩码使得模型能够同时检索高保真的短期局部上下文和压缩的长期全局上下文。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>本文在模拟和真实世界两个层面验证MemoryWAM的有效性。</p>
+<p><strong>Benchmark与实验设置</strong>：主要评估平台是RMBench，这是一个专为长视距、依赖记忆的双臂机器人操作设计的模拟基准，包含9个具有不同记忆复杂度的任务。在RMBench上，所有方法使用每个任务50条专家演示进行训练，并在100次运行中报告成功率。真实世界实验在配备ARX双臂机器人和RealSense D455相机的平台上进行，设计了“Shell Game”和“Look and Press”两个依赖记忆的任务。</p>
+<p><strong>对比的基线方法</strong>：包括代表不同范式的三种方法：1）<strong>π0.5</strong>：直接观测到动作映射的VLA模型；2）<strong>FastWAM</strong>：使用有界观测窗口的高效WAM；3）<strong>LingBot-VA</strong>：缓存全部历史KV、具备持久记忆的WAM。</p>
+<p><img src="https://arxiv.org/html/2606.20562v1/2606.20562v1/x3.png" alt="不同记忆机制效率与性能对比"></p>
+<blockquote>
+<p><strong>图4</strong>：不同记忆机制的对比。展示了（a）单次推理延迟和（b）GPU内存使用随序列长度的变化，以及（c）在“Press Button”任务上的成功率。测试了全注意力、测试时训练（TTT）、循环神经网络（RNN）和本文的混合记忆。混合记忆在取得与全注意力相当性能（87%成功率）的同时，延迟和显存开销显著更低。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：<br>在RMBench的9个任务上，MemoryWAM的平均成功率达到**83.0%**，显著优于仅使用当前观测/短期记忆的π0.5（10.4%）和FastWAM（5.9%），也超过了具备全历史记忆的LingBot-VA（78.2%）。在多个任务（如Rearrange Blocks, Put Back Block, Swap Blocks, Blocks Ranking Try）上取得了100%的成功率。</p>
+<p>在真实世界实验中，MemoryWAM在“Shell Game”任务上取得18/20的成功率，优于π0.5（5/20）和LingBot-VA（13/20）；在“Look and Press”任务上取得15/20的成功率，优于π0.5（0/20）和LingBot-VA（14/20）。</p>
+<p><img src="https://arxiv.org/html/2606.20562v1/2606.20562v1/x4.png" alt="真实世界任务示意图"></p>
+<blockquote>
+<p><strong>图5</strong>：真实世界任务示意图。硬件平台包括ARX双臂机器人和RealSense D455相机。任务为“Shell Game”（识别小方块被哪个杯子盖住）和“Look and Press”（根据观察到的数字按相应次数按钮）。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：<br>在“Cover Blocks”和“Press Button”任务上对混合记忆各组件进行消融。结果显示：1）<strong>移除摘要令牌</strong>导致性能下降最大，证明长期记忆对依赖记忆的决策至关重要；2）<strong>移除锚点帧</strong>或<strong>移除滑动窗口</strong>也会损害性能，表明任务边界信息和近期高保真观测提供互补价值；3）与使用<strong>全注意力</strong>（保留所有历史令牌）的变体相比，完整的MemoryWAM性能更好，这表明保留全部历史并非最优，可能引入冗余信息干扰相关信息的检索。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了<strong>MemoryWAM</strong>，一种集成了滑动窗口上下文、摘要令牌和锚点帧的混合记忆机制，为世界动作模型实现了高效的持久记忆，大幅降低了GPU内存消耗和推理延迟；2）对世界动作模型的记忆机制进行了<strong>系统性研究</strong>，分析了其在推理延迟、GPU内存成本和策略性能之间的权衡；3）在模拟和真实世界的长视距、依赖记忆的操作任务上，<strong>性能持续优于</strong>强大的VLA和WAM基线。</p>
+<p>论文自身提到的局限性隐含在消融实验中：即保留所有历史帧的完整令牌（全注意力）并不总是最优策略，密集的历史上下文可能包含冗余信息，使得检索任务相关信息变得更加困难。这启示后续研究可以进一步探索更智能的记忆压缩与检索机制，例如基于内容重要性或任务相关性的动态记忆更新与遗忘策略。</p>
+<p>MemoryWAM的工作为机器人基础模型高效处理长序列、非马尔可夫决策问题提供了一个新颖且有效的解决方案。其受认知启发的混合记忆设计思路，不仅适用于机器人操作，也可能对需要长程依赖建模的其他视觉序列任务（如长视频生成、流式3D重建）具有借鉴意义。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本篇论文研究世界行动模型中长期记忆与推理效率的矛盾。提出MemoryWAM，采用结合近期帧、事件边界锚帧和压缩历史概要标记的混合记忆设计，配合定制注意力机制，实现高效的长短期上下文检索。在仿真和真实世界的长周期、记忆依赖操作任务中，该方法在保持较低推理延迟和GPU内存占用的同时，性能优于主流视觉-语言-行动模型和世界行动模型基线，复杂度从O(N)降至O(N/d)。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.20562" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Temporal Self-Imitation Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Temporal Self-Imitation Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.19752" target="_blank" rel="noreferrer">2606.19752</a></span>
+        <span>作者: Boyuan Chen Team</span>
+        <span>日期: 2026-06-18</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，长视野机器人操纵策略通常使用密集塑造奖励（dense shaping rewards）和稀疏任务成功奖励（sparse task-success rewards）进行训练。然而，密集奖励可能导致“奖励错配”：高累积回报并不一定意味着高效的任务解决行为。机器人可能通过利用奖励丰富的中间状态、在部分解决的任务配置附近徘徊、或在最终成功前执行冗长且不稳定的恢复序列等方式获得高回报，导致策略低效、脆弱。现有方法（如增加稀疏成功奖励、每步时间惩罚、密集到稀疏的奖励调度等）大多依赖手动设计的时间偏好，未能将学习过程中自发涌现的成功行为的时间结构本身视为可重复利用的监督信号。</p>
+<p>本文针对“奖励无法有效区分高效与低效成功轨迹，且此类高效行为容易在策略分布漂移中被遗忘”这一痛点，提出时间效率（temporal efficiency）本身可以作为强化学习中一个未被充分利用的自我监督信号。本文核心思路是：挖掘训练过程中产生的<strong>快速成功轨迹</strong>，将它们作为动态的自适应时间目标以及优先回放的示范数据，引导策略趋向于更高效的行为。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Temporal Self-Imitation Learning (TSIL) 的整体框架基于 PPO，其核心思想是利用学习过程中发现的、时间上高效的成功行为，通过两种互补的方式为未来的策略改进提供可重复利用的自我监督：<strong>配置条件化的自适应时间目标</strong>和<strong>效率加权的自我模仿</strong>。</p>
+<p><img src="https://arxiv.org/html/2606.19752v1/2606.19752v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：Temporal Self-Imitation Learning 示意图。先前发现的快速成功轨迹用于设置自适应时间目标，并被重放以指导进一步的策略改进。</p>
+</blockquote>
+<p>TSIL的核心模块如下：</p>
+<ol>
+<li>**时间目标条件化 (Temporal Target Conditioning)**：对于每个任务配置 φ（如物体初始位姿、目标位姿和机器人初始状态），维持一个自适应时间目标 D(φ) ≤ T_max，代表迄今为止在该配置下发现的最快成功完成时间。策略的观察输入被扩展为 õ_t = (o_t, T_t^used, D(φ))，其中 T_t^used 是已用时间。这个目标不是硬性环境约束，而是一种自适应的监督信号，用于渐进地引导学习趋向更高效的行为。优化目标变为 J(π; D)。</li>
+<li>**自适应时间监督 (Adaptive Temporal Supervision)**：时间目标函数 D_i(φ) 会根据采集到的最快成功轨迹进行更新。更新规则为：D_{i+1}(φ) = min(D_i(φ), min_{τ∈T_i(φ)且成功} T^succ(τ))。这样，随着策略发现更快的成功行为，时间目标会逐步收紧。<br>同时，最终的成功奖励根据已用时间进行调整：r_K^succ = r_succ * 1_succ * [1 + min( D_i(φ) / T^used , 1)]。该奖励在基础成功激励上增加了一项与当前目标相关的时间奖励，奖励那些在目标时间内或更接近于目标时间完成的成功轨迹。</li>
+<li><strong>效率加权自我模仿 (Efficiency-Weighted Self-Imitation)<strong>：与标准自我模仿学习（SIL）优先回放高回报轨迹不同，TSIL优先回放</strong>快速成功轨迹</strong>，因为高回报可能仍包含低效行为。对于每个配置φ，维护一个容量为k的辅助回放缓冲区 B_i(φ)，存储迄今为止最快的成功轨迹。在每次重放前，缓冲区中的轨迹会使用当前时间目标 D_i 进行重新标注，形成新的状态、奖励和回报估计。重放时，轨迹的权重为 w_i(τ) = 1 + 1_succ(τ) * min(D_i(φ^τ) / T^succ(τ), 1)，这给快速（接近或优于当前目标时间）的成功轨迹赋予了更高的权重。<br>   自我模仿训练的损失函数 ℒ_SI 基于正的优势值差 A_t^+(τ) = [Ĝ_t^τ - V_ψ(õ_t^τ)]_+，并结合上述权重。总训练目标为 ℒ = ℒ_PPO + λ_SI * ℒ_SI。</li>
+<li><strong>实现细节</strong>：TSIL在PPO基础上实现，使用标准的演员-评论家架构。每个并行训练环境维护自己的配置、时间目标和重放缓冲区。在训练早期，当成功轨迹稀缺时，缓冲区会补充高回报轨迹以稳定回放过程。</li>
+</ol>
+<p>与现有方法相比，TSIL的创新点在于：1) <strong>配置条件化自适应时间目标</strong>：目标随学习过程自动收紧，为不同难度配置提供了个性化的效率标准。2) <strong>效率加权自我模仿</strong>：基于时间效率而非单纯累计回报来选择重放轨迹，更直接地锁定了高质量的行为模式。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>数据集/实验平台</strong>：在15个不同的长视野Meta-World机器人操纵任务上进行评估，任务涵盖关节物体交互、插入、搬运、工具使用和接触丰富的操纵。实验在Isaac Gym中通过MTBench实现。</p>
+<p><strong>基线方法</strong>：</p>
+<ul>
+<li>IH：标准密集奖励无限视野PPO。</li>
+<li>Step-cost IH：IH加上每步时间惩罚（步长成本）。</li>
+<li>D2S IH：采用密集到稀疏的奖励调度。</li>
+<li>FTTL：固定时间目标学习，观察已用时间和一个等于最大回合长度的固定时间目标。</li>
+<li>ATTL：自适应时间目标学习（无回放）。</li>
+<li>ATTL + SIL：ATTL加上标准的自我模仿学习回放。</li>
+<li><strong>TSIL（本文方法）</strong>：完整的自适应时间目标加效率加权快速成功回放。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.19752v1/2606.19752v1/x3.png" alt="主要训练曲线"></p>
+<blockquote>
+<p><strong>图4</strong>：主要训练曲线。TSIL在相同的交互预算下，达到了更高的样本效率和成功率，同时完成了更多的成功回合。阴影区域表示标准误。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.19752v1/2606.19752v1/x5.png" alt="主要评估结果"></p>
+<blockquote>
+<p><strong>图6</strong>：主要评估结果表。TSIL在成功率、AUC（学习效率）和最快速成功计数方面取得了最高的整体性能。行为完成时间也是所有方法中最快的。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>有效性与效率</strong>：TSIL在所有基线方法中取得了最高的最终成功率（0.986 ± 0.022）、最高的AUC（0.692 ± 0.149，表示学习效率）和最快速成功计数（765.74k ± 291.74k）。同时，其成功回合的平均完成时间也最短（0.674 ± 0.148），表明行为效率最高。从基线对比看，自适应时间目标（ATTL）相比IH和FTTL大幅提升了行为效率，而添加效率加权的回放（TSIL）则相比通用自我模仿（ATTL+SIL）进一步提升了最终性能和行为效率。</li>
+<li><strong>不稳定性训练下的鲁棒性</strong>：在引入策略梯度噪声、密集奖励随机丢弃、PPO裁剪范围变化和学习率变化等干扰条件下进行测试。结果表明，基于回放的方法显著提升了鲁棒性。特别是在策略梯度噪声和激进的PPO裁剪设置下，TSIL展现出最强的整体性能，回放的高效成功轨迹起到了“优化锚点”的作用，对抗了策略漂移。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.19752v1/2606.19752v1/x4.png" alt="自适应时间目标的分析"></p>
+<blockquote>
+<p><strong>图5</strong>：自适应时间目标改变了PPO的优化信号。自适应时间目标迅速将正的PPO更新信号集中到快速成功回合上，同时抑制了奖励分散和慢速失败行为。</p>
+</blockquote>
+<ul>
+<li><strong>消融实验与分析</strong>：自适应时间目标的分析（图5）显示，它们能够迅速将PPO的更新信号（正优势值质量）集中在快速成功回合上，而分配给奖励分散或慢速失败行为的优化压力很少。固定时间目标和无限视野基线则容易受到奖励分散或无法区分不同时间质量行为的影响。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>识别了时间效率作为一种可自我监督的信号</strong>：论文指出，在长视野机器人强化学习中，仅仅依赖奖励不足以区分高效和低效的成功行为，从而论证了挖掘时间效率本身作为额外监督信号的合理性。</li>
+<li><strong>提出了TSIL方法</strong>：该方法通过<strong>配置条件化的自适应时间目标</strong>和<strong>效率加权的自我模仿</strong>，将训练中出现的快速成功轨迹有效地转化为可重复利用的监督，以提升学习效率、行为效率和策略鲁棒性。</li>
+<li><strong>广泛的实验验证</strong>：在15个不同的长视野操纵任务上，以及与多种基线方法和干扰设置下的对比，系统地证明了TSIL方法的有效性、高效性和鲁棒性。</li>
+</ol>
+<p><strong>局限性</strong>：论文中未明确阐述TSIL的局限性，但根据其设计，一个潜在的局限是在任务初期或极端困难配置下，可能很难收集到快速成功轨迹，这可能会影响方法的初始收敛速度或效果。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li>时间结构可以作为强化学习中一个强大且可扩展的自我监督信号，超越了单纯的手动工程奖励塑造。</li>
+<li>将从在线学习中归纳出的目标（如自适应时间目标）与示范数据的回放相结合，是一种有效提升策略质量和训练稳定性的途径。</li>
+<li>对于机器人技术应用而言，不仅关注任务成功率，也关注策略的行为效率（完成时间、动作平滑度等），可能是通向更实用、更鲁棒策略的关键。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对长时程机器人操作任务中，基于奖励塑形的强化学习存在低效交互和高效行为易被遗忘的问题，提出**时间自模仿学习（TSIL）**框架。该方法的核心是**挖掘并重用训练过程中产生的快速成功轨迹**，将其转化为监督信号：通过**配置条件自适应时间目标**引导策略改进，并采用**效率加权自模仿学习**保存高效行为。在15项长时程操作任务上的实验表明，TSIL显著提升了**学习效率、任务完成效率和快速成功行为的重现率**，并增强了训练稳定性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.19752" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
