@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>KEMO: Event-Driven Keyframe Memory for Long-Horizon Robot Manipulation with VLA Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>KEMO: Event-Driven Keyframe Memory for Long-Horizon Robot Manipulation with VLA Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.23589" target="_blank" rel="noreferrer">2606.23589</a></span>
+        <span>作者: Zhongyu Li Team</span>
+        <span>日期: 2026-06-22</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>长时序机器人操作面临阶段模糊性和部分可观测性挑战：相似的当前观测可能对应不同的任务阶段，而正确的动作取决于已完成的步骤。现有记忆增强的视-言-动策略主要有两类：一是密集记忆方法，存储所有或最近的帧，但需通过标记合并、循环状态等方式压缩历史，可能导致关键事件信息丢失或与冗余观测混合；二是任务分解方法，依赖视觉-语言模型或高层模块跟踪进度，但可能引入额外的在线推理开销和误差传播，且需要子任务级监督。这些方法存在记忆内容冗余或依赖在线高层模块的局限性。本文针对此痛点，提出一个轻量级的、可直接保留稀疏任务相关事件而无需压缩密集观测或显式任务分解的记忆框架。本文核心思路是：利用机器人运动学和视觉变化验证来检测对应于任务相关状态转换的事件关键帧，构建紧凑有序的记忆库，并通过交叉注意力将其与当前观测融合，为VLA策略提供关键的历史证据，以消除歧义。</p>
+<h2 id="方法详解">方法详解</h2>
+<p><strong>整体框架</strong>：KEMO是一个插件式框架，旨在为VLA策略提供历史关键帧证据。其流程如图2所示：在每个时间步，关键帧检测器结合运动线索和视觉变化验证来识别事件关键帧；选中的关键帧被编码为紧凑的视觉标记并存入一个时序有序的记忆库；记忆集成模块通过掩码交叉注意力和门控残差融合，将记忆库中的关键帧信息注入当前视觉表示中；最后由VLA骨干网络结合当前状态和语言指令预测后续动作块。</p>
+<p><img src="https://arxiv.org/html/2606.23589v1/assets/introduce.png" alt="框架总览"></p>
+<blockquote>
+<p><strong>图2</strong>：事件驱动关键帧记忆框架。关键帧检测模块利用机器人状态和视觉观测选择任务相关的事件关键帧，并将其存储在关键帧记忆库中。记忆集成模块检索存储的关键帧并将其与当前视觉表示融合，使VLA骨干网络能够结合当前观测和历史转换证据来预测动作。</p>
+</blockquote>
+<p><strong>核心模块1：事件驱动关键帧检测</strong><br>检测器旨在无任务特定标注下可靠识别阶段转换，其流程见图3(a)。</p>
+<ul>
+<li><strong>事件显著性分数</strong>：基于近期关节运动特征计算分数，<code>S_t = 1 / (1 + δ_bar_t)</code>，其中<code>δ_bar_t</code>是滑窗<code>w</code>内的平均关节位移。高分表示机器人动作近来放缓（常见于抓取、放置等关键操作事件前后）。</li>
+<li><strong>因果峰值检测</strong>：将<code>S_t</code>序列中的局部峰值作为候选关键帧。</li>
+<li><strong>视觉去重过滤</strong>：为避免因停顿或调整产生的冗余候选，使用冻结的DINOv2编码器计算候选帧<code>c_i</code>与最新接受的关键帧<code>k_{i-1}</code>的视觉嵌入余弦相似度，若相似度小于阈值<code>ϵ</code>且通过最小不应期<code>r</code>的检查，则接受为新关键帧，否则丢弃。此步骤保留有真实场景变化的候选。</li>
+</ul>
+<p><strong>核心模块2：关键帧记忆集成</strong><br>记忆集成模块如图3(b)所示，使关键帧有效用于动作预测。</p>
+<ul>
+<li><strong>关键帧编码</strong>：使用与基础策略相同的SigLIP视觉编码器处理关键帧图像，生成256个空间块的标记。为降低计算成本，通过4×4空间平均池化，将每个关键帧的标记压缩至16个。</li>
+<li><strong>关键帧记忆库构建</strong>：在时间步<code>t</code>，记忆库<code>ℳ_t</code>最多包含<code>K</code>个最近被接受的关键帧。内存不足时用最近的关键帧填充，并使用二进制填充掩码<code>m</code>。</li>
+<li><strong>时序位置编码</strong>：为记忆库中每个关键帧槽位添加一个可学习的时序位置嵌入<code>PE(i)</code>，使其能区分不同阶段顺序。</li>
+<li><strong>基于交叉注意力的记忆注入</strong>：关键帧标记被拼接并作为键与值，当前帧的补丁标记作为查询，进行掩码交叉注意力。输出通过一个带负偏置初始化的线性投影门控<code>g(·)</code>，以门控残差方式融合到当前表示中：<code>X̂_t = X_t + σ(g([X_t; X‘_t])) · X‘_t</code>。此设计确保训练早期，当关键帧嵌入尚不具信息量时，记忆贡献被抑制。</li>
+</ul>
+<p><strong>关键帧一致训练</strong>：在关键帧邻域（窗口半径<code>δ</code>内）的时间步，将流匹配损失<code>ℓ_t</code>的权重提高（权重因子<code>λ&gt;1</code>），强调在阶段转换关键时刻的策略准确性。用于定义训练权重的关键帧索引与推理时用于构建记忆<code>ℳ_t</code>的索引保持一致。</p>
+<p><strong>创新点</strong>：与现有方法相比，创新点体现在（1）提出了一个无需任务特定标注、轻量级的基于运动学与视觉的事件关键帧检测器，避免了VLM推理开销和幻觉传播；(2) 设计了紧凑且保持时序顺序的关键帧记忆表示与融合机制，通过门控残差融合增强鲁棒性；(3) 提出了关键帧一致的训练策略，将对策略的监督与记忆内容的选择对齐。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在六个真实世界、具记忆依赖性的双臂操作任务（Swap Foods, Find Block, Cover Blocks, Box Refill, Make Sandwich, Drawer Items Replacement）上进行评估。任务时长为28至95秒（执行步数为830至2846步）。基线方法包括无记忆的<code>π_0.5</code>和记忆增强的MemoryVLA。每个任务收集100-200条演示数据，每个方法进行12次试验。评估指标为任务成功率（TSR）和阶段完成率（SCR）。KEMO策略基于预训练的<code>π_0.5</code>VLA骨干网络，在演示数据上使用监督微调训练。</p>
+<p><strong>关键实验结果</strong>：<br>KEMO在六个任务上的聚合性能显著优于基线。相比无记忆基线<code>π_0.5</code>，KEMO将总TSR提高了23.6%（绝对值），SCR提高了34.1%（绝对值）。与MemoryVLA相比，KEMO在TSR和SCR上分别获得了50.0个百分点和60.9个百分点的提升。</p>
+<p><strong>消融实验（以Cover Blocks任务为例）</strong>：</p>
+<ul>
+<li><p><strong>记忆选择策略消融</strong>：如表1所示，当固定检索和门控融合，并禁用关键帧对齐损失加权时，事件驱动关键帧选择（TSR: 3/12, SCR: 2.500/6）优于均匀采样（0/12, 1.833/6）和最近帧保留（1/12, 0.700/6）。<br> references: <a href="https://arxiv.org/html/2606.23589v1/assets/keyframe_detection.png">https://arxiv.org/html/2606.23589v1/assets/keyframe_detection.png</a> and <a href="https://arxiv.org/html/2606.23589v1/assets/keyframe_memory.png">https://arxiv.org/html/2606.23589v1/assets/keyframe_memory.png</a></p>
+<blockquote>
+<p><strong>图1</strong>：实验评估的两个主要任务示例。左列展示了各个任务的不同执行阶段，右图汇总了KEMO与基线方法在所有六个任务上的聚合任务成功率与阶段完成率对比。<br><strong>表1</strong>：在Cover Blocks任务上关于记忆选择策略和核心组件的消融实验结果。上部分对比不同记忆选择策略，下部分展示移除门控融合或损失加权组件的影响。完整KEMO方法（Ours）取得最佳性能。</p>
+</blockquote>
+</li>
+<li><p><strong>核心组件消融</strong>：在Cover Blocks任务上，若移除门控融合，TSR和SCR分别下降75.0%和87.5%（至0/12和0.000/6）；若移除关键帧对齐损失加权，TSR和SCR分别下降50.0%和45.8%（至3/12和2.500/6）。这显示了门控融合和损失加权各自的互补性贡献。</p>
+</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1. 提出了一种新颖的、插件式的事件驱动关键帧记忆框架，用于增强VLA策略在长时序操作中的性能。2. 设计了一个基于机器人状态和视觉观测的任务无关关键帧检测器，无需任务特定标注或在线VLM推理。3. 在涵盖2至6个子任务、轨迹长度830至2846步的多个真实世界挑战性任务上取得了显著性能提升，并通过消融实验验证了各组件有效性。</p>
+<p><strong>局限性</strong>：论文提到其记忆库容量固定（K个槽位），可能不适合子任务数量远超K的任务。此外，关键帧检测器中的视觉相似度阈值<code>ϵ</code>和不应期<code>r</code>等参数可能需要针对不同任务调整。</p>
+<p><strong>后续研究启示</strong>：KEMO的轻量级、事件驱动的记忆构建范式为机器人长时序操作中的记忆机制提供了新思路。未来的工作可探索自适应记忆容量管理、将关键帧检测与更复杂的状态变化模型结合，或将该框架扩展到动态环境和非预定义任务序列的场景中。关键帧一致训练的理念也可应用于其他需要关注关键时刻的序列决策问题。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对长时程机器人操作中因阶段歧义导致的决策困难问题，提出KEMO记忆框架。其核心方法为事件驱动关键帧选择：结合机器人运动学与视觉过滤检测任务相关状态变化，将关键帧编码为时序记忆令牌，并通过交叉注意力与门控残差融合整合到VLA策略中。实验表明，在真实世界双臂操作任务上，KEMO相较无记忆基线将聚合任务成功率提升23.6%，阶段完成率提升34.1%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.23589" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

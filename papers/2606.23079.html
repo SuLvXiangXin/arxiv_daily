@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AdaReP:Adaptive Re-Planning under Model Mismatch for Neural World-Model Predictive Control - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>AdaReP:Adaptive Re-Planning under Model Mismatch for Neural World-Model Predictive Control</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.23079" target="_blank" rel="noreferrer">2606.23079</a></span>
+        <span>作者: Qing Li Team</span>
+        <span>日期: 2026-06-22</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在当前基于神经世界模型的机器人控制领域，模型预测控制（MPC）与大型神经网络预测器相结合已成为主流范式。此类系统通常在图像空间、潜空间或学习的状态空间中进行规划。为了限制累积预测误差，标准的MPC控制器会在<strong>每个环境步都进行重新规划</strong>。然而，每次重规划都需要对庞大的世界模型进行大量的前向查询，产生了巨大的计算开销，这在现代大规模世界模型中尤为严重。直觉上，当实际执行轨迹与模型预测的轨迹紧密吻合时，重用缓存的计划可以节省计算而不牺牲性能，但持续重用会面临因<strong>执行漂移</strong>或<strong>局部动态高度敏感</strong>而导致性能下降的风险。</p>
+<p>本文针对“在执行过程中应在何时刷新当前计划”这一具体问题，提出了一种新的视角：将<strong>重规划的节奏视为一个可控变量</strong>，而非简单地以固定频率（如每步）执行。本文并未修改已学习的世界模型、重新训练策略或重新设计MPC求解器，而是旨在为一个已有的预测控制器提供一个通用的部署时决策层。本文的核心思路是：通过<strong>扰动分析</strong>推导出缓存计划重用的性能损失（动态遗憾）与三个关键量（重用容忍度、累积预测失配、局部动态敏感性）的关系，并据此设计一个能根据在线估计的<strong>执行偏差</strong>和<strong>局部敏感性</strong>动态调整重规划频率的训练免费自适应层。</p>
+<h2 id="方法详解">方法详解</h2>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图1</strong>：AdaReP解决MPC中计算效率与控制性能的权衡。传统求解器频繁重规划以限制累积预测误差，产生大量计算开销。AdaReP利用预测误差和局部动态敏感性的在线估计，动态调整重规划频率，从而在保持控制性能的同时减少计算。</p>
+</blockquote>
+<p>整体框架是一个包裹在现有神经世界模型MPC外部的部署时自适应重规划层。输入是每个时间步的真实观察 <code>x_t</code> 和缓存的计划预测 <code>y_t</code>，输出是决定“重用缓存计划”或“触发重规划”的二元决策。其核心模块是<strong>自适应阈值计算器</strong>和<strong>监控信号估计器</strong>。</p>
+<ol>
+<li><p><strong>监控信号</strong>：AdaReP在每一步监控两个核心信号：</p>
+<ul>
+<li>**执行偏差 <code>d_t</code>**：在监控的表示空间 <code>Z</code> 中（例如，图像特征嵌入、潜状态或原始状态），计算当前真实状态 <code>z_t</code> 与缓存计划中对应预测状态 <code>z_hat_t</code> 之间的欧氏距离（公式3）。这直接反映了自上次重规划以来，实际轨迹与计划轨迹的偏离程度。</li>
+<li>**局部敏感性估计 <code>L_hat_t</code>**：作为一个可部署的代理指标，通过有限差分计算状态变化的幅度与动作幅度之比（公式7），即 <code>L_hat_t = ||z_{t+1} - z_t|| / (||u_t|| + γ)</code>。它近似反映了当前局部动态对扰动的放大程度，γ是为了数值稳定添加的小量。</li>
+</ul>
+</li>
+<li><p><strong>自适应阈值 <code>ε_t</code><strong>：AdaReP动态计算一个容许的重用偏差阈值。该阈值基于一个基础阈值 <code>ε_0</code>，并随着监控信号的增大而</strong>指数衰减</strong>（公式9）：<code>ε_{t+1} = ε_0 * exp(-α_δ * d_bar_{t+1}) * exp(-α_L * L_bar_t)</code>。其中 <code>d_bar</code> 和 <code>L_bar</code> 是对 <code>d_t</code> 和 <code>L_hat_t</code> 在长度为 <code>W</code> 的滑动窗口内的平均值，用于平滑噪声。<code>α_δ</code> 和 <code>α_L</code> 是可调权重。</p>
+</li>
+<li><p><strong>重规划触发</strong>：在每一步 <code>t</code>，算法比较当前执行偏差 <code>d_t</code> 与自适应阈值 <code>ε_t</code>。如果 <code>d_t &gt; ε_t</code>，或者缓存计划的剩余部分已经用完，则触发重规划，更新缓存；否则，继续重用缓存计划的后缀部分。</p>
+</li>
+</ol>
+<p><strong>创新点</strong>：与固定步长 (<code>MPC_k^m</code>) 或固定阈值 (<code>MPC_{k,ε}</code>) 的基线方法相比，AdaReP的创新性体现在：</p>
+<ul>
+<li><strong>理论驱动</strong>：其自适应规则的设计直接源于对模型失配下动态遗憾的扰动分析。理论（定理4.1）表明，性能损失随 <code>(L^(m))^2 * E</code>（固定步长）或 <code>L^2 * (εE + ε²T)</code>（固定阈值）缩放，其中 <code>L</code> 为敏感性，<code>E</code> 为累积误差。这解释了为何单一固定参数难以跨任务或任务内不同阶段迁移。</li>
+<li><strong>自适应机制</strong>：AdaReP将分析中识别的核心惩罚项 <code>L_t² ε_t²</code> 和 <code>L_t² ε_t s_t</code> 转换为可通过 <code>d_t</code> 和 <code>L_hat_t</code> 在线监控的量，并采用指数衰减形式的阈值，确保这些惩罚项能被 <code>(ε_0, α_δ, α_L)</code> 参数统一控制（公式8及其推导）。</li>
+<li><strong>无需训练与通用性</strong>：该方法不修改底层世界模型或规划器，仅作为包装层，因此可以无缝应用于图像空间、潜空间或真实状态空间的控制器，只需在模型骨干级别进行少量调参。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p>本文在三个逐步逼近现实的环境中评估AdaReP：</p>
+<ol>
+<li><strong>图像空间世界模型仿真</strong>：使用VP2基准下的RoboDesk操纵环境，测试SVG和Struct-VRNN两种预测模型，涵盖7个操纵任务。</li>
+<li><strong>潜空间世界模型仿真</strong>：在DeepMind Control Suite的30个连续控制任务上，测试SOTA模型TD-MPC2。</li>
+<li><strong>物理世界部署</strong>：在真实的Franka Emika Panda机械臂上进行门开启和T型块重排列任务。</li>
+</ol>
+<p><strong>对比基线</strong>：标准每步重规划 (<code>MPC_k^1</code>)、固定步长重用 (<code>MPC_k^m</code>)、固定阈值重用 (<code>MPC_{k,ε}</code>)。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>VP2/RoboDesk</strong>：在确保成功率与 <code>MPC_k^1</code> 相比下降不超过0.02的“性能匹配”协议下，AdaReP取得了最低的NFE（网络前向传播次数）消耗。具体地，使用SVG和Struct-VRNN骨干时，NFE分别减少了<strong>59.2%</strong> 和<strong>34.9%<strong>，对应的实际运行时间减少了</strong>57.8%</strong> 和**31.5%**。</li>
+<li><strong>DeepMind Control with TD-MPC2</strong>：AdaReP在30个任务上的平均NFE减少了**54.5%<strong>，运行时间减少了</strong>50.3%**，同时其归一化平均得分与逐步重规划基线基本持平。</li>
+<li><strong>真实世界Franka机器人</strong>：AdaReP在50次物理实验中的总成功数为<strong>36/50</strong>，与逐步重规划的<strong>34/50</strong>相当，同时将规划器侧的模型查询次数（NFE）减少了**超过80%**。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.23079v1/2606.23079v1/teaser_new.png" alt="VP2结果"></p>
+<blockquote>
+<p><strong>图2</strong>：VP2在RoboDesk上的结果。展示了在性能匹配协议下，不同方法在SVG和Struct-VRNN骨干上的NFE对比，AdaReP的NFE最低。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.23079v1/2606.23079v1/figures/highres/tdmpc2_comparison.png" alt="DeepMind Control结果"></p>
+<blockquote>
+<p><strong>图3</strong>：DeepMind Control结果。展示了TD-MPC2骨干下，不同方法与step-wise MPC相比的NFE节约百分比和性能（归一化分数），AdaReP在显著降低NFE的同时保持了性能。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.23079v1/2606.23079v1/figures/highres/real_world_results.png" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界Franka结果。展示了在门开启和T块重排列任务中，AdaReP与逐步重规划的成功率对比，以及NFE的显著降低。</p>
+</blockquote>
+<p><strong>消融与分析</strong>：</p>
+<ul>
+<li><strong>组件作用</strong>：实验分析揭示了AdaReP各监控信号的作用。(1) <strong>偏差 <code>d_t</code> 监控</strong>：在模拟加入状态噪声时，<code>d_t</code> 增大并触发更频繁的重规划（图5），使算法能优雅地回退到近似逐步重规划，性能不下降。(2) <strong>敏感性 <code>L_hat_t</code> 监控</strong>：在门开启任务中，<code>L_hat_t</code> 在铰链附近（动态敏感）显著增大，阈值 <code>ε_t</code> 随之收缩，缩短重用；在远离铰链处（动态平滑），阈值放宽，延长重用（图6,7）。这验证了自适应机制应对任务内动态变化的能力。</li>
+<li><strong>鲁棒性分析</strong>：面对视觉噪声或模糊干扰时，由于依赖的特征提取器（如DINO）鲁棒性有限，监控信号 <code>d_t</code> 会受到影响，导致AdaReP的NFE节省优势减弱，但其任务成功率依然得以维持（图8）。这指出了未来需要更鲁棒视觉特征的方向。</li>
+<li><strong>超参数敏感性</strong>：对平滑窗口 <code>W</code> 的分析（图9）表明，<code>W</code> 在 <code>[8, 16]</code> 的较宽范围内都能提供稳定且强劲的性能，过小导致重规划抖动，过大导致响应迟钝。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>理论分析</strong>：建立了模型失配下，基于缓存计划的固定步长、固定阈值以及自适应重规划的动态遗憾上界，明确指出了<strong>累积预测失配</strong>和<strong>局部动态敏感性</strong>是决定重规划需求的关键因素，为自适应设计提供了理论基础。</li>
+<li><strong>算法提出</strong>：提出了AdaReP，一个无需训练、部署时自适应的重规划规则。它利用在线可计算的<strong>执行偏差</strong>和<strong>局部敏感性代理估计</strong>，动态调整重用阈值，从而决定何时刷新缓存计划。</li>
+<li><strong>实证验证</strong>：在图像空间、潜空间和真实机器人三个不同范式的控制基准上广泛验证了AdaReP的有效性，证明了其能在保持任务性能的同时，大幅减少世界模型的查询次数（NFE），尤其在真实机器人上取得了超过80%的NFE降低。</li>
+</ol>
+<p><strong>局限性</strong>：论文指出，AdaReP的性能依赖于监控信号（特别是视觉特征 <code>z_t</code>）的质量。当面对严重视觉干扰（噪声、模糊）时，基于现有特征提取器的监控信号可能退化，从而削弱其在节省计算方面的优势。这是将其推广到噪声严重的视觉环境时面临的主要挑战。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>鲁棒特征学习</strong>：开发对扰动更鲁棒的视觉特征提取器，是提升AdaReP在非理想视觉环境中实战能力的重要方向。</li>
+<li><strong>计算-性能联合优化</strong>：将重规划决策的“计算感知”特性融入到世界模型或策略的训练阶段，可能产生更优的协同效果。</li>
+<li><strong>更广泛的应用</strong>：AdaReP作为一种通用的部署时包装层，可以进一步应用于更多基于神经预测的控制场景，例如大规模Transformer或扩散模型预测器，以应对更复杂的长期任务规划。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>该论文针对神经世界模型预测控制中因每一步都重新规划而导致计算开销高的问题，提出AdaReP自适应重新规划方法。该方法通过在线监测当前执行轨迹与缓存规划的偏差，结合局部动态敏感性估计，动态决定重新规划时机，无需修改已有世界模型或规划器。实验表明，AdaReP在图像空间规划、潜在空间控制和真实机器人操作中均显著减少计算量，在50次物理机器人试验中实现了超过80%的模型查询减少，同时保持任务性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.23079" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

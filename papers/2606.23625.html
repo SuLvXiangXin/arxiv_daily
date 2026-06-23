@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning to See While Learning to Act: Diffusion Models for Active Perception in Robot Imitation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Learning to See While Learning to Act: Diffusion Models for Active Perception in Robot Imitation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.23625" target="_blank" rel="noreferrer">2606.23625</a></span>
+        <span>作者: Danfei Xu Team</span>
+        <span>日期: 2026-06-22</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人模仿学习的主流方法通常假设固定的、全视角的观测，将“看”和“行动”的能力混为一谈。然而在现实场景中，物体常被遮挡，机器人需要主动搜寻以获取关键视觉信息。现有方法，包括扩散策略和基于关键帧的方法，大多在感知上是被动的，它们依赖于推理时所需的视觉信息已经可见这一假设，因此在物体被遮挡时常常失败。尽管存在一些主动感知方法，但它们通常将视点控制与动作预测分开处理，需要单独的视点策略或规划模块。</p>
+<p>本文针对在部分可观测环境下，机器人需同时学习“搜寻（看哪里）”和“操纵（如何行动）”这一耦合行为的核心挑战，提出了一个新视角：将操纵视为动作细化和视觉证据获取的耦合过程，而非从固定视角预测动作。</p>
+<p>本文的核心思路是提出See2Act框架，通过一个扩散去噪循环将机器人6自由度动作的预测与摄像头位姿（视点）的主动推理结合起来，使策略能够隐式地学习在遮挡下哪些视点对精确操纵最有信息量。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>See2Act的整体框架分为训练和推理（测试）两个阶段，其核心在于将扩散轨迹同时视为视点轨迹，在学习去噪目标动作的过程中，耦合地学习生成一系列由粗到精的相机观测。</p>
+<p><img src="https://arxiv.org/html/2606.23625v1/2606.23625v1/x1.png" alt="训练与推理流程"></p>
+<blockquote>
+<p><strong>图2</strong>：See2Act的训练与推理流程。<strong>左（训练）</strong>：给定演示（物体初始状态 <code>s</code> 和关键帧动作 <code>a_0</code>），采样扩散时间步 <code>t</code>，计算对应相机位姿 <code>C_t</code>，在数字孪生中渲染观测 <code>O_t</code>，并将动作转换到相机坐标系后加噪得到 <code>â_t</code>。模型联合训练以预测噪声。<strong>右（推理）</strong>：从全局概览视点 (<code>t=T</code>) 开始，迭代地同时细化动作和相机位姿。每一步都捕捉观测、预测噪声、更新动作估计并计算下一个相机位姿，最终输出动作由机器人执行。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>关键帧动作提取与加噪</strong>：从演示中提取拾取/放置的关键帧末端执行器位姿 <code>a_0</code>（6维）。在扩散步 <code>t</code>，先将该目标动作通过变换 <code>T_W^C_t</code> 转换到当前相机坐标系，得到 <code>â_0</code>，然后按照标准DDPM前向过程添加高斯噪声，得到相机坐标系下的带噪动作 <code>â_t</code>。此设计使动作表达与相机坐标系绑定，为动作去噪与相机移动的耦合奠定基础。</li>
+<li><strong>相机位姿生成（策略条件输入）</strong>：为每个扩散步 <code>t</code> 关联一个相机位姿 <code>C_t</code>，构成一条从全局概览位姿 <code>C_T</code> 到目标中心位姿 <code>C_0</code> 的轨迹。<ul>
+<li><code>C_0</code> 由目标动作 <code>a_0</code> 决定：相机被放置在沿动作接近轴线（z轴）偏移 <code>d</code> 的位置，并指向动作坐标系原点。</li>
+<li><code>C_T</code> 是一个固定的、提供场景全局上下文的位姿。</li>
+<li>中间位姿 <code>C_t</code> 通过对位置进行线性插值、对朝向使用球面线性插值（SLERP）得到，确保在 <code>SE(3)</code> 空间连续平滑。这保证了训练时，相邻去噪步的观测变化平缓，利于学习。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.23625v1/2606.23625v1/x2.png" alt="相机位姿生成"></p>
+<blockquote>
+<p><strong>图3</strong>：相机位姿生成示意图。紫色点显示了中间位姿 <code>C_t</code> 的插值轨迹。轨迹一端是固定的全局视点 <code>C_T</code>，另一端是由关键帧动作 <code>a_0</code> 推导出的目标中心视点 <code>C_0</code>。</p>
+</blockquote>
+<ol start="3">
+<li><strong>图像条件动作去噪训练</strong>：训练数据集中只包含物体初始状态 <code>s</code> 和关键帧动作 <code>a_0</code>。对于每个训练样本和时间步 <code>t</code>，使用数字孪生渲染器根据 <code>s</code> 和 <code>C_t</code> 生成观测图像 <code>O_t</code>。模型包含一个共享视觉编码器 <code>e_φ</code> 和一个噪声预测网络 <code>ε_ψ</code>。训练目标是最小化预测噪声与真实噪声之间的均方误差（MSE），见论文公式(5)。此过程使模型学会从不同视点的观测中预测去噪方向，且相机轨迹的监督完全来自动作标签，无需额外视点标注。</li>
+<li><strong>主动视点推理（测试时）</strong>：这是See2Act的核心创新推理机制。从初始全局位姿 <code>C_T</code> 和随机初始化的世界系动作 <code>ã_T</code> 开始，执行反向扩散。在每一步 <code>t</code>：<ul>
+<li>将当前世界系动作估计 <code>ã_t</code> 转换到当前相机坐标系。</li>
+<li>基于当前观测 <code>Õ_t</code> 和该动作，预测噪声 <code>ε̂_t</code>。</li>
+<li>去噪得到相机坐标系下更优的动作估计 <code>ã̂_0</code>，并转换回世界系 <code>ã_0</code>。</li>
+<li><strong>关键耦合步骤</strong>：根据最新的动作估计 <code>ã_0</code>，利用公式(2)计算出一个新的目标中心相机位姿 <code>C̃_0</code>。</li>
+<li>结合 <code>C̃_0</code> 和固定的 <code>C_T</code>，通过插值公式计算<strong>下一个扩散步的相机位姿</strong> <code>C̃_{t-1}</code>，并移动相机获取新观测 <code>Õ_{t-1}</code>。</li>
+<li>迭代此过程，直到 <code>t=0</code>，输出最终动作 <code>ã_0</code>。</li>
+</ul>
+</li>
+</ol>
+<p><strong>与现有方法的创新点</strong>：</p>
+<ul>
+<li><strong>视点与动作的深度耦合</strong>：区别于将两者分开处理的主动感知方法，See2Act在单一生成（去噪）过程中联合优化动作和视点，无需单独的视点策略或奖励函数。</li>
+<li><strong>6自由度主动相机运动</strong>：相较于只能沿固定方向缩放（Zoom）的C3DM等方法，See2Act支持完整的6自由度相机轨迹，能够重新定位和调整朝向，以绕过遮挡。</li>
+<li><strong>视点监督来自动作标签</strong>：通过将目标动作 <code>a_0</code> 作为生成目标中心视点 <code>C_0</code> 的锚点，模型隐式地学习了“哪里看”的技能，而无需额外的视点演示数据，解决了数据组合爆炸问题。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与数据集</strong>：在模拟环境中使用 <strong>Ravens</strong> 基准（包含4个专门设计的、存在前视遮挡的任务：<code>place-red-in-green</code>, <code>bin-picking</code>, <code>put-within-shelf</code>, <code>bin-search</code>）和 <strong>RLBench</strong>（9个多样化操作任务）。真实机器人实验在UR10机械臂上进行，使用手腕安装的深度相机，任务为 <code>shelf-kitting</code>（高精度插入）和 <code>clean-up</code>（整理）。</p>
+<p><strong>对比基线</strong>：</p>
+<ul>
+<li>Ravens上对比：固定单视角BC (<code>Conv-MLP</code>)、固定多视角BC (<code>Conv-MLP-MV</code>, <code>Diff-MV</code>)、被动视点选择 (<code>Diff-MV-Entropy</code>)、仅缩放运动 (<code>C3DM</code>)。</li>
+<li>RLBench上对比：多种先进的模仿学习方法，包括 <code>Image-BC</code>、<code>C2F-ARM-BC</code>、<code>HiveFormer</code>、<code>PolarNet</code>、<code>PerAct</code>、<code>Act3D</code>、<code>RVT</code>、<code>RVT-2</code>（许多方法使用点云或多相机输入）。</li>
+<li>真实实验对比：<code>Diff-MV</code> 和 <code>Diff-MV-Entropy</code>。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>遮挡任务性能</strong>：在Ravens遮挡任务上（表1），See2Act取得显著优势（成功率：<code>bin-picking</code> 96%， <code>put-within-shelf</code> 72%， <code>bin-search</code> 100%）。固定视角方法（<code>Conv-MLP</code>, <code>Conv-MLP-MV</code>, <code>Diff-MV</code>）成功率均为0%。被动视点选择（<code>Diff-MV-Entropy</code>）和仅缩放（<code>C3DM</code>）在复杂遮挡（如货架）任务上表现很差（≤2%），表明主动的、全自由度视点细化对于解决遮挡至关重要。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.23625v1/2606.23625v1/x4.png" alt="主动视点推理示例"></p>
+<blockquote>
+<p><strong>图5</strong>：主动视点推理过程可视化。在<code>bin-picking</code>（左）和<code>open-drawer</code>（右）任务中，See2Act迭代地调整相机位姿（金字塔示意），从初始全局视图绕过遮挡，逐步获取对执行动作（拾取红色方块、拉开抽屉）至关重要的精细视觉信息。</p>
+</blockquote>
+<ol start="2">
+<li><strong>性能随细化步骤提升</strong>：图6显示，在<code>bin-picking</code>任务中，See2Act的成功率随着去噪（视点细化）步骤数增加而大幅提升（从5步到20步），而其他方法增益有限。这表明每一步视点细化都为动作预测贡献了新的、有价值的信息，而不仅仅是模型重复迭代推理。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.23625v1/2606.23625v1/x5.png" alt="成功率与细化步骤关系"></p>
+<blockquote>
+<p><strong>图6</strong>：<code>bin-picking</code>任务上，成功率随去噪（视点细化）步骤数的变化曲线。See2Act的性能随着更精细的相机调整而显著提升。</p>
+</blockquote>
+<ol start="3">
+<li><p><strong>在RLBench上的竞争力</strong>：如表2所示，仅使用单目2D观测的See2Act取得了9个任务平均81.1%的最高成功率，并在<code>place-wine</code>、<code>put-in-safe</code>、<code>slide-block</code>、<code>sort-shape</code>等多个任务上领先。这表明主动视点细化的益处不局限于遮挡场景，通过获取近距离细节视图，能媲美甚至优于使用点云或多固定视角的策略。</p>
+</li>
+<li><p><strong>对初始视点的鲁棒性</strong>：图7表明，即使初始相机位姿分布在训练分布之外，See2Act仍能通过主动调整保持较高成功率（性能下降约8-10%），说明其能补偿次优的起始视角。</p>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.23625v1/2606.23625v1/x6.png" alt="初始视点鲁棒性"></p>
+<blockquote>
+<p><strong>图7</strong>：在训练分布内（左，金字塔区域采样）和训练分布外（右，更大穹顶区域采样）初始相机位姿下，<code>place-red-in-green</code>和<code>bin-picking</code>任务的成功率。See2Act表现出一定鲁棒性。</p>
+</blockquote>
+<ol start="5">
+<li><strong>涌现的搜索行为与零样本Sim-to-Real转移</strong>：在<code>bin-search</code>任务中，See2Act（100%成功率）表现出搜索行为（当推断动作与观测矛盾时相机会重新定向），而所有基线为0%。在真实机器人实验中（表3），仅用50个数字孪生演示训练的See2Act实现了零样本迁移，在<code>shelf-kitting</code>和<code>clean-up</code>任务上均达到95%的成功率，显著优于固定多视角（25%）和被动选择（50%）基线。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.23625v1/2606.23625v1/x7.png" alt="真实世界任务设置"></p>
+<blockquote>
+<p><strong>图8</strong>：真实世界任务设置图（<code>shelf-kitting</code>和<code>clean-up</code>），展示了任务初始、拾取和放置状态。蓝色区域标出了从初始俯视视角被遮挡的区域。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：论文通过对比不同基线，验证了各组件贡献：</p>
+<ul>
+<li><strong>主动全自由度视点细化是核心</strong>：相比于固定视角、被动选择或仅缩放，主动的、耦合的6-DoF相机运动是解决遮挡和提升精度的关键。</li>
+<li><strong>视点-动作耦合训练有效</strong>：通过动作标签监督视点生成的方式，使模型学会了信息量最大的视点序列。</li>
+<li><strong>迭代推理机制很重要</strong>：随着细化步骤增加，性能持续提升，证明了耦合迭代过程的有效性。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>See2Act</strong>，一种将主动感知嵌入扩散去噪过程的模仿学习框架，首次在单一生成过程中实现了6自由度相机位姿与机器人动作的联合学习与推理。</li>
+<li>设计了<strong>主动视点推理</strong>机制，使策略在测试时能迭代调整相机位姿以主动解析遮挡、获取精细视觉细节，而无需额外的规划模块或视点奖励。</li>
+<li>在模拟和真实世界的遮挡、高精度操作任务上取得了卓越性能，验证了方法的有效性，并实现了高效的零样本仿真到现实迁移。</li>
+</ol>
+<p><strong>局限性</strong>：论文自身提到的局限性包括：1) <strong>方法依赖于精确的相机标定</strong>以实现仿真与真实世界之间以及动作坐标系变换的准确对齐；2) 在推理时执行多个rollout并选择最稳定的轨迹（<code>n_rollout=10</code>）的机制<strong>增加了计算开销</strong>。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>感知与行动的耦合学习范式</strong>：See2Act展示了一种有前景的方向，即通过设计合适的训练信号和生成模型结构，让机器人隐式地学习感知策略（如何获取信息），而无需显式的、独立的感知模块。这可以扩展到其他需要主动信息收集的机器人任务中。</li>
+<li><strong>利用动作监督视点</strong>：论文证明了利用动作目标作为锚点来生成有益视点轨迹的可行性，这为在缺乏详尽视点标注数据的情况下训练主动感知系统提供了新思路。</li>
+<li><strong>Sim-to-Real的潜力</strong>：结合数字孪生和主动感知机制，See2Act实现了高效的零样本迁移，表明主动调整视角以获取与训练分布更匹配的观测，是缩小仿真与现实差距的有效策略之一，值得在其他复杂任务中进一步探索。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人模仿学习中物体遮挡导致的部分可观察性问题，提出See2Act方法。该方法基于扩散模型，耦合动作去噪与视角精炼，通过关键帧动作锚定的相机姿态训练策略，使其能主动推断视角序列以预测动作。实验表明，该方法在严重遮挡下能恢复信息视角，在RLBench任务上性能较之前方法提升高达34%，并在真实抓取任务中实现95%的零样本仿真到真实转移。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.23625" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
