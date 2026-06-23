@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>CoRDE: Concept-Prior Routed Diffusion Experts for Structural Generalization in Robot Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>CoRDE: Concept-Prior Routed Diffusion Experts for Structural Generalization in Robot Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.21935" target="_blank" rel="noreferrer">2606.21935</a></span>
+        <span>作者: Xiaocong Li Team</span>
+        <span>日期: 2026-06-20</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>扩散模型因其能将动作生成建模为条件去噪过程，已成为机器人模仿学习的主导范式。然而，在多任务和长时域场景中，单一（单体）的扩散策略架构缺乏结构泛化能力，存在语义子阶段间梯度冲突和灾难性遗忘等问题。同时，其迭代去噪特性导致推理延迟高，难以进行策略优化。现有方法试图通过将预训练扩散策略转化为专家混合（Mixture-of-Experts， MoE）架构（如变分蒸馏VDD）来分解操作技能、加速推理，但纯数据驱动的路由机制在处理噪声多模态数据时经常引发路由崩溃，且实例化完整专家导致参数爆炸和扩展成本高昂。</p>
+<p>本文针对上述MoE训练中路由不稳定和参数膨胀的具体痛点，提出了引入高层语义概念先验引导路由的新视角。核心思路是通过从冻结的概念编码器提取稳定的语义分布，引导变分责任后验的推断，并基于共享骨干网络植入低秩适配（LoRA）模块构建参数高效的专家池，从而在缓解路由崩溃、控制参数量的同时，保证生成动作的多样性和高保真度。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>CoRDE是一个结构引导的变分蒸馏框架，旨在将预训练的扩散教师模型重组为可扩展、语义对齐的MoE学生模型。</p>
+<p><img src="https://arxiv.org/html/2606.21935v1/2606.21935v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：CoRDE框架总览。训练阶段，冻结的概念编码器处理多模态观测以提取语义分布，通过可学习的软映射矩阵投射为结构先验，该先验与从教师模型局部分数场衍生的行为证据几何融合，推断出变分责任后验。该机制驱动一个双熵动力学过程，将样本分配给构建在共享冻结骨干网络上、使用低秩适配（LoRA）的参数高效专家池。推理阶段，基于状态的动态路由激活特定专家，通过保留随机扩散项，生成的混合分数场保证了全秩的行为多样性并合成了高保真动作序列。</p>
+</blockquote>
+<p>整体流程分为两个阶段：1）离线变分蒸馏训练（算法1），输入为示范数据集、预训练的教师分数预测器和冻结的概念编码器，输出为优化后的路由网络、软映射矩阵和LoRA专家参数；2）在线仅状态执行推理（算法2），输入为当前观测，输出为生成的动作序列。</p>
+<p>核心模块包括：</p>
+<ol>
+<li><strong>结构引导的责任推断与熵动态</strong>：首先，使用冻结的概念编码器获取观测 <code>o</code> 在 <code>C</code> 个语义簇上的分布 <code>p_φ(c|o)</code>。通过一个可学习的软映射矩阵 <code>P_CE(z|c)</code>（满足每行和为1），构建结构先验 <code>p_struct(z|o) = Σ_c p_φ(c|o) P_CE(z|c)</code>。行为证据 <code>r(z|o， a_0)</code> 量化专家 <code>z</code> 的局部分数拟合精度。通过最小化关于归一化证据 <code>r_bar</code> 和结构先验 <code>p_struct</code> 的KL散度的加权和，得到最优变分责任后验 <code>q*(z|o, a_0)</code> 的解析解：它是一个几何平均 <code>q* ∝ r_bar^{1/(1+λ(o))} * p_struct^{λ(o)/(1+λ(o))}</code>。其中 <code>λ(o)</code> 根据概念置信度 <code>γ(o)</code> 自适应退火，确保在语义模糊时回退到证据驱动分配。该机制在结构先验置信时引导后验趋向更低的路由熵和更稳定的专家分配（定理1）。</li>
+<li><strong>参数高效的LoRA专家与L2分数近似</strong>：为避免参数量爆炸，学生策略共享一个冻结的扩散Transformer主干 <code>h_η(o)</code>。专家间的差异仅通过注入线性投影层的注意力LoRA模块实现，参数化为 <code>W^{(z)} = W_0 + B^{(z)}A^{(z)}</code>，满足低秩约束 <code>r &lt;&lt; d</code>。在最大化步骤（M步），每个专家最小化其责任加权的分数匹配损失 <code>L_expert(z)</code>。理论分析（定理2）表明，学生专家的混合分数场 <code>ũ</code> 与教师分数场 <code>u_T</code> 的L2误差，由各专家局部误差的责任加权和上界，确保了全局近似的高保真度。此外，由于动作生成遵循反向随机微分方程（SDE），LoRA增量仅修改确定性漂移项以调整模态均值，而由维纳过程 <code>g(t)dw_bar</code> 注入的满秩各向同性噪声被完整保留，从而确保了无论神经网络参数的低秩约束如何，行为多样性能得到完美保持。</li>
+<li><strong>路由解耦与EM软对齐</strong>：为使路由网络 <code>q_ψ(z|o)</code> 稳定并避免梯度冲突，将其优化与下游分数匹配任务解耦。路由器通过最小化与推断的责任后验 <code>q*</code> 的KL散度进行训练：<code>L_router = E[KL(q* || q_ψ)]</code>。软映射矩阵 <code>P_CE</code> 通过期望最大化（EM）风格的自组织统计进行更新：根据mini-batch中软分配计数 <code>N_c,z</code> 计算目标分布 <code>P^_CE</code>，再通过指数移动平均（EMA）进行平滑更新。这建立了一个无需反向传播不稳定的、可解释的宏观概念与微观专家间的多对多映射。</li>
+</ol>
+<p>创新点体现在：1) 用概念先验机制防止纯数据驱动的MoE路由崩溃；2) 用LoRA构建参数高效的专家池，控制了增量学习的参数量和计算成本；3) 理论上分析了低秩近似下分数场的误差边界，并阐明了通过SDE中的随机项保持行为多样性的机制；4) 设计了路由器和概念-专家映射的解耦、基于统计的自组织更新策略。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了两个机器人模仿学习基准：<strong>LIBERO</strong>（评估长时域多任务性能与跨套件结构泛化）和<strong>D3IL</strong>（验证多模态行为覆盖保持和推理效率）。</p>
+<p>对比的基线方法包括：1) **Diffusion Policy (Teacher)**：标准的单体扩散策略基线。2) **Distill-MoE (Evidence-only)**：仅依赖微观数据似然、无结构先验正则化的VDD学生MoE。3) **CoRDE (HiMaCon encoder)**：使用自监督概念编码器HiMaCon的本文方法。4) **CoRDE (AutoCGP encoder)**：使用无监督发现概念编码器AutoCGP的本文方法。所有蒸馏学生方法共享完全相同的参数预算、架构和训练步数。</p>
+<p>在<strong>LIBERO</strong>的四个标准套件（L-Spatial， L-Object， L-Goal， L-Long）上评估任务成功率。</p>
+<p><img src="https://arxiv.org/html/2606.21935v1/2606.21935v1/x2.png" alt="LIBERO成功率"></p>
+<blockquote>
+<p><strong>图2</strong>：LIBERO基准上的成功率。CoRDE在所有四个结构泛化场景中 consistently 优于单体扩散策略教师和仅依赖证据的Distill-MoE基线。提升在L-Long和L-Goal套件中最为显著。</p>
+</blockquote>
+<p>关键定量结果总结自图2：CoRDE consistently优于Distill-MoE基线和教师模型，获得了最高的宏观平均成功率。在具有强多阶段语义结构和时序依赖的L-Long和L-Goal套件上提升最显著，验证了注入的结构先验稳定了专家分配，对长时域任务中的累计误差具有鲁棒性。</p>
+<p>在<strong>D3IL</strong>的七个核心任务上评估任务成功率、任务熵（衡量行为多样性，0-1尺度）和推理时间。</p>
+<p><img src="https://arxiv.org/html/2606.21935v1/2606.21935v1/x3.png" alt="D3IL结果与消融"></p>
+<blockquote>
+<p><strong>图3</strong>：（左表）D3IL基准上的任务成功率和任务熵对比。CoRDE在保持高成功率的同时，严格保持了高任务熵，避免了低秩近似通常导致的模态崩塌。（右图）CoRDE的推理时间显著低于全参数VDD和教师模型，验证了其效率。</p>
+</blockquote>
+<p>关键结果总结自图3（左表）：与全参数VDD基线相比，CoRDE在大多数任务上取得了相当或更高的成功率（例如Avoiding任务0.97 vs. 0.93），并始终保持着与教师模型相当或更高的任务熵（例如Stacking-1任务0.64 vs. 0.44），成功避免了因引入低秩约束可能导致的多样性损失。同时，图3（右图）显示CoRDE的推理时间显著低于全参数VDD和教师扩散模型。</p>
+<p>消融实验验证了关键组件贡献：</p>
+<ul>
+<li><strong>结构先验重要性</strong>：移除结构先验（即λ(o)=0）退化为纯证据驱动的Distill-MoE，其在LIBERO上性能下降（宏观平均从<del>0.7降至</del>0.65），且路由熵波动剧烈，易崩溃。</li>
+<li><strong>LoRA专家有效性</strong>：将LoRA专家替换为全规模专家网络会导致参数量增长数倍，而性能增益有限，证明了LoRA参数高效设计的有效性。</li>
+<li><strong>概念编码器选择</strong>：使用HiMaCon或AutoCGP两种无监督概念编码器均能带来稳定提升，证明了方法对概念来源的鲁棒性。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.21935v1/2606.21935v1/x4.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图4</strong>：定性结果示例。（a）在复杂长时域任务中，CoRDE专家根据语义阶段（如“接近”、“抓取”、“放置”）被稳健激活，而基线方法出现混淆或崩溃。（b）责任后验q*的热图显示，CoRDE在任务关键阶段分配更确定（低熵），与人类标注的阶段边界对齐良好。</p>
+</blockquote>
+<p>图4的定性结果进一步支撑了上述结论，展示了CoRDE在复杂任务中依据语义阶段进行的稳健专家分配，以及其责任后验与任务阶段的对齐性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了一个<strong>概念先验驱动的变分扩散蒸馏框架</strong>，通过融合高层语义先验和底层行为证据推断责任后验，有效缓解了MoE中的路由崩溃问题，促进了语义对齐的专家分配；2）设计了<strong>参数高效的扩散专家池</strong>，基于共享冻结主干植入LoRA模块，在理论保证近似误差有界和通过SDE随机项保持行为多样性的前提下，大幅降低了参数和计算成本；3）开发了一种<strong>EM风格的自组织软对齐算法</strong>，建立了宏观任务概念与微观执行专家间可解释的多对多映射，且无需人工语义标注。</p>
+<p>论文提及的局限性包括：概念编码器<code>p_φ(c|o)</code>的质量和泛化能力会影响结构先验的可靠性；框架目前主要针对离线模仿学习，在线适应新任务或概念需要进一步研究。</p>
+<p>本工作对后续研究的启示在于：为结合高层语义理解和底层连续控制提供了一种有效的“软引导”范式，而非硬绑定；证明了在生成式机器人策略中，通过结构设计（如责任推断机制和SVE中的噪声项）可以在引入参数高效技术（如LoRA）的同时，严格保持策略的多样性；所提出的自组织概念-专家映射机制，为构建更可解释、更易与人类交互的模块化机器人技能系统提供了思路。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>为解决单块扩散策略在多任务场景中梯度冲突和分布建模不灵活，而纯数据驱动的MoE方法易出现路由崩溃和参数量爆炸的问题，本文提出了CoRDE框架。该框架的关键是：1）利用预训练概念编码器产生的语义分布，通过可学习的软映射矩阵引导变分后验责任分布，实现可靠语义预测下的路由；2）采用基于LoRA的参数高效专家池，在共享冻结主干网络上部署专家。核心实验结论表明，CoRDE有效减少路由崩溃，形成与语义对齐的专家分配，在动作质量和增量学习效率方面均优于基线模型。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.21935" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

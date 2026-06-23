@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Robot Self-Improvement via Human-Video Dynamics Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Robot Self-Improvement via Human-Video Dynamics Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.21406" target="_blank" rel="noreferrer">2606.21406</a></span>
+        <span>作者: Stefan Leutenegger Team</span>
+        <span>日期: 2026-06-19</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人学习领域的主流方法是利用人类视频来初始化机器人策略，例如通过预训练视觉-运动表征或提取可操作的结构（如可供性、3D路点、点流）。然而，这些方法主要关注初始部署阶段，即机器人能否模仿人类演示中的行为。一旦部署后，机器人会遇到具身化特有的错误和新情况。现有方法未能有效解决一个关键问题：人类视频的先验知识是否能支持机器人从其自身的失败中学习和自我改进？这需要超越单纯的模仿，获得能够跨具身化迁移、同时支持预测、评估和纠正的表征。</p>
+<p>本文针对机器人部署后如何利用自身失败数据进行自主改进这一具体痛点，提出从人类视频中学习具身无关的动作、动态和值表征的新视角，为机器人自我改进提供预测基础。核心思路是：首先从人类视频中预训练可迁移的模型，然后通过一种无需训练的<strong>动态引导动作修正</strong>方法，将失败状态转化为纠正性监督，驱动策略迭代更新。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架分为两个阶段：首先在人类视频数据上进行表征学习与模型预训练，然后在真实机器人环境中进行自主适应与迭代式自我改进。</p>
+<p><img src="https://arxiv.org/html/2606.21406v1/2606.21406v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：方法整体框架概述。第一阶段（左）：从人类视频中预训练策略（π）、动态（f）和值（V）模型，学习具身无关的表征。第二阶段（右）：在真实机器人上启动自我改进循环：收集成功与失败数据，通过DGAC将失败状态转换为纠正数据，更新动态和值模型，最后基于优势条件更新策略。</p>
+</blockquote>
+<p>核心模块是预训练模型与DGAC模块。</p>
+<ol>
+<li><strong>具身无关的表征设计</strong>：动作表示为6自由度的腕部绝对运动 <code>ξ_t ∈ SE(3)</code> 和手部闭合标量 <code>c_t∈[0,1]</code>。世界状态表示为 <code>o_t = [z_t， P_t]</code>，其中 <code>z_t</code> 是当前帧的DINO视觉token，<code>P_t</code> 是截止到时间t的短期3D点流轨迹。价值 <code>V_t</code> 定义为由稀疏终端奖励（成功为1，失败为-1）诱导的折现回报。</li>
+<li><strong>联合预训练</strong>：基于上述表征，在人类视频上联合训练策略模型 <code>π_θ</code>、动态模型 <code>f_ϕ</code> 和价值模型 <code>V_ψ</code>。采用流匹配范式，使用x-预测参数化来训练动作和动态模型，对价值模型使用回归损失。</li>
+<li><strong>机器人自主适应与策略初始化</strong>：使用一个大语言模型生成原子指令，由预训练策略在机器人上执行，自主收集包含自然失败的机器人数据，用于微调动态和价值模型。对于每个新任务，收集少量遥操作数据 <code>D_tele</code> 来初始化机器人策略。</li>
+<li><strong>动态引导动作修正</strong>：这是自我改进循环的关键模块。对于一个来自失败数据集 <code>D_fail</code> 的状态 <code>o_t</code>，首先从成功数据集 <code>D_succ</code> 中检索一个进度对齐（通过价值相似性）且状态兼容（通过状态相似性）的参考状态 <code>o_t~</code>。如果满足可恢复性阈值（价值和状态相似度阈值），则使用流匹配进行动作生成：将当前状态和参考状态对应的策略上下文（包括历史状态、视觉、元数据等）的流速场进行加权组合（权重 <code>w_n ∼ U(0.1， 1)</code>），生成N个候选动作块 <code>{a_t:t+H-1^(n)}</code>。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.21406v1/2606.21406v1/x2.png" alt="DGAC流程"></p>
+<blockquote>
+<p><strong>图3</strong>：DGAC流程示意图。左侧：给定失败状态，通过组合当前和参考（来自成功经验）的流速场，采样生成候选动作。右侧：使用学习到的动态模型对每个候选动作进行前向推演，并用价值模型对推演结果评分，选择最高价值的动作作为纠正性监督。</p>
+</blockquote>
+<p>与现有方法相比，创新点主要体现在：（1）设计了可跨具身化迁移的统一表征，使得从人类视频中学习的动态和价值模型能通过少量机器人数据快速适应。（2）提出了DGAC算法，它不是简单模仿成功参考，而是利用成功经验指导多样性采样，并基于学习的动态和价值模型进行精准筛选，从而将失败状态有效地转化为高质量的纠正数据。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在七个真实世界操作任务上进行，涉及两个机器人平台：Hello Robot Stretch 3（五个任务）和Franka Panda（两个任务）。任务涵盖抓取、操作铰接物体、放置和任务条件序列等长视野操作。</p>
+<p><img src="https://arxiv.org/html/2606.21406v1/2606.21406v1/figures/DGAC.png" alt="实验任务"></p>
+<blockquote>
+<p><strong>图4</strong>：七个真实世界操作任务，在两个机器人平台上进行评估。覆盖了取物、抓握、铰接物体操作、放置和任务条件排序。</p>
+</blockquote>
+<p>对比了六个基线方法：Expert BC（仅用遥操作数据训练）、AWR、RECAP、RISE、SWIM和LPB。主要结果如下：</p>
+<p><img src="https://arxiv.org/html/2606.21406v1/2606.21406v1/x3.png" alt="结果表格"></p>
+<blockquote>
+<p><strong>表格1</strong>（对应原文Tab.2）：五个Stretch任务的最终成功率对比。本文方法在平均成功率上达到85.3%，显著优于所有基线方法。</p>
+</blockquote>
+<p>关键实验结果：在Stretch的五个任务上，本文框架将平均成功率从Expert BC的40.0%提升至85.3%。表现第二好的基线RISE为76.0%。将DGAC应用到一个在大规模机器人数据上预训练的强策略骨干 <code>π_0.5</code> 上时，能将监督微调后的成功率（62.7%）提升到88.0%，而使用相同数据仅进行值过滤的RECAP方法只能提升到68.0%。这表明DGAC能有效利用失败数据，且具有策略无关的改进能力。</p>
+<p><img src="https://arxiv.org/html/2606.21406v1/2606.21406v1/x4.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图5</strong>：消融实验结果。左：移除DGAC（“No Correction”）导致性能大幅下降。右：在失败状态中使用检索到的成功动作（“BC from retrieved”）性能有限，而使用DGAC的候选选择（“w/o Candidate Selection”）性能次优，表明检索引导的生成与模型选择均至关重要。</p>
+</blockquote>
+<p>消融实验证明了每个组件的贡献：（1）移除DGAC，仅使用成功数据和值引导（类似RECAP）的方法性能显著下降（68.0% vs 85.3%）。（2）在失败状态中直接模仿检索到的成功动作，效果远不如DGAC。（3）在DGAC中移除候选动作选择（即始终使用第一个动作），性能也会下降，证明了基于动态和价值的排名机制的重要性。</p>
+<p><img src="https://arxiv.org/html/2606.21406v1/2606.21406v1/x5.png" alt="跨具身化与缩放分析"></p>
+<blockquote>
+<p><strong>图6</strong>：左：在Franka Panda上的两个任务上，本文方法成功从失败中学习并改进。右：使用更多的预训练人类视频数据（从4k到32k小时），初始策略性能（迭代表0）和最终性能均稳步提升。</p>
+</blockquote>
+<p>其他关键图：（1）跨具身化实验表明，方法在Franka Panda机器人上同样有效。（2）预训练数据规模分析显示，使用更多人类视频数据（从4k到32k小时）能持续提升初始策略和最终性能。（3）定性结果图展示了DGAC如何将失败（如错抓位置、杯子倾倒）纠正为成功行为。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：（1）从可扩展的人类视频中学习可重用的、具身无关的动作、动态和价值表征，为跨机器人形态的自主策略改进提供了基础。（2）提出了DGAC，一种将失败状态转化为纠正性监督的学习机制，无需在线人工干预即可改进策略。（3）DGAC作为一个即插即用的后训练模块，能够改进不同的策略骨干，具有策略无关性。</p>
+<p>论文提到的局限性包括：依赖于视觉基础模型（DINO）的性能，以及动态模型在非常长视野的推演中可能会产生误差累积。</p>
+<p>本文对后续研究的启示在于：展示了如何将被动的人类视频观察与主动的机器人经验（特别是失败经验）有机结合起来，为实现可扩展、自主的机器人策略改进开辟了一条新路径。它启示后续工作可以更深入地探索如何更高效地利用失败数据，以及如何设计更具普适性的跨具身化表征来进一步降低对机器人特定数据的需求。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决机器人如何利用人类视频先验知识自主改进策略的核心问题，确保从视频中提取的动作、动力学和价值表示能支持机器人评估、纠正自身尝试。提出关键技术Dynamics-Guided Action Correction (DGAC)，这是一种训练免费的方法，基于跨机器人体现的可转移模型，在失败时自动提议并排名纠正行动，将失败转化为策略更新监督。实验在七个真实操作任务中验证，使用移动和静态机械臂，成功率从40%提升至81%，实现了跨体现的自主改进。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.21406" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

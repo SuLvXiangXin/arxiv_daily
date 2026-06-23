@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>UniviewVLA: A Unified Multiview Vision-Language-Action Model with World Modeling - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>UniviewVLA: A Unified Multiview Vision-Language-Action Model with World Modeling</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.21501" target="_blank" rel="noreferrer">2606.21501</a></span>
+        <span>作者: Jinghui Lu Team</span>
+        <span>日期: 2026-06-19</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，机器人操纵领域的视觉-语言-动作模型通常依赖于固定的摄像头视角，例如固定的智能体视角和腕部视角。当任务关键信息（如夹爪-物体关系、物体姿态）被遮挡时，模型性能会急剧下降。现有解决方案主要分为两类：一类是部署额外的物理摄像头以获取更多视角，但这需要训练和推理阶段摄像头配置的严格匹配，难以规模化；另一类依赖显式的3D场景重建来推断几何信息，计算成本高昂且通常无法预测未来的场景演化。本文旨在解决一个核心痛点：能否仅基于标准的双摄像头观测，让一个具备世界模型能力的模型推理出多视角信息和未来的场景演化，从而提升针对遮挡场景的操纵性能，而无需高成本的传感配置？本文提出的核心思路是：通过一个统一的多视角VLA模型，学习从标准的两帧观测中生成多视角的未来场景演化视图，并将这些生成的视图表示作为动作预测的辅助条件，从而在不增加额外硬件或显式重建的情况下，注入多视角信息和未来演化知识。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>UniviewVLA遵循UniVLA的离散令牌自回归建模范式，将语言、视觉观测、辅助视图和动作都建模为由自回归变换器 ℳ_θ 处理的令牌序列。整体框架分为两阶段训练和动态推理。</p>
+<p><img src="https://arxiv.org/html/2606.21501v1/2606.21501v1/x2.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图1（原文Figure 3）</strong>：UniviewVLA 整体流程。（1）多视角世界模型后训练：模型接收语言指令和标准的智能体视图、腕部视图输入，自回归地生成融入多视角与世界演化信息的未来多视角图像。（2）动作微调：模型首先预测压缩的运动信息令牌来避免完整辅助视图令牌的高延迟，然后预测FAST动作令牌。（3）动态推理：推理期间，透明摄像头代表生成的辅助视图，绿色摄像头代表被选中的辅助视图。UniviewVLA周期性地在不同的推理阶段选择最佳的辅助视图用于动作预测，而非使用固定视角。</p>
+</blockquote>
+<p><strong>核心模块一：生成式多视角世界模型</strong>。在第一阶段，世界模型学习从两帧标准物理观测 o_{t-1:t}（包含智能体视图和腕部视图）和语言指令 L 中，为每个候选辅助视图 v ∈ 𝒱<em>sel 预测未来的视觉量化（VQ）令牌序列 𝐜</em>{t+1}^v。训练目标为自回归视觉预测损失 ℒ_world（公式2），通过监督未来辅助视图的预测，使模型获得多视角未来预测能力和场景演化知识。</p>
+<p><strong>核心模块二：联合运动信息令牌压缩与动作微调</strong>。生成的完整辅助视图包含 N_tok = 625个VQ令牌，生成五个视图将导致每步3125个令牌，带来6-7秒的高延迟。为降低计算成本，UniviewVLA提出了<strong>运动信息令牌压缩</strong>（图2）。其核心思想是保留每个预测视图中与运动最相关的令牌。具体做法是：对于辅助视图 v 在连续时间步 t 和 t+1 的VQ令牌序列 𝐜<em>t^v 和 𝐜</em>{t+1}^v，计算每个空间令牌 j 的余弦距离分数 δ_{t,j}^v（公式3），该分数越高表示视觉变化越强、运动相关性越高。然后保留得分最高的前 K = 16 个令牌，形成每个视图的紧凑运动信息表示 o ̂′<em>v</em>{t+1}。在动作微调阶段（第二阶段），模型训练目标是预测这些紧凑令牌，并直接生成它们。动作微调目标 ℒ_act（公式4）是将每个候选视图的K个紧凑令牌与动作令牌序列拼接，进行自回归交叉熵监督，使动作预测能够基于紧凑的多视角证据和世界模型引入的场景演化知识。</p>
+<p><img src="https://arxiv.org/html/2606.21501v1/2606.21501v1/x1.png" alt="运动信息令牌压缩示意图"></p>
+<blockquote>
+<p><strong>图2（原文Figure 2）</strong>：Motion-Informative Token Compression 示意图。通过计算连续帧间VQ令牌嵌入的余弦距离得分，识别并保留运动最显著的区域（高亮部分）的令牌，将每视图令牌数从625压缩至16。</p>
+</blockquote>
+<p><strong>核心模块三：基于动作熵的动态视角选择</strong>。推理时，模型不再依赖一个固定的生成视角，而是动态选择最具动作信息的辅助视图。对于每个候选视图 v，模型生成其紧凑表示 o ̂′<em>v</em>{t+1}，然后计算基于此视图的动作令牌平均熵 H_v（公式5）。动作熵越低，表示模型对该视图下的动作预测置信度越高，该视图的信息量也就越大。UniviewVLA选择具有最低动作熵的视图 v* 作为最终用于动作预测的辅助视图（公式6）。为了适应不同推理阶段最优视角的变化，模型每30个时间步动态更新一次选中的视图，此过程无需任何视角选择标签或额外的训练目标。</p>
+<p><strong>创新点总结</strong>：1）提出了从标准双摄像头观测生成多视角未来场景演化的世界模型，为动作预测提供遮挡线索和动态知识；2）设计了运动信息令牌压缩技术，大幅降低了生成视图的推理延迟；3）引入了无需训练、基于动作熵的动态测试时视角选择机制，自适应地利用最有效的视觉信息。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：评估使用了标准无遮挡基准测试LIBERO和CALVIN ABCD → D。为了专门评估遮挡性能，本文构建了六个基于LIBERO风格的自定义遮挡任务，并收集了多视角演示数据。同时，在两个真实机器人（ALOHA平台）遮挡任务上进行了部署验证。</p>
+<p><strong>对比方法</strong>：在CALVIN上与RT-1、Robo-Flamingo、GR-1、MDT、RoboVLMs、Fast-dVLA、MINT等对比；在LIBERO上与OpenVLA、π0-FAST、CoT-VLA、VLA-0、GR00T N1、UniVLA、OpenVLA-OFT等对比。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>标准无遮挡任务</strong>：在CALVIN ABCD → D上，UniviewVLA取得了平均链长4.60的最高性能（表1）。在LIBERO上，取得了95.8%的平均成功率，超过GR00T N1和π0-FAST分别1.9和10.3个百分点（表2）。</li>
+<li><strong>生成视图有效性分析</strong>：与仅使用双摄像头策略（LIBERO平均93.0%，CALVIN平均4.42）相比，UniviewVLA（使用双摄像头）性能达到或超过了使用额外物理三摄像头（LIBERO 95.2%， CALVIN 4.54）的策略（表3）。这表明世界模型生成的紧凑视图能够在不增加部署摄像头的情况下，提供等同于甚至优于额外物理摄像头的性能增益。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.21501v1/2606.21501v1/x3.png" alt="生成视图可视化示例"></p>
+<blockquote>
+<p><strong>图3（原文Figure 4）</strong>：生成视图可视化。前两列蓝框为标准物理视角，绿色框为基于它们生成的未来辅助视图（被选中），最后一列蓝框是同视角的真实物理观测以供对比。展示了世界模型根据标准输入预测未来动态和多视角信息的能力。</p>
+</blockquote>
+<ol start="3">
+<li><strong>遮挡任务性能</strong>：在六个自定义遮挡任务上（表4），仅使用双摄像头的策略平均成功率仅为40.0%。使用物理三摄像头后提升至66.3%。UniviewVLA在使用手动固定最佳视角时达到67.0%，而在使用基于熵的动态视角选择后，平均成功率进一步提升至**73.3%**。这证明了生成视图在关键信息被标准视角遮挡时的有效性，以及动态视角选择的优势。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.21501v1/2606.21501v1/x4.png" alt="真实机器人遮挡任务示意图"></p>
+<blockquote>
+<p><strong>图4（原文Figure 5）</strong>：真实机器人遮挡任务。目标物体（盘子或娃娃）对默认的智能体视角部分遮挡，需要额外的空间证据才能可靠执行。</p>
+</blockquote>
+<ol start="4">
+<li><strong>真实机器人部署</strong>：在两个真实机器人遮挡任务上（图5），双摄像头策略成功率极低（Oreo-to-Plate: 13.3%， Occluded-Doll Move: 20.0%）。添加物理第三摄像头显著提升成功率（分别至40.0%和53.3%）。UniviewVLA仅使用双摄像头，则分别达到了53.3%和46.7%的成功率（图6），大幅超越双摄像头基线，并逼近了使用额外硬件的三摄像头配置的性能。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.21501v1/2606.21501v1/x5.png" alt="真实机器人实验结果"></p>
+<blockquote>
+<p><strong>图5（原文Figure 6）</strong>：真实机器人性能（15次试验/任务）。对比了双摄像头、三摄像头和UniviewVLA（仅双摄像头）三种部署配置，证明UniviewVLA在不增加硬件成本的前提下，显著提升了遮挡任务的成功率。</p>
+</blockquote>
+<p><strong>消融实验</strong>：表4可视作一个消融实验。结果显示，与双摄像头策略（40.0%）相比，引入生成视图但固定手动选择视角（67.0%）带来了巨大提升，证明了生成视图模块的核心贡献。在此基础上，引入动态视角选择模块（73.3%）带来了进一步的性能增益，证明了其必要性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 提出了UniviewVLA框架，利用世界模型从标准观测生成多视角未来场景演化，显著提升了遮挡场景下的机器人操纵性能，且无需在部署时增加额外摄像头或进行显式3D重建。2) 开发了运动信息令牌压缩和基于动作熵的动态视角选择两个关键技术，有效解决了生成视图带来的计算冗余问题，并自适应地选择最佳视角，实现了高效的推理。3) 贡献了六个专门针对遮挡的操纵任务和一套开源的多视角数据收集、处理与评估流程。</p>
+<p><strong>局限性</strong>：论文提到，该方法与生成式机器人策略共有的约束，例如，辅助视图生成会带来一定的推理开销，性能依赖于多视角训练数据的覆盖度。目前评估集中于桌面遮挡任务，扩展到更多样化的场景、移动视点和更长视野的操纵是未来的工作方向。</p>
+<p><strong>对后续研究的启示</strong>：本文展示了将世界模型的场景预测与推理能力与传统VLA策略相结合的潜力，为提升机器人系统在面对部分可观测环境时的鲁棒性提供了一条新路径。其动态视角选择机制启发了无需额外训练、基于模型内在不确定性（熵）进行自适应决策的可能。同时，所构建的遮挡任务基准和数据管道，为社区进一步研究和评估机器人遮挡问题提供了重要工具。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出UniviewVLA模型，旨在解决机器人操作任务中的视觉遮挡瓶颈问题。现有方案依赖额外硬件或高成本3D重建，而本方法仅基于标准双摄像头观测，利用世界建模技术推断多视角的未来场景演变，从而揭示遮挡信息。关键技术创新包括运动信息令牌压缩（将每视图令牌从625个降至16个，延迟降低30倍）以及训练自由的动态动作熵视图选择机制。实验表明，模型在标准无遮挡基准上保持优异（LIBERO达95.8%），同时在遮挡任务中将成功率从40.0%大幅提升至73.3%，真实机器人任务平均成功率提高33.4个点。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.21501" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

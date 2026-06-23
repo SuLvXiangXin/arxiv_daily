@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>PolicyTrim: Boosting Intrinsic Policy Efficiency of Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>PolicyTrim: Boosting Intrinsic Policy Efficiency of Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.22540" target="_blank" rel="noreferrer">2606.22540</a></span>
+        <span>作者: Yinjie Lei Team</span>
+        <span>日期: 2026-06-21</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，提升视觉-语言-动作模型部署效率的主流方法集中在计算层面，例如视觉令牌剪枝、量化和KV缓存复用，旨在降低单步推理延迟。然而，这些方法将已习得的策略视为固定，忽略了策略本身的内在效率瓶颈。这种内在的策略效率受到两个关键因素共同影响：预测的动作块中可靠可执行的长度，以及完成任务所需的总物理步数，二者共同决定了执行过程所需的前向推理调用总数。</p>
+<p>现有VLA模型面临规划不可靠和动作冗余两大痛点：首先，其预测的动作块尾部质量存在严重退化；其次，其倾向于生成冗余的执行步骤，导致完成相同任务所需的物理步数存在巨大方差，更高效的执行路径仅偶然出现。这表明，即使单步推理被加速，策略内在的低效仍会限制最终的端到端部署速度。本文提出了一个名为PolicyTrim的强化学习后训练框架，其核心思路是通过“可靠的块扩展”和“冗余感知的步骤削减”两阶段优化，在不牺牲任务成功率的前提下，显著减少完成任务的推理调用总数，从而提升VLA模型的部署速度。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>PolicyTrim是一个两阶段的RL后训练框架，旨在联合优化每个推理步骤的可执行动作块长度和执行任务的总物理步数，从而减少总的推理调用次数。其输入为当前视觉观测 <code>o_t</code> 和语言指令 <code>l</code>，输出为由策略模型 <code>π_θ</code> 并行预测的未来动作序列 <code>a_t:t+H</code>。</p>
+<p><img src="https://arxiv.org/html/2606.22540v1/2606.22540v1/x1.png" alt="方法框架总览"></p>
+<blockquote>
+<p><strong>图2</strong>：PolicyTrim方法整体框架。该框架分为两个顺序阶段：第一阶段通过动态探索和基于步长奖励，延长可靠的动作块执行长度；第二阶段通过步骤节省奖励和组内稳定性正则化，减少冗余的物理执行步骤，共同减少执行任务所需的总推理次数。</p>
+</blockquote>
+<p>框架的两个核心模块分别是：</p>
+<ol>
+<li><p><strong>可靠的块扩展</strong>：该模块旨在安全地延长每次推理后实际执行的动作序列长度。其关键是一个<strong>动态执行范围探索</strong>策略：在一个采样组内，为每条轨迹分配不同的动作块“接受率” <code>γ_i</code>，从而对应不同的执行窗口 <code>h_i = ⌊γ_i H⌋</code>。这使得一次组采样能并行探测从短到长多个预测范围的可靠性。<strong>可靠范围奖励</strong> 由任务完成奖励和与接受率 <code>γ_i</code> 成正比的范围奖励 <code>β·γ_i</code> 组成，但仅在组内至少有一条轨迹成功时才激活范围奖励，以避免鼓励有错误的长块执行。通过GRPO计算组内归一化优势，并在KL惩罚约束下更新策略，模型被引导向更可靠的尾部预测演进。</p>
+</li>
+<li><p><strong>冗余感知的步骤削减</strong>：该模块在扩展的动作块基础上，进一步压缩完成任务的物理路径。<strong>步骤节省奖励</strong> 定义为：<code>R_step(τ_i) = max(0, S_base - S(τ_i)) / S_base</code>，其中 <code>S_base</code> 为基准步数预算。成功且步数更少的轨迹会获得更高奖励。为防止策略崩溃到不可复现的捷径上，引入了<strong>组锚定正则化</strong>：惩罚单条轨迹的步数与组内成功轨迹平均步数的偏离程度，通过 <code>tanh</code> 函数将偏离度平滑映射为有界惩罚值，并使用下界参数 <code>σ_floor</code> 防止方差过小时的过度惩罚。最终奖励整合了任务完成奖励、步骤节省奖励和稳定性惩罚。</p>
+</li>
+</ol>
+<p>与现有方法相比，PolicyTrim的创新点体现在：它首次明确地将策略效率作为独立于计算效率的优化目标；设计了组内差异化探索和组锚定正则化机制，实现了高效且稳定的后训练；采用顺序两阶段优化，先建立可靠的预测范围，再在该基础上压缩执行路径，避免目标冲突。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>论文在三个基准测试集（LIBERO、ManiSkill、Meta-World）和一个真实机器人平台上进行评估，对比了三个具有代表性的VLA模型：扩散策略 <code>π_0.5</code>、并行解码策略 OpenVLA-OFT 和双系统策略 GR00T。基线方法为各模型的原始策略。</p>
+<p>关键定量实验结果如下：在LIBERO基准上，PolicyTrim显著减少了物理执行步数（<code>S_total</code>），同时保持了可比的任务成功率（SR）。对于 <code>π_0.5</code> 模型，在Object子集上步数降至基线的51.4%；在Spatial子集上，端到端执行加速比（Spd）最高达5.83倍。对于可扩展动作块的模型（<code>π_0.5</code> 和 GR00T），可靠动作块执行长度（<code>h_chunk</code>）得到了有效提升（例如 <code>π_0.5</code> 从5步扩展到15步），而对于不兼容该操作的OpenVLA-OFT，仅应用步骤削减阶段也获得了效率提升。在ManiSkill和Meta-World基准上，PolicyTrim同样取得了成功率和步数效率的一致改进，在Meta-World上为 <code>π_0.5</code> 带来了2.52倍的端到端加速。</p>
+<p><img src="https://arxiv.org/html/2606.22540v1/2606.22540v1/x2.png" alt="定性对比"></p>
+<blockquote>
+<p><strong>图3</strong>：定性对比。在相同的LIBERO任务配置下，基线策略（上行）产生了大量冗余的物理动作，而经过PolicyTrim优化后的策略（下行）仅用大约一半的步骤就完成了任务，展示了其在压缩执行路径上的有效性。</p>
+</blockquote>
+<p>消融实验分析了框架各组件的作用。结果显示，单独使用步骤削减奖励（不含稳定性正则化）会导致策略不稳定和成功率暴跌；而同时优化块扩展和步骤削减会因奖励信号冲突而导致性能下降，验证了顺序两阶段设计的必要性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) 首次明确区分并系统性地优化了VLA模型的<strong>内在策略效率</strong>，指出了规划不可靠和动作冗余两大瓶颈；2) 提出了<strong>PolicyTrim后训练框架</strong>，通过可靠的块扩展和冗余感知的步骤削减，在不改变模型架构或需要额外数据的情况下，显著提升部署速度；3) 设计了一种<strong>基于组内对比的分布式探索策略</strong>和<strong>组锚定稳定性正则化</strong>，实现了高效且稳定的策略优化。</p>
+<p>论文自身也指出了局限性：PolicyTrim的有效性部分依赖于底层模型架构对扩展动作块的支持能力。例如，采用特定并行解码设计的OpenVLA-OFT模型无法有效延长动作块，只能受益于步骤削减阶段。</p>
+<p>这项工作对未来研究的启示在于：它将策略效率确立为与计算效率<strong>正交</strong>的优化维度，二者可以叠加获得复合增益。后续研究可以探索更通用的块扩展机制以兼容更多架构，或将该框架与其他计算加速技术结合，以实现VLA模型部署效率的全面提升。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>该论文聚焦视觉-语言-动作（VLA）模型中策略执行的效率瓶颈，指出现有方法重视降低推理延迟，却忽视了策略本身在动作片段有效长度和任务步骤数量方面的效率损失。研究者设计 PolicyTrim ，一种基于强化学习的后训练框架，核心包括：1. 动态探索策略，以奖励方式推动模型可靠预测更长的动作片段；2. 冗余感知奖励，直接奖励以更少步骤完成任务并惩罚取巧行为。实验表明，该方法将动作片段利用率提升 3 倍、物理执行步骤减少 51.4%，最终实现了端到端部署速度最高 5.83 倍的提升，且不降低任务成功率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.22540" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

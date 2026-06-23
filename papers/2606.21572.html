@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Robot Critics that Sweat the Small Stuff - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Robot Critics that Sweat the Small Stuff</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.21572" target="_blank" rel="noreferrer">2606.21572</a></span>
+        <span>作者: Carl Vondrick Team</span>
+        <span>日期: 2026-06-19</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人操控领域，利用大型视觉语言模型（VLM）作为策略执行循环中的“批评者”来评估和选择候选动作序列是一种有前景的方法。然而，闭环机器人操作要求区分成功与失败的细微视觉差异（例如1毫米的夹爪错位），这对现有VLM构成了挑战。现成的VLM（如Gemini 3）和专门的进度检测方法（如ROVER、ProgressLM）在区分细粒度进展和失败方面表现不佳，在八项机器人任务上，它们的判别准确率仅为54.7%至72.1%（机会水平为50%）。这暴露出当前方法在处理需要判别微小视觉变化的精细场景时的关键局限性。</p>
+<p>本文针对“VLM无法胜任细粒度视觉进展/失败判别”这一具体痛点，提出通过利用策略本身产生的成功与失败轨迹数据来微调VLM，从而构建一个能够关注“细枝末节”的批评者。核心思路是：从同一初始条件收集策略的成功与失败rollouts，构建用于监督学习的细粒度进展比较数据集，以此微调VLM使其具备精细判别能力，进而将该批评者整合到策略闭环中，通过在多个候选动作中进行比较选择来引导策略走向成功。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>方法整体框架分为两个阶段：批评者模型的训练，以及训练好的批评者在策略执行闭环中的整合与应用。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：Critic in-the-loop 框架。给定观测图像，一个学习到的随机策略采样K个不同的候选动作序列。一个以动作为条件的生成式视频模型合成视觉观测，为每个候选动作生成一个终末状态图像。批评者对终末状态进行成对的进展比较以选出最佳候选动作，该动作随后被执行，循环重复此重规划过程。</p>
+</blockquote>
+<p><strong>核心模块一：批评者（VLM）的训练</strong>。批评者被训练用于判断给定任务描述下，两帧图像中哪一帧展现了更大的任务进展（缺乏进展也意味着失败）。训练目标是最小化交叉熵损失，其中标签为二元选择（+1表示第二帧展示更多进展）。训练数据集<code>D</code>的构建是方法的关键，它包含两种数据对：</p>
+<ol>
+<li>成功-成功进展对：从同一成功轨迹中，以较小时间间隔<code>l</code>（如4, 8, 12, 16步）取连续帧<code>(S^t_s, S^s_(t+l))</code>，并标记为+1（后一帧进展更大）。这教会模型识别逐渐的向前进展。</li>
+<li>成功-失败比较对：从相同初始条件出发的成功与失败轨迹中，取相同时刻的帧<code>(S^f_t, S^s_t)</code>，并标记为+1（成功帧比失败帧进展更大）。这教会模型识别特定策略、任务和环境组合下的失败是什么样子。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.21572v1/2606.21572v1/x1.png" alt="训练数据构建"></p>
+<blockquote>
+<p><strong>图2</strong>：训练Robot Critics。用成功和失败的策略rollouts对VLM进行微调，以实现细粒度的任务进展/失败检测。上半部分展示了从策略收集配对的成功与失败轨迹。下半部分图示了如何从成功轨迹构建进展对，以及从配对轨迹中构建成功-失败比较对。</p>
+</blockquote>
+<p><strong>核心模块二：批评者在策略闭环中的整合</strong>。在每一个重规划步骤，给定当前观测<code>x_t</code>，从基础策略<code>π</code>中采样N个候选动作块，并通过最远点采样（FPS）选出K个多样性动作。对于每个候选动作<code>a_i</code>，使用一个以动作为条件的视频生成模型<code>f</code>来预测执行该动作序列后的终末状态图像<code>x_(t+H)^(i) = f(a_i， x_t)</code>。该视频模型基于HunyuanVideo 1.5的扩散变换器，通过插入交叉注意力层来以动作序列为条件进行微调。随后，对所有K个终末状态进行两两比较，查询已训练的批评者。每次比较中，被批评者认为进展更大的候选状态获得一票。最终选择获得票数最多的候选动作<code>a*</code>在真实环境中执行。</p>
+<p>与现有方法相比，本方法的创新点具体体现在：1）强调了在VLM微调中引入<strong>策略特定的失败数据</strong>的重要性，而不仅仅是成功数据或通用失败；2）专注于学习<strong>细粒度</strong>的成对比较，而非粗粒度的进度评分或子任务分解；3）将微调后的批评者与<strong>动作条件视频生成模型</strong>结合，形成一个完整的、可进行前瞻性推演的策略引导闭环系统。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：研究使用了RoboCasa模拟数据集和LBM真实世界数据集进行评估。Baseline包括：1）现成的VLM（Qwen2.5-VL、Gemini 3）；2）基于提示的进度检测方法（GVL、ROVER）；3）经过微调的进度检测方法（ProgressLM）。本文方法（Ours）是基于Qwen2.5-VL-7B，使用提出的成功与失败配对数据进行微调。</p>
+<p><strong>关键实验结果</strong>：<br>在RoboCasa数据集上的细粒度进度/失败判别任务中，本文方法取得了显著优势。</p>
+<p><img src="https://arxiv.org/html/2606.21572v1/2606.21572v1/x6.png" alt="RoboCasa结果表"></p>
+<blockquote>
+<p><strong>图4</strong>：RoboCasa数据集上各方法的批评者准确率。本文完整方法（Ours）在平均准确率（93.6%）和分布外（OOD）准确率（91.4%）上均显著高于所有基线。仅使用成功数据微调的版本（Ours Success-only）表现次之（88.6%），但仍优于基线，说明失败数据是关键。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.21572v1/2606.21572v1/x7.png" alt="LBM结果表"></p>
+<blockquote>
+<p><strong>图5</strong>：真实世界LBM数据集上的批评者准确率。本文方法平均准确率达90.0%，远超其他所有方法。</p>
+</blockquote>
+<p><strong>消融实验与细节分析</strong>：</p>
+<ol>
+<li><strong>失败数据的重要性</strong>：对比“完整方法”和“仅用成功数据”微调的结果（表1），后者在成功-失败对上的准确率下降了26%，这表明仅靠成功数据无法教会批评者识别失败模式。</li>
+<li><strong>细粒度检测能力</strong>：评估了在不同时间间隔（代表视觉差异大小）下的性能。随着间隔减小（进入更细粒度区域），ROVER和ProgressLM的性能从平均73%急剧下降至56%，而本文批评者的性能仅下降2%，显示出其在判别细微差异方面的鲁棒性。</li>
+</ol>
+<p><strong>闭环策略提升实验</strong>：<br>将批评者整合到策略循环中，在真实世界和模拟任务中测试是否能提升策略成功率。</p>
+<p><img src="https://arxiv.org/html/2606.21572v1/2606.21572v1/x2.png" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>图3</strong>：真实世界定性结果。(a) 评估的初始状态；(b) 批评者在关键时刻选择正确动作候选；(c) 本文方法最终成功；(d) 基线策略在关键时刻失败。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.21572v1/2606.21572v1/x3.png" alt="策略提升结果表"></p>
+<blockquote>
+<p><strong>图6</strong>：策略执行成功率结果。在真实世界任务中，本文方法相比基础扩散策略，将堆叠任务成功率从23/50提升至32/50（+18%），并显著提升其他任务性能。在RoboCasa365的18项模拟任务中，使用GR00T N1.5为基础策略，本文方法将平均成功率从43.6%提升至49.5%（+5.9%）。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了一种利用<strong>策略特定的成功与失败配对rollouts</strong>来微调VLM的方法，使其能够进行<strong>细粒度的进展推理和细微失败检测</strong>，在判别任务上达到超过90%的准确率；2）设计了一个完整的批评者闭环整合框架，通过结合随机策略采样、动作条件视频预测和批评者比较选择，有效提升了基础策略在真实世界和模拟环境中的性能（平均提升11%和5.9%）；3）通过系统的消融实验，明确验证了<strong>失败数据对于训练有效批评者的必要性</strong>。</p>
+<p>论文提到的局限性包括：批评者和策略提升的效果依赖于动作条件视频模型的准确性，以及在某些场景下收集配对失败数据可能需要额外成本。</p>
+<p>本工作对后续研究的启示包括：证明了针对策略特定失败进行数据驱动的VLM微调是一条有效路径，为构建更鲁棒的机器人决策辅助系统提供了新思路；所提出的框架可扩展至更复杂的任务和多模态输入；未来可探索如何将此类细粒度批评者用于策略训练本身，而不仅仅是测试时引导，以及如何实现更高效的大规模批评者预训练。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本论文致力于解决机器人闭环操作中，现有视觉语言模型难以区分成功与失败之间细微视觉差异的核心问题。为此，作者提出了一个微调批评器的新方法：利用从策略中获得的成对成功与失败轨迹构建细粒度的进展比较监督数据。该方法训练的批评器在细粒度进展推理和失败检测上表现出色，准确率超过90%。实验表明，集成该批评器可指导策略从候选动作中选择最优执行，使实际任务的平均策略成功率提升11%，模拟任务提升5.9%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.21572" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RARM: Confidence-Gated Progress Reward Modeling for RL in Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>RARM: Confidence-Gated Progress Reward Modeling for RL in Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.22027" target="_blank" rel="noreferrer">2606.22027</a></span>
+        <span>作者: Fan Shi Team</span>
+        <span>日期: 2026-06-20</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作中的强化学习常受限于奖励设计：稀疏的成功奖励提供的监督信号弱且延迟，而手工设计的密集奖励不仅繁琐，且难以跨任务泛化。基于进度的奖励模型通过估计观察状态离任务完成的“进度”来自动提供密集反馈，是一种有前景的替代方案。然而，现有方法通常需要任务特定的演示或进度标签，并且容易为视觉上合理但物理上错误的状态分配高奖励，导致“奖励欺骗”。</p>
+<p>现有方法难以同时满足“数据轻量”和“置信度感知”两个需求。基于视觉语言模型（VLM）的奖励模型计算成本高，且容易对视觉上合理的失败状态评分过高；小而专的任务特定模型虽然推理成本低，但仍需大量每任务数据，且在分布偏移下仍会高估进度。本文针对这一痛点，提出了RARM（Reference-Anchored Reward Model），其核心思路是：<strong>仅利用一个成功演示视频，通过一个轻量级的视觉比较器，将其转化为一个密集的、进度感知的奖励，并且通过置信度门控机制，只奖励“自信的”前进进度，抑制不确定的匹配，从而避免产生虚假的正面奖励。</strong></p>
+<h2 id="方法详解">方法详解</h2>
+<p>RARM分为两个阶段：1）在大量无标签通用视频上离线训练一个视频片段比较器；2）部署时，输入一个任务相关的成功参考视频，为在线强化学习策略训练提供置信度门控的进度奖励。</p>
+<p><img src="https://arxiv.org/html/2606.22027v1/2606.22027v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：方法整体概览。a) 比较器架构。b) RL训练时的参考视频与rollout视频输入。c) 自监督训练时的锚点、正样本与负样本构建。d) 将当前rollout片段与所有参考片段比较得到相似度矩阵。e) 置信度门控的进度估计与奖励计算流程。</p>
+</blockquote>
+<p><strong>整体框架/Pipeline</strong>：给定一个成功演示的参考视频，将其滑动窗口采样为一系列有重叠的短片段 (T=5帧)，并为每个片段根据其归一化时间位置分配一个进度值π_j ∈ [0, 1]。在RL训练过程中，从智能体最近的观测中构建一个当前片段c_t。将其与所有参考片段r_j通过训练好的比较器g_θ进行比对，得到相似度分数。奖励计算并非直接使用这些分数，而是通过一个置信度门控的进度估计机制（图2e）来产生最终奖励r_t。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><p><strong>模型架构（图2a）</strong>：核心是比较器g_θ(X, Y)，输入是两个视频片段（X和Y），输出一个标量相似度分数。它采用暹罗架构，共享一个<strong>片段编码器</strong>：使用预训练的DINOv3（配备LoRA适配器）提取每帧特征，经过空间池化后，加入时序旋转位置编码，再通过一个轻量级自注意力层进行跨帧融合，得到片段表征。随后是一个<strong>交叉注意力比较器与头</strong>：使用X片段表征作为查询（Query），Y片段表征作为键（Key）和值（Value），通过一个交叉注意力块，再经投影和轻量级头网络输出分数。这种设计使比较具有方向性（“rollout片段相对于参考片段如何”）。</p>
+</li>
+<li><p><strong>对比学习训练（图2c）</strong>：训练无需动作或进度标签，仅需具有定向时序变化的通用视频。从每个视频中选取一个锚点区域，从中采样一个锚点片段a。<strong>正样本</strong>是从同一锚点区域内随机采样的其他片段。<strong>负样本</strong>有三种：1) 同一视频其他区域的片段；2) 锚点区域片段的时间反转版；3) 其他视频的片段。训练采用<strong>Soft Nearest-Neighbours Loss</strong>（公式1），温度τ=0.1。数据增强（随机裁剪、颜色抖动）独立应用于每个片段，以增强对视角、光照等变化的鲁棒性。</p>
+</li>
+<li><p><strong>置信度门控的奖励计算（图2d, e）</strong>：这是RARM的核心创新点。对于当前rollout片段c_t，找到与其最匹配的参考片段索引 j*(t) = argmax_j g_θ(c_t, r_j)。每个参考片段r_j都有一个基于其自身匹配分数统计（通过参考视频的自比较）离线校准的置信度阈值δ_j。</p>
+<ul>
+<li><strong>进度估计</strong>：若匹配分数 g_θ(c_t, r_j*(t)) ≥ δ_j*(t)，则认为匹配是自信的，将当前进度估计p_t设为该参考片段的进度值π_j*(t)；否则，认为匹配不可靠，保持进度不变，即 p_t = p_{t-1}。</li>
+<li><strong>奖励计算</strong>：奖励只在前述自信匹配导致估计进度 <strong>增加</strong> 时发放，即 r_t = 1{p_t &gt; p_{t-1}}。重复访问同一进度级别或低置信度匹配的奖励为零。</li>
+</ul>
+</li>
+</ol>
+<p><strong>创新点</strong>：</p>
+<ul>
+<li><strong>数据效率与泛化性</strong>：比较器只需在<strong>通用视频上训练一次</strong>，无需机器人专用数据、任务特定的奖励标签或逐任务奖励工程。</li>
+<li><strong>置信度门控进度估计</strong>：区别于直接使用相似度分数或无条件信任进度估计，RARM通过<strong>基于参考视频自比较的阈值</strong>来过滤不可靠匹配，从而在奖励信号层面主动抑制了可能导致奖励欺骗的虚假正面奖励。</li>
+<li><strong>灵活的进度定位</strong>：通过将当前片段与<strong>所有</strong>参考片段进行比对，智能体可以以不同于参考视频的速度、节奏或顺序推进任务，甚至可以暂停或恢复，只要其状态能自信地匹配到参考的某个更靠前的阶段。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>Benchmark/数据集</strong>：模拟实验在4个MetaWorld任务和5个LIBERO-10任务上进行；真实世界实验在4个任务（Pick Eraser， Drawer Open， Bimanual Hand-over， Bimanual Clothes Folding）上进行，使用AIRBOT Play双臂平台。</p>
+<p><strong>Baseline方法</strong>：</p>
+<ul>
+<li><strong>基于参考的方法</strong>：RoboCLIP（基于视频-语言嵌入相似性）， TemporalOT（基于时序最优运输）。</li>
+<li><strong>基于VLM的方法</strong>：GVL, RoboMeter, RoboDopamine（利用VLM预测任务进度）。</li>
+<li><strong>消融方法</strong>：Similarity Reward（直接使用RARM的最大rollout-reference相似度作为奖励）。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.22027v1/2606.22027v1/x2.png" alt="主要结果"></p>
+<blockquote>
+<p><strong>图3</strong>：在9个模拟任务上经过1M环境步训练的成功率曲线。RARM（蓝色）在长短视野任务上均取得了最佳的整体性能，特别是在长视野任务上优势明显。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>模拟实验（Q1, Q2）</strong>：RARM在所有9个模拟任务上的RL训练中都取得了最佳或极具竞争力的成功率。在长视野任务（如LIBERO任务）上，相较于基线优势尤其显著。基于参考的基线（RoboCLIP， TemporalOT）在面对速度差异、暂停或需要纠正的rollout时表现脆弱；基于VLM的基线则对部分完成但视觉上合理的失败状态产生嘈杂或过度乐观的预测。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.22027v1/2606.22027v1/figure/combined_v6_mw9.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图4</strong>：在两个代表性任务上的消融研究。移置信度门控、交叉注意力比较器或时间处理器（时序位置编码和自注意力）都会导致性能下降，确认了这些组件对可靠进度估计的重要性。</p>
+</blockquote>
+<p><strong>消融实验（Q4）</strong>：</p>
+<ul>
+<li><strong>Similarity Reward</strong>：直接使用相似度分数作为奖励的性能弱于完整RARM，证明了将自信匹配转化为进度变化奖励的重要性。</li>
+<li><strong>核心组件</strong>：如图4所示，移置信度门控（接受所有匹配为自信）会导致性能显著下降；移除交叉注意力会削弱片段匹配能力；移除时间处理器（无法区分正向与反向运动）也会损害性能。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.22027v1/2606.22027v1/figure/combined_v6_mw7.png" alt="定性对比"></p>
+<blockquote>
+<p><strong>图5</strong>：在布折叠任务上对成功与失败轨迹的累计预测奖励归一化对比。RARM（红色）在成功轨迹上接近线性增长，在失败轨迹上约50%处饱和；而基线方法（GVL， Robometer等）将超过80%的成功轨迹奖励分配给了失败轨迹，无法区分二者。移掉置信度阈值后（浅玫瑰色），失败轨迹的累计奖励甚至超过了成功轨迹，证明了置信度门控的必要性。</p>
+</blockquote>
+<p><strong>定性分析</strong>：图5清楚地展示了RARM如何避免奖励欺骗。在布折叠任务中，对于一个视觉上看似完成但实际失败的轨迹，RARM的累计奖励远低于成功轨迹（约为成功轨迹的50%），且中途饱和。而所有基线方法（包括三个VLM基线）都为失败轨迹分配了超过80%的成功轨迹奖励。移除了置信度阈值（Ours w/o threshold）的RARM变体，失败轨迹的累计奖励甚至反超了成功轨迹（比例约1.89）。</p>
+<p><strong>真实世界实验（Q3）</strong>：</p>
+<blockquote>
+<p><strong>表1（文本摘要）</strong>：在四个真实世界任务上，对比了基础VLA策略（π0）、仅使用稀疏二元成功奖励（BinR）的DSRL、以及使用RARM奖励（Ours）的DSRL。在三个较短的任务（Drawer open, Pick eraser, Hand over）中，RARM从最小的30个rollout训练预算开始，其成功率（如6/10, 6/10, 5/10）就持续优于BinR（4/10, 3/10, 2/10）。在最困难的长视野任务Clothes folding上，优势最为明显：经过90次rollout训练后，RARM达到8/10的成功率，而BinR仅为2/10（基础π0为1/10）。</p>
+</blockquote>
+<p>RARM成功地为真实世界中的DSRL训练提供了密集奖励。在数据有限（30-90次真实机器人rollout）且有光照、背景干扰的条件下，RARM相比仅使用稀疏成功奖励的基线，显著提升了策略的成功率，尤其是在探索阶段成功信号极稀疏的复杂长视野任务（布折叠）上，效果提升达4倍。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了RARM</strong>：一种仅需单一成功演示、无需任务特定奖励监督的轻量级奖励模型，实现了“数据轻量”与“置信度感知”的进度估计。</li>
+<li><strong>设计了置信度门控机制</strong>：通过基于参考视频自比较的阈值，奖励只给予自信的前进进度，有效抑制了虚假正面奖励和奖励欺骗。</li>
+<li><strong>验证了广泛的有效性</strong>：在模拟和真实世界的9个/4个任务上，RARM相比多种基线方法取得了最佳的整体成功率，并展现出对视觉干扰的鲁棒性。</li>
+</ol>
+<p><strong>论文提到的局限性</strong>：</p>
+<ol>
+<li><strong>视觉依赖</strong>：RARM依赖于视觉片段比较，在面临巨大的机器人本体、视点或场景变化时，鲁棒性可能下降。</li>
+<li><strong>忽略物理细节</strong>：难以从RGB观察中推断对成功至关重要的精细操控细节（如微小接触变化、抓握稳定性、力交互或物体细微形变）。</li>
+<li><strong>处理重复或循环任务困难</strong>：视觉相似的状态可能在参考视频的不同进度级别重复出现，这给进度定位带来挑战。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：<br>RARM展示了<strong>利用单一成功演示作为“进度锚点”，并结合置信度感知的奖励设计</strong>是一条可行的、高效且鲁棒的机器人RL训练路径。未来工作可以探索：</p>
+<ul>
+<li><strong>引入多模态传感器</strong>（如深度、触觉）以克服视觉歧义。</li>
+<li><strong>扩展以处理重复阶段任务</strong>（如引入显式记忆或多参考演示）。</li>
+<li><strong>利用合成生成的演示</strong>作为参考，进一步提升方法的可扩展性。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中强化学习的奖励设计难题，提出RARM模型。核心问题是长时程任务中稀疏奖励监督弱、手工密集奖励设计繁琐且泛化差，现有进度奖励模型需任务特定数据且易对错误状态给予高奖励。方法上，RARM是一种轻量级视觉比较器，仅需单个成功演示，通过通用视频训练并引入置信度门控机制，抑制不确定匹配以避免假阳性奖励，自动生成密集进度奖励。实验表明，在9个模拟任务和4个真实世界任务中，RARM驱动RL训练取得了最佳整体成功率，在布料折叠等长时程任务上性能提升尤为显著。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.22027" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

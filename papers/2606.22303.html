@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FlowDPG: Deterministic Policy Gradient on Flow Matching Policies for Real-World Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>FlowDPG: Deterministic Policy Gradient on Flow Matching Policies for Real-World Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.22303" target="_blank" rel="noreferrer">2606.22303</a></span>
+        <span>作者: Deepak Pathak Team</span>
+        <span>日期: 2026-06-21</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，用于机器人操作的表达性策略，如流匹配和扩散策略，能够生成高效的多模态动作序列。然而，将这些策略与基于价值的强化学习相结合面临根本性挑战：标准的确定性策略梯度更新需要对映射噪声到动作的多步ODE进行沿时间的反向传播。这带来两个关键问题：计算开销随求解器步数线性增长，并且在速度场训练不充分时，雅可比矩阵链式法则会加剧梯度爆炸或消失问题，导致数值脆弱性。现有方法要么完全丢弃评论家的梯度信息，要么使用粗略的一步近似来更新策略，存在表达性或效果局限。</p>
+<p>本文针对在流匹配策略上稳定、高效地应用策略梯度这一具体痛点，提出了一种绕过BPTT的全新视角：通过单步前向投影估计干净动作，并利用评论家梯度直接修正速度场。其核心思路是将演示驱动的可行性速度场与评论家驱动的价值提升修正向量相结合，并通过一个简单的L2回归将合并后的目标蒸馏回流匹配的速度场中，从而实现无需ODE反向传播的策略改进。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>FlowDPG的整体pipeline分为离线与在线两个阶段。离线阶段，一个共享的视觉主干网络连接着一个冻结的奖励预测器、一个评论家网络以及一个流匹配行动器。FlowDPG模块将行动器输出的估计动作与评论家梯度结合，形成一个价值提升的目标动作，并蒸馏回行动器。在线阶段，策略在真实机器人上执行，收集的经验与演示数据混合存入回放缓冲区，用于异步更新评论家和行动器，而主干网络和奖励预测器保持冻结。</p>
+<p><img src="https://arxiv.org/html/2606.22303v1/2606.22303v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：FlowDPG的离线到在线流程。左侧离线阶段，策略网络、评论家网络和奖励预测器联合训练，FlowDPG模块（蓝色框）生成改进目标并蒸馏回流匹配行动器。右侧在线阶段，策略部署于双机器人平台，利用混合数据进行异步更新。</p>
+</blockquote>
+<p>其核心模块与创新技术细节如下：</p>
+<ol>
+<li><strong>价值估计</strong>：采用基于Twin Critics的隐式Q学习（IQL）来避免对分布外动作的查询和外推误差。奖励由冻结的阶段感知奖励预测器（SARM）提供，包含三个部分：连续进度项、阶段转换指示项和终止奖励项，以提供密集且结构化的奖励信号。</li>
+<li><em><em>策略更新 (FlowDPG)<em><em>：这是方法的核心。首先，从任意中间含噪动作$ x_t $通过单步前向速度场预测来估计干净动作$ \hat{a} $（公式4）。随后，在$ \hat{a} $处（停止评论家参数梯度）计算Twin Critics最小值的梯度$ g $（公式5）。通过自适应缩放（公式6）将梯度$ g $调整至与原始速度$ u_t $相匹配的量级，得到修正量$ \Delta $。目标动作定义为$ a^</em> = \hat{a} + \Delta $，对应的目标速度则为$ u_t^</em> = a^</em> - x_0 $（公式7）。最终，策略的损失函数是蒸馏损失$ \mathcal{L}_\text{distill} $（回归到$ u_t^</em> $）与行为克隆损失$ \mathcal{L}_\text{BC} $（回归到演示速度$ u_t $）的加权和（公式8），其中蒸馏权重在训练初期从0开始线性预热，以防早期不可靠的评论家主导训练。</li>
+<li><strong>一致性正则项</strong>：为确保单步投影$ \hat{a} $的可靠性，额外引入损失$ \mathcal{L}_\text{cons} = | \hat{a} - x_1 |^2 $（公式9），直接最小化投影动作与真实干净动作之间的距离，从而保证评论家梯度在接近真实动作分布的位置进行评估。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.22303v1/2606.22303v1/x2.png" alt="方法对比"></p>
+<blockquote>
+<p><strong>图3</strong>：方法原理对比。上：经典流匹配通过速度场$ v_\theta $将噪声$ x_0 $传输至演示可行的动作$ a $。下：FlowDPG将动作$ a $沿评论家梯度$ \nabla_a Q $方向修正，得到价值提升的目标动作$ a^* $，然后将对应的速度$ v_\theta&#39; $蒸馏回流速度场。</p>
+</blockquote>
+<p>与现有方法相比，FlowDPG的创新点在于：1) <strong>绕过BPTT</strong>：通过单步投影和蒸馏，完全避免了沿ODE链式法则的反向传播，计算成本低且数值稳定。2) <strong>理论清晰</strong>：论文证明了FlowDPG的更新方向是在三个明确近似（投影替代终点、单时间点蒙特卡洛估计、自适应梯度缩放）下对经典确定性策略梯度的近似，提供了透明的理论依据。3) <strong>端到端更新</strong>：直接更新底层流匹配策略的速度场，使其既能突破演示数据流形的限制，又能充分利用流策略的全部表达能力，而非训练一个分离的适配模块。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在长时程、接触丰富的双机械臂AirPods组装任务上进行（如图1所示），包含8个顺序子阶段，需要毫米级插入精度。评估指标包括各阶段成功率（允许重试）、阶段平均成功率以及要求所有步骤成功的端到端成功率。</p>
+<p><strong>Baseline方法</strong>：对比了三大类用于改进基础流策略的RL方法：1) <strong>价值条件类</strong>：仅使用标量价值/优势信息（RA-BC， AWR， RECAP）。2) <strong>辅助模块类</strong>：冻结基础策略，训练独立适配器（DSRL， PLD， RLT）。3) <strong>评论家梯度类</strong>：直接利用评论家梯度（QAM）。</p>
+<p><img src="https://arxiv.org/html/2606.22303v1/2606.22303v1/x3.png" alt="主要结果"></p>
+<blockquote>
+<p><strong>图4</strong>：端到端成功率、投影误差、Q值差异和训练损失的消融实验结果。（a）移除一致性正则项导致投影误差（黄线）和Q值差异（蓝线）显著增高。（b）导致最终性能下降。（c）移除自适应缩放导致训练损失振荡，性能大幅下降。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：FlowDPG（离线+在线）取得了92%的端到端成功率，显著优于所有基线（见表1）。价值条件类方法（最高84.27%）受限于演示数据支持；辅助模块类方法（最高88.45%）受限于适配器能力；评论家梯度类方法QAM（86.93%）性能次之。离线FlowDPG已达88%，在线微调进一步提升至92%，提升主要集中在接触丰富的抓取和插入阶段。在应对未见的扰动（如物体放回托盘、场景中途扰动）时，在线训练的FlowDPG恢复率（70%-94%）显著高于离线策略（78%-86%），展现了更好的鲁棒性。</p>
+<p><strong>消融实验分析</strong>：</p>
+<ol>
+<li><strong>核心组件贡献</strong>：移除一致性正则项会导致投影误差和Q值差异大幅增加，使评论家梯度在分布外评估，成功率从92%降至80%。移除自适应缩放则因梯度幅度不稳定导致训练损失振荡，性能降至76%。两者皆移除后成功率进一步降至72%（图4）。</li>
+<li><strong>奖励组件分析</strong>：移除进度项会削弱梯度的信息量，导致性能逐渐侵蚀（80%）。移除阶段转换项会降低完成任务子目标的驱动力（76%）。两者均移除仅保留终止奖励，则导致策略行为完全混乱（60%），证明结构化奖励对引导评论家梯度至关重要（图5）。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了FlowDPG，一个无需BPTT的蒸馏框架，首次实现了在流匹配策略上进行稳定、高效的DDPG风格策略改进。2) 建立了FlowDPG更新方向与经典确定性策略梯度之间清晰的理论联系（通过三个明确近似）。3) 在极具挑战性的长时程双臂装配任务上进行了实物验证，并结合机制层面的消融实验有力支撑了每个设计选择。</p>
+<p>论文提到的局限性包括：一致性正则项仅最小化平均投影误差，未能检测或降权少数梯度不可靠的状态；奖励公式需要阶段级标注，难以泛化到无明显子阶段分解的任务；实验仅在单一双臂平台和任务族上进行验证。</p>
+<p>这项工作为将策略梯度高效应用于生成式机器人策略开辟了新路径，其核心思想——将价值信息通过蒸馏直接注入生成过程，而非反向传播——对未来探索其他生成模型（如扩散模型）与强化学习的结合具有重要启示。同时，其离线到在线、保留预训练表征的微调范式，对在真实世界中安全、高效地迭代大型机器人策略也具有参考价值。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对流匹配策略在真实世界机器人操作中应用强化学习时，因需通过多步ODE反向传播（BPTT）而计算昂贵、数值不稳定的核心问题，提出FlowDPG方法。该方法基于DDPG框架，关键创新在于训练时将批评者梯度蒸馏至速度场，完全绕过BPTT，并融合演示驱动的可行速度与批评者驱动的修正向量。在长时程、多阶段双臂AirPods组装任务中，FlowDPG取得了92%的端到端成功率，显著优于其他主流RL方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.22303" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
