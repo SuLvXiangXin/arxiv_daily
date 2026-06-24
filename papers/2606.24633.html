@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Beyond Monotonic Progress: Retry-Supervised Value Learning for Robot Imitation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Beyond Monotonic Progress: Retry-Supervised Value Learning for Robot Imitation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.24633" target="_blank" rel="noreferrer">2606.24633</a></span>
+        <span>作者: Li Zhao Team</span>
+        <span>日期: 2026-06-23</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人模仿学习中，获取高质量的人类演示数据成本高昂，实际收集的数据常包含错误和纠正行为，例如不精确的抓取、物体未对齐、不稳定接触和重复尝试等。当前，从机器人数据中学习价值或奖励函数的主流方法依赖于<strong>单调进展假设</strong>，即认为任务进度是沿着轨迹单调递增的标量信号。然而，这种方法会忽略示教轨迹中不完美的中间片段，如错误和重试，导致无法捕捉到局部执行错误和后续的纠正行为。这使得学得的价值函数在错误发生的局部区域不够精确，进而影响下游模仿学习的策略性能。</p>
+<p>本文针对上述<strong>单调进展假设无法建模局部错误-恢复动态</strong>的痛点，提出了一个新视角：将演示数据中的<strong>重试事件</strong>视为有价值的稀疏监督信号。核心思路是利用重试关键点来构造局部成对偏好，结合全局进度校准，学习一个对错误敏感的价值函数，进而提升从不完美演示中进行模仿学习的性能。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>ReTVL（Retry-Supervised Value Learning）的整体目标是学习一个能根据观测历史 (h_t) 和任务指令 (\ell) 预测当前任务进度价值 (V_\theta(h_t, \ell)) 的模型。模型采用分布式的预测头，输出离散化进度箱上的概率分布，并通过期望获得标量价值。</p>
+<p><img src="https://arxiv.org/html/2606.24633v1/2606.24633v1/cube.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：ReTVL 方法整体框架。输入是观测历史和语言指令，通过 VLM 骨干网络和离散值头预测标量价值。训练过程结合了全局绝对进度校准（蓝色）和由重试事件诱导的局部偏好监督（红色），使得价值在重试状态附近下降并在恢复后回升。</p>
+</blockquote>
+<p>核心模块包含基于重试事件的成对价值学习和值引导的行为克隆。</p>
+<ol>
+<li><strong>数据标注</strong>：除轨迹成功/失败标签外，仅需额外标注每个重试（纠正行为）的<strong>起始关键点</strong> (r_{i,j})，无需标注整个重试片段。</li>
+<li><strong>成对构造</strong>：围绕每个重试关键点，将邻域划分为三部分：<code>pre-retry</code> 区域 ((\mathcal{W}^{\mathrm{pre}}<em>{i,j}))、<code>near-retry</code> 区域 ((\mathcal{W}^{\mathrm{near}}</em>{i,j})) 和 <code>post-retry</code> 区域 ((\mathcal{W}^{\mathrm{post}}_{i,j}))。基于“价值在纠正前下降、在有效纠正后回升”的假设，构造偏好对 ((h^+, h^-))，确保价值满足：(\mathcal{W}^{\mathrm{pre}}) 中的状态 &gt; (\mathcal{W}^{\mathrm{near}}) 中的状态，以及 (\mathcal{W}^{\mathrm{post}}) 中的状态 &gt; (\mathcal{W}^{\mathrm{near}}) 中的状态。</li>
+<li><strong>软窗口加权</strong>：为防止不精确的窗口边界引入噪声监督，为每个偏好对计算软权重 (w(h^+, h^-) = \exp(-d(h^+; r_{i,j})/\tau_w))，其中 (d(h^+; r_{i,j})) 是优选状态 (h^+) 到重试关键点的距离。这为靠近关键点的监督赋予更高权重。</li>
+<li><strong>偏好损失</strong>：使用带温度和软权重的成对逻辑损失来训练价值模型：(\mathcal{L}<em>{\mathrm{pref}} = -\mathbb{E}</em>{(h^+, h^-)} w(h^+, h^-) \log \sigma\left(\frac{V_\theta(h^+, \ell) - V_\theta(h^-, \ell)}{T_{\mathrm{pref}}}\right))。</li>
+<li><strong>全局进度监督</strong>：对于重试邻域外的帧，使用绝对进度目标 (v_t^\star = t/T)（成功轨迹）或 0（失败轨迹）进行离散交叉熵损失监督 ((\mathcal{L}_{\mathrm{abs}}))。</li>
+<li><strong>联合训练</strong>：总损失为 (\mathcal{L}<em>{\mathrm{value}} = \lambda</em>{\mathrm{abs}} \mathcal{L}<em>{\mathrm{abs}} + \lambda</em>{\mathrm{pref}} \mathcal{L}_{\mathrm{p}})，混合采样来自非重试区的绝对进度样本和来自重试区的偏好对。</li>
+<li><strong>值引导行为克隆</strong>：学得的价值函数用于加权行为克隆。计算动作块（从 (t) 到 (t+\Delta_a)）的权重 (\alpha_t)，基于预测的价值增量 (r_t = V_\theta(h_{t+\Delta_a}, \ell) - V_\theta(h_t, \ell))，并利用离线数据集统计进行标准化和裁剪。策略通过加权损失 (\mathcal{L}_{\mathrm{wBC}}) 进行训练。</li>
+</ol>
+<p><strong>与现有方法的关键创新点</strong>在于：1) 将稀疏、易标注的重试起始点作为监督信号，而非依赖可能不可靠的密集进度标签；2) 通过构造局部偏好对显式地建模“价值下降-回升”的动态，而非强加单调性；3) 引入软窗口加权减轻标注模糊性的影响。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设定</strong>：在四个真实机器人（Piper 机械臂）操作任务上进行评估：<code>Pick up Spoon</code>、<code>Stack Blocks</code>、<code>Fold Towel</code>、<code>Open Drawer</code>。使用包含 30 条标注轨迹的数据集训练价值模型，并在包含 200 条（<code>Pick up Spoon</code>为80条）混合质量演示的独立数据集上进行下游策略学习对比。<br><strong>Baseline方法</strong>：对比了三种代表性的密集监督方法：零样本 VLM 进度估计 (<code>TOPReward</code>)、通用机器人奖励模型 (<code>Robometer</code>) 和基于进度监督的价值学习 (<code>RECAP-Value</code>)。</p>
+<p><strong>关键实验结果</strong>：<br><strong>1. 价值评估</strong>：</p>
+<p><img src="https://arxiv.org/html/2606.24633v1/2606.24633v1/x1.png" alt="价值可视化对比"></p>
+<blockquote>
+<p><strong>图3</strong>：在不同任务上可视化价值预测。ReTVL（橙色）相较于基于进度的基线方法（蓝色），能更清晰地捕捉重试关键点（灰色竖线）附近的局部价值下降和纠正后的价值回升。</p>
+</blockquote>
+<p>表1（数值）显示，ReTVL 在全局指标（如价值-顺序相关性 <code>VOC=0.987</code> 和成功-失败检测 <code>S/F Det.=1.000</code>）上与最强基线相当。在衡量局部错误敏感性的指标上，ReTVL 显著优于所有基线，尤其是 <code>Pre &gt; Retry</code> (0.740 vs. 基线最高 0.329)，证明其能更好地为触发重试的错误前状态分配更低价值。<br><strong>2. 策略学习</strong>：</p>
+<p><img src="https://arxiv.org/html/2606.24633v1/2606.24633v1/x2.png" alt="错误动作权重分析"></p>
+<blockquote>
+<p><strong>图4</strong>：在恢复轨迹中，ReTVL-BC 分配给标注为“坏动作”的区块的平均权重（0.11）远低于标准 BC (1.0) 和 RECAP-BC (0.54)，且方差更小，表明其能更一致、更强力地抑制有害动作。</p>
+</blockquote>
+<p>表2（数值）显示，在下游模仿学习中，<code>ReTVL-BC</code> 的平均成功率高达**80.0%**，显著优于 <code>Standard BC</code> (41.3%) 和 <code>RECAP-BC</code> (62.5%)。<br><strong>3. 消融实验</strong>：<br>消融研究表明（表3）：</p>
+<ul>
+<li><strong>去除偏好损失</strong> (<code>w/o Preference Loss</code>)：即使手动在进度目标中注入价值下降，局部错误敏感性指标（如 <code>Drop AUC</code> 从 0.797 降至 0.510）也大幅下降，表明成对偏好监督对学习错误-恢复结构至关重要。</li>
+<li><strong>去除软窗口加权</strong> (<code>w/o Soft Window</code>)：全局 <code>VOC</code> 指标下降（0.987 到 0.940），表明硬边界可能引入与全局进度目标的冲突。</li>
+<li><strong>去除绝对校准</strong> (<code>w/o Abs. Calibration</code>)：全局指标（<code>VOC</code> 降至 0.929，<code>S/F Det.</code> 降至 0.967）变弱，表明全局进度校准对于锚定价值尺度是必要的。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 提出将示教数据中的<strong>重试事件</strong>作为学习对错误敏感的价值函数的<strong>新型稀疏监督信号</strong>；2) 设计了 <strong>ReTVL 框架</strong>，创新性地结合全局进度校准和局部重试诱导的偏好学习，以捕捉“下降-回升”的价值动态；3) 实验证明，该方法在<strong>真实机器人任务</strong>上能显著改善价值估计的局部敏感性和下游模仿学习的策略性能（平均成功率提升17.5%）。</p>
+<p><strong>论文提到的局限性</strong>：1) 假设重试事件遵循固定的“退化-恢复”模式，可能不涵盖所有现实世界的纠正模式；2) 当前仅应用于离线行为克隆的重新加权，未探索在线强化学习等更广泛场景；3) 实验在有限任务集上进行，泛化能力有待更大规模评估。</p>
+<p><strong>对后续研究的启示</strong>：纠正行为不应被视为单纯的噪声，而是可用于学习<strong>错误感知</strong>机器人策略的宝贵监督来源。该方法为利用<strong>易获得但信息丰富</strong>的稀疏标注（如重试起始点）来增强从<strong>非完美数据</strong>中学习的能力提供了新思路。未来可探索更复杂的纠正模式建模、在闭环策略改进中的应用以及在更大规模跨任务数据集上的验证。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人模仿学习中，人类演示数据包含错误和纠正行为，而现有基于单调进度假设的价值模型无法准确建模的问题，提出了基于重试监督的价值学习框架ReTVL。该方法以稀疏标注的重试关键点作为监督信号，结合全局进度校准与局部成对偏好学习，以捕捉执行错误附近的性能退化与恢复结构。实验表明，ReTVL能比基于进度的基线方法产生更细粒度的价值估计，有效提升了从不完美演示中进行行为克隆的性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.24633" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RE4: Transformation-aware Imitation of Object Interactions Using Manipulation Modes - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>RE4: Transformation-aware Imitation of Object Interactions Using Manipulation Modes</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.24403" target="_blank" rel="noreferrer">2606.24403</a></span>
+        <span>作者: Rahul Shome Team</span>
+        <span>日期: 2026-06-23</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，模仿学习领域在处理物体交互任务时，以扩散模型和流匹配模型为代表的端到端生成式策略占据主流，这些方法在性能上表现出色。然而，它们牺牲了可解释性，计算成本高昂，并且本质上是一个黑盒，其运行机制缺乏透明度。另一方面，基于检索和面向对象的方法虽然具有一定的可解释性，但功能有限，例如最近邻检索方法受限于演示的覆盖范围，单次姿态迁移方法则缺乏对物体交互模式切换的建模。具体而言，机械臂与物体在接触点（如抓取、放置）的行为会发生不连续的变化，这正是操控理论中深入研究的“操控模式”概念。</p>
+<p>本文针对现有生成式策略缺乏可解释性、计算成本高，以及现有检索方法无法有效处理操控模式切换这两个具体痛点，提出了一个融合原则性操控理论的新视角。本文的核心思路是：复用原有演示数据，但基于对当前操控模式的感知、对目标物体姿态的估计，通过检索、对象相对空间重构、满足模式约束的重规划、重放四个可解释的轻量级步骤，实现对演示行为的适应性再现。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RE4框架的核心是一个包含四个步骤的循环执行流水线：（<strong>Retrieve</strong>）检索、（<strong>Reframe</strong>）重构、（<strong>Replan</strong>）重规划和（<strong>Replay</strong>）重放，且每一步都以当前的“操控模式”为条件。输入是当前时刻的观测<code>O</code>和机器人状态<code>x</code>，输出是控制机械臂执行的动作序列。其设计基于两个关键原则：一是将演示行为表示为相对于操控物体而非世界坐标系的相对运动，使单一演示能覆盖连续变化的物体位姿；二是每个步骤都根据机械臂是否抓取物体这一“操控模式”进行条件化处理，以确保在接触点前后行为的正确性。</p>
+<p>框架循环运行的具体步骤如下：</p>
+<ol>
+<li><strong>获取模式与姿态</strong> (<code>GetMode</code>, <code>GetPose</code>): 根据当前观测和状态判断操控模式 <code>m ∈ {Transit， Transfer}</code> (Transit：机械臂自由移动；Transfer：物体被夹持并随机械臂移动)。同时估计目标物体在当前世界坐标系下的姿态 <code>o</code>。这是框架的关键使能环节。论文提出了一种轻量级的自监督姿态估计器，<strong>仅使用模仿学习任务中已有的演示数据进行训练</strong>，无需物体CAD模型或真实姿态标注。其核心见解是：对于RE4的下游任务（检索与重构），需要的是跨演示数据间一致的相对姿态估计，而非绝对精确的姿态；对于包含抓取的任务，可以利用演示中夹爪状态与物体姿态的关联进行自监督学习。</li>
+<li><strong>检索</strong> (<code>Retrieve</code>): 给定当前状态查询 <code>q = &lt;x， o&gt;</code> 和操控模式 <code>m</code>，从演示集 <code>D</code> 中检索最相似的演示帧 <code>j*</code>。检索分为两步以保证在同一操控模式内进行：首先，计算查询与每个演示中各帧基于完整状态（机械臂与物体）的距离 <code>ℓ_q</code>，选出每个演示中距离最近的帧，得到一个候选集 <code>K</code>；然后，在该候选集 <code>K</code> 中，仅基于物体姿态距离 <code>ℓ_o</code> 选择最终的演示及帧 <code>j*</code>。模式匹配保证了检索结果与当前状态处于相同的操控子空间中。</li>
+<li><strong>重构</strong> (<code>Reframe</code>): 将检索到的演示帧 <code>j*</code> 及其后续的动作序列，通过对象相对坐标转换，适配到当前的物体姿态 <code>o^q</code> 下。这生成了将要重放的动作块 <code>â</code> 及其起始点 <code>x_near</code>。对于 <strong>Transit</strong> 模式（物体世界坐标固定），动作被转换到当前物体所在位置；对于 <strong>Transfer</strong> 模式（抓取变换固定），动作为了适配当前抓持的物体，需要进行反向变换。<code>x_near</code> 被设定为转换后的起始点，成为下一个步骤“重规划”的目标。</li>
+<li><strong>重规划</strong> (<code>Replan</code>) 与 <strong>重放</strong> (<code>Replay</code>): <code>Replan</code> 阶段负责生成一个运动规划，将机械臂从当前位置 <code>x</code> 驱动到重构后的起始点 <code>x_near</code>。这个规划严格遵循当前操控模式的约束：在 <strong>Transit</strong> 模式下，规划路径需保证不移动物体；在 <strong>Transfer</strong> 模式下，规划路径需保持抓取变换不变。<code>Replay</code> 阶段则顺序执行重规划生成的连接动作和重构后得到的演示动作块。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.24403v1/2606.24403v1/x1.png" alt="方法流程图"></p>
+<blockquote>
+<p><strong>图1</strong>：Retrieve, Reframe, Replan, Replay (RE4) 流程示意图。左侧展示了一个消融实验，仅使用检索（Retrieve）和重放（Replay）步骤（RE2）无法完成任务；右侧展示了使用全部四个步骤的流程，即使人为地在检索阶段注入随机性（ε-球内随机选择邻域），也能产生多模态且符合任务目标的运动轨迹，体现了方法的鲁棒性。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在两个基准测试套件中进行：<strong>Push-T</strong>（平面SE(2)任务，推动T型块到目标位姿）和<strong>Robomimic</strong>（6-DoF SE(3)任务，包含Lift、Can、Square三个具体任务，涉及抓取和非抓取交互）。每个任务都评估了<strong>基于状态</strong>（真值物体姿态已知）和<strong>基于图像</strong>（仅单目相机观测）两种变体。</p>
+<p>对比的基线方法包括：流匹配策略（Streaming Flow Policy， SFP）、扩散策略（Diffusion Policy）的DDPM-100步和DDIM-10步采样器、以及几何感知模仿策略（Geometry-aware Imitation Policy， GPI）。此外，论文设置了移除<code>Reframe</code>和<code>Replan</code>的消融实验版本（RE2）。</p>
+<p>关键实验结果总结如下：</p>
+<ul>
+<li><strong>性能对比</strong>: RE4在几乎所有任务和模态上都达到或超越了基线方法的最佳性能。在图像模态的Push-T任务中，RE4平均覆盖率为0.883，优于扩散策略的最佳结果（DDIM-10， 0.826）和GPI（0.624）。在Robomimic的复杂任务Square中，RE4（状态0.95，图像0.85）也表现出优势。<br>7.72 0.11 0.55 -0.28 0.24 -0.21 0.07 0.56 -0.24 0.19 -0.17 0.05 0.41 -0.21 0.15 -0.13 0.03 0.28 -0.17 0.11 -0.10 0.01 0.16 -0.13 0.07 -0.06 0.00 0.06 -0.09 0.03 -0.03 0.00 -0.03 -0.04 0.00 0.00 0.00 -0.12 0.04 0.03 0.00 0.00 -0.21 0.08 0.06 0.00 0.00 -0.31 0.12 0.08 0.00 0.00 -0.41 0.16 0.11 0.00 0.00 -0.50 0.20 0.14 0.00 0.00 -0.60 0.24 0.16 0.00 0.00 -0.69 0.28 0.19 0.00 0.00 -0.79 0.32 0.22 0.00 0.00 -0.88 0.36 0.25 0.00 0.00 -0.98 0.40 0.28 0.00 0.00 -1.07 0.44 0.31 0.00 0.00 -1.17 0.48 0.34 0.00 0.00 * 表: Performance over 100 seeded runs. Push-T reports average maximum coverage; RoboMimic (Lift， Can， Square) reports success rate. For each task， the left column is state-based and the right column is image-based.<blockquote>
+<p><strong>表1</strong>：主要定量结果。RE4在多数任务上达到领先或持平的性能，尤其是在基于图像的任务中优势明显。</p>
+</blockquote>
+</li>
+</ul>
+<p> When compared to state-based setting on <strong>Can</strong> [ 30 ] ， the ablation performs 0.29 in state-based setting and 0.69 in images. The relative improvement shows that the retrieved object-centric information under the mode-aware assumption allows RE4 to make effective use of both demonstration and object pose. We do not see similar improvements from images on simpler tasks like <strong>Lift</strong> [ 30 ] because state-based demonstrations already cover the limited variability. In contrast on <strong>Can</strong> ， due to its diverse goals， image-based generalization of object pose provide benefits.</p>
+<blockquote>
+<p><strong>表1中也包含消融实验RE2的结果</strong>：在Push-T任务上，RE2性能（状态0.255，图像0.304）远低于RE4，验证了<code>Reframe</code>和<code>Replan</code>步骤的必要性。在Robomimic的Square任务上，RE2（状态0.25，图像0.37）与RE4（状态0.95，图像0.85）的巨大差距也证实了这一点。而在Can的图像任务中，RE2（0.69）性能尚可，但RE4（0.98）仍有显著提升。</p>
+</blockquote>
+<ul>
+<li><strong>稀疏观测鲁棒性</strong>: 论文构建了一个对抗性基准，测试了在演示数据覆盖稀疏的75个环境初始化下的表现。<br>7.72 0.11 0.55 -0.28 0.24 -0.21 0.07 0.56 -0.24 0.19 -0.17 0.05 0.41 -0.21 0.15 -0.13 0.03 0.28 -0.17 0.11 -0.10 0.01 0.16 -0.13 0.07 -0.06 0.00 0.06 -0.09 0.03 -0.03 0.00 -0.03 -0.04 0.00 0.00 0.00 -0.12 0.04 0.03 0.00 0.00 -0.21 0.08 0.06 0.00 0.00 -0.31 0.12 0.08 0.00 0.00 -0.41 0.16 0.11 0.00 0.00 -0.50 0.20 0.14 0.00 0.00 -0.60 0.24 0.16 0.00 0.00 -0.69 0.28 0.19 0.00 0.00 -0.79 0.32 0.22 0.00 0.00 -0.88 0.36 0.25 0.00 0.00 -0.98 0.40 0.28 0.00 0.00 -1.07 0.44 0.31 0.00 0.00 -1.17 0.48 0.34 0.00 0.00 * Figure: Mean coverage vs. maximum horizon in Image based Push-T. On 75 environment initialisations that are sparsely covered by ， RE4 maintains clear dominating behavior， highlighting robustness.<blockquote>
+<p><strong>因为URL错误，无法显示图表，根据论文描述，本处应为图3</strong>：该图展示了在图像模态Push-T任务中，RE4在稀疏观测区域的平均覆盖率显著高于基线扩散策略（如DDPM和DDIM），突显了其基于原则性框架带来的鲁棒性优势。</p>
+</blockquote>
+</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献主要包括：第一，提出了一个由检索（Retrieve）、重构（Reframe）、重规划（Replan）、重放（Replay）四个可解释步骤组成的RE4框架，用于物体交互模仿，该框架明确融合了操控模式理论来处理接触不连续性。第二，针对基于图像的任务，提出并验证了一种仅使用演示数据、轻量级的自监督物体姿态估计方法，有效降低了训练开销。第三，在多个基准测试中验证了RE4框架在达到或超越最先进的基于黑盒学习的方法的性能的同时，保持了高可解释性，并在数据稀疏或覆盖不足的场景下表现出更强的鲁棒性。</p>
+<p>论文自身提到的局限性在于：当前的姿态估计方法主要针对涉及抓取（Prehensile）的任务。对于非抓取（Non-prehensile）的交互，通用的姿态估计仍然困难，论文仅在Push-T任务中使用任务特定的启发式方法进行了探索，未提出通用解决方案。</p>
+<p>对后续研究的启示在于：这项工作展示了将经典机器人学原理（如操控模式）与现代数据驱动方法相结合，构建高性能且可解释系统的潜力。它启发了研究者重新思考模仿学习中“生成”与“检索复用”的关系，并为实现更高效、更鲁棒的技能学习指明了一条道路，即利用任务结构先验设计轻量级模块。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人模仿学习中端到端方法可解释性差的问题，提出RE4框架，旨在保持高性能的同时提升可解释性。方法核心是四个步骤：基于自监督的目标物体位姿估计、操作模式感知的演示检索、模式感知的轨迹变换、以及满足约束的连接重规划与回放。在Push-T和Robomimic的基准测试中，该方法在图像观测任务中展现出鲁棒性，特别是在对抗性稀疏数据区域，验证了其利用简单可解释模块学习操作技能的潜力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.24403" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

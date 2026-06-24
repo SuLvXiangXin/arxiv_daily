@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Enabling Robust Cloth Manipulation via Inference-Time Simulator-in-the-Loop Refinement - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Enabling Robust Cloth Manipulation via Inference-Time Simulator-in-the-Loop Refinement</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.24552" target="_blank" rel="noreferrer">2606.24552</a></span>
+        <span>作者: Fan Shi Team</span>
+        <span>日期: 2026-06-23</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，模仿学习及其扩展的机器人基础模型已成为可变形物体（如布料）操作的主流范式。这类方法绕过了显式的动力学建模，通过拟合专家演示数据和交互数据的分布来学习策略。然而，在部署阶段，这些策略纠正自身执行误差的能力有限。感知、抓取选择、时机或动作预测中的微小偏差，会通过布料复杂的接触动力学不断积累，使系统偏离预期的任务状态。因此，可靠的布料操作需要一个推理时机制，能够在线修正策略提议并从累积误差中恢复。</p>
+<p>高保真可变形物体模拟器为布料操作中的物理推理提供了基础。近期工作探索了用模拟器为基于扩散的神经动力学模型生成数据，但这引入了额外的学习近似误差。本文提出，物理模拟器本身就是最自然的前向动力学模型；直接进行模拟器推演可以避免针对任务或资产训练动力学模型，去除学习预测器的额外近似误差。这引出了本文的核心问题：<strong>能否在实时机器人控制预算下，直接将可变形物体模拟器用作真实世界布料操作的推理时前向模型？</strong></p>
+<p>本文核心思路是：构建一个从真实到模拟再回到真实的闭环框架，通过推理时嵌入模拟器循环优化，将先验策略轨迹在线细化为鲁棒的闭环动作。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架包含离线和在线两条耦合的流程。离线阶段，利用FLASH模拟器生成大规模合成布料变形数据，并训练一个纯基于合成数据的RGB原生真实到模拟状态估计模块。在线阶段，输入单目RGB观测，输出同步模拟器的稀疏布料网格状态，然后由结合先验引导的模型预测路径积分控制器进行并行物理推演和动作优化，并以滚动时域方式在硬件上执行优化后的动作。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：提出的框架总览。离线阶段，使用FLASH生成合成数据用于真实到模拟训练。在线阶段，RGB观测初始化物理推演，通过MPPI优化先验策略，用于闭环硬件执行。</p>
+</blockquote>
+<p><strong>核心模块一：模拟器主干 (Simulator Backbone)</strong><br>模拟器在框架中扮演双重角色：为训练提供合成监督并定义状态空间；作为推理时MPPI的推演引擎。其物理保真度、数值稳定性和推演效率至关重要。论文选用FLASH模拟器，它将布料表示为三角形网格，顶点为模拟自由度。它通过非光滑牛顿迭代求解Signorini-Coulomb摩擦接触条件，保持大变形下的粘滑行为。其局部-全局积分器将主要计算转化为GPU友好的稀疏矩阵运算，从而支持在线控制所需的稳定重复推演。给定机器人动作后，模拟器状态（顶点位置和速度）通过动力学函数更新，该更新在在线控制时对候选动作序列进行并行推演。</p>
+<p><strong>核心模块二：RGB原生真实到模拟状态估计（RGB-native Real-to-Sim Reconstruction）</strong><br>该模块的目标是从单张RGB图像中恢复与模拟器兼容的布料状态，即预测布料资产上N个固定材质顶点在变形后的三维位置。首先，为每件衣物离线重建一个固定拓扑的静止状态网格。随后，利用FLASH模拟生成的随机化配置的合成图像-顶点位置对数据集进行纯合成训练。网络架构上，使用冻结的DINOv2编码器提取密集图像块特征，并与N个可学习的规范令牌拼接。这些规范令牌每个对应一个网格顶点，旨在编码每个材质点的持久身份和规范位置。拼接后的令牌经过自注意力层处理，规范令牌聚合视觉证据并相互交换结构上下文，最终通过一个共享解码器为每个规范令牌输出预测的3D位置。训练使用平滑L1损失进行监督，并引入图像空间随机化和潜在层面的噪声与掩码（特别是对采样接触区域的随机抓取点掩码）来提高对模拟到真实视觉偏移的鲁棒性。</p>
+<p><strong>核心模块三：先验引导的MPPI优化（Prior-Guided MPPI Refinement）</strong><br>该方法假设可获得一个基础策略来生成名义动作序列。在部署时，该名义序列作为任务级先验，通过模拟器推演进行在线优化。具体流程为：给定同步的布料状态，围绕名义动作序列采样K个候选序列。每个候选序列在模拟器后端进行多步推演，并根据折叠目标、工作空间限制等任务成本函数进行评估。MPPI根据推演成本计算归一化权重，加权平均所有候选序列得到优化后的动作序列。机器人只执行优化序列的第一个动作，然后接收新的RGB观测，重复整个真实-模拟-真实的闭环循环，从而通过在线物理推理持续纠正基础策略。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与数据集</strong>：在真实机器人平台上进行实验，使用单目RGB相机观测。评估任务包括单臂对角折叠和双臂对称折叠等。模拟器评估在相同的计算环境下进行。</p>
+<p><strong>Baseline方法对比</strong>：</p>
+<ol>
+<li><strong>模拟器骨干对比</strong>：与Genesis， Newton， Isaac Sim对比。</li>
+<li><strong>状态估计对比</strong>：与基于点云扩散的DPM方法和基于深度图的DeFM方法对比。</li>
+<li><strong>完整管道对比</strong>：通过替换状态估计模块、模拟器骨干或控制器，构成不同的管道变体进行对比。</li>
+</ol>
+<p><strong>关键实验结果</strong>：<br><strong>模拟器骨干评估</strong>：在不同并行环境数量下，FLASH在控制精度、计算时间和最终状态保真度之间取得了最佳权衡。如表1所示，FLASH在所有设置下均达到95-100%的成功率，而Isaac Sim和Newton的成功率低于60%。FLASH的逐顶点MSE和EMD比Isaac Sim低约一个数量级。</p>
+<p><img src="https://arxiv.org/html/2606.24552v1/2606.24552v1/x1.png" alt="模拟器比较"></p>
+<blockquote>
+<p><strong>图B.1</strong>：模拟器骨干评估的扩展结果（图注对应论文附录图B.1）。展示了不同模拟器在不同并行推演数量下的关键点对齐误差和最终状态误差分布，FLASH表现最优且稳定。</p>
+</blockquote>
+<p><strong>状态估计评估</strong>：在毛巾和长袖衬衫两种布料资产上，本文的RGB原生模块在所有三个重建误差指标（逐顶点MSE、倒角距离CD、推土机距离EMD）上均达到最低，同时保持了最快的推理速度（7.4ms和12.4ms）。例如，在毛巾上，本文方法的逐顶点MSE为2.33 mm²，远低于DPM的7.17 mm²和DeFM的43.36 mm²。</p>
+<p><img src="https://arxiv.org/html/2606.24552v1/2606.24552v1/x2.png" alt="状态估计可视化"></p>
+<blockquote>
+<p><strong>图2</strong>：真实世界状态估计结果可视化。展示了本文方法与DPM方法在毛巾和长袖衬衫不同折叠阶段的预测顶点和重建网格对比。</p>
+</blockquote>
+<p><strong>真实世界管道评估</strong>：完整管道在两个主要任务上均取得最高成功率（单臂对角9/10，双臂对称8/10）。如表3所示，替换任何一个组件（状态估计、模拟器骨干或MPPI优化）都会导致性能下降，证明了状态同步、模拟器保真度和在线优化在真实-模拟-真实闭环中是紧密耦合的。</p>
+<p><strong>泛化与鲁棒性评估</strong>：在长袖衬衫折叠、短裤折叠、反向对角折叠和折叠中扰动恢复四个额外任务上，该框架在不进行额外动力学训练的情况下，依然保持了高成功率（7/10 到 8/10），展示了其对不同衣物资产、折叠变体和执行扰动的鲁棒性与泛化能力。</p>
+<p><img src="https://arxiv.org/html/2606.24552v1/2606.24552v1/x3.png" alt="泛化任务可视化"></p>
+<blockquote>
+<p><strong>图3</strong>：泛化与鲁棒性评估的代表性执行序列。展示了框架在长袖衬衫、短裤折叠、扰动恢复和反向对角折叠任务上的执行过程。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：<br>该研究通过替换完整管道中的单个组件进行消融实验，证明了每个核心组件的贡献：</p>
+<ol>
+<li><strong>状态估计模块</strong>：使用DPM替换本文的RGB-native模块，成功率显著下降（从9/10降至6/10，从8/10降至3/10），说明准确的状态同步是闭环成功的基础。</li>
+<li><strong>模拟器骨干</strong>：用Isaac Sim替换FLASH，成功率同样下降（从9/10降至5/10，从8/10降至4/10），表明物理保真度和数值稳定性对于可靠的推理时推演至关重要。</li>
+<li><strong>在线优化控制器</strong>：仅使用基础策略而移除MPPI优化，成功率急剧降低（从9/10降至3/10，从8/10降至1/10），突出了推理时物理推演对纠正执行偏差、实现闭环鲁棒性的关键作用。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>首次提出了一个完整的、将可变形物体模拟器直接用作推理时前向模型的框架，用于真实世界单目RGB输入的布料操作，实现了实时控制预算下的真实-模拟-真实闭环。</li>
+<li>设计了一个基于纯合成数据训练、结合预训练视觉特征与可学习规范令牌的RGB原生状态估计模块，有效解决了从现实观察到模拟兼容状态的映射难题。</li>
+<li>开发了一个结合稀疏网格推演与先验引导MPPI的在线规划器，在有限计算资源下平衡了动力学保真度与并行候选动作多样性，实现了对先验策略的在线物理推理与鲁棒细化。</li>
+</ol>
+<p><strong>论文提及的局限性</strong>：</p>
+<ol>
+<li><strong>推演并行性限制</strong>：相比刚体，可变形动力学的求解并行性较差，容易饱和单GPU的计算预算，从而限制了可实现的批处理大小和闭环控制频率上限。</li>
+<li><strong>泛化到新衣物的限制</strong>：目前框架需要为每件新衣物进行离线网格重建和单独训练一个真实的模拟模块，限制了其对全新类别衣物的零样本泛化能力。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li>可探索在多个GPU上进行分布式推演或进一步优化模拟器后端，以突破单GPU的算力瓶颈，实现更高的闭环控制频率和更复杂的优化。</li>
+<li>一个极具前景的方向是开发从单张观测图像生成模拟兼容资产的图像条件化网格基础模型，配合类别级别的真实到模拟模块，从而省去针对每件衣物的单独训练步骤，实现更广泛意义上的泛化。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对布料操作中因状态估计复杂、动作误差易累积导致的鲁棒性不足问题，提出了一种推理时模拟器在环优化方法。核心技术包括：基于FLASH模拟器的可扩展合成数据生成与滚动管道；融合预训练视觉特征的真实到模拟状态估计模块；以及结合稀疏网格滚动与先验引导MPPI的在线规划机制。真实机器人实验表明，该方法相比基线方法实现了更高的成功率和更强的鲁棒性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.24552" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
