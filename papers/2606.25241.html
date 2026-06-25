@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>GRAFT: Graph-Based Affordance Transfer via Part Correspondence - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>GRAFT: Graph-Based Affordance Transfer via Part Correspondence</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.25241" target="_blank" rel="noreferrer">2606.25241</a></span>
+        <span>作者: Danfei Xu Team</span>
+        <span>日期: 2026-06-23</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，将机器人操作泛化到未见过的物体类别仍然极具挑战。主流方法依赖于基于语义的检索框架，通常采用两阶段流程：首先通过高级语义（如类别或文本描述）筛选候选物体，然后使用基于外观的特征描述符（如来自DINOv2等基础模型）进行几何对齐以实现接触点迁移。然而，这类方法存在关键局限：语义过滤会严重限制候选池的多样性，而基于对象层面的几何或外观匹配则对物体在尺度、构型和关节连接上的差异非常敏感，容易导致对应关系失效。这使得检索过程趋于保守，反复选择近乎完全相同的物体实例，从而降低了合成交互数据的多样性，进而限制了基于此类数据训练出的策略的泛化能力。</p>
+<p>本文认为，物体之间的功能兼容性不应仅取决于整体的语义或几何特征，而应直接由其结构组织（即部件的配置关系）决定。即使属于不相关类别，只要部件配置相似，物体也往往支持相似的操作交互。基于此，本文提出了一个基于结构的检索新视角，其核心思路是：将物体表示为部件图，通过度量图之间的结构相似性（而非整体特征相似性）来检索功能兼容的物体，并通过部件级对应关系实现接触点的零样本迁移。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>GRAFT方法的核心是通过基于部件结构的图对齐来实现零样本操作迁移，其整体流程包含四个阶段。</p>
+<p><img src="https://arxiv.org/html/2606.25241v1/2606.25241v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：方法整体框架。（1）为目标物体构建部件图。（2）利用UFGW距离及集成EM的优化算法，计算目标与多个源对象间的结构对应关系。（3）基于最终的UFGW能量得分，检索出功能兼容性最高的K个源物体及其演示。（4）通过部件对应关系传播接触点，生成零样本抓取预测，并最终在仿真或现实世界中执行操作。</p>
+</blockquote>
+<p><strong>1. 对象特征图构建</strong><br>研究者将每个带部件标注的物体表示为一个无向图 <code>G = (X， A， μ)</code>， 其中每个节点对应一个部件，节点特征<code>X</code>编码了多层次的描述符。具体包括：</p>
+<ul>
+<li><strong>几何特征</strong>：记录部件的定向包围盒尺寸<code>e</code>和归一化的部件点云<code>P</code>。</li>
+<li><strong>顶点级描述符</strong>：通过公式（3）所示的傅里叶式位置编码，将部件点云中每个顶点映射到高维描述符<code>φ(p_i)</code>，为后续点级别的精细匹配奠定基础。</li>
+<li><strong>全局外观描述符</strong>：从基础模型（如DINOv2）提取的全局描述符<code>f</code>，提供粗略的功能签名。</li>
+<li><strong>功能标注</strong>：一个二元标签<code>y</code>，表示该部件是否在人类演示中被接触过。<br>节点间的差异通过公式（4）计算，结合了OBB尺寸差异和全局描述符的余弦相似度。图的边连接邻近的部件，存储部件间的相对变换（平移和旋转），并通过公式（5）定义了“边长度”，该长度在一个有界范围内综合编码了相对距离和方向，用以捕获物体的装配结构。</li>
+</ul>
+<p><strong>2. 计算部件节点权重</strong><br>在图匹配框架中，每个节点被赋予一个“质量”，决定了其在最优传输目标中的相对重要性。为了反映部件的功能相关性，GRAFT对源图和目标图采用不同的策略：</p>
+<ul>
+<li>**源节点质量<code>μ_s</code>**：固定值，由部件尺寸和功能显著性共同决定。以演示中交互过的部件为根节点进行广度优先搜索，质量随BFS距离呈指数衰减（<code>γ^di * Vi</code>），从而给靠近功能区域的部件分配更高权重。<br> Now， let&#39;s move on to the second part of the detailed explanation。</li>
+</ul>
+<p><strong>2. 计算部件节点权重（续）</strong></p>
+<ul>
+<li>**目标节点质量<code>ν</code>**：由于目标物体没有已知的交互部件，其质量需要联合优化进行推断。GRAFT采用集成了期望最大化模式的交替优化过程：在E步中，固定<code>ν</code>，求解最优传输计划<code>T</code>；在M步中，根据当前传输计划<code>T</code>计算流入目标节点的经验流量<code>Ṽ</code>，并将其与基于部件体积的几何先验<code>δ_vol</code>进行加权组合（<code>λ=0.4</code>）以更新<code>ν</code>。这种设计使质量能够自适应地权衡每个部件在对应关系中的参与度，提高对部件尺度变化的鲁棒性。</li>
+</ul>
+<p><strong>3. 基于部件对齐的检索与接触点迁移</strong><br>GRAFT使用前述构建的特征图和节点权重，通过求解<strong>非平衡融合Gromov-Wasserstein距离（UFGW）</strong> 来计算源物体图与目标物体图之间的相似性。UFGW距离的优化目标（公式2）巧妙地结合了结构差异（<code>E_GW</code>，比较图的关系一致性）、特征差异（<code>E_fuse</code>，比较节点特征相似性），并通过KL散度项约束质量分布的匹配程度，同时允许部分匹配和支持不同尺寸的图。该优化过程即为算法2所述。对于每个新的目标物体，算法1会计算其与数据集中所有源物体图的UFGW距离，并选取距离最小（即最相似）的前K个源物体作为检索结果。<br>对于检索到的每个源物体，算法利用已求解的最优传输计划<code>T</code>，找到目标物体中与源物体“被交互部件”对应性最强的部件。然后，利用部件节点中存储的顶点级描述符，计算源部件与匹配的目标部件之间密集的点级对应关系，从而将演示中的接触点直接迁移到目标物体的相应位置上。最终，这些迁移的接触点被输入到抓取规划器（如AnyGrasp）和运动规划器中以生成可执行轨迹。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>本文在三个场景下对GRAFT进行了评估：（1）零样本操作泛化能力，（2）与MimicGen结合的数据生成能力，（3）消融实验。评估使用了多个数据集和基准：BOP数据集、PartNet-Mobility数据集中的物体、以及ROBO-ABC的实验设置。物理实验在SAPIEN模拟器中完成。</p>
+<p><strong>1. 零样本操作泛化</strong><br>实验首先通过<strong>可操作区域泛化</strong>来评估。方法在ROBO-ABC设置下进行评估，通过精确度（ASR）、归一化显著图分数（NSS）和距离最近可操作区域的平均归一化距离（DTM）三个指标来衡量模型定位可抓取区域的能力。</p>
+<p><img src="https://arxiv.org/html/2606.25241v1/2606.25241v1/x5.png" alt="定性结果对比"></p>
+<blockquote>
+<p><strong>图4</strong>：可操作区域预测的定性对比。GRAFT（右列）能够更准确地预测出未见物体（如洗发水瓶、喷雾瓶）的抓取区域（黄色点），而基准方法ROBO-ABC（中列）的预测则较为分散或错误。</p>
+</blockquote>
+<p><strong>方法 ASR ↑ NSS ↑ DTM ↓</strong><br> where2act 0.31 -0.13 0.14<br> ROBO-ABC (CLIP+DIFT) 0.54 -0.10 0.12<br> ROBO-ABC (DINO+DIFT) 0.69 0.48 0.10<br> GRAFT <strong>0.85</strong> <strong>0.82</strong> <strong>0.02</strong></p>
+<p>表1结果显示，GRAFT在所有指标上均显著优于现有基准方法，表明其基于结构的对应方法能够更精确地定位功能区域。</p>
+<p>其次，在<strong>物理仿真执行</strong>评估中，研究者在模拟器中执行迁移后的抓取和提起动作，评估整体成功率（SR），并将失败原因细分为：抓取规划器错误（AG）、抓取失败（GF）和物体滑落（SL）。其中AG错误直接反映了迁移对应关系的质量。</p>
+<p><strong>方法 SR(%) ↑ AG(%) ↓ GF(%) ↓ SL(%) ↓</strong><br> where2act 36.46 0.00 58.33 5.21<br> AnyGrasp （无对应） 59.38 0.00 19.79 20.83<br> ROBO-ABC (DINO+DIFT) 61.46 41.67 20.83 17.71<br> GRAFT <strong>78.13</strong> <strong>2.08</strong> <strong>10.42</strong> <strong>9.37</strong></p>
+<p>结果表明，GRAFT不仅取得了最高的仿真成功率（78.13%），其AG错误率（2.08%）也远低于最强的基准方法ROBO-ABC（DINO+DIFT）的41.67%，这直接证明了其部件对应关系的质量远优于基于对象特征的方法。</p>
+<p><strong>2. 作为数据生成器</strong><br>研究将GRAFT与现有演示生成系统MimicGen结合，仅使用5个物体的演示作为种子，为38个目标物体生成多样化数据，并用这些数据训练操作策略。</p>
+<p><img src="https://arxiv.org/html/2606.25241v1/2606.25241v1/x4.png" alt="数据生成与策略训练结果"></p>
+<blockquote>
+<p><strong>图3</strong>：使用GRAFT+MimicGen生成数据（右）与仅使用MimicGen（左）训练出的策略在仿真成功率上的对比。在多个物体类别上，基于GRAFT生成数据训练的策略成功率显著更高，尤其是在训练数据中没有的物体上（灰色区域）。</p>
+</blockquote>
+<p>实验结果显示，使用GRAFT+MimicGen生成的数据训练的策略，在多个测试集上（包括包含训练时未见物体的泛化集）的仿真成功率，都显著高于仅使用原始MimicGen方法（依赖于固有的保守对应关系）生成数据训练的策略。</p>
+<p><strong>3. 消融实验</strong><br>研究对GRAFT的多个设计选择进行了消融实验，结果同样以仿真成功率（SR）和AG错误率来衡量。</p>
+<p><img src="https://arxiv.org/html/2606.25241v1/2606.25241v1/x6.png" alt="消融实验结果"></p>
+<blockquote>
+<p><strong>图5</strong>：消融实验结果直方图。（左）移除结构匹配（<code>α=1</code>）、移除特征匹配（<code>α=0</code>）或使用源质量计算目标质量，均会导致性能显著下降。（右）在质量计算中移除广度优先搜索传播（<code>γ=0</code>）或使用统一质量，也会损害性能。</p>
+</blockquote>
+<p>关键发现如下：</p>
+<ul>
+<li><strong>结构与特征平衡（α）</strong>：仅使用结构（<code>α=0</code>）或仅使用特征（<code>α=1</code>）均会大幅降低性能，证明了UFGW联合优化的重要性。</li>
+<li><strong>目标质量推断</strong>：使用M-step（算法中）动态推断目标质量是必要的，直接使用源质量计算（<code>λ=0</code>）或纯几何先验（<code>λ=1</code>）都会导致对应关系变差。</li>
+<li><strong>质量初始化</strong>：在源质量计算中引入基于BFS传播的功能显著性（<code>γ=0.6</code>）非零，能有效提升性能。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献有三个方面：首先，提出了GRAFT这一种新颖的、基于部件级结构对齐的零样本操作迁移框架，从根本上跳出了依赖对象级语义或整体几何特征的范式，实现了更精准且更多样化的对应。其次，方法创新地将非平衡融合Gromov-Wasserstein距离和图匹配思想引入机器人操作领域，以优雅的数学模型统一处理了尺寸不一、结构各异的部件图间的相似性度量和部分匹配问题。最后，该框架不仅可以用于零样本操作，还可以作为一个强大的数据生成前端，与现有系统（如MimicGen）结合，显著提升合成数据的多样性和质量，进而增强学习策略的泛化能力。</p>
+<p>论文自身也提到了其方法的一个局限性：依赖于物体的部件级信息（如带标注的部件分割、OBB等）。虽然这在许多形状数据库中可用，但在完全无监督的场景下可能需要额外的部件分割步骤。</p>
+<p>这项工作带来的启示是深远的。它强调了在机器人感知与操作中，“结构先验”的重要性可能不亚于乃至超过“语义先验”。对于后续研究，探索如何将这种基于结构对应的思想与端到端学习更紧密结合，或者如何将其扩展到更复杂的多步操作序列中，是颇具潜力的方向。此外，该方法也为如何利用小样本数据生成大规模、高质量的训练数据提供了一个新的、可解释性更强的技术路径。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作难以泛化到未见物体的问题，提出GRAFT框架，通过基于部分几何对应的零样本转移方法，减少对大量演示的依赖。该技术将物体表示为部分级图结构，利用部分描述符进行全局实例检索与功能对齐，再通过顶点级描述符实现细粒度接触点匹配。核心步骤包括：检索几何与功能最相似的演示实例，经部分对齐后传播接触点。在零样本可供性、模拟和真实实验中，GRAFT显著提升了对应准确性、操作成功率及检索多样性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.25241" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Action ControlNet: A Lightweight Delay-Aware Adapter for Smooth Asynchronous Control in Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Action ControlNet: A Lightweight Delay-Aware Adapter for Smooth Asynchronous Control in Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.25985" target="_blank" rel="noreferrer">2606.25985</a></span>
+        <span>作者: Meng Guo Team</span>
+        <span>日期: 2026-06-24</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，视觉-语言-动作（VLA）模型因其支持广泛任务和指令跟随的能力，在通用机器人操控领域展现出强大潜力。然而，这些模型通常采用同步执行模式：机器人等待策略推理完成后再执行预测的动作块（chunk）。对于大型骨干网络和迭代式动作生成器（如扩散模型）而言，推理延迟不可忽略，导致连续动作块之间存在空闲间隔，表现为机器人运动不连续、完成任务时间延长。异步执行通过重叠策略推理与动作执行来缓解此瓶颈，这是目前的主流改善方向。但异步执行仍存在关键局限性：下一动作块是基于过时（stale）的观测生成的，而机器人在推理延迟期间继续运动，导致直接拼接连续动作块会在交接边界（handoff）处产生不连续性，表现为动作突变、振荡抖动，在接触丰富或高精度操作中可能累积导致任务失败。</p>
+<p>本文针对异步块状控制中由推理延迟引起的局部交接不匹配这一具体痛点，提出了新视角：不将其视为全局任务理解的失效，而是视为一个边界条件（boundary conditioning）问题。核心思路是，设计一个轻量级的延迟感知适配器（ACNet），将延迟期间已执行的动作后缀作为残差条件（residual condition）注入到一个基本冻结的动作头中，从而在保护预训练任务语义的同时，实现平滑的跨块动作衔接。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架保持预训练的感知-语言骨干网络（<code>ℬ_ω</code>）完全冻结，仅对动作头（<code>𝒜_ψ</code>）进行轻量级适配。输入包括当前观测<code>o_t</code>、语言指令<code>l</code>以及填补至动作块长度<code>H</code>的已延迟执行动作后缀<code>𝐚~_t^delay</code>。输出是新的、延迟感知的动作块<code>𝐚^_t</code>。核心创新模块是Action ControlNet（ACNet），它是一个参数高效的残差条件分支。</p>
+<p><img src="https://arxiv.org/html/2606.25985v1/2606.25985v1/model.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图3</strong>：ACNet 架构。预训练的感知-语言骨干网络和主动作专家（action expert）基本保持冻结，延迟动作由一个轻量级侧支分支编码，并通过投影层作为残差条件注入动作头。</p>
+</blockquote>
+<p><strong>ACNet包含两个核心组件：</strong></p>
+<ol>
+<li><strong>延迟动作编码</strong>：延迟期间已执行的动作后缀<code>𝐚_t^delay</code>（长度为<code>d</code>）被填充至动作块长度<code>H</code>以形成<code>𝐚~_t^delay</code>。填充部分使用可学习（learnable）的令牌<code>𝐩_j</code>，以明确标记不可用的未来动作槽位，避免歧义。然后，一个轻量级Transformer编码器<code>ℰ_φ</code>对<code>𝐚~_t^delay</code>进行编码，再经过与动作专家相同的终端时序池化（Pool）操作，得到条件向量<code>𝐜_t ∈ ℝ^{d_c}</code>，该向量封装了短时程的已执行运动后缀。</li>
+<li><strong>残差注入作为局部边界校正</strong>：条件向量<code>𝐜_t</code>通过一系列小型投影网络<code>𝒵_{φ,l}</code>被注入到动作专家的特定层（<code>l ∈ 𝒮</code>）。注入方式为残差加和：<code>𝐡&#39;_l = 𝐡_l + 𝒵_{φ,l}(𝐜_t)</code>。这种方式使得原始预测器是默认模式，残差分支仅在需要提供边界修正时才起作用。论文在一阶近似下证明（公式12），ACNet只需产生一个残差方向，使其下游效应与期望的边界修正相匹配，而非从头重建整个动作块，这支持了将异步延迟视为局部边界条件而非完整视运动重映射的观点。在基于Evo-1的8层DiT风格动作专家中，注入仅发生在最终块，即<code>𝒮 = {L}</code>，因为靠近输出层的层对手部交接边界的影响最直接。</li>
+</ol>
+<p><strong>与现有方法相比的创新点</strong>：</p>
+<ul>
+<li><strong>参数高效</strong>：仅训练ACNet分支的少量参数（约占模型总参数的20%），主干和其他部分冻结，避免了完整的延迟条件重训练（Training-RTC）带来的高昂成本。</li>
+<li><strong>兼容性强</strong>：作为一个即插即用模块，可与现有采用扩散、流匹配等生成式动作头的块状VLA策略兼容。</li>
+<li><strong>问题新视角</strong>：将异步延迟误差明确建模为交接处的边界条件问题，并识别已执行动作后缀为关键条件信号。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.25985v1/2606.25985v1/layer_sensitivity.png" alt="层激活分析"></p>
+<blockquote>
+<p><strong>图6</strong>：在Evo-1动作专家的8个层中，平均令牌更新幅度（<code>K=1000</code>个流匹配积分步）。结果显示，最后一层（第7层）的激活幅度最大，表明其最直接影响最终输出的轨迹。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与数据集</strong>：在Kinetix仿真器（遵循RTC评估协议）、完整的Meta-World MT50套件以及一个真实的SO-ARM101机器人操作平台（包含“将蓝色积木放入盒子”和“清洁桌面”任务）上进行了评估。</p>
+<p><strong>对比基线方法</strong>：</p>
+<ul>
+<li><strong>Naïve Async</strong>：直接拼接连续动作块的朴素异步方法。</li>
+<li><strong>RTC</strong>：冻结已提交动作并对剩余后缀进行修复（inpainting）的方法。</li>
+<li><strong>Training-RTC</strong>：执行完整的延迟条件训练的基线。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br><strong>Kinetix</strong>：如表I所示，在延迟（<code>d&gt;0</code>）设置下的平均成功率，ACNet达到0.79，显著高于Naïve Async的0.61和RTC的0.72，与Training-RTC的0.80接近。ACNet仅需训练约20%的模型参数（Params. (%)），而Training-RTC需要更新100%的参数。</p>
+<p><strong>TABLE I: Kinetix results under asynchronous inference delay.</strong></p>
+<table>
+<thead>
+<tr>
+<th><em>Method</em></th>
+<th><em>Success rate under delay d</em></th>
+<th><em>Avg. (d&gt;0)</em></th>
+<th><em>Params. (%)</em></th>
+</tr>
+</thead>
+<tbody><tr>
+<td><em>0</em></td>
+<td><em>1</em></td>
+<td><em>2</em></td>
+<td><em>3</em></td>
+</tr>
+<tr>
+<td>Naïve Async</td>
+<td>0.89</td>
+<td>0.74</td>
+<td>0.69</td>
+</tr>
+<tr>
+<td>RTC</td>
+<td>0.91</td>
+<td>0.75</td>
+<td>0.80</td>
+</tr>
+<tr>
+<td>Training-RTC</td>
+<td>0.89</td>
+<td>0.88</td>
+<td>0.83</td>
+</tr>
+<tr>
+<td>ACNet</td>
+<td>0.90</td>
+<td>0.87</td>
+<td>0.84</td>
+</tr>
+</tbody></table>
+<p><strong>Meta-World MT50</strong>：如表II所示，ACNet平均成功率为0.74，超过了Naïve Async和RTC，与Training-RTC持平。同时，得益于其轻量级设计和所基于的Evo-1骨干网络，ACNet实现了91毫秒的端到端推理延迟和11.0 Hz的控制频率，优于RTC和Training-RTC。动作平滑性分析（图4）显示，在螺母装配和盘子滑动任务中，ACNet产生的轨迹在延迟区间和块替换事件周围的抖动（jerk）远小于Naïve Async，表明其跨块过渡更平滑。</p>
+<p><img src="https://arxiv.org/html/2606.25985v1/2606.25985v1/jerk_compare.png" alt="动作平滑性对比"></p>
+<blockquote>
+<p><strong>图4</strong>：左侧：螺母装配任务；右侧：盘子滑动任务。展示具有代表性异步执行过程的动作抖动（前50步）。灰色区域表示延迟区间，虚线表示动作块替换事件。ACNet在手部交接边界处的抖动曲线比Naïve Async更平缓，表明其跨块过渡更平滑。</p>
+</blockquote>
+<p><strong>TABLE II: Meta-World MT50 results under asynchronous delay.</strong></p>
+<table>
+<thead>
+<tr>
+<th><em>Method</em></th>
+<th><em>Success rate under delay d</em></th>
+<th><em>Avg.</em></th>
+<th><em>Lat.</em></th>
+<th><em>Freq.</em></th>
+</tr>
+</thead>
+<tbody><tr>
+<td><em>0</em></td>
+<td><em>5</em></td>
+<td><em>10</em></td>
+<td><em>15</em></td>
+<td></td>
+</tr>
+<tr>
+<td>Naïve Async</td>
+<td>0.80</td>
+<td>0.71</td>
+<td>0.70</td>
+<td>0.70</td>
+</tr>
+<tr>
+<td>RTC</td>
+<td>0.79</td>
+<td>0.72</td>
+<td>0.72</td>
+<td>0.71</td>
+</tr>
+<tr>
+<td>Training-RTC</td>
+<td>0.80</td>
+<td>0.77</td>
+<td>0.74</td>
+<td>0.73</td>
+</tr>
+<tr>
+<td>ACNet</td>
+<td>0.81</td>
+<td>0.76</td>
+<td>0.74</td>
+<td>0.73</td>
+</tr>
+</tbody></table>
+<p><strong>真实世界实验</strong>：在SO-ARM101平台上，ACNet在两个测试任务上均实现了20/20的总成功率，而Naïve Async为17/20（表III）。定性结果显示（图5），Naïve Async在块过渡附近有较大振荡，而ACNet保持了更平滑的转换和清洁过程中更稳定的接触。</p>
+<p><img src="https://arxiv.org/html/2606.25985v1/2606.25985v1/exp_put_cube_to_the_box.png" alt="真实世界对比"></p>
+<blockquote>
+<p><strong>图5</strong>：在SO-ARM101平台上“将蓝色积木放入盒子”任务的代表性异步执行过程快照（从左到右）。上方序列为Naïve Async，下方序列为ACNet。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：</p>
+<ol>
+<li><strong>注入位置</strong>：如图7（a）所示，仅在最终动作专家块进行条件注入效果最佳（跨越不同延迟均保持最高成功率），而注入较早层（尤其是第0层）会降低鲁棒性。这支持了将延迟动作作为靠近动作输出的局部边界线索，而非对任务表征的早期扰动。</li>
+<li><strong>填充策略</strong>：如图7（b）所示，使用可学习填充令牌（Learnable tokens）在每一个测试延迟下均优于零填充（Zero padding）和随机噪声填充（Noise padding）。这支持了ACNet的最小干预设计：明确表示延迟动作，并将其作为临近动作输出的晚期残差修正。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.25985v1/2606.25985v1/ablation.png" alt="消融实验结果"></p>
+<blockquote>
+<p><strong>图7</strong>：在Meta-World MT50上对ACNet设计选择的消融研究。<strong>左图</strong>：仅对最终动作专家块进行条件处理能在不同延迟下获得最佳鲁棒性。<strong>右图</strong>：可学习令牌在所有延迟下均优于噪声填充和零填充。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：</p>
+<ol>
+<li><strong>问题新视角</strong>：将异步块状VLA控制中延迟引起的性能下降明确表述为交接处的边界条件问题，并识别已执行的动作后缀是关键的调节信号。</li>
+<li><strong>轻量级适配器设计</strong>：提出了Action ControlNet（ACNet），一个参数高效的、仅作用于动作头层面的残差适配器。它可作为一个即插即用模块附加到现有的、具有生成式动作头的块状VLA策略上。</li>
+<li><strong>全面验证</strong>：在仿真（Kinetix, Meta-World MT50）和真实世界（SO-ARM101）实验中，ACNet在推理延迟下实现了与完整延迟条件重训练相当的鲁棒性和更平滑的轨迹，同时训练参数大幅减少，且保持了较高的控制频率。</li>
+</ol>
+<p><strong>论文自身提到的局限性</strong>：未来工作需要将这一边界条件框架扩展到更丰富的延迟信号、处理更大和时变的延迟，并应用于更广泛的实时控制策略类别。</p>
+<p><strong>对后续研究的启示</strong>：ACNet的成功表明，对于预训练大模型在实时控制中的应用，采用轻量级、专注于局部时序对齐的适配器是一种高效且有效的路径。这为在机器人等领域部署大型VLA模型提供了新思路，即不必为了处理延迟而重新训练整个模型，而是可以通过设计精巧的条件模块来补偿时序错位问题。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作（VLA）模型在异步控制中，因推理延迟导致动作块拼接不连续、产生抖动和任务失败的问题，提出了一种轻量级延迟感知适配器Action ControlNet（ACNet）。该方法以已执行动作后缀为残差条件，微调冻结的动作头，保持主干网络不变，参数量少，且兼容扩散等生成式动作头。实验表明，在Kinetix、Meta-World MT50和真实机器人平台上，ACNet提升了延迟下的鲁棒性，生成比直接拼接更平滑的轨迹，同时比全模型重训练更轻量。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.25985" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
