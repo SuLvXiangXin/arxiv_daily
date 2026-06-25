@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>TurboMPC: Fast, Scalable, and Differentiable Model Predictive Control on the GPU - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>TurboMPC: Fast, Scalable, and Differentiable Model Predictive Control on the GPU</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.24039" target="_blank" rel="noreferrer">2606.24039</a></span>
+        <span>作者: Thomas Lew Team</span>
+        <span>日期: 2026-06-23</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人领域，基于GPU的大规模学习、并行仿真和神经网络推理已成为趋势。模型预测控制作为一种可靠的规划与控制工具，需要适应这一新的计算范式以利用其扩展性。然而，高性能的MPC求解器大多为CPU设计，它们利用最优控制问题的时间稀疏性结构，但难以整合到需要批处理、并行展开和可微架构的学习流程中。现有的GPU可微求解器为了暴露并行性，往往限制问题形式，不支持机器人应用所需的关键特性，如处理刚性动力学的隐式积分器、考虑执行器平滑的控制率惩罚、用于安全约束的状态不等式以及保证递归可行性的松弛变量。本文针对这一问题，提出了一个完全在GPU上运行的、支持上述所有特性的可微MPC求解器，旨在弥合丰富表达能力与GPU加速可扩展性之间的鸿沟。核心思路是结合顺序二次规划、交替方向乘子法内层求解器、隐式微分以及协同设计的JAX-CUDA实现，实现快速、可扩展且功能齐全的GPU原生MPC求解。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>TurboMPC求解器整体基于顺序二次规划框架进行前向求解，并利用隐式微分进行后向梯度计算。</p>
+<p><img src="https://arxiv.org/html/2606.24039v1/2606.24039v1/x1.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图1</strong>：TurboMPC求解器的整体流程图。左侧为前向求解的SQP流程（算法1），对OCP进行凸近似得到QP，再由ADMM内层求解器（算法3）求解，并进行线搜索；右侧为基于活动集隐式微分的后向梯度计算（算法2）。</p>
+</blockquote>
+<p>**前向求解 (SQP)**：对于给定的参数θ和初始状态，求解最优控制问题。在每个SQP迭代中，首先对原问题的成本和约束进行二次化和线性化，形成一个凸的二次规划子问题。该QP的变量维度与原始OCP相同，其Hessian矩阵P（编码成本耦合）为块三对角，等式约束矩阵C（编码线性化动力学和初始状态约束）为块双对角，不等式约束矩阵G（编码线性化逐点不等式）为块对角。这种稀疏结构是高效求解的基础。然后，使用定制的交替方向乘子法求解该QP。最后，使用带回溯的线搜索步骤更新当前迭代点，并检查收敛条件。</p>
+<p>**内层QP求解 (定制ADMM)**：这是实现高效GPU并行计算的核心。TurboMPC采用了一种受OSQP启发的ADMM方案，并参考[50]的方法处理松弛变量。它将QP问题重写为带有辅助变量的形式，其增广拉格朗日函数的更新分为三步：</p>
+<ol>
+<li><strong>原始更新</strong>：求解一个关于辅助变量<code>(x̃, z̃)</code>的等式约束QP。通过利用矩阵P、C、G的稀疏性，其KKT系统的舒尔补S = P + σI + AᵀρA 是块三对角矩阵（其中A = [C; G]）。这使得可以使用针对三对角结构的并行线性系统求解器（如cuDSS）高效求解S x̃ = η。</li>
+<li><strong>松弛更新</strong>：更新原始变量<code>(x, z, ξ)</code>。对于不等式约束部分<code>z_g</code>，根据是否启用松弛变量（δ_ξ=0或1），分别进行硬投影或平滑投影[50]操作。这种设计避免引入额外的松弛变量副本，简化了实现。</li>
+<li><strong>对偶更新</strong>：更新乘子<code>y</code>。</li>
+</ol>
+<p>与现有方法相比，TurboMPC的创新点在于其ADMM方案能自然地处理由隐式积分器引入的跨时间耦合（仍保持块三对角结构），并通过平滑投影高效支持松弛变量，同时整个求解过程完全在GPU上并行化。</p>
+<p>**后向微分 (隐式微分)**：求解器收敛后，通过隐式微分计算解相对于参数θ的梯度，避免了反向传播求解器迭代带来的内存和时间开销。具体方法是识别活动不等式约束，基于活动集的KKT条件F(w, θ)=0，利用向量-雅可比积公式计算梯度。后向过程需要求解一个线性系统，该系统的稀疏结构与前向ADMM中的线性系统不同，TurboMPC使用cuDSS作为通用的稀疏直接求解原语，统一处理前向和后向的线性系统求解。</p>
+<p><strong>软硬件协同设计</strong>：TurboMPC采用JAX前端提供易用的自动微分和批处理接口，同时使用融合的CUDA后端（核心是cuDSS）实现低开销的高性能GPU内核。这种设计平衡了易用性和效率，使得求解器既能用于在线控制，也能无缝集成到需要批处理和梯度的学习管道中。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了多个基准测试和数据集进行验证：1）模拟环境下的约束规划、人形机器人模仿学习、以及使用神经网络成本函数的强化学习任务；2）在实车（雷克萨斯LC500）上进行最小时间竞速和长时域规划部署。</p>
+<p>对比的基线方法包括：CPU求解器<strong>acados</strong>，以及使用OSQP的混合GPU-CPU求解器（在部分实验中作为基准）。其他对比包括<strong>Trajax</strong>, <strong>DiffMPC</strong>, <strong>mpc.pytorch</strong>等GPU可微求解器。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>速度提升</strong>：在模拟任务中，与最先进的CPU可微求解器（acados）相比，TurboMPC实现了高达<strong>15倍</strong>的加速；与其他GPU可微求解器相比，实现了高达<strong>58倍</strong>的加速。</li>
+<li><strong>长时域规划</strong>：在实车部署中，TurboMPC能够实时重新规划超过<strong>8000个</strong>节点（N&gt;8000）的时域，这是基线求解器能保持车辆控制的最大时域的<strong>8倍</strong>。</li>
+<li><strong>自动调参</strong>：通过GPU加速的贝叶斯优化批量调整MPC参数，实现了比手动调参基线<strong>显著更快</strong>的驾驶速度。</li>
+</ul>
+<p><strong>结果展示图</strong>：</p>
+<p><img src="https://arxiv.org/html/2606.24039v1/2606.24039v1/x7.png" alt="QP求解时间对比"></p>
+<blockquote>
+<p><strong>图7</strong>：不同求解器求解单个QP问题的中位时间对比（对数刻度）。TurboMPC（绿线）在GPU上显著快于所有其他求解器（包括基于PCG的GPU求解器），尤其在时域较长时优势更明显。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.24039v1/2606.24039v1/x8.png" alt="SQP求解时间对比"></p>
+<blockquote>
+<p><strong>图8</strong>：在具有隐式动力学和约束的汽车问题中，完整SQP（多个QP）的求解时间对比。TurboMPC的GPU实现相比CPU上的acados有巨大优势，并且比在GPU上运行OSQP（但受限于CPU和GPU间的数据传输）的混合方案更快。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.24039v1/2606.24039v1/x10.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图10</strong>：消融实验展示了不同后端实现的性能差异。使用JAX纯Python实现（JAX-naive）最慢，融合的JAX-CUDA实现（JAX-fused）带来显著加速，而完全使用手写CUDA内核（Ours-CUDA）在特定情况下能达到最快速度，验证了协同设计的必要性。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：论文通过比较纯JAX实现、融合JAX-CUDA实现和纯手写CUDA实现，验证了其协同设计（JAX前端+CUDA后端）对性能的关键贡献。融合实现有效地减少了内核启动开销，是兼顾易用性和性能的最佳选择。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了第一个完全在GPU上运行、同时支持状态/控制不等式约束、隐式积分器、跨时间成本、松弛变量和可微性的MPC求解器，填补了现有工具的空白；2）设计了一种结合SQP、定制ADMM和隐式微分的算法框架，并创新性地通过平滑投影处理松弛变量，简化了实现；3）通过JAX与CUDA的协同设计，在保持易用性的同时实现了高性能，为大规模学习与控制集成提供了强大工具。</p>
+<p>论文自身提到的局限性主要是当前实现针对中等问题规模（状态维度约≤100，时域≤10k）进行了优化，对于更大规模的问题可能需要调整线性求解器。</p>
+<p>这项工作对后续研究的启示是，将传统控制算法与现代学习基础设施深度融合是解锁机器人新能力的关键。TurboMPC为在GPU上规模化运行包含复杂模型和约束的MPC提供了可行性，有望推动基于模型的强化学习、模仿学习以及自动控制器调参等领域的发展，特别是在需要高频率长时域规划的动态复杂任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出TurboMPC，旨在解决机器人领域模型预测控制（MPC）难以与基于GPU的大规模学习框架高效集成的问题。其关键技术结合了顺序二次规划（SQP）、交替方向乘子法（ADMM）内层求解器、隐式微分以及专为高效易用设计的JAX-CUDA实现。实验表明，该求解器在仿真和全尺寸汽车部署中表现优异，相比最先进的CPU与GPU可微分求解器，分别实现了最高15倍与58倍的速度提升，并支持超过8000个节点的长规划时域。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.24039" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
