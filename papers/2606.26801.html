@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Improving Vision-Language-Action Model Fine-Tuning with Structured Stage and Keyframe Supervision - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Improving Vision-Language-Action Model Fine-Tuning with Structured Stage and Keyframe Supervision</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.26801" target="_blank" rel="noreferrer">2606.26801</a></span>
+        <span>作者: Liang Wang Team</span>
+        <span>日期: 2026-06-25</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型在机器人操作任务中展现出强大潜力，其标准微调流程依赖于一个连续的、均匀作用于整个轨迹的动作损失函数。然而，机器人操作轨迹并非均匀，通常由自由空间移动和接触约束技能执行等多个结构化阶段组成，抓手状态转换是关键的阶段边界。现有方法对所有时间步一视同仁，未能提供关于当前操作阶段或即将到来的转换目标的结构化监督，这导致策略失败（例如未成功抓取的“动作失败”或抓取后执行错误的“技能失败”）集中在这些阶段边界。</p>
+<p>本文针对“均匀动作损失无法捕获操作轨迹的内在阶段结构”这一具体痛点，提出了从演示视频的抓手状态中自动派生结构化监督信号的新视角。其核心思路是：提出一个名为StaKe的即插即用辅助监督框架，通过引入阶段分类和关键帧预测两种互补信号来丰富VLA微调过程中的表征学习，而不改变基础策略架构或推理流程。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>StaKe框架基于开源的π₀.₅ VLA模型构建，该模型包含视觉编码器、预训练语言模型主干和流匹配动作专家。StaKe不修改此基础架构，而是在训练时引入两个从演示数据自动提取的监督信号，并通过轻量级辅助头进行学习。</p>
+<p><img src="https://arxiv.org/html/2606.26801v1/2606.26801v1/x2.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图3</strong>：StaKe框架总览。两个可学习的查询标记被附加到预训练的VLM主干上，每个标记连接一个轻量级的辅助头：一个使用二元交叉熵损失训练的阶段分类头，和一个使用L1损失训练的关键帧预测头。这两个头仅在训练时激活（标记为“仅训练”），并与流匹配策略损失联合优化。在推理时，查询标记保留在序列中，但辅助头不会被调用。</p>
+</blockquote>
+<p><strong>核心模块一：阶段标签自动提取</strong>。该模块旨在为每个时间步生成一个二元标签（0代表“运动”阶段，1代表“技能”阶段），无需人工标注。算法核心是分析演示轨迹中抓手的开闭状态。基本原理是：当任意机械臂的抓手处于闭合状态时，表明机器人正在执行接触式技能。为了捕捉接触前的准备和接触后的稳定阶段，算法会将每个抓手闭合的时间区间向前后各扩展K帧（K为超参数，默认为25帧，约1秒），并将这些扩展区间内的所有帧标记为“技能”，其余帧标记为“运动”。</p>
+<p><strong>核心模块二：关键帧目标自动提取</strong>。该模块旨在为每个时间步预测下一个关键抓手转换时刻的目标关节构型。算法首先扫描轨迹，检测任一抓手状态发生改变（开-&gt;闭或闭-&gt;开）的帧，并记录该时刻的完整关节配置作为一个关键帧。对于双机械臂场景，两臂的转换帧会被合并排序。然后，对于轨迹中的每一帧t，算法找到下一个即将到来的关键帧，并将该关键帧的关节配置q_{t_next}作为当前帧t的监督目标q_t^kf。轨迹的最后一帧也被视为一个关键帧，以确保轨迹末端的监督。</p>
+<p><strong>模型实现细节</strong>。为实现上述监督，论文向语言模型主干的输入序列中添加了两个可学习的查询标记（e_ss和e_kf）。这两个标记与视觉和语言标记一起被处理，产生对应的上下文表征。阶段分类头是一个小型MLP，接收e_ss对应的输出，通过sigmoid函数输出当前帧处于“技能”阶段的概率，使用二元交叉熵损失L_stage进行训练。关键帧预测头是另一个MLP，接收e_kf对应的输出，预测下一个关键帧的关节位置，使用L1损失L_kf进行训练。总训练损失为三者加权和：L = L_policy + λ_s * L_stage + λ_k * L_kf，其中λ_s和λ_k均设为0.01以平衡损失尺度。推理时，辅助头被禁用，仅使用基础策略生成动作。</p>
+<p><strong>创新点</strong>：与现有方法相比，StaKe的创新性主要体现在：1. <strong>全自动结构化监督</strong>：无需手动标注关键帧或阶段，完全从演示的抓手状态中自动派生两类监督信号；2. <strong>即插即用与非侵入式</strong>：通过添加可学习查询标记和轻量级辅助头实现，不修改预训练VLA主干和动作专家的架构，推理无额外开销；3. <strong>互补的监督信号</strong>：阶段监督提供粗粒度的阶段级结构信息，关键帧监督提供细粒度的、事件驱动的帧级目标，两者相辅相成。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与数据集</strong>：仿真实验在RoboTwin2.0双机械臂基准上进行，选取了10个任务（关键帧数量从2到5个）。真实机器人实验使用Franka Research 3单机械臂，设计了4个桌面任务（关键帧数量从2到4个）。每个任务收集50条演示数据进行微调。</p>
+<p><strong>基线方法</strong>：主要对比基线是相同数据和训练配方下的π₀.₅模型。同时，在仿真中还对比了扩散策略、ACT和RDT-1B等方法（使用官方基准报告结果）。</p>
+<p><strong>关键实验结果（仿真）</strong>：在RoboTwin2.0的10个任务上，StaKe取得了最高的平均成功率（59.8%），优于扩散策略（42.9%）、ACT（42.7%）、RDT（49.7%）和π₀.₅（52.4%）。与π₀.₅相比，StaKe在所有10个任务上都有提升，平均提升7.4个百分点。特别是在涉及更多关键帧（即更长视野）的任务上，提升更为明显，如在两个4关键帧任务上分别提升8和12个百分点，在5关键帧任务上从42%提升至46%。</p>
+<p><img src="https://arxiv.org/html/2606.26801v1/2606.26801v1/x3.png" alt="定性分析"></p>
+<blockquote>
+<p><strong>图4</strong>：定性分析。展示了三个复杂性递增的任务（从上到下：Lift Pot, Handover Block, Stack Blocks Two）的成功运行轨迹。左侧：RGB执行序列。中间：带有标注的阶段边界（绿色虚线）和关键帧位置（灰色虚线）的真实双机械臂抓手状态。右侧：每个动作块的预测阶段标签（条形图颜色：蓝色=运动，橙色=技能）和关键帧预测的L1误差（橙色线）。结果显示，预测的阶段标签能忠实跟踪真实阶段转换，关键帧预测误差在整个长序列中保持在极低水平。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：</p>
+<ul>
+<li><strong>两个辅助损失均必要</strong>：移除阶段监督或关键帧监督均会导致性能下降，平均成功率分别降至54.3%和53.3%，证实二者互补。</li>
+<li><strong>事件驱动目标更有效</strong>：将“下一转换关键帧”目标替换为固定的未来时间步（t+H）目标，平均成功率降至50.0%，显著低于完整StaKe。</li>
+<li><strong>专用查询标记很重要</strong>：用视觉语言前缀的最后一个标记替代专用查询标记，性能下降至50.8%。</li>
+<li><strong>超参数K的敏感性</strong>：阶段标签扩展余量K在20-30帧范围内性能稳健，K=25时最佳。</li>
+</ul>
+<p><strong>真实机器人实验结果</strong>：在四个真实桌面任务上，StaKe相比π₀.₅取得了显著且一致的提升。例如，在“Two Mugs in Basket”（4关键帧）任务上，成功率从30%提升至70%（相对提升56%）。</p>
+<p><img src="https://arxiv.org/html/2606.26801v1/2606.26801v1/x4.png" alt="真实机器人实验设置"></p>
+<blockquote>
+<p><strong>图5</strong>：真实机器人实验。左上：工作空间，包含一个Franka Research 3机械臂和一个前视ZED 2i相机。中间：每个任务的起始帧和关键帧快照（从上到下：Mug on Plate, Stack Bowls, Bowl in Drawer, Two Mugs in Basket）。右侧：π₀.₅和StaKe在每个关键帧上超过10次试验的累计成功率。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.26801v1/2606.26801v1/x5.png" alt="每个关键帧的累计成功率对比"></p>
+<blockquote>
+<p><strong>图6</strong>：真实机器人任务中，π₀.₅和StaKe在每个关键帧的累计成功率对比。StaKe（橙色）在所有任务的所有关键帧上都优于或匹配π₀.₅（蓝色），尤其是在后续关键帧上优势更明显，展示了其在长视野操作中减少错误累积的能力。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1. 提出了StaKe，一个即插即用的结构化监督框架，通过引入阶段监督和关键帧监督两个互补信号来改进VLA微调性能，且不改变推理循环；2. 设计了一个全自动流程，从演示的抓手状态提取阶段标签和关键帧目标，无需任何手动标注；3. 在双机械臂仿真和单机械臂真实机器人任务上验证了StaKe，证明了其在多样化场景中一致提升成功率，并在涉及更多抓手状态转换的长视野任务上获得更大增益。</p>
+<p><strong>局限性</strong>：提供的论文正文片段未明确讨论该工作的局限性。</p>
+<p><strong>启示</strong>：本研究表明，利用从演示中自动派生的结构化监督信号来丰富标准VLA微调损失，是一种有效且通用的策略。这种方法不依赖于特定的策略架构或动作表示，具有很强的通用性和可扩展性，为提升VLA模型在复杂长视野操作任务中的鲁棒性和成功率提供了新的思路。后续研究可以探索如何将这种自动化结构化监督与其他微调改进方法（如强化学习结合、动态架构调整等）相结合。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型微调中动作监督均匀、缺乏对操作阶段和夹爪事件转换的结构化指导问题，提出StaKe框架。该框架从演示数据自动衍生阶段分类器和关键帧预测器作为轻量级辅助监督头，在训练中丰富表示而不改变原策略架构。实验表明，在双手机器人模拟和单臂Franka真实任务中，成功率相对提升14%和56%，且涉及更多夹爪转换的长时程任务改进更显著。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.26801" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
