@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>G2DP: Diffusion Planning with Spatio-Temporal Grid Guidance - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>G2DP: Diffusion Planning with Spatio-Temporal Grid Guidance</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.26017" target="_blank" rel="noreferrer">2606.26017</a></span>
+        <span>作者: Wilhelm Stork Team</span>
+        <span>日期: 2026-06-24</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在自动驾驶领域，基于扩散（Diffusion）的规划器因其能够有效建模多样化驾驶行为，已成为稠密、交互式交通场景中鲁棒运动规划的一种有前景范式。然而，其固有的随机性需要在去噪过程中施加明确的引导，以确保闭环执行的安全性和路线遵循。现有引导方法通常依赖于稀疏的、以实体为中心的几何查询（如到车道线或其他车辆多边形的欧氏距离）或事后（post-hoc）轨迹修正。前者基于对稀疏邻车未来状态的确定性预测，忽略了空间不确定性，引导能力局限于实例锚定的避障而非主动引导；后者则重新引入了基于规则系统的僵化性，可能使轨迹偏离学习到的分布。因此，如何将密集的、概率性的空间约束直接整合到可微的生成循环中，仍是一个开放性问题。本文针对扩散规划中稀疏引导对交互场景感知有限且性能脆弱的痛点，提出利用时空网格表示作为密集约束的新视角。其核心思路是：通过融合预测的未来占位概率分布与路线进展图，构建一个可微的时空成本场，并以此为能量函数在去噪过程中注入密集梯度，主动将轨迹生成引导至安全且贴合路线的区域。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>G2DP的整体框架包含三个核心模块：一个基于扩散变换器（DiT）的轨迹生成器、一个基于U-Net的成本网格预测器，以及一个连接二者的基于网格的迭代去噪引导机制。</p>
+<p><img src="https://arxiv.org/html/2606.26017v2/2606.26017v2/x1.png" alt="方法架构"></p>
+<blockquote>
+<p><strong>图2</strong>：G2DP模型架构。系统使用DiT解码器处理以矢量化场景为条件的自车未来含噪轨迹，同时使用一个占位网络从栅格化历史中预测占位分布。关键创新在于右侧的基于网格的迭代去噪引导：它通过可微采样在 $\mathbf{x}<em>t$ 的坐标处查询预测的成本网格，计算安全能量项，并将引导梯度 $-\lambda_t\nabla</em>{\mathbf{x}_t}E$ 注入采样步骤，主动引导轨迹远离高成本区域并保持路线进展。</p>
+</blockquote>
+<p><strong>1. 扩散轨迹生成</strong>：规划目标是在固定未来 horizon（$T_{\text{fut}}$步）内生成自车轨迹 $\mathbf{x} \in \mathbb{R}^{(T_{\text{fut}}+1)\times 4}$，包含位置和航向。采用DiT作为主干网络，以前景编码得到的场景上下文令牌 $\mathcal{S}$ 以及扩散步数 $t$ 和导航路线为条件，对含噪轨迹 $\mathbf{x}_t$ 进行去噪。训练时使用MSE损失，推理时使用DPM-Solver从高斯噪声开始进行迭代反向扩散采样。</p>
+<p><strong>2. 成本网格构建</strong>：一个轻量级U-Net模型以前2秒的动态历史及静态地图为输入，预测未来一系列时间步（与规划 horizon 对齐）的占位概率栅格 $\mathbf{O} \in \mathbb{R}^{T_{\text{occ}} \times H \times W}$。同时，根据导航路线中心线生成路线合意性图 $R(u,v)$，鼓励向前进展。两者通过权重 $\gamma$（默认0.95）融合，形成时空成本网格栈 $\mathcal{C} = {\psi_\tau}<em>{\tau=1}^{T</em>{\text{occ}}}$，其中 $\psi_{\tau}(u,v) = \gamma \cdot O_{\tau}(u,v) + (1-\gamma) \cdot R(u,v)$。</p>
+<p><strong>3. 基于成本网格的轨迹生成引导</strong>：这是方法的核心创新点。其目标是为扩散采样器提供一个空间连续且可微的引导信号。</p>
+<ul>
+<li><strong>时空能量公式化</strong>：对于一个轨迹样本 $\mathbf{x}$，在每一时间步 $\tau$，根据自车位姿确定其 orient 矩形 footprint，并从成本网格 $\psi_\tau$ 中通过双线性采样获得一组成本值 $\mathcal{V}<em>\tau$。为平衡安全覆盖与对预测噪声的鲁棒性，采用 <strong>Top-K</strong> 聚合策略，计算该步的标量成本 $c^{(\tau)} = \frac{1}{K}\sum</em>{v \in \Omega_K} v$，其中 $\Omega_K$ 是 $\mathcal{V}<em>\tau$ 中最大的 $K$ 个值（$K=15$）。轨迹总能量定义为 $E(\mathbf{x}) = \sum</em>{\tau=1}^{T} c^{(\tau)}$。</li>
+<li><strong>基于梯度的去噪引导</strong>：在推理采样时，应用分类器引导。将原始扩散模型学到的分布 $p_t(\mathbf{x}_t | \mathcal{S})$ 与基于能量 $E$ 的指数权重结合，形成目标分布 $p_t^*(\mathbf{x}_t | \mathcal{S}, \mathcal{C}) \propto p_t(\mathbf{x}_t | \mathcal{S}) \exp(-\lambda_t E(\mathbf{x}<em>t; \mathcal{C}))$。对应的引导采样更新方程为：$\nabla</em>{\mathbf{x}<em>t} \log p_t^* = \nabla</em>{\mathbf{x}<em>t} \log p_t - \lambda_t \nabla</em>{\mathbf{x}_t} E(\mathbf{x}<em>t; \mathcal{C})$。其中，$-\lambda_t \nabla</em>{\mathbf{x}_t} E$ 项作为能量校正被注入到DPM-Solver中，主动将生成过程导向 $p_t^*$ 的低能量（即低成本）区域。为确保不破坏模型宏观行为意图，引导仅施加在去噪的最后阶段（10步中的第8-9步），$\lambda_t$ 固定为0.5。</li>
+</ul>
+<p><strong>与现有方法的创新对比</strong>：G2DP的核心创新在于将<strong>密集的、概率性的时空成本网格</strong>作为可微的能量函数直接整合到扩散去噪循环中，实现了对环境约束的主动、细粒度引导。这区别于以往基于稀疏几何基元（如多边形距离）的引导，后者无法有效捕获未来状态的不确定性分布；也区别于那些虽然使用栅格但依赖于离散搜索或静态成本图的后处理或非可微方法。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准数据集</strong>：在nuPlan的三个闭环基准（Val14， Test14-hard， Test14-random）上进行主要评估，并在interPlan和DeepScenario数据集上进行零样本泛化测试。</li>
+<li><strong>对比基线</strong>：包括规则类方法（IDM， PDM-Closed/Hybrid），以及学习类方法（PlanTF， PLUTO， GameFormer， Flow Planner， Diffusion Planner）。</li>
+<li><strong>评估模式</strong>：在nuPlan模拟器中使用LQR控制器，分非反应性（NR）和反应性（R）两种模式。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>在nuPlan基准上，G2DP在所有仅基于模仿学习的规划器中取得了最佳性能。在最具挑战性的反应性Test14-hard基准上，G2DP比最强的基线Flow Planner提升了7.2分（73.91 vs 70.42）。一个移除邻车历史输入、仅使用当前状态的变体G2DP†表现出了更强的反应性，其得分比Diffusion Planner高出8.4分（77.61 vs 69.22）。</p>
+<p><img src="https://arxiv.org/html/2606.26017v2/2606.26017v2/x2.png" alt="定量结果可视化"></p>
+<blockquote>
+<p><strong>图3</strong>：闭环规划定性对比。上图（DeepScenario）：在高度交互的交通中，只有G2DP能在无碰撞的前提下保持高效的前行进展。下图（nuPlan）：只有G2DP做出了及时的换道决策，并安全超越了静止车辆。</p>
+</blockquote>
+<p>在零样本迁移到interPlan基准时，G2DP展现了强大的安全性能提升。如表III所示，G2DP†在“碰撞避免”指标上比Diffusion Planner提升了10.15分（94.93 vs 84.78），在“时间到碰撞”指标上提升了10.75分。</p>
+<p><img src="https://arxiv.org/html/2606.26017v2/2606.26017v2/x3.png" alt="interPlan结果分析"></p>
+<blockquote>
+<p><strong>图4</strong>：G2DP与基线在interPlan各场景类别下的表现对比。G2DP在高流量和乱穿马路等交互密集的场景中优势更明显。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.26017v2/2606.26017v2/x4.png" alt="消融实验：网格引导组件"></p>
+<blockquote>
+<p><strong>图5</strong>：不同引导设置的消融研究。仅使用路线（Progress-only）或占位（Occupancy-only）引导均次于完整方案（Both）。无引导（No guidance）性能最差，验证了各组件必要性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.26017v2/2606.26017v2/x5.png" alt="超参数 $\gamma$ 分析"></p>
+<blockquote>
+<p><strong>图6</strong>：成本融合权重 $\gamma$ 的敏感性分析。$\gamma=0.95$（侧重占位避免）在安全与进度间取得了最佳平衡。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.26017v2/2606.26017v2/x6.png" alt="超参数 $\lambda$ 与引导时机分析"></p>
+<blockquote>
+<p><strong>图7</strong>：引导强度 $\lambda$（左）和引导开始步数（右）的消融实验。$\lambda=0.5$且在去噪最后阶段（步数≥8）启用引导能获得最佳性能。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.26017v2/2606.26017v2/x7.png" alt="Top-K聚合中K值分析"></p>
+<blockquote>
+<p><strong>图8</strong>：Top-K聚合中不同K值的性能影响。K=15（约覆盖自车脚印的8%）在覆盖风险区域与抵抗栅格噪声间达到最优。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：<br>论文通过系统的消融实验验证了每个核心组件的贡献：</p>
+<ol>
+<li><strong>引导的必要性</strong>：移除网格引导（No guidance）导致性能显著下降。</li>
+<li><strong>成本成分</strong>：单独使用路线进展引导或占位引导均不如两者融合（Both）有效。</li>
+<li><strong>超参数选择</strong>：成本融合权重 $\gamma=0.95$、引导强度 $\lambda_t=0.5$、在去噪最后阶段启用引导、以及Top-K聚合中 $K=15$ 被验证为最优配置。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了密集网格引导范式</strong>：针对扩散规划中稀疏几何引导的局限性，创新性地引入由未来占位概率与路线图融合构成的时空成本场，实现了对生成过程直接、密集且概率感知的约束注入。</li>
+<li><strong>构建了可微的时空能量函数</strong>：设计了基于自车几何脚印的Top-K成本聚合方法，并形成了可计算解析梯度的能量函数，使得无需改变生成模型主干即可实现主动、全局的轨迹优化。</li>
+<li><strong>验证了卓越的性能与泛化能力</strong>：在nuPlan上达到了模仿学习规划器的SOTA性能，并在interPlan和DeepScenario上展示了强大的零样本安全泛化能力，显著提升了碰撞避免等关键指标。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，网格引导的有效性依赖于占位预测网络的准确性。如果预测的未来占位存在较大误差，引导可能将轨迹错误地引向高风险或低效率区域。此外，该方法增加了推理时的计算开销（需多次查询成本网格并计算梯度）。</p>
+<p><strong>对后续研究的启示</strong>：G2DP的成功表明，将感知和预测模块输出的密集、概率性表示（如占位流）与生成式规划模型进行深度、可微的耦合，是一条实现安全、可控端到端驾驶的有效路径。未来工作可以探索更高效的成本场构建与查询方式，或者研究如何将此类引导机制与模型的联合训练相结合，以进一步提升系统的一致性和鲁棒性。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对扩散规划器在自动驾驶中缺乏明确安全约束引导的问题，提出G2DP方法。其核心是构建可微分的时空成本网格，通过融合未来占用概率与路线进度图形成密集梯度，直接在去噪循环中引导轨迹生成，确保安全性与路径跟随。实验表明，G2DP在nuPlan基准上以反应分数领先基线+7.2分，在interPlan的零样本迁移中碰撞避免提升+10.15分，验证了时空网格引导的有效性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.26017" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
