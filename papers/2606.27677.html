@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DIM-WAM: World-Action Modeling with Diverse Historical Event Memory - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>DIM-WAM: World-Action Modeling with Diverse Historical Event Memory</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.27677" target="_blank" rel="noreferrer">2606.27677</a></span>
+        <span>作者: Liang Wang Team</span>
+        <span>日期: 2026-06-26</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，机器人操作领域中的世界-动作模型通过联合预测未来视觉状态和动作，已展现出良好性能。然而，现有方法主要依赖短期历史和短视距的未来预测，这对于正确执行依赖于早期观测和任务进度的长时程任务而言是不足的。这类具有时间依赖性的任务需要有效利用互补的时间信息，包括近期的局部上下文、跨阶段的历史事件、即时的未来动态以及全局任务进度。现有方法面临长期遗忘和对全局任务状态感知差的问题。直接增加历史上下文长度会加剧信息量和计算负担，且早期关键状态可能因注意力竞争而被削弱；而近期一些记忆增强的VLA方法主要针对动作预测，其单一的记忆机制在应用于同时参与未来视觉状态生成的WAM时，可能丢弃细粒度视觉证据或将生成状态误差注入后续历史。</p>
+<p>本文针对长时程WAM中跨阶段历史状态管理不足以及任务进度信息缺失这一具体痛点，提出了将决策所需信息明确分解为局部历史、跨阶段历史、即时未来动态和全局任务进度信息的新视角，并通过一个多银行记忆结构在局部窗口之外组织长期历史。核心思路是：引入一个多类型历史事件记忆，首先从真实观测中提取紧凑的视觉事件信息，然后通过独立的基于相似性的合并更新多个记忆银行，进而读取附带银行身份和时间嵌入的长期上下文以条件化视频和动作去噪，并辅以任务进展监督来编码全局任务状态。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>DiM-WAM的整体框架是一个读-预测-交互-更新的循环。在每个决策片段i，模型首先读取长期记忆状态ℳᵢ，将其与局部上下文𝒞ᵢ（由滑动窗口和KV缓存提供）以及语言指令c结合，联合预测未来H步的视觉潜在序列ẑᵢ:ᵢ₊ₕ和动作序列âᵢ:ᵢ₊ₕ（式2）。随后，执行首个预测动作，接收真实环境观测，并利用该观测反馈更新长期记忆。全局任务进度信息𝒢ᵢᵖʳᵒᵍ并非通过显式的未来推演生成，而是在训练中通过任务进展监督目标学习得到，以此实现局部预测与全局任务状态的持续对齐，并避免仅依赖自回归生成状态来维护长期上下文所导致的误差累积。</p>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：DiM-WAM的整体框架。模型在每个决策片段遵循读取长期记忆、预测短期未来视频和动作、执行动作、利用真实观测更新记忆的闭环流程。</p>
+</blockquote>
+<p>核心模块包括：</p>
+<ol>
+<li><strong>多银行时间记忆</strong>：针对长期历史异质性的特点，构建了K个并行记忆银行，每个银行维护N个事件槽位，总容量固定为K·N个令牌。每个银行独立运作，其记忆ℳᵢᵏ由一系列记忆令牌𝐦ᵢ,ₖ,ₙ构成。记忆更新流程包括：<ul>
+<li><strong>压缩视觉事件提取</strong>：将第i步交互后的真实观测编码为视觉特征𝐗ᵢ，并通过一个压缩模块gᵩ提取出紧凑的视觉事件令牌ũᵢ（式4），该令牌被提供给所有银行作为写入候选。</li>
+<li><strong>独立有界压缩</strong>：每个银行基于自身的历史状态，独立决定是否以及如何保留这个候选令牌。当银行槽位已满时，模型根据一个合并优先级函数ρₖ(u,v)（式5）评估银行内相邻历史事件的冗余度，该函数结合了余弦相似度和时间距离衰减。如果新候选ũᵢ与当前最新事件的冗余度高于银行内最冗余的历史事件对，则跳过写入；否则，则合并最冗余的历史事件对（u*, v*），以释放槽位写入新事件。合并操作采用基于累计质量α的加权平均来更新表示和时间位置（式6, 7）。这一机制确保了在固定容量下，各银行能根据自身语义空间独立评估信息价值，减少了异质历史信息在单一空间内的直接竞争。</li>
+</ul>
+</li>
+<li><strong>协同记忆读取</strong>：在预测当前片段前，模型为每个银行k中的每个有效记忆令牌附加一个可学习的银行身份嵌入𝐛ₖ。然后，将所有银行的有效令牌按其保留的时间索引t排序、展平，形成跨银行的时序序列。最后，对该序列应用RoPE时间位置编码，生成最终的记忆条件序列𝐑ᵢ（式11）。这个序列作为共享的上下文，同时条件化视频去噪分支和动作去噪分支。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.27677v1/2606.27677v1/x1.png" alt="可见性掩码"></p>
+<blockquote>
+<p><strong>图2</strong>：内存令牌、视频潜在令牌和动作令牌之间的可见性掩码。内存令牌为视频和动作去噪提供长期上下文，同时保持了视频-动作预测的因果结构。</p>
+</blockquote>
+<ol start="3">
+<li><strong>任务进展监督</strong>：除了视频和动作预测损失，模型还引入了一个辅助的进展预测目标。该目标鼓励长期记忆令牌不仅编码已完成的过去事件，还能体现当前任务阶段及其对剩余任务的影响，从而增强模型对全局任务状态的感知。</li>
+</ol>
+<p>与现有方法相比，DiM-WAM的创新点主要体现在：1) 明确将长期历史分解并组织到多个并行的记忆银行中，以减少不同类型事件信息在固定容量下的直接竞争；2) 采用基于感知相似性的独立合并与更新规则，实现了对长历史的在线、有界压缩，避免了单纯延长上下文窗口带来的计算负担；3) 引入任务进展作为辅助监督信号，使记忆表征能够编码全局任务进度信息。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在两个平台上进行：<strong>RMBench</strong>仿真基准和<strong>四个真实世界</strong>的Franka Panda机器人长时程操作任务（例如，多步骤整理、组装）。<br>对比的Baseline方法包括：基础世界-动作模型<strong>LingBot-VA</strong>，以及显式记忆基线<strong>Mem-0</strong>。</p>
+<p><strong>关键实验结果：</strong><br>在RMBench上，以LingBot-VA为基础模型，DiM-WAM将所有长时程任务的平均成功率从28.4%大幅提升至**69.8%<strong>。这一性能显著超过了Mem-0基线（42.0%）。在四个真实机器人任务上，DiM-WAM将平均阶段成功率从70.7%提升至</strong>91.5%<strong>，并将全任务成功率从52.5%提升至</strong>80.0%**。</p>
+<p><img src="https://arxiv.org/html/2606.27677v1/2606.27677v1/x2.png" alt="RMBench性能对比"></p>
+<blockquote>
+<p><strong>图3</strong>：在RMBench上的任务成功率对比。DiM-WAM相比LingBot-VA和Mem-0基线在所有任务上均有显著提升，尤其在具有强时间依赖性的任务上优势最大。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.27677v1/2606.27677v1/x3.png" alt="真实机器人任务性能"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界Franka Panda任务上的性能对比。左图显示平均阶段成功率，右图显示全任务成功率。DiM-WAM均显著优于基线。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.27677v1/2606.27677v1/x4.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图5</strong>：消融实验结果。移除多银行结构（单银行）或移除任务进展监督，均会导致性能显著下降，验证了这两个核心设计的必要性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.27677v1/2606.27677v1/x5.png" alt="不同银行设置的影响"></p>
+<blockquote>
+<p><strong>图6</strong>：探讨不同记忆银行数量（K）和每个银行容量（N）对性能的影响。结果表明，适度的多银行结构（K=4）和容量能够取得最佳效果。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.27677v1/2606.27677v1/x6.png" alt="记忆内容分析"></p>
+<blockquote>
+<p><strong>图7</strong>：跨银行行为分析。通过可视化不同银行中记忆令牌的注意力分布和表示相似性，表明不同银行学习到了互补的事件选择模式和表示子空间，而非退化成相同的记忆。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.27677v1/2606.27677v1/x7.png" alt="定性结果"></p>
+<blockquote>
+<p><strong>图8</strong>：定性结果展示。DiM-WAM能够成功完成需要记忆早期状态和进度判断的长时程任务（如“将积木放入对应颜色的杯子”），而基线方法会出现重复动作或阶段切换错误。</p>
+</blockquote>
+<p><strong>消融实验总结：</strong><br>消融研究表明，多银行结构和任务进展监督都是DiM-WAM取得高性能的关键。移除多银行（使用单银行）或移除进度监督都会导致成功率显著下降（图5）。跨银行行为分析进一步证实，不同的银行确实学习到了互补的历史事件选择模式，形成了功能分化的表示子空间（图7）。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了<strong>多类型历史事件记忆</strong>，通过多银行独立压缩与协同读取的机制，有效管理了长时程操作中异质、互补的历史信息，缓解了固定容量下的记忆竞争问题；2) 引入了<strong>任务进展监督</strong>作为辅助目标，使模型能显式地感知全局任务状态，从而更好地处理时间模糊性；3) 在仿真和真实机器人长时程任务上实现了<strong>显著的性能提升</strong>，验证了所提方法的有效性。</p>
+<p>论文自身提到的局限性包括：记忆的更新和读取机制是启发式与学习式结合的，其最优设计可能因任务而异；当前方法主要针对单任务序列，对于交织的多任务场景的适用性有待进一步探索。</p>
+<p>这项工作对未来研究的启示包括：在构建处理长序列的具身智能模型时，<strong>显式地结构化记忆</strong>（而非单纯增加长度）是一个富有前景的方向；将<strong>任务高层进展</strong>作为一种监督信号融入训练，有助于提升策略的时序一致性；记忆机制如何更紧密地与<strong>世界模型的前向预测</strong>能力结合，以支持更长期的规划，是一个值得深入探索的问题。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有世界-动作模型在长期任务中因依赖短期历史而导致的长期遗忘和全局任务状态意识不足问题，提出了DiM-WAM记忆增强模型。该模型集成多尺度历史上下文、局部未来动力学和全局任务进展，通过提取视觉事件信息、基于相似性更新多个记忆库、读取嵌入长期上下文进行条件去噪，并结合进展监督目标。实验显示，在RMBench上平均成功率从28.4%提升至69.8%；在真实世界Franka任务上，阶段成功率从70.7%提升至91.5%，全任务成功率从52.5%提升至80.0%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.27677" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
