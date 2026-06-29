@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Support-Constrained RL Enables Real-World Policy Improvement without Real-World Experience - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Support-Constrained RL Enables Real-World Policy Improvement without Real-World Experience</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.27475" target="_blank" rel="noreferrer">2606.27475</a></span>
+        <span>作者: Abhishek Gupta Team</span>
+        <span>日期: 2026-06-25</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人策略通常通过在真实世界数据上进行模仿学习（IL）获得，但这类策略往往不精确、缓慢且对扰动脆弱。利用强化学习（RL）在真实世界中改进策略成本高昂且不安全。一个流行的替代方案是利用模拟环境进行策略改进，但无约束的模拟RL会利用接触和动力学的建模差异（即“奖励黑客”），导致产生在真实世界中可能失败或不安全的行为。为了避免这一问题，现有方法通常在策略梯度更新中添加行为克隆（BC）等分布距离约束，惩罚学习策略与基础策略之间的KL散度。然而，这类分布约束方法在策略改进（需要宽松约束）和可迁移性（需要严格约束）之间引入了难以平衡的权衡，可能过度约束策略，使其保留了基础策略中的次优行为模式。</p>
+<p>本文针对“如何在仅使用模拟交互的前提下，安全且有效地提升一个从真实世界数据预训练的策略的性能”这一具体痛点，提出了“支持约束”的新视角。核心思路是将约束对象从策略的分布匹配，转向策略行动集的包含关系，即要求改进后的策略产生的所有行动，都必须属于基础策略在给定观测下能够生成的支持集内。这使得模拟RL能够放大基础策略中已有的更快速、更精确或更鲁棒的行为模式，同时抑制次优化行为，且避免引入可能在真实世界中失效的任意行动。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法称为支持约束离域强化（SCORE），它是一个由三个步骤构成的“真-模-真”框架。</p>
+<p>首先，<strong>真实到模拟阶段</strong>：在每个任务上，利用来自真实机器人交互数据集 <code>(o, a)</code> 训练一个条件流匹配策略 <code>π_base(a|o)</code>。训练损失如论文公式（4）所示。该策略为后续改进提供了一个基于真实世界行为的先验和行动支持集。</p>
+<p><img src="https://arxiv.org/html/2606.27475v1/2606.27475v1/figs/score_teaser.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：SCORE框架概览。从真实世界的流匹配策略（可能基于成功、随意尝试和失败数据训练）开始，将其带入模拟环境，使用“流驾驶”这一支持约束RL算法进行策略改进，最终可直接将驾驶策略部署回真实世界。</p>
+</blockquote>
+<p>其次，核心的<strong>模拟优化阶段</strong>：在此阶段，<strong>冻结</strong>预训练好的基础流策略 <code>π_base</code>，并学习一个轻量级的“驾驶策略” <code>π_steer(z|o)</code>。该驾驶策略作用于基础流策略的隐变量输入 <code>z</code>（即流匹配的初始噪声）。在每个策略步 <code>k</code>，组合策略的采样过程为：<code>z_k ∼ π_steer(·|o_k)</code>，<code>a_k = π_base(o_k, z_k)</code>。这确保了最终产生的动作 <code>a_k</code> 始终位于基础策略模型诱导的支持集 <code>A_base(o) = {π_base(o, z) | z ∈ Z}</code>内，实现了<strong>硬支持约束</strong>。论文中实例化了两种驾驶方法：纯隐变量驾驶的DSRL（SCORE-DSRL），以及在此基础上额外添加一个微小残差 <code>a_r</code> 的RFS（SCORE）。后者可视为一种允许对支持集内动作进行局部微调的软支持约束。</p>
+<p>模拟优化的目标是最大化组合策略在模拟环境中的期望折扣回报，如论文公式（5）所示。为了高效利用大规模并行模拟，作者使用PPO算法优化 <code>π_steer</code>，并采用非对称的“演员-评论家”架构：演员网络仅接收与部署时一致的观测输入（如点云、本体感知），输出隐变量的分布；评论家网络在训练时可额外利用模拟器提供的特权状态信息以改善价值估计，但这不影响最终部署的策略。</p>
+<p>最后，<strong>模拟到真实部署阶段</strong>：将学习到的驾驶策略 <code>π_steer</code> 与冻结的基础策略 <code>π_base</code> 直接组合，在真实硬件上部署。具体来说，部署时执行 <code>(z_k, a_r) ∼ π_steer(·|o_k)</code> 和 <code>a_k = π_base(o_k, z_k) + a_r</code>，无需对基础策略进行蒸馏或微调。这使得整个流程简单且可扩展。</p>
+<p>与现有方法相比，SCORE的主要创新点在于：1）形式化了“离域策略改进”问题，并首次在在线模拟RL情境下提出并实现了“支持约束”的优化目标（公式3）；2）通过“流驾驶”这一具体技术手段，在冻结的生成式策略上操作，自然而然地强制执行了支持约束；3）整个框架避免了复杂的奖励工程（使用稀疏奖励）、策略蒸馏和基础策略微调。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>评估基准</strong>：论文在八项需要丰富接触的灵巧多指手机器人操作任务上进行了评估，涵盖抓取、倾倒、推动、重定向和物体放置等多个类别。</p>
+<p><strong>对比基线</strong>：</p>
+<ul>
+<li><strong>Base</strong>：仅在真实数据上预训练的流匹配策略，作为初始策略。</li>
+<li><strong>FPO</strong>：一种在模拟中对流策略进行无约束RL优化的先进方法，用于验证无约束优化的风险。</li>
+<li><strong>RialTo</strong>：一种“真-模-真”方法，在PPO优化中添加BC正则化（前向KL约束），代表分布约束方法。</li>
+<li><strong>Residual-RL</strong>：学习一个有界的残差策略来扰动基础策略的输出，可解释为Wasserstein-1距离约束。</li>
+</ul>
+<p><strong>关键结果</strong>：</p>
+<ol>
+<li><strong>整体性能</strong>：如图4所示，SCORE在所有八个任务上都显著超越了基础策略，将平均真实世界成功率从 <strong>37.8%</strong> 提升至 **89.9%**，相对提升了52.1个百分点。表现次优的基线方法（Residual-RL）的平均成功率仅为 **59.5%**。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.27475v1/2606.27475v1/figs/score_success_rate.png" alt="平均成功率"></p>
+<blockquote>
+<p><strong>图4</strong>：八项任务的平均真实世界成功率对比图。SCORE（使用RFS驾驶）和SCORE-DSRL显著优于所有基线，而FPO和RialTo习得了危险或次优行为。</p>
+</blockquote>
+<ol start="2">
+<li><strong>效率提升</strong>：如图5所示，与基础策略相比，SCORE平均将每项任务的执行时间缩短了 **36.8%**，而Residual-RL仅缩短了 **19.0%**。这说明SCORE能够成功地偏向基础策略中更快速的执行模式。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.27475v1/2606.27475v1/figs/score_speed.png" alt="速度提升"></p>
+<blockquote>
+<p><strong>图5</strong>：SCORE和Residual-RL相比基础策略的平均执行速度提升百分比。SCORE在效率提升上显著优于基于分布约束的Residual-RL。</p>
+</blockquote>
+<ol start="3">
+<li><strong>约束效果验证</strong>：<ul>
+<li><strong>无约束风险</strong>：FPO策略在模拟中性能很高，但在真实部署中产生了危险行为（如在Soccer Push任务中猛烈击打桌面），验证了无约束优化的“奖励黑客”问题。</li>
+<li><strong>分布约束的权衡</strong>：如图6所示，RialTo方法中的BC正则化强度存在一个艰难的权衡。弱正则化（λ=100）导致模拟性能好但真实世界表现差；强正则化（λ=100k）虽能保持可迁移性，但严重限制了策略改进，使其保留了基础策略的失败模式。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.27475v1/2606.27475v1/figs/distributional_tradeoff_empirical.png" alt="分布约束权衡"></p>
+<blockquote>
+<p><strong>图6</strong>：RialTo方法的BC正则化强度（λ）对模拟性能（圆圈）和真实世界性能（菱形）的影响曲线，清晰地展示了提升与可迁移性之间的权衡。</p>
+</blockquote>
+<ol start="4">
+<li><strong>消融实验与数据多样性分析</strong>：<ul>
+<li><strong>数据量影响</strong>：如图7所示，增加用于训练基础策略的真实演示数据量，虽然对基础策略本身的提升有限，但能显著增强SCORE的改进效果。这表明更丰富的数据扩展了支持集，为SCORE提供了更大的优化空间。<br><img src="https://arxiv.org/html/2606.27475v1/2606.27475v1/figs/data_ablation_curve.png" alt="数据量影响"><blockquote>
+<p><strong>图8</strong>：在Cube Pinch任务上，基础策略所用演示数据量对最终成功率的影响。SCORE的改进幅度随数据量增加而显著增长。</p>
+</blockquote>
+</li>
+<li><strong>非最优数据价值</strong>：实验证明，在训练基础策略的数据集中包含重试失败、随意尝试等非最优交互数据，尽管不会直接提升基础策略的性能，却能大幅增强SCORE的最终表现。<br><img src="https://arxiv.org/html/2606.27475v1/2606.27475v1/figs/retry.png" alt="重试数据"><blockquote>
+<p><strong>图9</strong>：相比仅使用最优演示数据，加入失败重试数据训练出的基础策略能使SCORE获得更大的性能提升。</p>
+</blockquote>
+</li>
+</ul>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：</p>
+<ol>
+<li>概念上，形式化了“离域策略改进”问题，并论证了相对于无约束优化和分布约束，<strong>支持约束</strong>在确保可迁移性的同时，能够实现更优的策略改进。</li>
+<li>方法上，提出了<strong>SCORE框架</strong>，通过“流驾驶”这一简单且无需蒸馏的技术，将支持约束具象化，使得在模拟中大规模并行提升真实世界策略变得可行。</li>
+<li>实证上，在八项高难度的<strong>多指灵巧操作任务</strong>上，SCORE实现了<strong>从37.8%到89.9%的平均成功率跃升</strong>，并显著提升了任务执行速度，验证了方法的有效性和实用性。</li>
+</ol>
+<p>局限性方面，论文虽未明确单列一节，但指出其方法依赖于模拟器的质量（存在领域差距），且最终性能受限于<strong>基础策略支持集的覆盖度</strong>——如果最优行为模式完全不在原始真实数据覆盖范围内，SCORE将无法发现它们。</p>
+<p>本研究提供了新的研究范式，其启示包括：1）强调了在利用模拟进行策略改进时，约束的<strong>设计形式</strong>（支持 vs. 分布）至关重要；2）表明<strong>数据收集策略</strong>（包括成功和失败数据）对于后续通过模拟进行改进的潜力有重大影响；3）为未来开发更高效的支持约束优化算法、处理更复杂的长时程任务，以及探索如何评估和改进基础策略的支持集覆盖度开辟了道路。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出SCORE框架，解决机器人策略在仿真中优化时因动力学差异导致无法迁移到真实世界的问题。其核心技术为基于流的支持约束强化学习（Flow Steering），将模拟中的策略优化严格限制在预训练真实策略的动作支持集内，确保行为可转移。实验表明，在八个真实灵巧操作任务中，该方法将平均成功率从37.8%提升至89.9%，且达到成功所需步数比基础策略减少36.8%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.27475" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

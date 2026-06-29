@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Direct Action-Head Injection of A Grounded 3D Point Unlocks Spatial and Task Generalization - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Direct Action-Head Injection of A Grounded 3D Point Unlocks Spatial and Task Generalization</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.27663" target="_blank" rel="noreferrer">2606.27663</a></span>
+        <span>作者: Yi-Ting Chen Team</span>
+        <span>日期: 2026-06-26</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型通过大规模视觉-语言预训练获得了丰富的语义表示，能够处理自由形式的指令并识别多种物体。然而，这些模型在测试时仍存在两个关键的泛化能力瓶颈：<strong>空间泛化</strong> 能力不足，即当物体位置与训练时所见不同时性能骤降；以及<strong>任务泛化</strong> 能力不足，即面对熟悉的场景但与训练时不同的语言指令时，模型倾向于复现记忆中的轨迹而非遵从新指令。现有主流方法试图通过为策略提供显式的空间 grounding 信息（例如物体定位的2D像素坐标）来解决此问题，其传递方式主要有两种：通过语言提示或视觉提示。然而，本文研究发现，现有方法对 grounding 信号的<strong>表示形式</strong>（2D vs. 3D）及其<strong>注入策略</strong>（注入到VLA主干 vs. 直接注入动作头）缺乏系统性探索，而这恰恰是解锁稳健泛化的关键。本文核心思路是：将 grounding 信号从2D提升到3D，并跳过VLA主干，将其作为一个连续的几何嵌入<strong>直接注入到动作预测头</strong>，从而显著提升VLA模型的空间与任务泛化能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法是一个轻量级、模型无关的模块，其核心在于<strong>3D表示</strong>与<strong>直接注入</strong>两个设计选择。整体流程如下：给定一个语言指令，首先使用任何现成的视觉 grounding 模块（如VLM或检测器）在图像中定位出任务相关物体或区域，得到一个2D目标点；接着，利用深度图像和相机参数将该2D点提升到3D空间，并计算机械夹爪与该3D目标点之间的相对位移；然后，用一个两层MLP将此3D位移编码为一个空间嵌入；最后，将该空间嵌入通过自适应层归一化机制直接注入到VLA模型的扩散Transformer动作头中，用于调节动作生成。</p>
+<p><img src="https://arxiv.org/html/2606.27663v1/2606.27663v1/x2.png" alt="方法框架图"></p>
+<blockquote>
+<p><strong>图2</strong>：方法整体框架。(1) 外部 grounding 模块提供2D目标点。(2) 利用深度和相机参数将其提升至3D，计算与夹爪的相对位移，并通过一个两层MLP编码为空间嵌入。(3) 将该空间嵌入通过AdaLN直接注入到流匹配动作头中。</p>
+</blockquote>
+<p><strong>核心模块一：从2D目标点到3D空间嵌入</strong>。对于可关联到目标物体或区域的子任务（如抓取、放置），给定一个2D目标点 <code>(x_t, y_t)</code>，结合深度图及相机内参，可计算出其在机器人基坐标系下的3D位置 <code>p_t</code>。同时，从机器人状态中获取当前夹爪的3D位置 <code>p_g</code>。关键步骤是计算相对位移 <code>d = p_t - p_g</code>。随后，使用一个简单的两层MLP将 <code>d</code> 编码为空间嵌入 <code>z_spatial</code>。该嵌入直接捕获了目标与夹爪之间与动作预测最相关的3D几何关系。</p>
+<p><strong>核心模块二：将空间嵌入注入VLA动作头</strong>。现代VLA模型常采用扩散Transformer作为动作头。本文利用DiT中已有的自适应层归一化（AdaLN）条件机制进行注入。具体而言，将空间嵌入 <code>z_spatial</code> 与原有的时间步嵌入 <code>z_time</code> 进行逐元素相加，然后通过一个线性层回归出AdaLN所需的尺度与偏移参数 <code>γ</code> 和 <code>β</code>，用这些参数来调制DiT块中的归一化特征。此方式无需修改VLA主干结构或增加额外的注意力交互模块。</p>
+<p><strong>创新点</strong>：与现有方法相比，本文的创新性体现在两点：1) <strong>3D几何表示</strong>：不同于先前工作使用的2D图像坐标或语言描述的坐标，本文明确提出并验证了使用目标与夹爪间的3D相对位移作为 grounding 信号的有效性，其几何形态与动作输出空间匹配。2) <strong>直接注入动作头</strong>：区别于通过语言提示（经VLM主干处理）或视觉提示（叠加在输入图像）等间接方式，本文将3D信号作为连续嵌入直接注入到最终负责动作生成的DiT动作头中，避免了信号在VLM主干处理过程中的保真度损失。</p>
+<p><img src="https://arxiv.org/html/2606.27663v1/2606.27663v1/x1.png" alt="方法对比图"></p>
+<blockquote>
+<p><strong>图1</strong>：不同 grounding 表示与注入范式的对比。在获得相同2D目标点的情况下，将其作为坐标附加到语言提示或作为标记叠加在图像上仅带来小幅提升，而将其提升至3D并直接注入动作头则能带来显著的性能提升。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：主要在仿真环境中的<strong>LIBERO</strong>和<strong>LIBERO-PRO</strong>基准上进行评估。LIBERO-PRO包含两种测试时扰动：<strong>任务扰动</strong>（用场景中其他合理物体替换指令目标，测试任务泛化）和<strong>位置扰动</strong>（改变物体初始放置位置，测试空间泛化）。训练数据扩充至69个抓放任务。对比的基线包括OpenVLA、π0、MolmoAct以及同样在本数据上微调的两个强VLA骨干网络：π0.5和GR00T-N1.6。</p>
+<p><strong>关键实验结果</strong>：<br><img src="https://arxiv.org/html/2606.27663v1/2606.27663v1/x5.png" alt="主实验结果表"></p>
+<blockquote>
+<p><strong>表1</strong>：在LIBERO和LIBERO-PRO上的结果。所有基线在两种扰动下性能均大幅下降。本文方法在π0.5和GR00T-N1.6两个骨干网络上均带来一致且显著的提升，验证了其有效性和骨干无关性。</p>
+</blockquote>
+<p>如表1所示，基线模型在任务扰动和位置扰动下成功率大幅下降（例如GR00T-N1.6分别降至31.2%和28.1%）。应用本文方法后，GR00T-N1.6在任务扰动下的平均成功率提升至77.5%（+46.3%），在位置扰动下提升至60.2%（+32.1%）。在π0.5骨干上也观察到可比幅度的提升（分别从37.3%到75.9%，从47.0%到72.2%）。</p>
+<p><img src="https://arxiv.org/html/2606.27663v1/2606.27663v1/x6.png" alt="消融实验表"></p>
+<blockquote>
+<p><strong>表2</strong>：控制变量对比不同表示和注入方式。实验表明，2D表示无论以何种方式注入均有根本性局限，而3D表示也只有在通过AdaLN直接注入时才能发挥其全部潜力。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：</p>
+<ol>
+<li><strong>表示与注入方式解耦（表2）</strong>：在给定相同2D目标点的控制实验中，所有使用2D表示的方法（文本提示、视觉提示、AdaLN）提升有限。将坐标提升至3D但通过文本提示注入，性能也无明显改善。<strong>只有当同时采用3D表示和AdaLN直接注入（本文方法）时，性能才实现飞跃</strong>。这证明3D表示和直接注入二者缺一不可。</li>
+<li><strong>空间嵌入输入成分（表3）</strong>：实验显示，使用相对位移 <code>d</code> 单独作为输入，效果优于同时输入目标位置 <code>p_t</code>、夹爪位置 <code>p_g</code> 和 <code>d</code>。这表明学习场景不变的几何关系（<code>d</code>）比学习可能随场景变化的绝对位置更具泛化优势。</li>
+<li><strong>注入机制（表4）</strong>：对比AdaLN与将位移作为机器人状态令牌通过自注意力交互的注入方式，AdaLN效果更佳，表明通过调制归一化特征能更有效地传递空间信号。</li>
+</ol>
+<p><strong>其他关键实验</strong>：<br><img src="https://arxiv.org/html/2606.27663v1/2606.27663v1/x3.png" alt="数据规模对比"></p>
+<blockquote>
+<p><strong>图3</strong>：比较20任务和69任务训练规模下的各方法性能。本文方法仅用20个任务训练，性能已超过所有其他方法使用69个任务训练的结果，表明精心设计的方案比单纯扩大数据规模更有效。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.27663v1/2606.27663v1/x4.png" alt="深度噪声鲁棒性"></p>
+<blockquote>
+<p><strong>图4</strong>：深度噪声实验。训练时加入深度噪声会导致性能轻微下降但仍显著优于基线，且推理时对深度噪声表现出良好的鲁棒性。</p>
+</blockquote>
+<p><strong>现实世界实验</strong>：<br><img src="https://arxiv.org/html/2606.27663v1/2606.27663v1/x7.png" alt="现实世界结果"></p>
+<blockquote>
+<p><strong>图5</strong>：现实世界实验结果。在任务和位置扰动下，基线及2D变体方法成功率接近于零，而本文方法仍能保持大部分性能，证明了其实际应用的有效性。</p>
+</blockquote>
+<p>在真实的Franka机器人平台上，使用消费级RGB-D传感器和开源VLM作为 grounding 源。实验结果显示，在分布内场景下，所有引入 grounding 的方法均有提升；但在任务和位置扰动下，基线及2D变体方法成功率崩溃至接近零，而唯有本文方法能维持较高成功率，证实了其在噪声现实条件下的强泛化能力。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>揭示了决定VLA泛化能力的关键并非仅仅是提供 grounding 信号，而在于<strong>如何表示和注入该信号</strong>。提出并验证了“3D表示 + 直接注入动作头”这一高效组合。</li>
+<li>设计了一个极其轻量（仅两层MLP）、模型无关的模块，无需改动VLA主干或预训练流程，即可在不同骨干网络上大幅提升空间与任务泛化性能。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>方法假设每个子任务都能关联到一个目标物体或区域，暂未涵盖无明确目标的物体无关动作。</li>
+<li>依赖于一个可用的2D grounding 信号，在复杂场景或指令下如何鲁棒地获取该信号是与本文正交的开放问题。</li>
+<li>实验均在单臂机器人上进行，向双臂或人形机器人的扩展留待未来探索。</li>
+</ol>
+<p><strong>启示</strong>：<br>本研究为提升VLA的泛化能力提供了一条简单而有效的路径，强调了在构建机器人学习系统时，应仔细考虑中间表示的几何对齐性（3D动作空间对应3D信号）以及信息流的有效性（直接注入关键决策模块）。这种“最小有效形式”的3D信息利用方式，为未来在更复杂任务和 embodiment 上的应用提供了基础。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型在空间泛化和任务泛化上的脆弱性问题，提出一种直接注入接地3D点到动作头的方法。该方法使用轻量级的两层MLP模块，将3D点表示的空间信号计算与夹持器的相对位移，并通过自适应层归一化直接注入动作头，无需修改主干网络。实验表明，在LIBERO-PRO数据集上，该方法使GR00T-N1.6模型在任务扰动下平均成功率从31.2提升至77.5（提升46.3点），位置扰动下从28.1提升至60.2（提升32.1点）。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.27663" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

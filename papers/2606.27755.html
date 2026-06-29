@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Drop-Then-Recovery: How Redundant Are Vision-Language-Action Models? - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Drop-Then-Recovery: How Redundant Are Vision-Language-Action Models?</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.27755" target="_blank" rel="noreferrer">2606.27755</a></span>
+        <span>作者: Ang Li Team</span>
+        <span>日期: 2026-06-26</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-行动（VLA）模型已成为指令驱动机器人操作的主流框架，其通常继承来自预训练视觉语言模型（VLM）的大型语言主干网络。然而，在标准的机器人操作基准测试中，指令通常简短且模板化（例如“拿起红杯子”），这使得这些庞大主干网络的容量可能远超任务所需。这引发了一个核心问题：对于闭环控制而言，VLA模型中究竟有多少部分是真正必需的？仅凭参数量无法回答此问题，因为语言建模中有用的模块对下游控制任务可能非必要，而微小的动作误差却会在长时程中累积导致任务失败。关键是，冗余性的衡量必须基于闭环任务成功率，而非单步预测损失。本文针对VLA模型的架构冗余性，提出了一个“删除-后恢复”（Drop-Then-Recovery）的分析协议，通过物理移除Transformer模块并微调剩余模型，来量化评估各组件（视觉、语言、行动）的冗余程度，其核心思路是：如果被删除的模型经过下游微调后能恢复任务成功率，则被移除的容量对于当前任务分布并非必需，从而系统性地揭示了VLA模型内部冗余的严重不对称性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p><img src="https://arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：DTR方法概述。预训练VLA模型的Transformer模块根据重要性排序，重要性最低的模块被物理删除，然后对更小的模型进行恢复性微调。</p>
+</blockquote>
+<p>整体框架遵循DTR协议，包含两个阶段。首先，一个VLA模型被分解为视觉编码器 $\mathcal{V}$、语言主干 $\mathcal{L}$ 和行动头 $\mathcal{A}$，每个组件都由一系列具有残差连接的Transformer模块堆叠而成。所有可删除模块的集合记为 $\mathcal{B}$。</p>
+<p><strong>第一阶段：删除</strong>。给定一个重要性度量指标 $I$ 和目标删除数量 $K$，选择并物理删除 $K$ 个最不重要的模块。删除操作将残差连接短路（$h_i = h_{i-1}$）并丢弃该模块的参数 $\theta_i$，从而产生一个FLOPs、内存和延迟均成比例减小的、真正更小的密集模型。</p>
+<p><strong>第二阶段：恢复</strong>。将删除后的模型在下游任务上进行微调，最小化动作预测损失（例如，连续动作为MSE，基于扩散的头为流匹配损失）。这一阶段至关重要，因为在闭环控制中，动作质量的微小下降会在长时程中累积并导致任务级崩溃。恢复后的任务性能被称为“可恢复性”，这与“重要性”（即删除后性能的即时下降程度）不同——一个模块可能导致很大的零样本性能下降，但经过微调后却很容易恢复。</p>
+<p><strong>创新的重要性度量：GateProbe</strong>。DTR的一个核心挑战是如何选择要删除的模块。现有的静态度量（如余弦相似性、困惑度、参数幅值）仅衡量删除后的即时性能，无法捕捉模块在微调后的恢复潜力。本文提出了GateProbe，一种在激活空间运行、直接测量任务损失对每个模块功能贡献敏感度的单次虚拟门控度量。其关键思想是为每个模块的残差分支引入一个虚拟标量门 $\alpha_i$：$\tilde{h}<em>{i}=h</em>{i-1}+\alpha_{i} \cdot F_{i}(h_{i-1}; \theta_{i})$。将 $\alpha_i$ 设为0等效于删除该模块，设为1则还原原始模型。GateProbe的重要性得分是任务损失对此门的期望绝对敏感度：$I_{\text{gate}}(B_{i}) = \mathbb{E}<em>{x\sim\mathcal{D}}[ |\frac{\partial\mathcal{L}(x)}{\partial\alpha</em>{i}}|<em>{\alpha</em>{i}=1} ]$。通过链式法则，此得分可计算为下游梯度 $\partial\mathcal{L}/\partial h_{i}$ 与该模块残差贡献 $F_{i}(h_{i-1})$ 的内积，从而捕捉了模块改变表征的程度以及下游计算对此改变的依赖程度。</p>
+<p>与现有方法相比，DTR的创新点在于：1）它不是权重级的压缩，而是基于架构单元的结构化探测，使干预更易于跨组件比较且不依赖于特定硬件内核；2）它强调“删除-后恢复”的完整流程，以任务成功率恢复能力作为冗余性的最终判据；3）提出的GateProbe度量直接关联下游动作损失，能更好地预测极端压缩下的可恢复性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了四个代表性的VLA架构：$\pi_{0.5}$、OpenVLA-OFT、Lingbot-VLA和GigaBrain-0。评估基准包括三个模拟环境：LIBERO、LIBERO-Plus和RoboTwin 2.0。主要对比了不同的块重要性度量（泰勒敏感度、Fisher、海森、余弦相似度、困惑度、参数幅值等），并在某些实验中以“删除一半”和“仅保留2个”作为简单的固定干预策略进行基线比较。</p>
+<p>关键实验结果总结如下：</p>
+<p><img src="https://arxiv.org/html/2606.27755v1/2606.27755v1/x1.png" alt="表格结果"></p>
+<blockquote>
+<p><strong>图2</strong>：真实世界实验布置及主要结果。(a)实验平台，(b)(c)两个测试环境，(d)(e)在不同语言模块删除程度下的任务成功率。结果显示，删除一半语言模块（Drop-9）的性能与完整模型相当甚至略优，即使在仅保留2个模块（Drop-16）时也只出现中度性能下降。</p>
+</blockquote>
+<p>在LIBERO基准上（见表1），语言主干表现出极高的冗余性。对于OpenVLA-OFT，删除一半语言模块（参数减少44.5%）后，平均成功率（SR）从95.0%提升至98.3%；即使仅保留两个语言模块（参数减少83.4%），平均SR仍达95.1%，与基线持平。相反，视觉和行动路径对删除的容忍度低得多：视觉模块仅删除3.6%参数，SR就降至83.9%；行动模块在 $\pi_{0.5}$ 上仅保留两个模块时，SR骤降至26.2%。这证实了冗余性的严重不对称性：语言主干高度冗余，而视觉和行动路径则至关重要。</p>
+<p>GateProbe被证明是最稳健的块选择度量。如表3所示，在 $\pi_{0.5}$ 上进行不同程度删除的实验中，非梯度度量（余弦相似度、幅值、困惑度）在各个删除级别上始终表现不佳。基于梯度的度量（泰勒敏感度、IGIA）在适度压缩时效果良好，但在极端设置下性能恶化。GateProbe在所有四个删除级别上都取得了最佳或次佳性能，且在激进压缩下（删除16/18和17/18个模块）优势扩大，分别领先+3.9和+4.3个百分点。</p>
+<p><img src="https://arxiv.org/html/2606.27755v1/2606.27755v1/x2.png" alt="分布偏移"></p>
+<blockquote>
+<p><strong>图3</strong>：在分布偏移下的鲁棒性评估。(a)光照扰动（粉色、绿色、闪烁光），(b)物理扰动（新物体、容器方向改变、容器移除）。在轻度扰动下，删除模型与完整模型性能接近，但在强扰动下，性能差距显现（例如在绿光下Drop-16 SR降至35%，而完整模型为50%）。</p>
+</blockquote>
+<p>消融实验表明，删除冗余模块带来了实际收益。在匹配总FLOPs的计算预算下，进行更多迭代的删除模型（如Drop-12）性能可以超越基线（平均SR 93.7% vs 91.7%）。此外，DTR产生的标准密集模型可在任何硬件上实现推理加速，且无需专用内核支持。如表5所示，DTR-16在OpenVLA-OFT上实现了1.64倍的任务级加速，并降低了42%的内存占用，而零-shot块删除则会因成功率严重下降导致总步骤增加，最终使端到端速度变慢。</p>
+<p>跨基准分析进一步揭示了语言冗余性的普遍性及其局限。在图4所示的RoboTwin 2.0实验中，删除模型在“简单”任务变体上性能下降微弱（-0.6%），但在“困难”变体上下滑明显（-6.6%）。更重要的是，如表6对LIBERO-Plus的详细分析所示，删除语言模块后，性能下降最大并非出现在“语言”扰动类别，而是出现在“机器人”（初始姿态扰动）类别。这表明，尽管语言主干对简单指令是过参数的，但它对模型适应物理扰动的泛化能力仍有贡献。</p>
+<p><img src="https://arxiv.org/html/2606.27755v1/2606.27755v1/x3.png" alt="跨任务分析"></p>
+<blockquote>
+<p><strong>图4</strong>：在RoboTwin 2.0基准上使用π0.5的逐任务DTR结果。语言冗余性在各基准中普遍存在，但被删除的模块同时也对超出语言理解的物理泛化能力有贡献。各任务的“困难”变体性能下降远比“简单”变体剧烈。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）通过DTR协议系统地揭示并量化了VLA模型中惊人的冗余不对称性：语言主干对于当前机器人操作基准严重过剩，而视觉与行动路径则压缩性很差；2）提出了GateProbe这一创新的、面向可恢复性的重要性度量，特别是在激进压缩下优于现有指标；3）研究结果不仅为模型压缩提供了实用路径，更指明了当前VLA基准测试可能对深层语言基础和组合指令理解施压不足，以及VLA架构设计与任务需求间的根本性错配。</p>
+<p>论文自身提到的局限性在于，语言主干的冗余性结论主要基于当前指令相对简单和模板化的标准操作基准。一旦任务需要更丰富的语言理解或组合推理，其冗余程度可能会降低。</p>
+<p>对后续研究的启示是双重的：一方面，未来的VLA架构设计应有意识地、更均衡地在语言、视觉和行动组件间分配容量；另一方面，需要开发语言复杂度更高、分布外（OOD）扰动更充分的基准测试，以匹配和激发VLA模型中庞大语言组件的潜力，并更真实地评估其闭环控制能力。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本研究核心在于评估VLA（视觉-语言-动作）模型在机器人操控任务中的结构冗余性。提出了一种“Drop-Then-Recovery”分析协议：先移除预训练模型中的特定Transformer模块，再微调下游控制任务，以检验其必要性。关键技术为一次性敏感度度量GateProbe，用于快速评估各模块对动作损失的影响。实验发现一个关键不对称性：在标准操控任务中，语言骨干网络冗余度极高（例如移除一半LLM块后性能从95.0%提升至98.3%），而视觉与动作路径的冗余容忍度则低得多。这表明当前基准对深层语言理解要求有限。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.27755" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
