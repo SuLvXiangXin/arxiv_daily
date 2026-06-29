@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>WARP-RM: A Warp-Augmented Relative Progress Reward Model for Data Curation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>WARP-RM: A Warp-Augmented Relative Progress Reward Model for Data Curation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.28320" target="_blank" rel="noreferrer">2606.28320</a></span>
+        <span>作者: Ken Goldberg Team</span>
+        <span>日期: 2026-06-26</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人模仿学习中，大规模数据集的构建是关键，但人类远程操作不可避免地会产生混合质量的演示数据，其中包含犹豫和恢复行为。现有数据筛选方法主要分为轨迹级和帧级。轨迹级方法（如基于互信息或影响函数的筛选）会丢弃整个低质量片段，但可能同时丢弃了次优执行中嵌入的高价值片段，且无法剔除保留演示中的局部犹豫。帧级方法通过学习密集的进度奖励信号进行更精细的筛选。当前主流方法（如ReWiND、VIP、LIV）属于绝对进度模型，它们使用归一化的时间步长或全局时间对齐作为监督目标。然而，由于操作者可能在演示中暂停、重试或恢复，相同的时间戳可能对应完全不同的任务状态，这为模型引入了显著的标签噪声。近期一些方法（如SARM、ARM）通过人工标注来缓解噪声，但成本高昂且难以扩展。</p>
+<p>本文针对上述绝对进度模型中的标签噪声问题，提出了一个全新的视角：学习<strong>相对</strong>进度信号。核心思路是：通过时间扭曲（可变播放速度和反向播放）对成功演示进行数据增强，生成自监督的伪标签，从而训练一个能预测帧间相对时间增量的模型，最终得到一个密集的、有符号的帧级任务进度速度信号。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>WARP方法的整体目标是从成功的视觉演示中学习一个密集的、每帧的相对任务进度速度。其pipeline分为两步：首先，通过WARP算法自监督训练WARP-RM（进度奖励模型）；然后，使用WARP-RM的输出进行WARP-BC（行为克隆），通过筛选和重加权动作块来训练策略。</p>
+<p><img src="https://arxiv.org/html/2606.28320v1/2606.28320v1/figures/assets/model_arch_submission.png" alt="WARP-RM Architecture"></p>
+<blockquote>
+<p><strong>图3</strong>：WARP-RM架构。一个32帧的演示窗口（左侧）通过冻结的DINOv3主干网络ϕ编码，并由一个双向注意力Transformer聚合，该Transformer在每个输入帧处输出30个累积进度区间的分布。黄色阴影区域（左下）展示了应用于连续片段的一个滑动预测窗口。它们的每帧期望值构成窗口的预测累积进度向量。离散的时间导数产生窗口内速度（右下），然后在重叠窗口上平均以产生最终的每帧进度速度。</p>
+</blockquote>
+<p><strong>核心模块1：时间扭曲采样器。</strong> 这是生成自监督训练数据的关键。采样器通过一个平稳的AR(1)过程生成一系列相关的对数速度，取指数后得到非负的未归一化速度。为了模拟非单调进度（如倒退），采样器会从泊松分布中抽取一定数量的“反转点”，在反转点处翻转后续所有速度的符号。整个过程还可能以0.5的概率完全反向播放，确保模型看到正向和反向的样本。最终，采样器生成一组带符号的、归一化的播放速度，并据此计算出一系列非均匀、非单调的帧索引及其对应的伪标签（相对于窗口起始帧的归一化时间增量）。</p>
+<p><img src="https://arxiv.org/html/2606.28320v1/2606.28320v1/figures/assets/sampler_submission.png" alt="Time-Warp Sampler"></p>
+<blockquote>
+<p><strong>图2</strong>：时间扭曲采样器。WARP使用扭曲的播放计划对轨迹进行重采样。(1)：播放速度可变，涵盖慢动作到快进。播放方向随机反转以向模型暴露负进度（倒退）。(2)：累积这些播放速度得到一个32帧源帧窗口。每帧相对于起始帧的时间偏移作为WARP-RM模型预测的自监督进度标签。</p>
+</blockquote>
+<p><strong>核心模块2：进度模型训练。</strong> WARP-RM使用冻结的DINOv3-ViT作为视觉编码器ϕ。每个输入token由当前帧的特征及其与前帧的差值拼接而成，以捕获运动信息。这些token经过投影和位置编码后，送入一个双向Transformer编码器。模型输出不是直接回归进度值，而是为每一帧预测一个独立的、在30个均匀间隔区间上的分类分布，并使用双热点编码的交叉熵损失进行训练。这种方式相比直接回归更稳定且能更充分利用模型容量。</p>
+<p><strong>核心模块3：进度信号聚合与行为克隆。</strong> 在推理时，WARP-RM以重叠窗口方式应用于演示序列，窗口步长为1个源帧。在每个窗口内，计算连续预测的累积进度的差值，得到窗口内速度。每个源帧的最终进度速度v̂ₜ是其所在的所有重叠窗口内速度的平均值。该方法命名为WARP-BC，它利用v̂ₜ来筛选和重加权行为克隆损失中的动作块（每个块持续1秒）。具体地，使用动作块最后一帧的进度速度v̂_end来计算权重：w(s,a) = v̂_end ⋅ 1(v̂_end &gt; τ)，其中τ为过滤阈值。权重为零的块在训练前被过滤掉。最终的行为克隆损失是标准的流匹配损失，但每个样本都按此权重加权。</p>
+<p><strong>创新点</strong>：1) 提出了一种通过结构化时间扭曲生成自监督相对进度信号的算法，避免了绝对进度模型的标签噪声问题和人工标注成本。2) 在行为克隆中，创新性地使用进度速度的连续值进行重加权，而不仅仅是二值过滤，并证明使用块末速度（而非块内平均速度）进行门控效果最佳。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：评估在一个真实的双臂机器人系统上进行，主要任务是将一件随机 crumpled 的T恤折叠整齐。通过演示时长对数据集进行分层（𝒟₁: ≤60s，𝒟₂: ≤90s，𝒟₃: ≤120s）来模拟不同质量的训练数据。评估指标包括成功率（20次试验）、平均任务完成时间（TTC）和吞吐量（成功折叠次数/小时）。WARP-RM在一个由最短演示（≤59.8s）组成的干净参考集上训练一次，然后应用于所有层级。</p>
+<p><strong>对比方法</strong>：Vanilla BC（作为基线），以及SARM、DemInf、SCIZOR等数据筛选方法。在引入额外标注数据𝒟_A后，在𝒟₄（𝒟₁∪𝒟_A）和𝒟₅（𝒟₂∪𝒟_A）上进行了公平比较。</p>
+<p><img src="https://arxiv.org/html/2606.28320v1/2606.28320v1/figures/ttc_distribution.png" alt="Time-to-completion distribution for successes"></p>
+<blockquote>
+<p><strong>图4</strong>：成功试验的任务完成时间分布。性能在三个按次优性递增的数据集上进行评估。策略执行超过240秒视为失败，未在图中显示。随着训练数据中低效演示增多（𝒟₂, 𝒟₃），WARP-BC的成功率和完成速度都显著优于Vanilla BC。</p>
+</blockquote>
+<p><strong>关键结果</strong>：</p>
+<ol>
+<li><strong>跨层级评估（表1）</strong>：在最高效的数据集𝒟₁上，WARP-BC和Vanilla BC均达到20/20成功率，但WARP-BC的吞吐量（56.3 vs. 31.6 /hr）高出1.78倍。在𝒟₂上，Vanilla BC崩溃至2/20成功率，而WARP-BC保持19/20，吞吐量提升约18倍（27.4 vs. 1.5 /hr）。在𝒟₃上，WARP-BC仍取得14/20成功率。同时，WARP-BC仅保留了22.5%至35.7%的动作块用于训练。</li>
+<li><strong>基线对比（表2）</strong>：在𝒟₅（更次优的数据集）上，SARM和SCIZOR的成功率均降至2/20，且它们保留了更多的动作块（66.6%）。DemInf表现稳健（18/20），但在匹配保留数据量的情况下，WARP-BC的吞吐量（44.6 vs. 25.3 /hr）更高，且取得了20/20的成功率。</li>
+<li><strong>消融实验（表3）</strong>：<ul>
+<li><strong>加权函数</strong>：使用连续权重（v̂_end）优于二值权重（19/20 vs. 16/20成功率），证明了按进度幅度比例加权的重要性。</li>
+<li><strong>聚合策略</strong>：使用动作块<strong>末端</strong>帧的速度（v̂_end）进行门控，优于使用块内平均速度（19/20 vs. 15/20）。</li>
+<li><strong>采样器</strong>：使用平滑相关的AR(1)采样器比独立同分布（IID）采样器带来了吞吐量的提升（27.4 vs. 22.8 /hr）。</li>
+</ul>
+</li>
+<li><strong>额外任务验证（表4）</strong>：在“瓶入箱”放置任务中，WARP-BC同样显著提升了任务完成数量（74/80 vs. 59/80）和吞吐量（237.8 vs. 147.8 /hr）。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：1) 提出了WARP，一种完全自监督的算法，通过新颖的时间扭曲增强来学习密集的相对任务进度信号。2) 提出了WARP-BC，利用WARP-RM的帧级估计对行为克隆中的动作块进行门控和重加权，证明了使用末端帧速度进行连续重加权的有效性。3) 在真实的、长视野、非刚性物体操纵任务上进行了大规模实证评估，证明了该方法在处理混合质量演示数据时的强大鲁棒性，在数据质量下降时能将策略性能崩溃转化为吞吐量的大幅提升。</p>
+<p><strong>局限性</strong>：论文提到，虽然WARP通过学习相对速度避免了绝对对齐，但其自监督信号的“进度”概念仍然模糊，与任务语义可能存在差距。</p>
+<p><strong>启示</strong>：这项工作表明，通过精心设计的、贴合下游推理特性的数据增强（如时间扭曲）来生成自监督信号，可以高效地解决模仿学习中数据质量不一的痛点。其“相对进度”的视角为未来无需人工标注的精细数据筛选提供了新思路。同时，连续重加权优于二值过滤的结论，以及末端速度优于平均速度的观察，对设计基于优势估计的策略学习方法具有参考价值。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对模仿学习中人类示教数据质量参差不齐的问题，提出WARP-RM算法。该方法通过时间扭曲增强（如变速与反转播放）生成自监督的帧级相对进度信号，并训练奖励模型预测帧间归一化时间差。基于此构建的WARP-BC策略在行为克隆中依据聚合的进度奖励加权高优势动作片段。在双臂机器人折叠T恤的实验中，面对低质量数据，WARP-BC成功率保持19/20，相较普通行为克隆（2/20）提升显著，吞吐量最高提升约18倍。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.28320" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
