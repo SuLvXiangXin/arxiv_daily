@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>You Only Touch Once: 6-DoF Object Pose Estimation from Single Tactile Contact - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>You Only Touch Once: 6-DoF Object Pose Estimation from Single Tactile Contact</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.28899" target="_blank" rel="noreferrer">2606.28899</a></span>
+        <span>作者: Edward Adelson Team</span>
+        <span>日期: 2026-06-27</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>主流的6-DoF物体位姿估计方法依赖于RGB或RGB-D视觉传感器，通过模板匹配、直接位姿回归或关键点投票等技术实现。这些方法在物体可见且光照条件良好时精度很高，但在机器人操控的关键场景中，例如抓取时被手或夹具遮挡、反光或透明表面违反光度假设、以及光线昏暗时，其性能会严重下降。触觉感知直接观测接触点的几何形状，对上述三种失效模式具有鲁棒性，但面临一个核心挑战：单个触觉接触仅能观测到物体表面的一小块区域，而相同的局部几何形状可能在物体的多个不同位置出现，导致严重的定位模糊性。现有触觉方法要么匹配低维的接触特征，性能有限，要么依赖连续接触历史进行跟踪，无法实现单次接触下的绝对位姿估计。</p>
+<p>本文针对单次触觉接触无法直接确定物体位姿这一核心难题，提出了一种新视角：利用一对同步的接触点（而非单个点），将触觉接触表示为三维点云，并利用其在物体模型表面上的局部几何特征进行精确定位。通过一个粗到精的定位网络将两个接触点准确地映射到物体表面，并结合接触点处的表面法向，最终利用一个闭式、法向感知的奇异值分解（SVD）求解器，一步恢复完整的6-DoF物体位姿，无需接触历史、物体运动或视觉输入。</p>
+<p>本文的核心思路是以触觉点云作为输入，通过模拟到真实（sim-to-real）的两阶段训练技术，学习将局部触觉几何特征对应到已知物体模型的特定区块，再利用两个定位成功的接触点及其法向，解析地计算出物体在世界坐标系中的位置和姿态。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>YOTO的整体流程如下：给定了物体模型和一对来自左右GelSight触觉传感器同步采集的接触点云，系统首先对物体表面进行区块化表示，然后将每个触觉点云输入一个粗到精的定位网络，预测该接触点在物体坐标系中的精确位置及其表面法向，最后将这些信息与已标定的传感器位姿一起，送入一个闭式求解器，输出物体在世界坐标系中的6-DoF位姿估计 $\hat{\mathbf{T}}_{O}^{W} \in SE(3)$。</p>
+<p><img src="https://arxiv.org/html/2606.28899v1/2606.28899v1/Fig2.jpg" alt="YOTO系统流程图"></p>
+<blockquote>
+<p><strong>图1</strong>：YOTO系统整体框架。输入是物体模型和一对触觉点云。流程包括：（左）表面区块化表示与虚拟接触生成；（中）粗到精接触定位网络；（右）基于双接触的法向感知SVD位姿求解器。</p>
+</blockquote>
+<p><strong>核心模块与技术细节：</strong></p>
+<ol>
+<li><p><strong>表面表示与虚拟接触生成</strong>：从物体模型（CAD网格或消费级扫描重建网格）采样得到物体表面点云 $\mathcal{P}$。为降低搜索空间，将 $\mathcal{P}$ 沿物体主轴向划分为若干“表面区块”（Surface Block） ${\mathcal{B}_i}$，每个区块包含其表面点、法向和区块中心坐标 $\mathbf{c}_i^O$。虚拟触觉点云从 $\mathcal{P}$ 中随机中心点的邻域（半径匹配GelSight足迹）采样生成。为使网络不依赖于接触点在世界坐标系中的绝对朝向，所有触觉点云（无论虚拟生成还是真实采集）在输入网络前都进行了“规范化”：通过PCA估计局部凹方向并旋转至与z轴对齐，再平移到原点。这确保了虚拟与真实数据特征分布一致，是实现少量真实数据微调的关键。</p>
+</li>
+<li><p><strong>粗到精接触定位网络</strong>：网络接收单个触觉点云 $\mathbf{X}_s$ 和所有表面区块 ${\mathcal{B}_i}$。它采用两个权重共享的轻量级点云编码器分支，分别提取触觉特征 $\mathbf{q}_s$ 和区块特征 $\mathbf{b}_i$。</p>
+<ul>
+<li><strong>粗检索阶段</strong>：计算触觉特征与所有区块特征的归一化相似度得分 $a_i$（式1）。得分最高的区块被选为初始接触区域。接着，根据区块中心坐标，检索该区域空间邻域内得分最高的K个候选区块。<br><img src="https://arxiv.org/html/2606.28899v1/2606.28899v1/Fig3.jpg" alt="定位网络框架图"><blockquote>
+<p><strong>图2</strong>：粗到精触觉表面定位网络架构。左侧接收触觉点云，中间部分进行区块特征匹配与粗检索，右侧为每个候选区块预测局部偏移和置信度。</p>
+</blockquote>
+</li>
+<li><strong>精定位阶段</strong>：对于每个候选区块 $\mathcal{B}<em>{i_k}$，一个精细定位头 $g</em>{\theta}$ 预测一个局部偏移量 $\Delta\hat{\mathbf{p}}<em>{s,k}^O$ 和一个置信度分数 $\gamma</em>{s,k}$（式2）。最终的接触位置预测 $\hat{\mathbf{p}}<em>s^O$ 由粗检索得分 $a</em>{i_k}$ 与精定位置信度 $\gamma_{s,k}$ 之和最高的候选决定（式3）。</li>
+<li><strong>法向估计</strong>：定位后，在表面点云 $\mathcal{P}$ 中查找距离 $\hat{\mathbf{p}}_s^O$ 最近的k个点（实验取k=20），取它们的法向平均值作为该接触点的表面法向估计 $\hat{\mathbf{n}}_s^O$。</li>
+</ul>
+</li>
+<li><p><strong>两阶段训练目标</strong>：采用模拟到真实的两阶段训练策略。</p>
+<ul>
+<li><strong>预训练</strong>：使用大量虚拟接触点云进行训练，为区块检索（分类损失 $\mathcal{L}<em>{\text{cls}}$）和位置回归（平滑L1损失 $\mathcal{L}</em>{\text{pos}}$）提供密集监督。此外，使用边界损失 $\mathcal{L}_{\text{topK}}$ 确保正确区块在候选集中竞争力。</li>
+<li><strong>微调</strong>：混合虚拟样本和少量真实GelSight接触样本进行微调，真实样本被赋予更大的损失权重。总损失为三项的加权和（式8）。</li>
+</ul>
+</li>
+<li><p><strong>基于双接触的6-DoF位姿恢复</strong>：网络仅预测接触位置，丢弃了绝对朝向信息。系统利用两个同步接触点的相对几何关系来恢复完整的物体旋转和平移。</p>
+<ul>
+<li>根据网络输出的两个物体坐标系接触位置 $\hat{\mathbf{p}}_L^O, \hat{\mathbf{p}}_R^O$ 及其估计法向 $\hat{\mathbf{n}}_L^O, \hat{\mathbf{n}}_R^O$，以及由传感器标定得到的两个世界坐标系接触位置 $\mathbf{p}_L^W, \mathbf{p}_R^W$ 和接触方向 $\mathbf{n}_L^W, \mathbf{n}_R^W$，分别构建物体坐标系和世界坐标系的方向矩阵 $\mathbf{Q}^O$ 和 $\mathbf{Q}^W$（式10）。</li>
+<li><strong>旋转求解</strong>：通过求解正交普鲁克问题（式11），最小化 $|\mathbf{Q}^W - \mathbf{R}\mathbf{Q}^O|_F^2$，得到一个闭式的SVD解 $\hat{\mathbf{R}}$。</li>
+<li><strong>平移求解</strong>：将预测的物体坐标系接触点用求解出的旋转对齐到世界坐标系，并对两个接触点的平移误差取平均，得到平移估计 $\hat{\mathbf{t}}$（式12）。</li>
+</ul>
+</li>
+</ol>
+<p><strong>创新点</strong>：与现有方法相比，YOTO的核心创新在于：1）提出使用一对同步接触点并结合其表面法向，解析求解6-DoF位姿，避免了依赖接触历史或迭代优化；2）设计了基于表面区块的粗到精定位网络，将全局的接触匹配问题转化为区块检索加局部偏移回归，有效处理了几何复杂物体；3）引入触觉点云规范化与两阶段训练，显著减少了对真实触觉数据量的需求，并能兼容消费级扫描的模型。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集/平台</strong>：在四个几何形状各异的物体（电钻Drill、松鼠Squirrel、猴子Monkey、牛油果Avocado）上进行评估。使用两个6-DoF AIRBOT Play机械臂，各搭载一个GelSight Mini触觉传感器。通过OptiTrack动作捕捉系统获取物体和传感器的真实姿态（仅用于评估）。触觉图像通过InvariantCloud重建为局部点云。</li>
+<li><strong>对比方法</strong>：由于没有公开可复现的、在相同单次、双接触、无历史设定下的触觉位姿估计器，因此将YOTO与几何方法的基线（ICP）和视觉方法的代表性基线（FoundationPose）进行比较。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>触觉接触定位精度</strong>：首先孤立评估定位网络。在所有物体上，YOTO实现了亚厘米级的平均定位误差。具体地，使用扫描模型并经过真实数据微调的YOTO平均误差为4.78 mm，远低于ICP基线的52.81 mm。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.28899v1/2606.28899v1/Fig4.jpg" alt="触觉接触定位结果可视化"></p>
+<blockquote>
+<p><strong>图3</strong>：YOTO预测的接触位置（蓝色）与基于动捕的真实接触区域（红色）在四个测试物体上的对比。展示了每个物体的两个视角。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2606.28899v1/2606.28899v1/Fig6.jpg" alt="接触定位误差数值表"></p>
+<blockquote>
+<p><strong>图4</strong>：接触定位误差数值对比表。关键结论：1) 使用消费级扫描模型训练的YOTO性能最佳（4.78 mm）；2) 仅使用虚拟数据训练会显著增大误差（24.65 mm），证明少量真实数据微调对弥补模拟到真实的差距至关重要。</p>
+</blockquote>
+<ol start="2">
+<li><strong>遮挡下的6-DoF物体位姿估计</strong>：评估在清晰视野和严重遮挡下的完整位姿估计性能。<ul>
+<li><strong>清晰视野下</strong>：YOTO在所有物体上的平移误差（平均3.42 mm）和旋转误差（平均3.58°）均优于FoundationPose（5.48 mm, 5.44°）。</li>
+<li><strong>严重遮挡下</strong>：FoundationPose性能急剧下降，平移和旋转误差分别增大约15倍（达到82.93 mm和85.57°）。而YOTO的性能几乎不受影响，平移和旋转误差分别保持在3.52 mm和3.56°，显著优于视觉方法。这表明YOTO在视觉感知不可靠时具有巨大优势。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.28899v1/2606.28899v1/Fig7.jpg" alt="遮挡下与视觉基线的位姿估计误差对比表"></p>
+<blockquote>
+<p><strong>图5</strong>：6-DoF位姿估计误差对比表。YOTO（仅触觉）在清晰和遮挡场景下性能稳定且优秀，而FoundationPose（RGB-D）在遮挡下误差暴增，凸显了纯触觉方法的鲁棒性。</p>
+</blockquote>
+<ol start="3">
+<li><strong>动态位姿跟踪</strong>：评估在仅初始化一次接触，后续机械臂执行开环轨迹运动时的持续跟踪能力。YOTO在整个运动过程中保持有界的跟踪误差，平移误差小于6.5 mm，旋转误差小于7.8°。运动中的误差峰值源于惯性负载，但未发散，且在运动停止后误差回落并保持在一个小的、可预测的漂移范围内。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.28899v1/2606.28899v1/20260605-071118.jpg" alt="动态跟踪误差曲线图"></p>
+<blockquote>
+<p><strong>图6</strong>：单个代表性轨迹上的逐帧6-DoF跟踪误差曲线。上图是平移误差，下图是旋转误差。虚线为多次试验的均值（对应表格数值），彩色曲线展示了单次试验的误差随时间变化情况，尾部的阴影区域为运动停止后的稳定阶段。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>首个单次双接触触觉位姿估计系统</strong>：提出了YOTO，一个仅依赖一次同步双传感器触觉接触，无需接触历史或视觉输入，即可恢复复杂几何物体绝对6-DoF位姿的完整系统。</li>
+<li><strong>创新的“粗到精定位+解析求解”方法</strong>：设计了结合表面区块检索与局部偏移回归的点云定位网络，以及利用接触点对相对几何（含法向）进行闭式SVD位姿求解的完整算法流程，兼具高效性与精确性。</li>
+<li><strong>实用的数据与训练流水线</strong>：通过触觉点云规范化和两阶段（虚拟预训练+少量真实微调）训练策略，大幅降低了对真实触觉数据采集的依赖，并证明系统可直接使用消费级扫描的物体模型，降低了应用门槛。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ul>
+<li>论文明确指出，对于像电钻这样具有细长、近似旋转对称轴形状的物体，当双传感器的接触方向接近共线时，绕该轴的旋转约束较弱，会导致该方向的姿态估计误差相对较大（动态跟踪中表现最明显）。</li>
+<li>方法仍需依赖一个已知的物体模型（无论是CAD还是扫描的）。尽管论文探索了使用扫描模型，并量化了其与CAD模型的微小精度差距，但无法处理完全未知的物体。</li>
+<li>系统的闭式求解依赖于两个接触点的准确定位，当物体表面局部几何高度相似（如牛油果的表面凸起）导致定位出错时，会直接影响最终位姿估计。</li>
+</ul>
+<p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li>本工作证明了即使在单次、非滑动接触的条件下，纯触觉感知也能实现高精度的6-DoF位姿估计，使其从视觉失效时的备选方案，转变为可独立应用于遮挡严重操作流程的可行方案。</li>
+<li>提出的表面区块表示方法为解决触觉感知的局部-全局对应问题提供了一个有效案例。未来可探索更具扩展性的表示形式，以支持更大的物体库或实现物体类别级别的泛化。</li>
+<li>研究揭示了瓶颈已从触觉传感器分辨率转向如何有效地将局部触觉信息与物体几何模型耦合。这启发了后续工作可以关注更高效的触觉特征学习、更鲁棒的模拟到真实迁移，或结合少量主动探索的增量模型构建。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出YOTO系统，解决视觉方法在遮挡、光照不佳等场景下6-DoF物体位姿估计失效的问题。关键技术包括：将单次双触觉接触表示为局部3D点云，通过粗到精网络在物体表面定位接触点，再结合传感器位姿，利用闭式法向量感知SVD解算器一步恢复完整6-DoF位姿。实验表明，在四种几何多样物体上，该方法实现了准确的触觉接触定位和位姿估计，性能优于视觉基线方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.28899" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
