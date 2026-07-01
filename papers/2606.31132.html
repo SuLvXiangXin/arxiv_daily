@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>ELASTIC: Efficiently Learning to Adaptively Scale Test-Time Compute for Generative Control Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>ELASTIC: Efficiently Learning to Adaptively Scale Test-Time Compute for Generative Control Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.31132" target="_blank" rel="noreferrer">2606.31132</a></span>
+        <span>作者: Andrea Bajcsy Team</span>
+        <span>日期: 2026-06-30</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>生成控制策略（如扩散策略和基于流的视觉-语言-动作模型）支持通过增加测试时计算来提升性能，而非依赖更多训练。测试时计算可沿两个正交轴分配：<strong>序列缩放</strong>（增加去噪步数以细化动作）和<strong>平行缩放</strong>（采样多个候选动作以探索策略分布的多模态）。然而，最佳计算分配难以预先确定，因为它依赖于状态、任务和策略能力。例如，抓取早期可能受益于更广的平行探索，而近接触阶段可能需要更多序列细化以保证精度。现有方法通常采用固定且保守的计算设置，导致效率低下。本文针对这一痛点，提出可以通过强化学习来学习状态依赖的测试时计算调度。本文的核心思路是：将计算分配问题形式化为一个元马尔可夫决策过程，训练一个元策略与冻结的预训练策略交互，自适应地在每个去噪迭代中选择序列步长和平行样本数，以在任务成功和计算成本之间取得最优权衡。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出ELASTIC算法，其核心是将测试时计算分配形式化为一个元马尔可夫决策过程（Meta-MDP）。</p>
+<p><img src="https://arxiv.org/static/base/1.0.1/images/arxiv-logo-primary-light.svg" alt="方法流程图"></p>
+<blockquote>
+<p><strong>图1</strong>：并行与序列缩放的示意图。并行缩放探索多样的动作模式，而序列缩放提升解决方案的质量。ELASTIC算法联合分配两个计算轴以优化性能-延迟权衡。</p>
+</blockquote>
+<p><strong>整体框架</strong>：元MDP控制着N个动作样本的联合去噪过程。在每个决策步k（对应于去噪迭代），<strong>元策略</strong> πmeta根据当前的<strong>元状态</strong> sk，为每个样本选择一个<strong>元动作</strong>（即去噪步长 Δτk(i)）。选择 Δτk(i)=0 表示永久停止（剪枝）该样本。当所有样本都完成去噪或被剪枝后，剩余样本通过<strong>验证器</strong> Qφ评分，选择最高分动作在真实机器人上执行。元策略的目标是最大化整个去噪轨迹 ξ 的回报，该回报由任务性能和计算成本组成。</p>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>元状态定义</strong>：sk = (x, uk1:N, τk1:N, mk1:N)。其中x是物理状态（在去噪过程中恒定），uk1:N是N个部分去噪的动作样本，τk1:N是它们对应的去噪时间，mk1:N是表示样本是否活跃的掩码。</li>
+<li><strong>奖励设计</strong>：轨迹ξ的回报 r(ξ) = Qtask(x, u) - αL(ξ) - β(P(ξ)-1)。<ul>
+<li>Qtask(x, u) 是基于状态-动作对的环境级Q函数，作为任务性能的终端值估计，解决了信用分配难题。</li>
+<li>L(ξ) = maxi∈[N] ℓ(i)(ξ) 是序列计算成本，定义为完成最慢样本所需的去噪步数。</li>
+<li>P(ξ) = (∑iN ℓ(i)(ξ)) / L(ξ) 是平行计算成本，定义为时间平均的活跃样本数。</li>
+<li>超参数α和β分别控制序列和平行成本的权重。</li>
+</ul>
+</li>
+<li><strong>元策略与评论家架构</strong>：使用Soft Actor-Critic (SAC)算法训练元策略πmeta和元评论家Qmeta。为了处理N个样本的集合（顺序无关）并实现样本间的协调，本文采用了关键设计：<ul>
+<li><strong>注意力机制</strong>：πmeta和Qmeta的参数化基于对样本集的注意力机制，实现了<strong>置换等变的行为者</strong>和<strong>置换不变的集中式评论家</strong>。</li>
+<li><strong>集中式设计</strong>：避免分散式设计中决策趋于一致的问题，使元策略能够协调不同样本的步长（例如，抑制潜力较低样本的计算）。</li>
+<li><strong>FiLM条件</strong>：将冻结的基础策略观测嵌入通过FiLM调制后输入元网络，确保去噪决策依赖于物理状态。</li>
+</ul>
+</li>
+<li><strong>高效训练策略</strong>：采用混合强化学习提升样本效率。<ul>
+<li><strong>阶段1：离线评论家预训练</strong>：在由各种固定去噪调度收集的离线缓冲池上预训练Qmeta。</li>
+<li><strong>阶段2：混合RL</strong>：运行由πmeta控制计算分配的在线rollout，并通过反事实计算分配（例如，在所有N个样本运行时进行子采样以模拟不同预算）来增强经验回放池。</li>
+</ul>
+</li>
+</ol>
+<p><strong>创新点</strong>：与现有仅优化单一轴（如基于方差估计自适应序列步长）或固定平行预算的方法相比，ELASTIC的创新在于<strong>同时、自适应地优化两个测试时计算轴</strong>，并为此设计了一套完整的元MDP形式化、奖励函数和高效的训练架构。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准/数据集</strong>：<ul>
+<li><strong>模拟</strong>：PushT、PushT Obstacle、Robomimic的Square（PH/MH）、Can Paired、Can Reverse任务。使用Diffusion Policy[1]作为基础GCP。</li>
+<li><strong>真实世界</strong>：使用π0.5 VLA模型[2]，在LIBERO-10多任务模拟基准和真实Franka Emika机械臂（双马克杯拾放任务）上进行零样本评估。</li>
+</ul>
+</li>
+<li><strong>实验平台</strong>：模拟实验；真实实验使用RTX 6000 GPU。</li>
+<li><strong>基线方法</strong>：<ul>
+<li><strong>Fixed</strong>：状态无关的固定(L, P)分配，其平均计算成本与ELASTIC匹配。</li>
+<li><strong>Sequential</strong>：仅使用序列缩放，将所有计算预算用于单一样本的更多去噪步。</li>
+<li>**Best-of-N (BoN)**：固定使用最大计算（默认步长，N个样本）。</li>
+<li>**Diffusion Policy (DP)**：基础策略默认设置（10步，1样本）。</li>
+</ul>
+</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.31132v1/2606.31132v1/x1.png" alt="结果对比图"></p>
+<blockquote>
+<p><strong>图2</strong>：扩散策略在不同任务上的成功率与序列步数L、平行样本数P的关系。ELASTIC（星形）在匹配的计算预算下（通过灰色箭头与Fixed比较），在6个任务、3种成本设置下均优于Fixed和Sequential基线，证明了状态依赖分配的价值。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>模拟实验（扩散策略）</strong>：ELASTIC在匹配的计算成本下，在所有任务和(α, β)成本设置下均<strong>帕累托优于Fixed和Sequential-only基线</strong>。例如，在Can Paired和Square MH等基础策略训练数据多样但不完美的任务上，ELASTIC的优势最明显。它自动发现任务瓶颈：在Can Paired任务中，ELASTIC在抓取阶段分配更多序列步以保证可靠抓握，在动作模式可能分裂的状态分配更多平行样本以选择正确模式，在自由运动阶段则大幅减少计算。</li>
+<li><strong>真实世界实验（π0.5 VLA）</strong>：<br><img src="https://arxiv.org/html/2606.31132v1/2606.31132v1/x2.png" alt="真实世界结果图"><blockquote>
+<p><strong>图5</strong>：真实世界拾放任务的成功率与推理延迟关系图。ELASTIC（红色星形）自适应缩放计算，达到了与BoN-10（10个样本）相当的成功率，同时将推理延迟降低了34%。</p>
+</blockquote>
+<ul>
+<li>ELASTIC在真实机器人任务中达到了与<strong>Best-of-10相当的成功率</strong>。</li>
+<li>与此同时，ELASTIC将**端到端推理延迟降低了34%**。</li>
+</ul>
+</li>
+<li><strong>消融分析与定性观察</strong>：<ul>
+<li><strong>任务适应性</strong>：在LIBERO-10多任务VLA上，ELASTIC针对不同任务学习不同的计算分配模式（例如，有的任务在拾放阶段需要更多序列步，有的则更需要平行样本）。</li>
+<li><strong>策略能力适应性</strong>：在相同任务环境但不同质量训练数据（Square PH vs. MH）上，ELASTIC为性能更差的MH策略分配了更多计算，表明其能补偿基础策略的不足，而不仅仅是适应任务几何。</li>
+</ul>
+</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>问题形式化</strong>：首次将生成控制策略的测试时序列与平行计算联合分配问题，形式化为一个可学习的元MDP。</li>
+<li><strong>算法设计</strong>：提出了ELASTIC算法，包括结合任务Q函数与双重计算成本的奖励设计、基于注意力的置换不变/等变网络架构，以及混合RL训练策略，实现了对冻结基础策略的高效、自适应计算调度。</li>
+<li><strong>广泛验证</strong>：在多种模拟操控基准和真实世界最先进的VLA模型上，实证了ELASTIC能够以显著更低的计算成本匹配或超越固定及单轴缩放基线的性能。</li>
+</ol>
+<p><strong>局限性（论文提及）</strong>：ELASTIC依赖于一个外部验证器Qφ来提供任务奖励和动作选择。训练元策略本身也需要额外的环境交互样本（尽管通过混合RL进行了优化）。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li>证明了对测试时计算进行精细化、状态自适应的管理具有巨大潜力，可应用于更广泛的生成模型（如图像生成、语言模型），以优化性能-延迟权衡。</li>
+<li>所提出的元MDP框架和协同设计（集中式注意力网络、FiLM条件）为解决其他需要协调多个生成过程或资源的序列决策问题提供了思路。</li>
+<li>未来工作可以探索减少对验证器的依赖，例如通过基础策略的内在不确定性或学习到的价值函数来指导计算分配。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>论文解决生成控制策略在测试时如何自适应分配顺序扩展（增加去噪步骤优化动作）和并行扩展（采样多动作探索模式）计算资源的难题。提出ELASTIC算法，基于元马尔可夫决策过程和强化学习，训练元策略动态调度两轴计算以最大化任务成功、最小化开销。实验表明，在模拟操作中帕累托占优固定与单轴扩展基线；真实机器人操作中匹配best-of-10成功率，同时降低34%实际延迟。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.31132" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

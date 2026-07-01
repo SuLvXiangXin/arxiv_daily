@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Stage-Transition Dense Reward Modeling for Reinforcement Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Stage-Transition Dense Reward Modeling for Reinforcement Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.31377" target="_blank" rel="noreferrer">2606.31377</a></span>
+        <span>作者: Houde Liu Team</span>
+        <span>日期: 2026-06-30</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人操纵领域，强化学习（RL）的应用潜力巨大，但长时程任务常受限于稀疏且延迟的奖励信号。当前主流方法是通过人工设计密集奖励函数来提供中间指导，但这过程耗时且脆弱，对环境或物体配置的变化敏感。另一条路径是从专家演示中学习奖励函数，以减少人工设计成本。然而，在实践中，大多数可用的演示（尤其是视频）是非结构化的，缺乏明确的子任务边界或进度标注，这导致将原始专家视频转化为可靠的、时序连贯的密集学习信号成为一个关键瓶颈。</p>
+<p>本文针对上述痛点，提出了一个新视角：将长时程操纵任务视为通过多个功能阶段（如接近、抓取、插入）进行的过程。核心思路是利用语义理解从演示中推断任务的分阶段结构，从而为RL代理提供两种互补的反馈：反映全局阶段转换的粗略信号，以及度量当前阶段内进度的细粒度信号。具体而言，本文提出了<strong>STDR（Stage-Transition Dense Reward）</strong>，一个视觉奖励学习框架，能够将非结构化专家视频转化为具有逻辑基础的密集奖励，用于从头训练RL代理。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>STDR框架旨在从非结构化的专家视频中提取结构化指导，生成密集奖励信号。其整体流程分为两个阶段：离线预训练和在线奖励驱动学习。</p>
+<p><img src="https://arxiv.org/html/2606.31377v1/2606.31377v1/framework.jpg" alt="方法框架图"></p>
+<blockquote>
+<p><strong>图1</strong>：STDR框架概览。(a) STDR预训练：专家视频通过视觉语言模型（VLM）进行分割，生成伪标签<code>y_t</code>以建立带标签的数据集<code>D_label</code>。这些标签监督奖励模型的训练，该模型集成了<strong>阶段判别器</strong>（输出阶段索引<code>k_t</code>）和基于FiLM阶段嵌入<code>e_k</code>调节的<strong>进度估计器</strong>。(b) 奖励驱动的在线学习：预训练的STDR模块处理实时连续观察流，生成复合密集奖励<code>R_STDR</code>，通过强化学习实现高效策略优化。</p>
+</blockquote>
+<p><strong>核心模块与技术细节：</strong></p>
+<ol>
+<li><p><strong>任务阶段分割</strong>：首先，利用视觉语言模型（VLM，如Qwen3）对专家视频进行时序分割。给定任务描述和视频，VLM输出JSON格式的片段（包含阶段编号、起始帧、结束帧）。通过聚合多个演示的预测片段数量确定任务的总阶段数<code>K</code>，并为每个视频帧<code>o_t</code>分配类别伪标签<code>y_t</code>，从而构建带伪标签的数据集<code>D_label</code>。此过程仅在离线预训练中使用，为后续训练提供弱监督。</p>
+</li>
+<li><p><strong>奖励模型架构</strong>：奖励模型由两个核心组件构成：</p>
+<ul>
+<li><strong>阶段判别器</strong>：该模块接收一个长度为<code>L</code>的观测滑动窗口<code>O_t</code>，使用LSTM编码以捕捉对操纵任务至关重要的时序依赖关系，从而检测任务流中的关键“过渡点”。它被训练为将每个时序窗口映射到相应的阶段索引<code>k_t</code>。为提升鲁棒性，集成了一个变分自编码器（VAE）用于<strong>OOD检测</strong>：如果当前观测的重构误差超过阈值<code>δ</code>，则将阶段预测重置为初始阶段（<code>k_t ← 0</code>），以抑制OOD观测下的虚假奖励提升。此外，针对需要抓取的任务，引入了<strong>抓握调节模块</strong>（一个基于MLP的视觉验证门），仅当模块从视觉特征预测出稳定抓握时，才允许阶段索引从抓取阶段推进到后续阶段。阶段奖励定义为 <code>R_stage = k_t / K</code>。</li>
+<li><strong>阶段内进度估计器</strong>：该模块旨在提供每个阶段内的密集指导，估计一个归一化的进度值<code>p_prog ∈ [0, 1]</code>。它构建在一个深度视觉进度网络<code>Φ</code>上，使用ResNet骨干网络和一个融合MLP。为了处理不同阶段相关的视觉线索，采用了<strong>特征线性调制（FiLM）</strong>机制，利用当前阶段嵌入<code>e_k</code>动态调节视觉骨干网络。训练时，应用了复合损失函数，包括：回归损失<code>L_reg</code>（目标为阶段内的相对时间进度<code>p̃_t</code>）、成对排序损失<code>L_rank</code>（强制执行时序方向性）、等渗正则化<code>L_iso</code>（鼓励单调性）以及视觉一致性损失<code>L_cons</code>（增强对视觉扰动的鲁棒性）。</li>
+</ul>
+</li>
+<li><p><strong>OOD感知融合与总体奖励</strong>：为防止在陌生状态下的奖励欺骗，进度估计器集成了一个基于马氏距离的OOD检测器来自适应地融合回归进度<code>p_reg</code>和保守的基于检索的估计<code>p_near</code>。融合权重<code>g(d_ood)</code>随状态偏离专家分布的程度而单调递减。最终进度<code>p_prog</code>在严重OOD时被置零。阶段内进度奖励定义为 <code>R_prog = p_prog / K</code>。合成的总体奖励为：任务成功时<code>R_STDR = 1.0</code>，否则<code>R_STDR = R_stage + R_prog</code>。这种设计通过结合离散的阶段转换和连续的阶段内进度，在整个任务范围内形成了一个全局单调的激励格局。</p>
+</li>
+</ol>
+<p><strong>创新点</strong>：与现有基于几何接近度或语义相似性的奖励学习方法（如VIP、LIV）相比，STDR的创新在于<strong>将奖励信号分解为功能片段</strong>，通过阶段转换确保单调和定向的激励结构。具体体现在：1）利用VLM进行无监督的任务逻辑分解；2）提出结合全局阶段指导和局部阶段内进度反馈的结构化奖励塑形原则；3）集成了OOD感知门控、抓握转换验证等机制以增强鲁棒性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在三个仿真平台上的14个机器人操纵任务中评估STDR：MetaWorld（8个任务，评估泛化能力）、ManiSkill（3个任务，评估高精度控制）、Franka Kitchen（3个任务，评估复杂视觉环境下的特征选择）。每个任务准备30个专家演示进行奖励模型预训练。策略优化统一使用PPO算法。</p>
+<p><strong>对比方法</strong>：</p>
+<ol>
+<li><strong>Sparse</strong>：环境提供的原始稀疏（二进制成功）奖励。</li>
+<li><strong>Human-Dense</strong>：基于真实状态手动设计的密集奖励函数。</li>
+<li><strong>VIP</strong>：基于视觉嵌入空间到目标距离的奖励。</li>
+<li><strong>LIV</strong>：基于当前观测与目标图像语义相似性的奖励。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.31377v1/2606.31377v1/main-result.jpg" alt="主要结果曲线图"></p>
+<blockquote>
+<p><strong>图2</strong>：14个机器人操纵任务的训练成功率曲线。任务按环境分组。实线表示4次独立运行的平均成功率，阴影区域表示标准差。注：带星号（*）的任务名称表示集成了抓握调节模块。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>仿真性能</strong>：如<strong>图2</strong>所示，STDR在三个平台的所有任务上均优于VIP和LIV基线。在多个高难度MetaWorld任务（如Pick-Place， Stick-Push）上，STDR匹配甚至超越了需要领域知识手动调校的Human-Dense奖励的性能。在需要高精度控制的ManiSkill任务中，VIP和LIV基线进展甚微，而STDR通过其时序阶段分解机制保持了稳定且优异的表现。</li>
+<li><strong>数据效率分析</strong>：在ManiSkill环境中，与使用相同专家演示的纯离线模仿学习方法Diffusion Policy（DP）相比，STDR在PullCube、PushCube任务上取得了更高的成功率（STDR：0.959， 0.943；DP：0.120， 0.129），表明其数据利用效率更高，泛化能力更好（见表I）。</li>
+<li><strong>真实世界评估</strong>：</li>
+</ul>
+<p><img src="https://arxiv.org/html/2606.31377v1/2606.31377v1/real-world.jpg" alt="真实世界评估图"></p>
+<blockquote>
+<p><strong>图3</strong>：物理机器人操纵任务中不同方法的奖励分配。左图展示了在成功任务视频上的奖励分布，右图展示了在失败视频上的奖励分配。x轴为帧索引，y轴为归一化奖励。</p>
+</blockquote>
+<pre><code>如**图3**所示，在真实机器人实验中，STDR在成功执行时能分配稳定、与进度对齐的奖励（奖励曲线平滑上升），而在失败情况下能产生适当低的奖励（奖励值低且波动）。相比之下，VIP和LIV的奖励信号在成功和失败情况下区分度不佳，且可能出现非单调波动，表明STDR对视觉噪声更鲁棒，且在不同环境下奖励校准更好。
+</code></pre>
+<p><strong>消融实验</strong>：<br><img src="https://arxiv.org/html/2606.31377v1/2606.31377v1/Ablation1.jpg" alt="消融实验图"></p>
+<blockquote>
+<p><strong>图4</strong>与<strong>图5</strong>：展示了各个核心模块（阶段判别器、进度估计器、抓握调节、OOD机制）的消融实验结果。移除了OOD检测导致策略易受奖励欺骗而失败；禁用抓握调节使抓取任务成功率显著下降；仅使用阶段奖励或仅使用进度奖励均会损害性能，验证了二者互补的必要性。</p>
+</blockquote>
+<pre><code>消融研究表明：1）**阶段判别器**提供了关键的全局方向引导，缺失它会导致策略在局部循环；2）**阶段内进度估计器**提供了精细的局部梯度，对提高采样效率至关重要；3）**OOD检测和抓握调节模块**显著增强了鲁棒性，防止了在分布外状态或错误抓握时的奖励欺骗和无效探索。每个组件都对最终性能有明确贡献。
+</code></pre>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>STDR</strong>，一个从非结构化专家视频中通过语义任务阶段划分和在线阶段推理来提取阶段结构化密集奖励的视觉奖励学习框架。</li>
+<li>提出了一种针对长时程操纵的<strong>结构化奖励塑形原则</strong>：结合全局的、阶段单调的指导（阶段转换反馈）和局部的、阶段内密集梯度（进度反馈），形成一个时序连贯且细粒度的激励格局。</li>
+<li>引入了针对<strong>分布外状态和奖励欺骗的鲁棒机制</strong>，包括OOD感知的阶段门控、OOD门控的进度融合和抓握转换验证，并通过消融实验验证了其增益。</li>
+</ol>
+<p><strong>局限性</strong>：论文提及，STDR框架依赖VLM进行初始的离线阶段分割，分割质量可能影响后续学习。此外，它需要少量的成功专家演示来构建奖励模型，在完全缺乏演示的场景下无法应用。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>结构先验的价值</strong>：将任务分解为语义阶段为长时程RL提供了强大的归纳偏置，这一思路可扩展到其他需要时序逻辑理解的领域。</li>
+<li><strong>弱监督与鲁棒性结合</strong>：展示了如何利用弱监督（VLM伪标签）结合OOD检测等鲁棒性机制来构建可靠的奖励函数，为在数据有限或分布偏移下学习奖励提供了范例。</li>
+<li><strong>跨模态与泛化</strong>：未来工作可以探索结合语言指令或其他模态来进一步自动化阶段划分，并研究如何将学习到的阶段概念迁移到新任务，减少对任务特定演示的依赖。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对长时程机器人操作任务中奖励稀疏、延迟且手工设计密集奖励成本高、脆弱的难题，提出**STDR（Stage-Transition Dense Reward）**视觉奖励学习框架。该方法**从非结构化的专家视频中自动推断任务的阶段结构，融合了“阶段转换”与“阶段内进度”两种互补的密集反馈信号**，并集成了OOD检测与抓取调节模块以提升鲁棒性。在14个操作任务上的实验表明，STDR显著提升了样本效率和成功率，在多项挑战性任务上**达到甚至超越了手工设计的密集奖励性能**；真实机器人评估证实其能产出稳定、与进度对齐的奖励信号。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.31377" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
