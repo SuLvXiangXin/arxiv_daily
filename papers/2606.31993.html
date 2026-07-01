@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>OopsieVerse: A Safety Benchmark with Damage-Aware Simulation for Robot Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>OopsieVerse: A Safety Benchmark with Damage-Aware Simulation for Robot Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2606.31993" target="_blank" rel="noreferrer">2606.31993</a></span>
+        <span>作者: Roberto Martín-Martín Team</span>
+        <span>日期: 2026-06-30</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操纵能力发展迅速，但物理安全仍是家庭机器人部署的主要障碍：若机器人损坏自身或环境，仅仅完成任务是不够的。仿真提供了一个无伤害且成本低廉的替代方案，用于替代危险且昂贵的真实世界训练与评估。然而，现有的仿真器缺乏检测、量化和表示损伤的通用机制。现有的仿真基准（如BEHAVIOR-1K和RoboCasa）通常仅以目标完成为成功标准，无法区分在现实世界中无害的行为与那些仅通过造成损伤才能成功的行为。这导致了仿真与现实之间的安全差距：在仿真中看似成功的策略，在部署时可能依赖不安全或破坏性的行为。现有方法依赖任务特定的奖励塑形或手工设计的约束，这些方法脆弱且难以在不同环境和损伤源之间扩展。</p>
+<p>本文针对仿真中缺乏通用、物理基础的损伤建模这一具体痛点，提出了一个统一的“损伤感知”仿真新视角。本文的核心思路是：通过一个名为DamageSim的模拟器无关框架，将接触力、温度变化和液体相互作用等物理交互转化为机械、热或流体损伤，提供一个显式的、物理基础的、任务无关的安全信号，并配合一个包含32个家庭任务的基准测试OopsieBench，以系统地评估和促进安全机器人解决方案的开发。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>OopsieVerse框架包含两个核心组件：DamageSim（损伤模拟插件）和OopsieBench（安全基准测试任务集）。</p>
+<p>整体上，DamageSim作为一个插件，通过引入“健康”状态来增强现有的、以任务完成为中心的POMDP（部分可观测马尔可夫决策过程），从而创建一个损伤感知的POMDP。其工作流程是：在模拟的每个时间步，插件从底层物理模拟器（如OmniGibson或MuJoCo）获取状态信息（如接触力、加速度、温度、液体粒子接触），通过一系列损伤评估模型计算损伤值，更新每个对象及机器人各链接的健康值，最终提供一个可以整合到观察、奖励或终止条件中的统一损伤信号。</p>
+<p><img src="https://arxiv.org/html/2606.31993v1/2606.31993v1/x1.png" alt="Damage-Augmented POMDP Implementation"></p>
+<blockquote>
+<p><strong>图2</strong>：OopsieVerse中DamageSim实现的损伤增强POMDP。概念上，DamageSim插件（蓝色部分）通过用健康状态增强状态空间，来扩展现有仿真中的POMDP（绿色部分）。健康状态进而可以影响观察和奖励，和/或提供新的损伤感知终止状态访问。DamageSim将原始POMDP状态增强为损伤感知状态，并通过一组损伤评估模型（DEM）根据模拟器状态和交互计算机械、热和流体损伤，从而更新每个实体的健康。</p>
+</blockquote>
+<p>DamageSim的核心模块是三种物理损伤的评估模型（DEM），均以对象为中心进行计算：</p>
+<ol>
+<li><strong>机械损伤评估模型</strong>：捕捉由冲击、压缩或张力导致的损伤。模型从模拟器获取每个链接的接触力集合和加速度。它将每个接触力分解为与加速度平行和垂直的分量，并分别聚合为<code>F_parallel</code>（捕捉脉冲相互作用）和<code>F_perpendicular</code>（捕捉持续/约束载荷）。有效机械载荷近似为<code>ε_mech = α*F_parallel + β*F_perpendicular</code>，其中α和β是用户指定的系数，控制对持续载荷与脉冲载荷的敏感度。增量机械损伤计算为<code>d_mech = Λ_mech * max(ε_mech - ℰ_mech, 0)</code>，其中ℰ_mech是类似材料屈服极限的最小载荷阈值，Λ_mech是控制阈值以上损伤累积速率的缩放因子，这两个参数可根据链接的材料属性（脆性、延展性）进行配置。</li>
+<li><strong>热损伤评估模型</strong>：捕捉因暴露在对象安全温度范围之外（过热或过冷）而造成的损伤。该模型需要模拟器提供温度读数。在DamageSim中，热损伤计算为分段函数：当温度T超过安全上限𝒯_hot时，损伤<code>d_therm = Λ_hot*(T - 𝒯_hot)</code>；当T低于安全下限𝒯_cold时，损伤<code>d_therm = Λ_cold*(𝒯_cold - T)</code>；否则为0。Λ_hot和Λ_cold控制损伤累积速率，参数可根据对象材质（如耐热炊具 vs. 易燃塑料）设定。</li>
+<li><strong>流体损伤评估模型</strong>：捕捉因液体接触（如导致短路、腐蚀）而造成的损伤。该模型需要模拟器提供流体模拟。DamageSim计算每个链接接触的液体粒子数量<code>c_ℓ</code>。流体损伤计算为<code>d_fluid = Λ_fluid * max(c_ℓ - C_fluid, 0)</code>，其中C_fluid是开始造成损伤前的耐受接触量阈值，Λ_fluid控制损伤累积速率。参数可根据对象防水性（如防水物品 vs. 电子产品）设定。</li>
+</ol>
+<p>所有损伤值每秒汇总，用于减少对应链接的健康值<code>h</code>。对象的整体健康定义为其所有链接健康值的最小值，范围为100（完全无损）到0（完全损坏）。健康状态<code>h_t</code>构成损伤感知POMDP状态<code>s^DA</code>的一部分。</p>
+<p><img src="https://arxiv.org/html/2606.31993v1/2606.31993v1/x2.png" alt="Types of physical damage detected by DamageSim"></p>
+<blockquote>
+<p><strong>图3</strong>：DamageSim检测的物理损伤类型。由过度的a)冲击、b)压缩力、c)张力、d)温度变化或e)泼洒水引起的对象级损伤被我们的模拟插件测量和跟踪，从而能够在机器人行为中学习和评估其影响。图中，顶行显示未受损状态，底行显示受损对象（从左至右：酒瓶、鸡蛋、带抽屉的橱柜、机器人手臂、笔记本电脑），用红色深浅程度指示。</p>
+</blockquote>
+<p>与现有方法相比，创新点在于：DamageSim提供了一个<strong>模拟器无关</strong>（已适配OmniGibson和MuJoCo）、<strong>物理基础</strong>（基于模拟器可提供的力、温度等物理量）、<strong>任务无关</strong>（损伤信号的计算不依赖于具体任务目标）的通用安全信号生成框架，避免了手工设计、任务特定的安全约束。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了OopsieVerse框架，主要在OopsieBench的32个家庭操纵任务上进行评估，这些任务在OmniGibson（基于NVIDIA Omniverse）和RoboCasa（基于MuJoCo）两个模拟器中实例化。实验平台即这两个模拟器。</p>
+<p>研究对比了多种基线和方法，包括：无安全约束的行为克隆、无安全约束的强化学习、最先进的视觉-语言-动作模型策略，以及集成OopsieVerse损伤信号的各种方法。</p>
+<p>关键实验结果如下：</p>
+<ol>
+<li><strong>指导更安全的示教收集</strong>：在遥操作界面中集成实时损伤反馈，与无反馈的基线相比，在多个任务中收集的人类示范造成的损伤显著减少（例如，在某个任务中，平均损伤从约40降至接近0）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.31993v1/2606.31993v1/x3.png" alt="Demo Safety with Real-Time Damage Feedback"></p>
+<blockquote>
+<p><strong>图15</strong>：集成实时损伤反馈后的人类示范安全性对比。柱状图显示，在提供实时损伤反馈（有）的情况下，人类示范导致的平均对象损伤值远低于无反馈（无）的情况，表明反馈能有效指导操作者产生更安全的轨迹。</p>
+</blockquote>
+<ol start="2">
+<li><strong>损伤条件模仿学习</strong>：在使用安全（低损伤）和不安全（高损伤）混合示范训练行为克隆策略时，引入基于损伤的样本加权（给不安全样本更低权重），可以显著降低学得策略的损伤，同时保持相近的任务成功率。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.31993v1/2606.31993v1/x4.png" alt="Damage-Conditioned Imitation Learning"></p>
+<blockquote>
+<p><strong>图16</strong>：损伤条件模仿学习（Damage-Conditioned BC）与标准行为克隆（BC）的性能对比。折线图显示，Damage-Conditioned BC在多个训练检查点上，其策略在测试任务中造成的平均损伤远低于标准BC，而任务成功率（右侧纵轴）保持相当或略有优势。</p>
+</blockquote>
+<ol start="3">
+<li><strong>损伤感知强化学习</strong>：在强化学习奖励中引入基于DamageSim健康值的惩罚项，与仅以任务成功为奖励的基线相比，能训练出损伤显著降低的策略。例如，在“开门”任务中，损伤感知策略将平均损伤降低了超过50%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.31993v1/2606.31993v1/x5.png" alt="Damage-Aware Reinforcement Learning"></p>
+<blockquote>
+<p><strong>图18</strong>：损伤感知强化学习（RL w/ Damage Penalty）与标准强化学习（RL Task-Only）的对比。图中显示，随着训练步数增加，损伤感知策略（蓝色）的平均损伤持续下降并维持在低水平，而标准RL策略（红色）的损伤保持在高位。</p>
+</blockquote>
+<ol start="4">
+<li><strong>评估与提升现有VLA策略的安全性</strong>：对最先进的视觉-语言-动作模型策略进行评估，发现其在追求任务成功时会造成可观损伤。利用OopsieVerse提供的损伤信号，可以通过类似“安全微调”的方式，在保持任务成功率的同时，将被评估的VLA策略的损伤降低超过30%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2606.31993v1/2606.31993v1/x8.png" alt="VLA Policy Safety Benchmarking and Improvement"></p>
+<blockquote>
+<p><strong>图21</strong>：对最先进的视觉-语言-动作模型（VLA）策略进行安全性评估与改进。左侧小提琴图显示，原始VLA策略（Vanilla）在多个任务中造成高损伤，而经过OopsieVerse框架进行安全微调（Ours）后，损伤分布显著左移（降低）。右侧条形图具体展示了在示例任务“Shelve Item”中，安全微调将平均损伤降低了约34%，而任务成功率保持不变。</p>
+</blockquote>
+<ol start="5">
+<li><strong>仿真到现实的策略迁移</strong>：将在OopsieVerse中训练（有损伤惩罚）的策略部署到真实机器人上，与无损伤惩罚训练的策略相比，显示出更安全的行为，例如更温和的接触和更少的碰撞。</li>
+</ol>
+<p>消融实验方面，论文展示了DamageSim中不同损伤模型（机械、热、流体）在对应任务中的有效性，并验证了将损伤信号整合到不同学习范式（模仿学习、强化学习）中均能带来安全性提升。每个核心组件（DamageSim框架和OopsieBench任务集）对于实现全面的安全评估和策略学习都是不可或缺的。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了<strong>DamageSim</strong>，一个模拟器无关、物理基础、任务无关的损伤检测与量化框架，为机器人操纵提供了通用的安全信号；2）构建了<strong>OopsieBench</strong>，一个包含32个家庭任务的基准测试套件，专门用于区分任务完成与安全执行，并进行系统化的安全评估；3）通过一系列实验（从安全示范收集到损伤感知模仿学习与强化学习，再到对现有VLA策略的评估与改进），全面展示了OopsieVerse框架在推动安全机器人操纵研究方面的广泛用途和潜力。</p>
+<p>论文自身提到的局限性包括：损伤评估模型是对真实物理过程的启发式近似，而非高保真度的物理模拟（如有限元分析）；热和流体损伤模型的实现依赖于特定模拟器（OmniGibson）的额外功能。</p>
+<p>这项工作对后续研究的启示是：它提供了一个开放、统一的基础设施，使得安全研究可以从依赖特定任务、手工设计约束的模式，转向系统化、可扩展的、基于物理损伤信号的学习与评估。研究者可以利用OopsieVerse在不同任务和模拟器间一致地训练和比较各种安全感知算法，并将安全性明确地纳入机器人策略学习的目标中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对现有机器人操作模拟器缺乏损伤建模能力，无法区分任务完成与安全执行的问题，引入OopsieVerse安全基准。其核心技术包括：1）DamageSim模拟框架，将接触力、温度变化等物理信号转化为可量化的机械、热或流体损伤；2）一套用于评估常见损伤模式的家庭任务集。该框架已在OmniGibson和RoboCasa两个物理引擎中实例化，实验证明其能有效引导安全示范收集、训练更安全的策略，并为现成策略提供安全评估基准。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2606.31993" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
