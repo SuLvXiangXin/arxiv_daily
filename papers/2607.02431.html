@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>WorldSample: Closed-loop Real-robot RL with World Modelling - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>WorldSample: Closed-loop Real-robot RL with World Modelling</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.02431" target="_blank" rel="noreferrer">2607.02431</a></span>
+        <span>作者: Ziwei Wang Team</span>
+        <span>日期: 2026-07-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人模仿学习（IL）从大规模人类示教中学习复杂操作技能，但其性能受限于演示数据的覆盖范围，在遇到分布外状态时容易失败。强化学习（RL）通过试错交互提供了超越演示行为的改进路径，但其在真实机器人上部署受到物理交互成本高昂的根本性限制。每次物理rollout不仅耗时、可能造成硬件磨损或危险接触，而且仅揭示了单个动作-结果的实现路径。</p>
+<p>现有方法从数据流程的不同环节试图降低交互成本。基于演示和人在回路的方法依赖昂贵的人类努力和物理rollout。传统的数据增强方法通过扰动图像观测或动作序列来提升鲁棒性，但忽略了物理可达性和合理动力学。基于世界模型的方法通过预测未来观测来合成动作条件下的经验，但当作为独立的模拟器或“做梦”环境使用时，容易偏离真实的物理数据分布，产生视觉幻觉和接触动力学伪影，为策略学习带来噪声监督。</p>
+<p>本文提出 WorldSample，一个物理接地的世界模型数据增强框架，用于在线真实机器人学习。其核心思路是：建立一个闭环的真实-合成数据循环，利用物理rollout来锚定世界模型的生成，同时引入策略节奏学习来调控合成数据的使用，从而在扩大有效训练分布的同时，抑制价值高估和伪影噪声。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>WorldSample框架的核心是一个紧密耦合的闭环系统，包含真实-合成数据循环和策略节奏学习（PPL）两大组件。</p>
+<p><img src="https://arxiv.org/html/2607.02431v1/2607.02431v1/x1.png" alt="方法流程图"></p>
+<blockquote>
+<p><strong>图2</strong>：WorldSample流程图。WorldSample在物理rollout、世界模型生成和策略改进之间建立了一个闭环的真实-合成数据循环，同时通过策略节奏学习（PPL）来调控训练过程中合成数据的构成和使用。</p>
+</blockquote>
+<p><strong>1. 真实-合成数据循环</strong><br>该循环起始于在线交互期间收集的物理机器人rollout。这些真实轨迹有两个作用：一是为策略学习提供训练数据，二是通过动作条件世界模型为合成数据生成提供物理基础。</p>
+<ul>
+<li><strong>反事实轨迹生成</strong>：世界模型不随机采样动作，而是在真实执行的动作序列附近进行局部扰动来采样反事实轨迹段。给定真实轨迹段 <code>τ = (o0， A0:T-1， O1:T)</code>，采样扰动后的动作序列 <code>Ã0:T-1</code>。随后，世界模型 <code>p_φ</code> 根据初始观测 <code>o0</code> 和扰动动作预测视觉未来 <code>Ŏ1:T</code>，奖励模型 <code>R_ψ</code> 为预测结果分配任务反馈 <code>ř0:T-1</code>。最终生成带标签的合成轨迹 <code>(o0， Ã0:T-1， Ŏ1:T， ř0:T-1)</code>。这种方法保留了机器人策略的时间结构和动作统计特性，使生成的轨迹比无约束的rollout更具物理可行性。</li>
+<li><strong>异步调度</strong>：为了保证机器人控制的实时性，反事实生成与策略执行是异步进行的。机器人学习流持续收集物理rollout并更新策略，而世界模型流并行生成合成轨迹。这种解耦避免了缓慢的视频生成阻塞策略执行，并允许多个世界模型工作线程增加在线训练期间的数据吞吐量。随着新rollout的积累，世界模型流将它们纳入后训练，使生成过程与高多样性数据覆盖保持一致，从而形成闭环。</li>
+</ul>
+<p><strong>2. 策略节奏学习（Policy-Paced Learning， PPL）</strong><br>为了稳定合成数据的使用，PPL将合成数据的使用分为样本级价值平衡和策略级调度，其Q函数损失定义为：<br><code>L_Q^PPL(θ) = E_τ~D_real[l_Q(τ;θ)] + ρ(H_t) * E_τ~D_syn[w_Q(τ~) * l_Q(τ~;θ)]</code>。<br>其中 <code>l_Q</code> 是TD损失，<code>w_Q</code> 控制合成监督的构成，<code>ρ(H_t)</code> 控制其依赖于训练阶段的影响力。</p>
+<ul>
+<li><strong>Q感知样本选择</strong>：该方法控制生成数据诱导的价值信号。正向合成轨迹扩展稀有的成功结果并加速价值传播，负向合成轨迹约束视觉上合理但不成功的行为，抑制乐观的外推。PPL通过保持合成数据（正向和负向集合）与真实数据之间的价值对比在一定界限内，来防止合成数据使评论家趋向于 uniformly optimistic 或过于保守的估计。</li>
+<li><strong>不确定性引导的数据调度</strong>：即使经过价值平衡选择，合成转移仍比物理rollout噪声更大。PPL根据策略在真实状态上的熵 <code>H_t</code> 来调度其影响力。高熵表示策略在真实状态上仍不确定，使得演员-评论家学习对带有偏差的合成目标更敏感。因此，PPL采用熵引导的调度函数 <code>ρ(H_t) = ρ_max / (1 + κ H_t^p)</code>，该函数在高策略不确定性时抑制合成数据的影响，并随着策略在真实机器人状态上变得更加集中而逐渐引入。这确保了合成数据产生的有效价值偏差随着策略不确定性趋近于零而趋近于零。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在配备二指夹爪的Galaxea A1X机械臂上进行，使用两个Intel RealSense D435i相机进行观测。评估了五类具有不同接触复杂性、精度要求和动作空间难度的真实世界操作任务：<strong>推动</strong>、<strong>插入</strong>、<strong>分拣</strong>、<strong>抓放</strong>和<strong>组装</strong>。<br><strong>基线方法</strong>：对比了人在回路的真实机器人RL基线HIL-SERL，以及最先进的世界模型协同训练方法VLAW和WMPO。所有方法使用相同的机器人平台、观测设置、动作空间、奖励定义、干预协议和20条人类示教进行初始化。<br><strong>关键结果</strong>：<br><img src="https://arxiv.org/html/2607.02431v1/2607.02431v1/x2.png" alt="成功率与干预率曲线"></p>
+<blockquote>
+<p><strong>图3</strong>：各任务的成功率与干预率曲线。WorldSample通常能在训练早期达到更高的成功率，表明在有限的真实世界交互下，生成的转移提供了有用的学习信号。<br>表1：真实世界实验结果</p>
+<table>
+<thead>
+<tr>
+<th align="left">方法</th>
+<th align="left">指标</th>
+<th align="left">推动</th>
+<th align="left">插入</th>
+<th align="left">分拣</th>
+<th align="left">抓放</th>
+<th align="left">组装</th>
+<th align="left">平均</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">VLAW</td>
+<td align="left">成功率</td>
+<td align="left">86%</td>
+<td align="left">47%</td>
+<td align="left">78%</td>
+<td align="left">76%</td>
+<td align="left">32%</td>
+<td align="left">64%</td>
+</tr>
+<tr>
+<td align="left">WMPO</td>
+<td align="left">成功率</td>
+<td align="left">90%</td>
+<td align="left">82%</td>
+<td align="left">72%</td>
+<td align="left">78%</td>
+<td align="left">23%</td>
+<td align="left">69%</td>
+</tr>
+<tr>
+<td align="left">HIL-SERL</td>
+<td align="left">成功率</td>
+<td align="left">84%</td>
+<td align="left">63%</td>
+<td align="left">66%</td>
+<td align="left">55%</td>
+<td align="left">10%</td>
+<td align="left">56%</td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">训练步数</td>
+<td align="left">15K</td>
+<td align="left">40K</td>
+<td align="left">52K</td>
+<td align="left">78K</td>
+<td align="left">96K</td>
+<td align="left"><strong>56K</strong></td>
+</tr>
+<tr>
+<td align="left">WorldSample</td>
+<td align="left">成功率</td>
+<td align="left"><strong>95%</strong></td>
+<td align="left"><strong>95%</strong></td>
+<td align="left"><strong>95%</strong></td>
+<td align="left"><strong>84%</strong></td>
+<td align="left"><strong>42%</strong></td>
+<td align="left"><strong>82%</strong></td>
+</tr>
+<tr>
+<td align="left"></td>
+<td align="left">训练步数</td>
+<td align="left">8K</td>
+<td align="left">10K</td>
+<td align="left">20K</td>
+<td align="left">36K</td>
+<td align="left">40K</td>
+<td align="left"><strong>23K</strong></td>
+</tr>
+</tbody></table>
+</blockquote>
+<p>与HIL-SERL相比，WorldSample将所有五个任务的平均成功率从56%显著提高到82%。同时，将平均训练步数从56K减少到23K（减少59%），训练时间从83分钟减少到64分钟（减少23%）。与模型基线（VLAW， WMPO）相比，WorldSample在所有任务上都实现了更高的成功率。</p>
+<p><strong>世界模型质量评估</strong>：<br><img src="https://arxiv.org/html/2607.02431v1/2607.02431v1/x3.png" alt="真实与生成视频帧对比"></p>
+<blockquote>
+<p><strong>图4</strong>：真实与生成视频帧的对比。经过在线rollout适应后，世界模型能够生成具有准确物体形状和位置的逼真视频。<br>表2 (a) 显示，仅使用在线rollout数据进行适应，可以将世界模型的PSNR从8.501大幅提升至28.428，SSIM从0.334提升至0.906。结合人类示教和在线rollout能获得最佳性能（PSNR 29.887， SSIM 0.925）。这验证了在线RL数据提供了更多样化的状态-动作结果（包括失败和恢复行为），对于使世界模型成为物理接地的生成引擎至关重要。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br><img src="https://arxiv.org/html/2607.02431v1/2607.02431v1/x4.png" alt="消融实验的成功率与干预率"></p>
+<blockquote>
+<p><strong>图5</strong>：各消融设置下的成功率与干预率曲线。移除不确定性引导调度会导致成功率大幅下降；移除Q感知样本选择也会降低性能并提高干预率。<br>在插入任务上的消融实验（表2 (b)）表明，完整WorldSample达到95%成功率，10K步，30分钟。移除不确定性引导调度后，成功率降至61%，步数增至18K。移除Q感知样本选择后，成功率降至76%，干预率升至42%。移除整个PPL后，虽然最终成功率可达86%，但需要32K步和69分钟。这验证了PPL的两个组成部分对于稳定高效地利用合成数据都是必要的。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了<strong>WorldSample</strong>，一个物理接地的世界模型增强框架，通过建立闭环真实-合成数据循环，降低真实机器人操作RL的交互成本。</li>
+<li>引入了<strong>策略节奏学习</strong>，通过Q感知样本选择和不确定性引导的数据调度，稳定了真实-合成训练过程，在提供有用数据增强的同时，缓解了价值高估和幻觉诱导的噪声。</li>
+<li>实验证明，该框架在多种接触密集和精密操作任务上，能以更少的真实交互步骤（减少59%）实现更高的策略成功率（平均提升28%），并显著改善了世界模型的视觉保真度。</li>
+</ol>
+<p><strong>局限性</strong>：WorldSample目前专注于在单一任务和相对固定的场景分布内增强真实机器人学习。虽然在线rollout适应改善了该设定下的世界模型，但将此框架扩展到实例、任务或场景级别的泛化仍然是未来工作的重要方向。</p>
+<p><strong>启示</strong>：本工作展示了一条通过紧密耦合的、物理接地的闭环来利用世界模型进行数据增强的有效路径，为突破真实机器人RL的样本效率瓶颈提供了新思路。其核心的“锚定生成”和“谨慎利用”思想，即用真实数据约束生成、用策略状态调控使用，对未来研究如何安全高效地利用生成模型增强机器人学习具有借鉴意义。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本论文针对真实机器人强化学习（RL）中因物理交互成本高而难以部署的问题，提出了WorldSample框架。该框架通过后训练世界模型生成高保真合成数据，并引入策略步调学习（PPL）进行样本选择与调度，以平衡数据增强与值高估。实验显示，在接触密集和精确操作任务中，WorldSample相比基线将策略成功率提升28%，训练步骤减少59%；同时世界模型视觉保真度在PSNR和SSIM上分别提升19.4dB和0.47。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.02431" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

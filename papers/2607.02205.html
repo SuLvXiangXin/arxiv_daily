@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Actuator Reality Shaping for Zero-Shot Sim-to-Real Robot Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Actuator Reality Shaping for Zero-Shot Sim-to-Real Robot Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.02205" target="_blank" rel="noreferrer">2607.02205</a></span>
+        <span>作者: Jun Morimoto Team</span>
+        <span>日期: 2026-07-02</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人学习领域，强化学习策略通常在GPU加速的物理模拟器中训练，但当这些策略部署到物理硬件时，会因“模拟-现实间隙”而导致性能下降。这一间隙的主要来源在于执行器层面。模拟器通常将关节建模为理想的扭矩源或简化伺服系统，而真实的执行器则存在摩擦、静摩擦、齿隙、传动柔顺性、惯性失配、饱和及机电延迟等未建模效应。这些效应扭曲了指令关节运动与实际运动之间的关系，导致在模拟中优化的策略驱动真实机器人沿着非预期的轨迹运动，从而降低任务性能、放大跟踪误差，甚至在不稳定的动态任务中导致机器人失稳。</p>
+<p>当前减少模拟-现实间隙的主流策略是试图让模拟器变得更真实，主要包括三类方法：领域随机化（DR）、执行器建模和基于数据的系统识别。领域随机化通过在随机的物理参数上训练策略，使真实系统可能落在训练分布内，但这往往以牺牲任务特定性能为代价。执行器建模方法则使用从硬件数据中标识出的模型（黑箱网络或可解释参数）来增强模拟器，但通常依赖于低减速比、扭矩响应近似理想电流源的准直驱执行器。数据驱动的系统识别方法需要在线上估计环境参数并以此调整控制器，或者训练一个带有在线识别隐编码的环境感知策略。所有这些方法都有一个共同的结构性成本：它们需要针对特定硬件的数据和/或在线识别，当硬件更换、老化或迁移到不同机器人平台时，这一过程必须重复。</p>
+<p>本文针对这一具体痛点，提出了一个替代性的新视角：<strong>执行器现实塑形</strong>。其核心思路与传统方法相反：我们不修改模拟器去匹配每个物理执行器，而是修改底层的执行器控制器，使得硬件向策略呈现与模拟训练时相同的参考动力学。简言之，本文通过一个底层驱动控制器，让物理执行器的闭环行为去匹配模拟器中使用的理想化二阶参考动力学模型，从而提供一个标准化的执行器接口，实现策略的零样本迁移，而无需收集硬件特定数据或微调任务级策略。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>执行器现实塑形方法的总体框架是为机器人的每个关节设计一个独立的驱动控制器，该控制器将物理执行器的闭环响应塑形，以匹配模拟器中预设的理想二阶参考模型。整个pipeline分为两个阶段：</p>
+<ol>
+<li><strong>策略训练阶段</strong>：在模拟器（如Isaac Sim）中，使用一个理想的二阶参考动力学模型作为每个关节的模型，并在此环境下使用强化学习算法（如PPO）训练策略。策略的观测-动作空间与此参考模型交互。</li>
+<li><strong>零样本部署阶段</strong>：将训练好的策略直接部署到物理硬件上。每个关节由一个“双自由度”驱动控制器接管，该控制器接收策略输出的目标关节角度，并生成电机电流指令，驱动物理电机，使其关节角度响应尽可能地匹配模拟中的参考动力学输出。</li>
+</ol>
+<p><img src="https://arxiv.org/static/base/1.0.1/images/icons/smileybones-small.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：执行器现实塑形概念图。顶部：在模拟器中使用理想的二阶参考模型进行策略训练；底部：在零样本硬件部署中，每个关节的双自由度（2-DoF）驱动器塑形物理响应，使得真实关节角度θ近似等于参考角度θ_ref。</p>
+</blockquote>
+<p>整体架构的核心是每个关节的<strong>双自由度控制器</strong>，它是一个级联的位置-速度控制环，并辅以<strong>扰动观测器</strong>。</p>
+<p><img src="https://arxiv.org/static/base/1.0.1/images/arxiv-logo-primary-light.svg" alt="控制器架构"></p>
+<blockquote>
+<p><strong>图2</strong>：提出的执行器现实塑形架构（单个关节）。一个级联的2-DoF控制器（外层位置环+内层速度环）配合扰动观测器（DOB）驱动真实电机，使其闭环响应跟踪模拟器的参考模型。</p>
+</blockquote>
+<p><strong>核心模块一：双自由度控制器</strong><br>该控制器采用控制理论中的标准2-DoF结构，其核心思想是<strong>独立地指定参考跟踪特性和扰动抑制特性</strong>。控制器输入为策略输出的目标关节角度θ_bar，输出为电机电流指令。控制器设计围绕一个“参考模型”F(s)和一个反馈块K(s)展开。</p>
+<ul>
+<li>**参考模型F(s)**：其设计目标是让闭环系统的响应匹配模拟器中使用的理想二阶动力学。对于级联控制，外层位置环的目标参考模型F1(s)被设定为与模拟器动力学（公式1）匹配的二阶系统，即 <code>F1(s) = Kp / (I_sim * s^2 + D * s + Kp)</code>。内层速度环的目标参考模型F2(s)被设计为一阶系统 <code>F2(s) = α / (s + α)</code>，以实现快速的速率响应。</li>
+<li><strong>反馈块K(s)<strong>：为了在存在恒定扰动（如摩擦力矩）时保证零稳态跟踪误差，根据内模原理，反馈块K(s)必须包含一个积分器。在本文中，K(s)采用经典的PID控制器形式：<code>K(s) = kp + ki/s + kd * s</code>。<br><strong>核心模块二：扰动观测器</strong><br>2-DoF控制器辅以一个扰动观测器来进一步提升鲁棒性。DOB用于估计并补偿包括非线性摩擦、齿隙、外部负载在内的总扰动扭矩。它基于一个标称执行器模型，通过测量关节速度和指令扭矩，经由一个低通滤波器（截止频率为α_dob）来在线估计扰动扭矩的估计值τ_hat_d。随后，将该估计值在电流指令前进行前馈补偿，从而在低于α_dob的频段内有效地抵消扰动，并抑制模型误差ΔP的影响。<br><strong>创新点</strong>：与现有方法相比，本方法的创新性在于</strong>视角的转换</strong>和<strong>实现的解耦</strong>。现有方法试图让模拟器或策略去适应硬件的不完美，而本方法则通过设计一个包含前馈（参考模型）和反馈（PID+DOB）的底层驱动控制器，强制硬件去呈现一个理想的、标准化的接口给上层策略。这使得策略训练完全基于一个干净的、理想的动力学模型，避免了策略优化过程中受硬件特定非线性的干扰，同时，适配硬件特性的负担被转移到了可复用、模块化的驱动层。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p>论文在多个硬件平台和任务上验证了执行器现实塑形方法的有效性。<br><strong>实验平台与基准</strong>：</p>
+<ul>
+<li><strong>硬件平台</strong>：使用了三种定制机器人平台：一个高减速比（99:1）伺服电机构成的7自由度机械臂；一个由四个类似机械臂耦合而成的轮腿式机器人；以及一个由更高减速比（501.9:1）伺服电机构成的22自由度全尺寸人形机器人。</li>
+<li><strong>基准方法</strong>：PID Cascade（伺服电机出厂默认的级联PID控制器）、Simple PD（手工调参的单环PD控制器）以及ASAP（一种需要真实世界数据训练Delta Action模型来补偿动态失配的“真实-模拟-真实”方法）。本文方法自身也对比了两个配置：2-DoF（仅使用双自由度控制器）和 2-DoF+DOB（完整配置，包含扰动观测器）。<br><strong>关键实验结果</strong>：</li>
+</ul>
+<ol>
+<li><strong>单轴跟踪实验</strong>：在一个单独的伺服电机构成的单关节测试台上，对比各方法跟踪模拟参考轨迹的能力。结果显示，仅采用前馈-反馈的2-DoF控制器已能大幅减少跟踪误差，加入DOB后性能进一步提升。具体数值上，在20秒的正弦参考轨迹跟踪中，2-DoF方法将平均位置偏差较PID Cascade基线降低了约94.7%，而完整的2-DoF+DOB方法则将平均位置偏差降低了96.3%（见表1）。</li>
+<li><strong>机械臂轨迹跟踪任务</strong>：7自由度机械臂末端执行器跟踪一个“8”字形轨迹。<br>   <img src="https://arxiv.org/html/2607.02205v1/2607.02205v1/figs/asap_compaire/asap_comp_pos_err.png" alt="末端位置错误比较"><blockquote>
+<p><strong>图3a</strong>：本文方法（2-DoF/DOB）与ASAP方法在执行器8字形轨迹跟踪任务中的末端位置误差对比。本文方法在零样本条件下实现了更小且更稳定的误差。</p>
+</blockquote>
+</li>
+</ol>
+<ul>
+<li>定量结果（表1）：2-DoF+DOB控制器获得了最低的末端位置和速度偏差，相对于出厂级联控制器，位置偏差减少了96.5%。DOB的加入使2-DoF单独的性能提升了50%。与需要真实数据训练的ASAP方法相比，本文方法在零样本条件下获得了更好的跟踪性能，且策略训练过程更稳定。</li>
+</ul>
+<ol start="3">
+<li><strong>零样本演示</strong>：<br>   <img src="https://arxiv.org/html/2607.02205v1/2607.02205v1/figs/moonbot_sequence.png" alt="轮腿机器人演示"><blockquote>
+<p><strong>图4a</strong>：应用了2-DoF驱动层的轮腿机器人成功实现了零样本斜坡爬升。</p>
+</blockquote>
+</li>
+</ol>
+<ul>
+<li><strong>轮腿机器人</strong>：将2-DoF驱动层应用于其速度控制的轮子关节，在模拟中训练的策略能够零样本地迁移到真实硬件，实现爬坡任务，展示了方法对轮式执行器的适应性。<br>   <img src="https://arxiv.org/html/2607.02205v1/2607.02205v1/figs/Phase1-first-walk.drawio.png" alt="人形机器人行走"><blockquote>
+<p><strong>图4b</strong>：人形机器人应用2-DoF驱动层后，模拟训练的行走策略实现了稳定的零样本向前行走。</p>
+</blockquote>
+</li>
+<li><strong>人形机器人</strong>：在与公开的BeyondMimic框架结合后，仅替换了执行器模型为本文的理想参考模型和底层控制器，训练出的行走策略无需硬件特定调参即可在真实人形机器人上实现稳定的零样本向前行走，证明了方法在高自由度、动态平衡的全身平台上的泛化能力。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了“执行器现实塑形”这一新的模拟-现实迁移范式。该范式将适配重心从修改模拟器/策略转向塑造硬件底层的闭环响应，为机器人学习提供了一个标准化的执行器接口。</li>
+<li>设计并实现了一个基于双自由度控制器和扰动观测器的具体架构。该架构仅需执行器的基本信息（如转动惯量、扭矩常数），就能驱动真实执行器（即使是高减速比伺服）精确复现模拟器中预设的理想二阶参考动力学。</li>
+<li>通过在单关节、多自由度机械臂、轮腿机器人和人形机器人等多个平台上的系统性实验，验证了该方法在显著减少模拟-现实跟踪误差、提升零样本任务性能方面的有效性，并展示了其跨硬件平台的通用性。<br><strong>局限性</strong>：论文指出的主要局限性在于，该方法在设计中假设关节轴的转动惯量为常数 <code>I_sim</code>，而实际上它是一个与全身构型相关的函数 <code>I_sim(q)</code>。这对于高减速比执行器影响较小，但对于准直驱执行器则需要额外考虑（例如通过模型参考自适应控制）。此外，方法仍然需要一个对名义转动惯量J和扭矩常数K_tau_i的粗略估计，并且其在强非线性硬件（如气动执行器）上的扩展性仍有待探索。<br><strong>对后续研究的启示</strong>：本文提供了一种将策略学习与硬件特性解耦的有效途径。它启示后续研究者可以专注于在理想化的动力学接口上开发和训练高性能策略，而将底层硬件的多样性和非理想特性封装在可复用、可移植的驱动层中，从而实现算法层面的更大程度复用和策略的快速跨平台部署。这为实现真正“硬件无关”的机器人学习算法库迈出了重要一步。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决了机器人学习中仿真到真实迁移因理想化执行器模型与真实硬件非线性动力学不匹配而导致的性能下降问题。提出“执行器现实塑造”方法，通过为各关节设计两自由度前馈-反馈控制器，将物理执行器的闭环行为塑造为匹配仿真中使用的理想二阶参考动力学。实验表明，该方法在单关节伺服和7自由度机械臂任务上，显著降低了仿真到真实跟踪误差，并提升了零样本任务性能；进一步在轮腿和人形机器人上验证了零样本迁移能力。
+
+（共136字）</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.02205" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
