@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>KAM-WM: Kinematic Affordance Maps from Latent World Models for Robot Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>KAM-WM: Kinematic Affordance Maps from Latent World Models for Robot Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.04652" target="_blank" rel="noreferrer">2607.04652</a></span>
+        <span>作者: Xiu Li Team</span>
+        <span>日期: 2026-07-06</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，从少量示教学习机器人操作依赖于视觉先验。静态先验（如分割掩码）虽能指示“在哪里”交互，但属于零阶线索，无法编码“如何开始”交互的方向性信息。这对于需要特定接触方向的任务（如将杯子挂到挂钩上）是有限的。预训练的视频模型因需预测未来帧而编码了丰富的运动与交互信息，是方向性信息的理想来源。然而，现有机器人方法利用这类知识时，通常需要对未来帧进行推演（增加测试时延）或对主干网络进行动作微调（在目标低数据区域成本高昂）。本文针对“在不生成未来帧或微调大模型的前提下，能否直接从冻结的视频模型中直接读取运动知识”这一具体痛点，提出了新视角。核心思路是：通过对冻结的流匹配图像-视频模型进行单次查询，直接将其单步潜在速度场解读为一种提供任务相关交互区域和粗略运动结构的“运动可供性图”，为下游策略提供一阶视觉先验。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>KAM-WM框架分为两个阶段：1）在回合初始查询冻结的图像-视频模型一次，获得任务条件化的运动可供性图；2）将此密集场压缩为少量令牌，用于在整个闭环执行过程中为扩散策略提供条件。其关键思想是将模型不用于视频推演，而是用于提取单步潜在速度场——其幅度高亮任务相关区域，其归一化响应为策略增添方向结构。</p>
+<p><img src="https://arxiv.org/html/2607.04652v1/2607.04652v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：KAM-WM框架。给定初始观察和语言指令，KAM-WM在 <code>t=1.0</code> 时查询冻结的流匹配图像-视频主干一次（不生成未来帧），并将产生的单步潜在速度场读取为运动可供性图。一个感知器将此密集场压缩为K个动态令牌，这些令牌与当前RGB观察和本体感觉一起作为1D U-Net扩散策略的条件，以预测H步的动作组块。</p>
+</blockquote>
+<p><strong>1. 单步潜在速度提取</strong>：核心创新在于从冻结的图像-视频模型中通过一次前向传播读取任务条件化的运动线索，而非生成未来帧。作者使用官方Wan2.2-TI2V-5B模型作为主干。在流匹配的训练目标下，模型在噪声终点 <code>t=1.0</code> 输出的潜在速度 <code>v_θ(x_1, 1.0, c)</code> 近似为带噪声的初始潜在 <code>x_1</code> 与条件 <code>c=[o_1, l]</code>（初始观察与语言指令）下预期未来干净视频潜在 <code>E[x_0|c]</code> 的差。该信号被视为一个视觉先验而不是精确校准的运动场。单次噪声终点查询依赖于观察和指令，无需多步去噪。</p>
+<p><strong>2. 运动可供性图</strong>：将提取的单步潜在速度场 <code>V_prior</code>（形状为 <code>C×F×H×W</code>）定义为运动可供性图。F轴是模型并行预测的固定时间窗口的潜在，不涉及自回归生成。作者进一步将其分解为通道维度的幅度 <code>A_kam</code>（用于高亮响应区域）和归一化响应 <code>V_prior_hat</code>（用于保留潜在场中的粗略方向结构），二者共同提供定位和方向信息。</p>
+<p><strong>3. 动态令牌压缩</strong>：原始的KAM张量过于稠密，无法直接用作策略条件。作者采用一个感知器交叉注意力瓶颈进行压缩：通过 <code>1×1×1</code> 投影和3D自适应平均池化产生令牌网格，再通过与K个可学习的查询进行交叉注意力，将其压缩为 <code>K</code> 个动态令牌 <code>H_dyn</code>（默认 <code>K=8</code>）。这使先验保持紧凑同时保留粗略的空间结构。</p>
+<p><strong>4. KAM条件化的扩散策略</strong>：动作策略采用1D U-Net扩散策略。KAM本身已通过提取过程语言条件化；为使RGB流也能感知指令，策略的观察编码器通过FiLM模块，利用冻结的Wan 2.2文本编码器产生的文本嵌入 <code>Φ(l)</code> 进行调制。在每个控制步τ，策略的条件特征 <code>g_τ</code> 由三部分拼接而成：文本调制的RGB观察特征 <code>Ψ(o_τ, Φ(l))</code>、展平的KAM动态令牌 <code>vec(H_dyn)</code> 以及本体感觉状态 <code>s_τ</code>。扩散策略的标准训练损失函数 <code>L_DP</code> 用于预测添加到动作组块中的噪声。KAM仅作为条件输入，从不作为动作目标，默认每个回合提取一次并保持固定。</p>
+<p><strong>与现有方法的创新点</strong>：1）<strong>冻结模型，单次查询</strong>：避免了昂贵的视频主干微调和耗时的多步未来帧推演。2）<strong>从速度场解读运动先验</strong>：利用流匹配模型预测的潜在速度，而非生成视频或估计2D光流，将其作为一阶、任务条件化的运动先验。3）<strong>轻量级接口</strong>：通过轻量级感知器将密集的先验场压缩为令牌，无缝集成到扩散策略的条件机制中，训练参数量远小于联合微调大规模视频-动作模型。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与基准</strong>：实验在两个仿真机器人操作基准上进行：LIBERO（包含4个套件共40个任务）和RoboTwin 2.0（包含50个接触丰富的双臂任务）。均遵循标准的50条示教协议。</p>
+<p><strong>基线方法</strong>：在LIBERO上，对比了DP和OpenVLA等方法的公开结果。在RoboTwin 2.0上，对比了从官方排行榜获取的ACT、DP、RDT、DP3、π₀等基线方法的结果。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li><strong>LIBERO</strong>：如表1所示，KAM-WM实现了90.6%的平均成功率，比DP（72.4%）和OpenVLA（76.5%）分别高出18.2和14.1个百分点。在需要维持任务意图和应对状态变化的Goal和Long套件上提升尤为显著。</li>
+<li><strong>RoboTwin 2.0</strong>：如表2所示，在Easy设置下，KAM-WM在50个任务上平均成功率达65.7%，相比排行榜上DP3（55.2%）、π₀（46.4%）等方法有显著提升。在Hard设置下，KAM-WM获得22.4%的平均成功率，也优于其他基线。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.04652v1/2607.04652v1/figs/visualization_paper_ready.png" alt="定性比较"></p>
+<blockquote>
+<p><strong>图3</strong>：掩码先验与KAM的定性对比。掩码先验能定位目标区域，但仍属于零阶空间先验。KAM则高亮了更具选择性的交互区域，并在相同策略接口下，通过潜在速度场增添了粗略的方向先验。图中可见，KAM能突出瓶子的可抓取下部和机器人的接近方向。</p>
+</blockquote>
+<p><strong>消融研究</strong>：</p>
+<ol>
+<li><strong>先验类型</strong>：将KAM替换为一个基于SAM 3生成的零阶语言条件化掩码，并保持策略架构不变（表3）。结果表明，KAM在Easy和Hard设置下的总体平均成功率均优于掩码先验，尤其是在需要方向信息（如“Hanging Mug”、“Place Empty Cup”）的任务上优势明显。但在一些依赖精确点接触的任务（如“Click Bell”、“Place Shoe”的Hard设置）上，掩码可能对纹理和光照变化更鲁棒。</li>
+<li><strong>提取时间步</strong>：探究在流匹配轨迹的不同时间点 <code>t</code> 提取速度场的影响（表4）。虽然 <code>t=0.0</code> 或 <code>t=0.5</code> 对某些任务可能更好，但 <code>t=1.0</code> 是唯一完全无需任何推演（即不进行多步去噪）的设置，因此被选为默认操作点。</li>
+<li><strong>低数据区域</strong>：在RoboTwin 2.0的6个代表性任务上将可用示教从50条减至20条（表5）。相比扩散策略基线和增加掩码先验，KAM-WM在20条示教下仍然带来了非负面的性能提升，其子集平均成功率从基线DP的45.0%提升到了66.7%，显示出其在更低数据区域下的潜力。</li>
+<li><strong>效率</strong>：推理时，KAM-WM的策略动作组块延迟为99毫秒（不包括一次性KAM提取的895毫秒），显著低于其自身实现的微调π₀的380毫秒。训练时，仅需训练约1.2亿参数（其中感知器仅210万参数），远小于需要微调数十亿参数的π₀等方法。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一种新方法：从冻结的流匹配图像-视频模型中提取单步潜在速度场，作为低数据机器人操作的一阶视觉先验（运动可供性图）。</li>
+<li>设计了一个轻量级的感知器令牌接口，可将此密集潜在场压缩并用于为扩散策略提供条件，而无需视频推演或世界模型微调。</li>
+<li>在LIBERO和RoboTwin 2.0基准上的实验验证了方法的有效性，消融实验表明其在交互方向很重要的任务上收益最大，并且训练参数和推理效率高。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>KAM在回合开始时仅提取一次，在长时程、场景剧变或被遮挡时可能陈旧。</li>
+<li>单步速度场与流匹配参数化紧密相关，在其他视频生成器上需重新审视。</li>
+<li>KAM是粗略的视觉运动先验，非显式3D规划，精确操作可能需要几何、触觉等多模态反馈。</li>
+<li>实验仅限于仿真环境，未在真实机器人上验证。</li>
+<li>报告结果为单次运行成功率，未提供多轮种子的置信区间。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：<br>本文表明，冻结视频模型编码的方向性信息可以在不进行测试时未来帧生成的情况下被直接读取和利用，为“如何以低计算成本利用大规模预训练视频模型中的时空知识”提供了一个新颖且高效的思路。未来的工作可探索动态更新先验、适配其他视频生成架构，以及将此类先验与更精细的几何表示相结合，以处理更复杂的接触式操作任务。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出KAM-WM框架，解决从少量演示中学习机器人操作时，静态视觉先验（如分割掩码）缺乏方向性交互信息的问题。该方法核心是：利用冻结的流匹配图像-视频模型，通过单步查询提取其潜在速度，直接解释为运动可供性地图，为任务提供交互区域与粗略运动结构；再经轻量级Perceiver压缩为token，与RGB和本体感觉共同条件化扩散策略。在LIBERO和RoboTwin 2.0上的实验表明，KAM-WM在LIBERO上平均成功率达90.6%，在RoboTwin 2.0的Easy和Hard设置下分别达到65.7%和22.4%的成功率，优于仅依赖空间定位的掩码先验。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.04652" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

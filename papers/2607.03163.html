@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Beyond Point-Attached Semantics: Object-Centric Semantic Fields for Generalizable Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Beyond Point-Attached Semantics: Object-Centric Semantic Fields for Generalizable Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.03163" target="_blank" rel="noreferrer">2607.03163</a></span>
+        <span>作者: Fei Chen Team</span>
+        <span>日期: 2026-07-03</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人泛化操作需要对功能部件（如把手、工具头、开口）具有稳定的三维理解。原始点云虽然提供了几何信息，但缺乏明确的部件语义，且其采样点会随视角、传感器配置和物体实例而变化。当前主流方法主要通过将2D视觉特征提升至3D，或在输入点云上预测密集的点级语义特征来丰富点云信息。然而，这些方法生成的语义特征通常仍然附着于观测相关的离散采样点上。当原始点分布变化时，呈现给策略的语义表示也随之改变，且来自视图依赖图像或局部3D邻域的特征仍可能因视角、投影质量而变化。</p>
+<p>本文针对现有方法中语义特征与观测点样本强绑定的痛点，提出了将物体条件输入与语义查询输出分离的新视角。核心思路是训练一个以物体点云为几何条件的连续语义场，可在任意的三维查询位置提取语义嵌入；冻结该场模型并将其用于在下游策略学习阶段，通过在物体区域重采样查询点生成语义点云，为策略提供更稳定、部件感知的物体级表示。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体流程分为训练和使用两个阶段：训练时，利用PartNet数据集中的部件标注模型，学习一个可查询的类别级物体语义场；部署时，将观测到的物体点云输入冻结的语义场模型，在重采样的物体位置上查询语义嵌入，生成语义点云作为策略的额外输入。</p>
+<p><img src="https://arxiv.org/html/2607.03163v1/2607.03163v1/Images/method.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>： 方法整体框架。<strong>左侧</strong>展示了语义场训练阶段：支持点用于构建物体条件三元平面缓存，在查询坐标处解码出语义嵌入和部件分类分数（训练用）。<strong>右侧</strong>展示了策略学习/部署阶段：用观测点云构建条件，在重采样的查询位置产生语义嵌入，形成语义点云供给下游操作策略。</p>
+</blockquote>
+<p>核心模块与细节如下：</p>
+<ol>
+<li><strong>支持点编码与适配</strong>：首先，将支持点集 𝒫_sup（来自物体表面采样的几何条件）输入一个冻结的预训练3D主干网络（论文使用Utonia）提取点级几何特征。然后，通过一个轻量级适配器将这些特征映射到语义场空间。</li>
+<li><strong>三元平面特征缓存</strong>：为了构建可查询的表示，将适配后的支持点特征根据其归一化的三维坐标，聚合到一个物体条件的三元平面缓存中。该缓存包含三个二维特征平面（XY, XZ, YZ投影）和一个通过池化得到的全局特征向量，为后续查询提供了几何和语义线索。</li>
+<li><strong>查询解码</strong>：给定一个查询坐标x，将其投影到三元平面上并进行双线性插值，得到各平面的局部特征。将这些特征与全局特征、归一化的坐标x一起输入解码器，输出一个L2归一化的语义嵌入e_x（用于策略）和一个部件分类分数l_x（仅用于训练监督）。</li>
+<li><strong>训练目标</strong>：训练过程中优化三个加权损失：<ul>
+<li>**部件锚定损失 (ℒ_part)**：在查询点的部件分类分数上使用交叉熵损失，确保预测与预定义的部件标签语义对齐。</li>
+<li>**跨实例部件对齐损失 (ℒ_align)**：采用监督对比学习，拉近同一部件（跨不同实例）的嵌入，分离不同部件的嵌入，以增强泛化性。</li>
+<li>**增强稳定性损失 (ℒ_stab)**：要求同一查询点在不同增强的支持条件下预测的嵌入保持一致，提升表示对输入扰动的鲁棒性。</li>
+</ul>
+</li>
+<li><strong>语义点云生成</strong>：训练完成后，场模型被冻结。在策略的每一步，将观测物体点云作为支持点集，在从物体区域内重采样的M个查询位置处调用场模型的嵌入分支，生成语义点云𝒮_obj = {(x_i, e_i)}。此表示保留了三维空间结构，并为策略提供了感知功能的部件线索。</li>
+</ol>
+<p><strong>核心创新点</strong>在于将物体表示的“条件”（几何输入）与“查询”（语义输出）明确分离，允许在任意、可控的三维位置生成语义特征，而非局限于原始观测点的位置，从而提供了更稳定、与采样无关的部件级表示。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>本研究在RoboTwin仿真环境和真实世界双臂机器人平台上进行实验评估。</p>
+<ul>
+<li><strong>Benchmark/数据集</strong>：仿真任务使用RoboTwin生成演示；真实世界任务演示在机器人上采集。语义场训练使用PartNet数据集。</li>
+<li><strong>Baseline方法</strong>：与三种基线进行对比：1) <strong>DP3</strong>：直接使用原始点云作为输入的扩散策略；2) <strong>2D Feature Lifting</strong>：将DINOv2特征从RGB图像提升到3D点云；3) <strong>3D Point-wise Features</strong>：使用与本文相同的冻结Utonia编码器提取观测点上的密集点级特征。</li>
+</ul>
+<p>定量结果如下表所示：<br><img src="https://arxiv.org/html/2607.03163v1/2607.03163v1/Images/simulation_experiment.png" alt="仿真实验结果"></p>
+<blockquote>
+<p><strong>表1</strong>：在四个RoboTwin仿真任务上的成功率。本文方法（Ours）在所有任务上均取得最高成功率（Hang Mug: 37%， Beat Hammer: 84%， Open Micro.: 35%， Put Cabinet: 83%），显著优于原始点云及其他语义特征基线。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.03163v1/2607.03163v1/Images/real_experiment.png" alt="真实世界任务与物体划分"></p>
+<blockquote>
+<p><strong>图3</strong>：真实世界任务设置（抓握杯子、敲击方块、搅拌杯子、倒水）及训练/测试物体划分。策略在训练实例上训练，在未见过的测试实例上评估。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.03163v1/2607.03163v1/Images/more_result.png" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>表2</strong>：四个真实世界任务的成功次数（共20次尝试）。本文方法在所有任务上均大幅超过基线，特别是在抓握杯子（17/20成功率）和敲击方块（17/20成功率）任务上表现突出，证明其在真实噪声和外观变化下的强泛化能力。</p>
+</blockquote>
+<p>定性分析方面，下图比较了不同方法在真实观测的杯子和锤子实例上生成的特征嵌入的可视化效果（通过共享PCA降维并映射到RGB颜色）。<br><img src="https://arxiv.org/html/2607.03163v1/2607.03163v1/Images/feature_compare.png" alt="跨实例特征可视化"></p>
+<blockquote>
+<p><strong>图4</strong>：特征嵌入可视化对比。相较于2D提升和3D点级特征基线，本文方法产生的特征颜色模式在跨实例的对应功能部件（如杯把手、锤头）上表现出更高的一致性，表明其学到的部件级嵌入更具跨实例对齐性和稳定性。</p>
+</blockquote>
+<p>消融实验蕴含在训练目标中，三个损失函数共同作用：ℒ_part锚定语义，ℒ_align促进跨实例对齐，ℒ_stab增强稳定性。论文指出，这些目标协同工作，使学习到的语义场能够产生稳定且泛化性强的部件感知表示。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个<strong>物体中心的连续语义场</strong>，将功能部件表示为可查询的3D语义嵌入，实现了在显式对象位置（而非仅限于观测点）进行语义读取。</li>
+<li>设计了一套利用<strong>部件锚定</strong>、<strong>跨实例部件对齐</strong>和<strong>增强稳定性</strong>的监督方法，从部件标注数据中训练出跨实例稳定对齐的语义场。</li>
+<li>将学习到的语义场<strong>导出为即用型语义点云</strong>，并验证了其在仿真和真实世界多任务、跨实例操作中提升策略性能的有效性。</li>
+</ol>
+<p><strong>局限性</strong>：论文指出，该方法假设物体是刚性的且具有稳定的几何结构和明确的语义部件，不直接适用于可变形物体、软体或拓扑结构在交互中发生显著变化的物体。此外，它依赖于离散的规范部件监督，对于模糊、连续或任务相关的功能区域可能有限制。</p>
+<p><strong>对后续研究的启示</strong>：本文通过分离“条件”与“查询”，为机器人操作提供了一个更具泛化潜力的物体表征新范式。未来工作可探索将此框架扩展到非刚性物体、集成更精细的几何与物理属性建模，以及结合少样本或自监督学习来减少对密集部件标注的依赖。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>该论文针对机器人操作中功能部件语义的泛化问题，旨在克服传统点云语义不稳定（依赖观测采样）的局限性。论文提出了一个以物体为中心的连续语义场方法：该方法以物体点云为条件，从明确的三维查询位置读取部件感知的语义嵌入，从而生成稳定的语义点云。核心结论表明，相较于原始点云、2D特征提升等基线方法，该表征能提供更为稳定的功能部件线索，有效提升了操作策略在模拟与真实环境中的性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.03163" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
