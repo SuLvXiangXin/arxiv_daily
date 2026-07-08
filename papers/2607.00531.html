@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Active-GRPO: Adaptive Imitation and Self-Improving Reasoning for Molecular Optimization - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Active-GRPO: Adaptive Imitation and Self-Improving Reasoning for Molecular Optimization</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.00531" target="_blank" rel="noreferrer">2607.00531</a></span>
+        <span>作者: Le Cong Team</span>
+        <span>日期: 2026-07-01</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于大型语言模型（LLMs）的分子优化任务通常采用两种主要训练范式：纯答案监督微调（SFT）和基于可验证奖励的强化学习（RLVR）。答案SFT迫使模型记忆输入-输出对，忽略了化学推理逻辑，导致模型在多步推理任务上泛化能力差。RLVR虽然保留了推理过程，但在分子优化这类严格约束（如分子有效性和结构相似性）的任务中，绝大多数随机生成的分子因无法满足闸门条件而获得零奖励，导致训练信号稀疏，学习效率低下。<br>为了同时解决这两个问题，研究引入了参考引导策略优化（RePO）。RePO通过将策略更新锚定在数据集中预先存在的参考分子上，结合了模仿学习和奖励学习，从而提供了更密集的训练信号并获得了演示学习的稳定性优势。然而，RePO的性能严重依赖于参考质量：当参考分子本身质量不高、存在噪声或与优化指令不完全一致时，模仿信号会主动将策略拉离其可能发现的最优解，形成一个由数据集上限而非模型能力决定的静态参考天花板。</p>
+<p>本文针对这一具体痛点，提出了“主动推理”的新训练范式。核心思路是：<strong>让策略在每次训练实例中主动决定何时模仿参考（模仿学习）、何时强化自身发现（强化学习），并持续将模仿目标升级为策略自身发现的最优候选分子</strong>。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Active-GRPO的整体框架嵌入在RePO的基础上，引入了两个核心耦合机制：<strong>主动模仿-强化（active imitate-reinforce）</strong> 和 <strong>主动参考（active referencing）</strong>。策略πθ生成功率<code>τ  &lt;answer&gt;  m  &lt;/answer&gt;</code>格式的输出，其中<code>τ</code>是自由形式的推理轨迹，<code>m</code>是候选分子的SMILES表示。优化目标是根据上下文c和参考分子进行。</p>
+<p><img src="https://arxiv.org/html/2607.00531v1/2607.00531v1/x2.png" alt="Active-GRPO 框架"></p>
+<blockquote>
+<p><strong>图2</strong>：Active-GRPO方法概览。该方法增强了参考引导策略优化，通过动态指导权重决定“何时”模仿，并通过记忆库（Bank）主动选择策略发现的候选分子来决定“模仿什么”。</p>
+</blockquote>
+<p><strong>主动模仿-强化机制</strong>决定“何时”模仿。它为每个实例计算一个动态的、上下文相关的指示权重β_guide(c_i)。首先，评估当前策略生成的一批（G个）候选分子，计算其中top-k平均奖励v_top(c_i)。然后与固定的参考分子奖励v_ref(z_i)进行比较：</p>
+<pre><code>β_guide(c_i) = β_min + (β_max - β_min) * σ(-α * (v_top(c_i) - v_ref(z_i)))
+</code></pre>
+<p>其中σ是logistic sigmoid函数，α控制过渡的锐利度。</p>
+<ul>
+<li><strong>语义</strong>：当策略落后于参考（v_top &lt; v_ref），β_guide较大，模仿学习占主导。当策略超越参考（v_top &gt; v_ref），β_guide减小，训练转向强化学习。β_min和β_max设定了权重的上下界，β_min&gt;0意味着策略即使超越了参考，仍会保留一部分对最佳已知目标的自蒸馏信号。</li>
+</ul>
+<p><strong>主动参考机制</strong>决定“模仿什么”。它为每个训练实例维护一个容量为K的持久化记忆库B(c_i)。记忆库初始存放数据集提供的参考分子及其奖励值<code>(m_ref, v_ref)</code>。在训练过程中，策略生成的分子m若满足以下<strong>提升（Promotion）</strong>条件，则可被存入记忆库：</p>
+<pre><code>Promote(m | c_i) = 1[R(m; c_i) &gt; v_ref(z_i) + δ ∧ Q(m; c_i) ∧ Valid(m)]
+</code></pre>
+<p>其中δ是奖励提升阈值，Q是任务特定的硬约束（如最小Tanimoto相似度），Valid检查分子有效性。当记忆库已满时，奖励最低的条目会被<strong>清除（Eviction）</strong>。在每个训练步骤，提供给模仿学习的目标是记忆库中奖励最高的分子：</p>
+<pre><code>m*(c_i) = arg max_(m, r) in B(c_i) r
+</code></pre>
+<p><strong>优化目标</strong>：在大小为B的minibatch上，总的优化损失函数为：</p>
+<pre><code>L_Active-GRPO = L_RL + (1/B) * Σ_{i=1}^{B} [β_guide(c_i) * L_guide^{(i)}(m*(c_i))]
+</code></pre>
+<p>其中L_RL是基于GRPO的强化学习损失，L_guide是对目标分子序列（m*）的负对数似然损失（模仿学习）。</p>
+<p><strong>创新点</strong>：</p>
+<ol>
+<li><strong>动态模仿权衡</strong>：与RePO使用固定的（或批平均的）模仿权重不同，Active-GRPO基于每个实例“策略当前表现”与“参考表现”的比较，自适应地调整模仿学习的强度。</li>
+<li><strong>自我提升参考</strong>：与RePO使用静态数据集参考不同，Active-GRPO允许策略自身发现的更优候选分子，在经过验证后，升级成为新的、更优的模仿参考目标。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>基准与数据集</strong>：在TOMG-Bench的MolOpt子任务上进行评估，包含LogP、MR和QED三个属性的分子优化任务。<br><strong>对比方法</strong>：零样本推理、GRPO-only（无指导）、RePO（固定参考）、迭代SFT（模拟自蒸馏）、离线增强RePO（用更强但固定的目标替代原始参考）以及Active-GRPO的两个消融版本（仅用主动模仿-强化机制、仅用主动参考机制）。</p>
+<p><strong>关键实验结果</strong>：<br>在一致性三种子评估下，Active-GRPO在LogP、MR和QED三个子任务上均取得了最高的SR×Sim复合分数，平均分数从RePO的0.1665提升至0.1773。具体数值如下：</p>
+<ul>
+<li><strong>LogP</strong>：Active-GRPO (0.1977) &gt; RePO (0.1877)，提升+0.0100。</li>
+<li><strong>MR</strong>：Active-GRPO (0.1904) &gt; RePO (0.1860)，提升+0.0044。</li>
+<li><strong>QED</strong>：Active-GRPO (0.1440) &gt; RePO (0.1258)，提升+0.0182。<br>这些提升均具有统计显著性（p&lt;0.001）。Active-GRPO的成功率（SR）从RePO的0.2017提升至0.2249，而平均相似度（Sim）略有下降（0.8281-&gt;0.7906），表明模型在减少无意义复制的同时，进行了更有效的优化。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.00531v1/2607.00531v1/x1.png" alt="主要结果表"></p>
+<blockquote>
+<p><strong>图1（对应论文表1）</strong>：TOMG-Bench MolOpt的主要结果。Active-GRPO在SR×Sim指标上全面领先。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.00531v1/2607.00531v1/x3.png" alt="消融研究表"></p>
+<blockquote>
+<p><strong>图3（对应论文表2）</strong>：Active-GRPO的消融实验结果。单独的“主动模仿-强化”或“主动参考”机制均无法超越RePO（平均分分别为0.1624和0.1659，均低于RePO的0.1665），只有两者结合（0.1773）时才显示出显著优势，证明两个机制是互补的。</p>
+</blockquote>
+<p><strong>消融实验</strong>：消融实验明确显示，主动模仿-强化和主动参考两个机制缺一不可。去掉任何一个，性能（SR×Sim）都与RePO相当或更低，而两者结合时性能最佳。这表明，单纯调整模仿权重（何时模仿）或单纯升级目标（模仿什么）是必要的，但只有将它们联合起来，策略才能无缝地从模仿参考过渡到自我超越。</p>
+<p><strong>优化空间条件分析</strong>：论文预测，Active-GRPO的优势将在优化空间（即原始分子属性与目标属性间的差距）较大的实例上最明显。实验结果支持了这一点：在LogP任务中，将测试实例按优化空间大小分为五组，Active-GRPO相较于RePO的优势从第一组的+0.002单调递增到第五组的+0.031。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>识别并形式化了参考引导策略优化中的<strong>静态参考天花板</strong>问题，指出固定的数据集参考在质量不佳或策略能力超越参考时会成为性能瓶颈。</li>
+<li>提出了<strong>主动推理</strong>的新训练范式，并通过<strong>Active-GRPO</strong>算法将其具象化，该算法通过耦合的“主动模仿-强化”和“主动参考”机制，使参考引导能适应参考质量并随时间自我提升。</li>
+<li>在分子优化任务上实证表明，Active-GRPO能持续超越RePO和其他基线方法，在多样的参考质量场景下都表现出更强的鲁棒性和更好的化学性质平衡能力。</li>
+</ol>
+<p><strong>局限性</strong>：<br>论文指出，Active-GRPO依赖于对分子结构和性质进行精确、可靠、可编程化验证的奖励函数。在奖励信号稀疏、噪声大或无法精确定义有效约束的领域，该方法的适用性可能受限。</p>
+<p><strong>后续研究启示</strong>：</p>
+<ol>
+<li><strong>范式推广</strong>：这种“判断-模仿/强化-升级目标”的动态指导范式，可以推广到其他需要结合高质量演示与大搜索空间的RL任务中，如程序合成、硬件设计或生物序列设计。</li>
+<li><strong>机制拓展</strong>：可以探索在记忆库中使用更复杂的参考选择策略（如基于多样性、置信度或不确定性），或设计更精细的动态权重调度策略，以处理多目标或存在欺骗性局部最优的任务。</li>
+<li><strong>理论基础</strong>：深入分析这种自适应模仿-强化混合策略的收敛性保证和泛化边界，将有助于指导算法设计和超参数选择。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本篇论文旨在解决分子优化任务中，现有方法（如RePO）因依赖固定参考而导致性能受限的核心问题。为此，论文提出了Active-GRPO（主动分组相对策略优化）方法，其关键技术包含两个耦合机制：一是“主动模仿-强化”，使策略能自适应地基于参考质量选择模仿学习或切换至强化学习进行自我改进；二是“主动参考更新”，持续用已发现的最优候选分子替换参考，从而动态提升模仿目标。在TOMG-Bench MolOpt基准测试中，该方法将平均SR × Sim指标从RePO的0.1665提升至0.1773，并在LogP、MR、QED等任务上取得了统计显著的性能提升。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.00531" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
