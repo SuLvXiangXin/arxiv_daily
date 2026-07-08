@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DeWorldSG: Depth-Aware 3D Semantic Scene Graph Generation via World-Model Priors - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>DeWorldSG: Depth-Aware 3D Semantic Scene Graph Generation via World-Model Priors</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.00889" target="_blank" rel="noreferrer">2607.00889</a></span>
+        <span>作者: Woontack Woo Team</span>
+        <span>日期: 2026-07-01</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，3D语义场景图生成主要有两类主流方法。一类是基于几何重建的“几何优先”范式，它直接利用点云或SLAM重建的3D结构来构建场景图，其关系推理基于显式几何，但图的质量与重建质量强耦合，对姿态漂移、几何不完整和计算开销敏感。另一类是“2D到3D提升”的方法，它先逐帧生成2D场景图，再将其提升并对齐到共享3D坐标系中。这种方法降低了对完整3D重建的依赖，但存在两个关键局限性：其一，由于提升过程通常基于2D边界框和单点深度，不稳定性深度（尤其是物体边界处）会导致提升的物体3D几何扭曲，造成物体表示不稳定；其二，关系预测基于逐帧独立推理，由于遮挡或输入分辨率限制导致的观测有限，常常遗漏关键关系，生成的场景图往往只能反映局部几何邻近性而非连贯的场景级上下文。</p>
+<p>本文针对3D物体表示不稳定和关系稀疏/不一致这两个具体痛点，提出了结合深度感知概率建模与世界模型先验的新视角。其核心思路是：1）通过掩码引导的深度过滤，直接估计实例级的概率性3D高斯分布来表示物体，而非单一投影点；2）通过聚合跨帧的时空证据并利用来自世界模型的上下文先验来细化和补全关系，从而生成时空一致的3D语义场景图。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>DeWorldSG的整体框架从RGB-D序列输入到输出全局一致的3D语义场景图，包含三个核心阶段。</p>
+<p><img src="https://arxiv.org/html/2607.00889v1/2607.00889v1/x1.png" alt="框架总览"></p>
+<blockquote>
+<p><strong>图2</strong>：DeWorldSG整体框架概述。给定RGB-D图像序列，首先逐帧检测物体并预测关系，构建2D场景图（a）。检测到的实例通过掩码引导的深度过滤和双域深度细化，被提升为深度感知的概率3D高斯分布（b）。最后，来自视频世界模型的时空谓词先验被聚合，并与视觉预测融合，从而将局部图增量式合并为全局一致的3D语义场景图（c）。</p>
+</blockquote>
+<p><strong>阶段一：2D场景图生成</strong>。对于每一帧的RGB图像，使用对象检测器（如DETR）获取实例边界框和类别概率，并使用2D关系推理模型（如EGTR）预测每对物体之间的关系logits。这一步的输出是包含2D节点（边界框、类别概率）和边（关系概率）的逐帧2D场景图。</p>
+<p><strong>阶段二：深度感知局部3D高斯表示</strong>。这是第一个核心创新模块，旨在构建稳定、几何可信的物体节点。具体步骤如下：</p>
+<ol>
+<li><strong>掩码引导的实例提取</strong>：利用SAM生成每个边界框内的物体二值掩码。通过处理跨类别的模糊像素和过滤过小掩码，确保后续步骤的深度样本纯净。</li>
+<li><strong>双域深度细化</strong>：这是第二个核心创新模块（DR），旨在去除深度图中的噪声。它在<strong>空间域</strong>和<strong>深度分布域</strong>顺序操作。在空间域，通过比较每个像素深度与其3x3邻域的中值深度，过滤掉不符合局部一致性的异常值（如“飞点”），得到空间内点集。在深度分布域，对空间内点集的深度值进行一维聚类。聚类阈值根据局部深度变化和全局深度尺度动态计算，最终保留均值最接近参考深度（即深度中值）的簇作为<strong>最终内点集</strong>。这一步有效隔离了每个实例的主导、自一致的深度层。</li>
+<li><strong>深度引导的3D高斯估计</strong>：将最终内点集中的每个像素根据其深度值通过相机内参和相机位姿反投影到世界坐标系，形成实例特定的3D点集。直接计算该点集的样本均值和协方差，得到代表该物体在当帧观测下的3D高斯分布（均值μ，协方差Σ）。如此，每个物体节点不再是一个不确定的单点，而是源自大量精炼深度观测的概率分布。</li>
+</ol>
+<p><strong>阶段三：时空关系推理与全局图合并</strong>。这一步将逐帧的局部3D图增量式合并到全局图中，并利用世界模型先验优化关系。</p>
+<ol>
+<li><strong>增量式节点合并</strong>：当新的局部节点到来时，计算其与全局现有节点的几何相似度（基于高斯分布的Hellinger距离）和语义相似度（基于类别概率分布的内积距离）。只有当两者均低于阈值时，节点才被判定为同一实例并进行融合。融合时使用加权平均更新高斯参数，并合并观测频率和关系预测。</li>
+<li><strong>基于世界模型的关系细化</strong>：这是第三个核心创新模块。首先，并非所有物体对都进行关系推理，而是通过结合2D中心距离和深度差异的“几何邻近代价”筛选出空间上接近的候选对，以减少幻觉关系。对于每个候选对，提取其联合边界框在16帧滑动缓冲区内的短片段。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.00889v1/2607.00889v1/x2.png" alt="世界模型关系细化"></p>
+<blockquote>
+<p><strong>图3</strong>：时空谓词细化示意图。对于每个物体对，从其16帧联合裁剪片段中，使用冻结的V-JEPA 2骨干网络提取时空token，经平均池化后送入一个MLP探针网络，预测片段级的谓词分布。</p>
+</blockquote>
+<p>   如图3所示，使用一个冻结的预训练视频世界模型（V-JEPA 2）编码该时空片段，并附加一个轻量级MLP探针来预测关系分布 <code>p_WM(r)</code>。这个分布捕获了超越单帧的时空上下文和结构规律性。在训练和推断过程中，相同主语-宾语类别对的关系分布会被跨时间聚合，形成稳定的关系先验 <code>P_WM(r|c_s, c_o)</code>。与此同时，视觉证据通过累加多帧的关系logits得到分布 <code>P_vis(r|i,j)</code>。最终关系通过不确定性感知的加法融合得到：仅当 <code>P_vis</code> 的熵（表示不确定性）较高时，才引入世界模型先验进行补充（<code>P_new ∝ P_vis + α * P_WM</code>），从而避免覆盖强视觉证据，只补全模糊或缺失的关系。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>数据集与基线</strong>：实验在3DSSG（真实扫描室内场景）和ReplicaSSG（合成室内场景）两个基准数据集上进行。对比的基线方法包括基于几何的方法（3DSSG, SGFusion, MonoSSG）和基于提升的方法（IMP, VGFM, Kim, FROSS）。</p>
+<p><strong>关键实验结果</strong>：DeWorldSG在两个数据集的所有指标上均达到了最先进的性能。特别是在3DSSG数据集上，相比于之前最好的方法（FROSS），**三元组召回率（Relationship Recall）提升了77.4%，谓词召回率（Predicate Recall）提升了23.2%**。这证明了其生成更完整、更准确场景图的能力。</p>
+<p><img src="https://arxiv.org/html/2607.00889v1/2607.00889v1/x3.png" alt="定量结果"></p>
+<blockquote>
+<p><strong>图4</strong>：在3DSSG数据集上的定量评估结果。表格显示DeWorldSG在物体召回率（R@k）、谓词召回率（P@k）、三元组召回率（S@k）和平均召回率（mR@k）上全面领先于所有基线方法。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.00889v1/2607.00889v1/x4.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图5</strong>：消融实验图，展示了不同组件对性能的影响。图中可见，移除双域深度细化（DR）或世界模型先验（WM）都会导致性能显著下降，验证了它们各自的必要性。同时使用两者时（Full）达到最佳性能。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.00889v1/2607.00889v1/x5.png" alt="定性比较"></p>
+<blockquote>
+<p><strong>图6</strong>：3D场景图可视化定性比较。DeWorldSG（中）生成的场景图比基线FROSS（左）包含更多正确的关系（如“supported by”，以红色高亮），且物体节点（高斯椭球）定位更准、形状更稳定，而FROSS则存在关系缺失和物体定位漂移的问题。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：消融实验（图5）验证了每个核心组件的贡献。移除双域深度细化（-DR）导致物体和关系性能大幅下降，说明稳定的几何表示是基础。移除世界模型先验（-WM）则主要损害谓词和三元组召回率，证明时空上下文对于补全和纠正关系至关重要。两者结合（Full）实现了最佳性能。</p>
+<p><img src="https://arxiv.org/html/2607.00889v1/2607.00889v1/figures/fail.png" alt="失败案例"></p>
+<blockquote>
+<p><strong>图8</strong>：失败案例分析。在极端情况下，如物体被严重遮挡或连续动态运动时，DeWorldSG可能无法生成足够多有效观测来建立稳定的物体表示或关系。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1）提出了一个深度感知的3D语义场景图生成框架，通过掩码引导的深度过滤与双域深度细化，将物体表示为<strong>实例级的概率3D高斯分布</strong>，显著提升了3D物体几何的稳定性。2）设计了<strong>双域深度细化机制</strong>，分别在空间和深度分布域过滤噪声，为鲁棒的高斯估计提供了保障。3）引入了<strong>时空关系推理方案</strong>，通过聚合多帧视觉证据并融合从视频世界模型（V-JEPA 2）中提取的上下文先验，有效增强了关系的完整性和一致性。</p>
+<p>论文自身提到的局限性在于，当物体被<strong>严重或长期遮挡</strong>，或者在连续<strong>动态运动</strong>中无法获得足够多有效观测时，方法的性能会下降（如图8所示）。这源于其依赖多视角观测进行概率估计和证据积累的本质。</p>
+<p>这项工作为后续研究提供了重要启示：其一，将<strong>概率性表示</strong>与<strong>增量式融合</strong>引入3D场景理解，是应对真实世界不确定性和提升鲁棒性的有效途径。其二，利用大规模预训练的<strong>世界模型</strong>作为“常识”或“物理规律”的先验知识库，来约束和补足基于几何与外观的推理，是提升高阶场景理解任务性能的一个富有前景的方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出DeWorldSG框架，解决3D语义场景图生成中因不稳定对象表示和逐帧推理导致的关系缺失问题。方法通过深度引导滤波估计实例级3D高斯分布，将对象表示为概率节点，并聚合时空证据、利用世界模型先验精炼关系。实验在3DSSG和ReplicaSSG数据集上实现最先进性能，三元组召回率提升77.4%，谓词召回率提升23.2%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.00889" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

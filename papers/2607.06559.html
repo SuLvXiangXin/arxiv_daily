@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RynnWorld-4D: 4D Embodied World Models for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>RynnWorld-4D: 4D Embodied World Models for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.06559" target="_blank" rel="noreferrer">2607.06559</a></span>
+        <span>作者: Zhongyu Li Team</span>
+        <span>日期: 2026-07-07</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，机器人操纵领域的世界建模主流方法主要分为两类：一是基于2D像素空间的生成视频模型，它们虽然展现了强大的生成先验，但由于其投影本质，无法捕获精确的3D几何结构，导致预测结果在时空上不一致（如物体尺度波动和非物理形状变形），与世界预测和策略学习之间存在巨大鸿沟。二是现有的4D场景建模方法，它们或基于NeRF/3D高斯泼溅（计算密集且特定于场景），或基于动态运动恢复结构（缺乏从单图生成未来状态的能力），均难以提供紧凑、可扩展且能与预训练视频扩散模型强先验相结合的表示。</p>
+<p>本文针对上述痛点，提出了一种新的视角：构建一个轻量级的、投影式的4D表示。核心思路是，通过同步预测RGB、深度和光流（RGB-DF）序列，将外观、几何和运动信息显式地整合在一个与2D对齐的格式中，从而既能进行3D场景流推导以提供物理基础，又能继承大规模视频扩散模型的可扩展性和生成能力。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架分为三部分：1）构建大规模4D数据集Rynn4DDataset 1.0；2）训练4D具身世界模型RynnWorld-4D，该模型以单张RGB-D图像和语言指令为条件，在一个共享的去噪循环中同步生成未来的RGB帧、深度图和光流视频；3）利用RynnWorld-4D内部产生的4D表示，通过RynnWorld-4D-Policy策略头，以单次前向传播的方式输出机器人动作，实现闭环控制。</p>
+<p><img src="https://arxiv.org/html/2607.06559v1/2607.06559v1/x1.png" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图4</strong>：RynnWorld-4D整体框架概览。利用大规模Rynn4DDataset 1.0数据集训练一个生成模型。给定一个RGB-D观测和语言指令，RynnWorld-4D共同生成未来的RGB帧、深度图和光流。这些预测性的4D表征随后被RynnWorld-4D-Policy聚合以生成最终的机器人动作。</p>
+</blockquote>
+<p>核心模块是RynnWorld-4D的三分支架构。该模型基于预训练的视频扩散模型Wan扩展而来，包含三个独立的分支，分别处理RGB、深度和光流模态。每个分支拥有独立的Transformer层，但通过<strong>联合跨模态注意力（JA）模块</strong>共享跨模态的键（Key）和值（Value）。JA模块被插入到主干网络的特定层中，确保外观、几何和运动协同演化。具体而言，每个分支的查询（Query）会与另外两个分支的键和值进行交叉注意力计算，并且使用了3D旋转位置编码（RoPE）和帧级掩码来保持时空一致性。</p>
+<p>训练过程采用<strong>三阶段策略</strong>：第一阶段（模态适应）禁用JA，独立训练三个分支；第二阶段（联合注意力训练）插入并仅训练JA模块及相关参数，冻结主干；第三阶段（全参数联合微调）解冻整个模型进行训练。此外，在训练中引入了<strong>分支丢弃</strong>技巧：以概率 <code>p_drop</code> 随机选择深度或光流分支，将其未来帧的噪声潜变量替换为纯高斯噪声，迫使JA模块从其他可见模态中重建信息，从而增强模态间的依赖性和鲁棒性。</p>
+<p>损失函数采用流匹配目标，为每个模态学习一个速度场。总损失是三个模态损失的加权和，其中RGB和深度权重为1，光流在第一阶段权重为0.5，后续阶段为1。三个模态共享同一个高斯噪声样本，以确保它们的去噪轨迹在时间上对齐。</p>
+<p>与现有方法相比，创新点体现在：1）提出了RGB-DF这一兼具几何可解释性和生成可扩展性的4D表示；2）设计了三分支架构与联合跨模态注意力机制，在保留预训练模型强大生成先验的同时，实现了多模态的一致生成；3）提出了直接从4D表征中高效提取动作的策略学习范式，绕过了昂贵的多步视频解码。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了自建的大规模数据集<strong>Rynn4DDataset 1.0</strong>，它包含超过2.544亿帧视频，融合了以人为中心的（如Epic-Kitchens、EgoVid）和机器人操纵（如RoboMIND、RDT-1B）数据集，并通过Qwen3-VL生成指令、DPFlow估计光流、Depth Anything 3估计深度，生成了高质量的4D伪标注。</p>
+<p>在真实世界的灵巧双手操作任务上评估了<strong>RynnWorld-4D-Policy</strong>的性能。对比的基线方法包括：H3D、CM-V（两种基于NeRF/Gaussian的4D生成方法），以及一系列基于2D视频扩散模型的方法（如Wan、Pandora、Open-Sora Plan）。还对比了RynnWorld-4D的变体（例如移除光流分支的 <code>w/o Flow</code> 版本）以进行消融研究。</p>
+<p>关键实验结果显示，RynnWorld-4D-Policy在需要空间精确性和时序协调性的任务上实现了最先进的性能。具体成功率的数值对比图表显示，该方法显著优于所有基线。</p>
+<p><img src="https://arxiv.org/html/2607.06559v1/2607.06559v1/x2.png" alt="定性结果对比"></p>
+<blockquote>
+<p><strong>图5</strong>：生成的4D序列定性结果（示意图）。左列：输入RGB-D图像和指令。中间列：RynnWorld-4D同步预测出的未来RGB、深度和光流帧。右列：根据预测的深度和光流反投影得到的3D场景流轨迹，展示了物理上合理的物体运动。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.06559v1/2607.06559v1/x3.png" alt="消融实验分析"></p>
+<blockquote>
+<p><strong>图6</strong>：消融实验分析。展示了移除关键组件（如联合跨模态注意力、光流模态、分支丢弃等）对模型生成质量（如深度误差、光流精度）和下游策略性能（成功率）的影响，验证了各模块的有效性。</p>
+</blockquote>
+<p>消融实验总结如下：</p>
+<ol>
+<li><strong>移除光流模态（w/o Flow）</strong>：导致策略在需要精确轨迹跟踪的任务上性能显著下降，验证了显式运动信息对操纵的重要性。</li>
+<li><strong>移除联合跨模态注意力（w/o JA）</strong>：导致生成的RGB、深度和光流之间出现不一致（如物体位置不匹配），破坏了4D表示的物理一致性。</li>
+<li><strong>移除分支丢弃（w/o Dropout）</strong>：在部分模态缺失的鲁棒性测试中表现变差，表明分支丢弃训练增强了模态间的互补和重建能力。</li>
+</ol>
+<p>此外，论文还对推理延迟进行了分析。在NVIDIA RTX 5090 GPU上，一次完整的RynnWorld-4D前向传播耗时约1.1秒。通过<strong>动作组块化</strong>（一次推理预测K=10个未来动作）和并行执行，系统实现了约9 Hz的有效控制频率，并能维持较高的闭环操作鲁棒性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了RGB-DF这一新颖的投影式4D表示，它显式编码几何与运动，同时兼容视频扩散模型的先验；2）构建了超大规模、多模态的Rynn4DDataset 1.0数据集，解决了4D生成模型训练的数据瓶颈；3）提出了RynnWorld-4D-Policy，通过单次前向传播利用世界模型的内部4D表征进行决策，实现了从“想象”到“行动”的高效、闭环映射。</p>
+<p>论文自身提到的局限性主要在于推理速度：三分支Transformer是主要的计算瓶颈（占延迟的89.5%），尽管通过动作组块化实现了9Hz的控制频率，但与高速率底层控制器相比仍有差距。</p>
+<p>这项工作对后续研究的重要启示是：<strong>显式的、物理基础的中间表示（如RGB-DF）是弥合生成式世界模型与具体机器人动作空间之间鸿沟的有效途径</strong>。它表明，与其在纯2D像素空间或完全显式的3D体积表示中二选一，不如采用这种折中的、与2D对齐的4D表示，既能保有生成模型的强大能力，又能提供机器人控制所需的几何和动态线索。未来的工作可以进一步探索更高效的模型架构，以降低4D生成的延迟，并研究如何将这种表示无缝集成到更复杂的层次化决策框架中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决机器人开放世界操作中预测环境动态变化的核心问题。提出RynnWorld-4D，一种基于RGB-DF（同步RGB、深度、光流）表示的生成世界模型。其关键技术在于统一扩散过程，通过三分支架构整合跨模态注意力与帧间3D RoPE，从单帧RGB-D图像和语言指令协同预测未来视觉、几何与运动状态。衍生的RynnWorld-4D-Policy利用其内部表示直接生成机器人动作。实验表明，该模型能产生时空一致的4D预测，其策略在真实世界双手灵巧操作任务中达到先进水平，尤其在需要空间精度与时间协调的任务上表现出色。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.06559" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
