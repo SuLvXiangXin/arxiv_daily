@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>A Closed-Loop Multi-Agent Framework for Robust Multi-Robot Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>A Closed-Loop Multi-Agent Framework for Robust Multi-Robot Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.06990" target="_blank" rel="noreferrer">2607.06990</a></span>
+        <span>作者: Wei-Shi Zheng Team</span>
+        <span>日期: 2026-07-08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>多机器人系统通过并行与冗余为长程任务提供了潜力，然而，如何将高层语义推理有效地物理接地到多机器人协同操作中仍是一个开放挑战。当前基于大语言模型（LLM）的方法主要分为两类：一是单机器人操作方法，虽能实现鲁棒的接触丰富操作，但缺乏跨多个工作空间任务所需的协调机制；二是现有的多机器人框架，其重点在于高层任务规划，通常将具体的操控动作视为理想化的原语，忽略了现实世界中执行的不确定性，如抓取失败、接触变化、外部干扰或可达工作空间限制等。</p>
+<p>本文针对上述“规划与执行脱节”以及“缺乏对执行不确定性的自适应恢复能力”这两个具体痛点，提出了一个新视角：从静态的执行管道转向迭代的、代理式的工作流程，通过融入分层恢复机制来实现鲁棒操作。核心思路是提出一个分层的、闭环的、基于多代理的LLM框架，该框架集成了语义规划、物理接地与结果验证，使机器人系统能够感知环境反馈并从失败中自适应恢复。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架是一个由三个专门化代理协同工作的闭环循环，输入为自然语言指令和粗略的场景描述（如机器人位置、物体大致方位），输出为控制机器人执行的具体动作序列。其核心是“推理-行动-反思”的迭代过程。</p>
+<p><img src="https://arxiv.org/html/2607.06990v1/2607.06990v1/x2.png" alt="方法框架图"></p>
+<blockquote>
+<p><strong>图2</strong>：闭环多代理框架总览。系统包含三个代理：(a) 规划代理（Planning Agent）处理指令并考虑机器人能力生成带依赖关系的任务图；(b) 操控代理（Manipulation Agent）利用感知工具将抽象子任务转化为可执行的动作原语；(c) 验证代理（Verification Agent）监控物理执行结果，并触发分层恢复机制（本地恢复或全局重新规划）以确保鲁棒性。</p>
+</blockquote>
+<p><strong>核心模块一：规划代理（Planning Agent）</strong><br>该模块作为语义推理核心，负责任务分解与分配。其工作包含两个关键机制：</p>
+<ol>
+<li><strong>依赖感知的任务分解</strong>：将全局指令解析为一个有向无环图（DAG），识别子任务间的逻辑依赖关系（顺序或并行），并输出带有并行标志的子任务调度，以优化异构机器人的并发执行效率。</li>
+<li><strong>基于能力的分配与交互式细化</strong>：根据子任务需求（如“运输”）与各机器人能力（如移动底盘、固定基座）进行匹配分配。当初始指令或场景信息不足时（如模糊的“整理”指令），规划代理可以触发一个<code>further_perception</code>标志，向对应的操控代理发起针对性查询以获取细粒度观测，从而基于更新的语义上下文细化任务图。</li>
+</ol>
+<p><strong>核心模块二：操控代理（Manipulation Agent）</strong><br>该模块作为具身执行器，负责将逻辑子任务转化为可物理执行的动作原语。其核心是<strong>自适应工具调用</strong>机制：</p>
+<ul>
+<li><strong>基于角色的操作解析</strong>：首先利用VLM将子任务分解为可执行的细粒度操作步骤，识别交互中实体的主动/被动角色及其语义部件描述（如“手柄”、“表面”），并判断是否需要双臂操作。</li>
+<li><strong>工具增强的视觉感知</strong>：调用VLM检测器和Segment Anything Model (SAM)进行目标检测与分割，获取像素级掩码。随后使用视觉提示工具进行功能感知关键点选择（如杯柄上部），并将2D关键点投影至3D空间作为操作的空间锚点。</li>
+<li><strong>自适应工具调用的动作原语生成</strong>：根据建立的空间关键点和任务需求，查询预定义的动作原语库（见表I）。当原语需要更精确的物理接地时，会自适应调用专用工具。例如，生成抓取原语时，会触发<code>AnyGrasp</code>生成6自由度候选抓取位姿，并与提取的3D语义关键点匹配以选择最优解；需要调整物体朝向时，则激活旋转感知工具，由VLM推理出所需的旋转轴、方向和角度。</li>
+<li><strong>记忆增强推理</strong>：采用双层记忆机制提升效率。短期记忆记录之前的操作历史，用于解析模糊指令和验证；经验池则存储成功执行的子任务分解模板和对应的动作原语序列，当下次遇到签名完全匹配的子任务时直接复用，减少VLM API调用，加速执行。</li>
+</ul>
+<p><strong>核心模块三：验证代理（Verification Agent）</strong><br>该模块作为反思组件，通过监控任务状态和实施<strong>分层错误恢复</strong>来确保系统可靠性。</p>
+<ul>
+<li><strong>离散视觉结果验证</strong>：在子操作完成后，分析动作前后的图像，进行逻辑验证并生成二进制成功/失败预测。</li>
+<li><strong>分层错误恢复</strong>：根据失败类型触发不同层次的恢复策略。对于<strong>执行失败</strong>（任务仍可行，如抓取滑脱），验证代理启动<strong>本地恢复循环</strong>，参考交互历史和视觉状态自主构建纠正序列，直接交由操控代理执行，形成快速自校正的内循环。对于<strong>可行性错误</strong>（如目标超出固定基座机器人工作空间），验证代理将包含具体错误上下文的失败反馈发送给规划代理，触发<strong>全局恢复循环</strong>。规划代理根据错误原因和当前机器人状态生成新的任务图（例如，派遣移动机器人协助），从而在不中断全局工作流的前提下确保任务连续性。</li>
+</ul>
+<p><strong>与现有方法相比的创新点</strong>：</p>
+<ol>
+<li><strong>从开环到闭环的代理范式</strong>：不同于多数现有方法将验证局限于执行前，本文引入验证代理实现执行中的持续监控与反馈，形成了“规划-执行-验证-恢复”的闭环。</li>
+<li><strong>分层协同恢复机制</strong>：明确区分并处理执行层与能力约束层的错误，通过本地恢复与全局重新规划的协同，有效隔离故障，防止单点失败导致整个系统崩溃。</li>
+<li><strong>灵活的自适应工具调用</strong>：操控代理并非固定流水线，而是根据具体物理上下文动态调用最合适的感知与动作生成工具（如VLM、SAM、AnyGrasp），增强了应对多样化操作任务的泛化能力。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在真实世界环境中设计了6个复杂度不同的任务，涵盖桌面双臂操作与多机器人协作。使用了三种异构机器人：Agilex Cobot Magic（移动双臂）、ABB-YuMi（桌面双臂）、Agilex Piper（桌面单臂）。任务分为两类：</p>
+<ul>
+<li><strong>桌面双臂任务</strong>：积木堆叠（Block Stacking）、桌面整理（Table Organization）、物体收纳（Object Stowing）。</li>
+<li><strong>多机器人协作任务</strong>：篮子搬运上架（Basket Shelving）、协同倒水（Collaborative Pouring）、食物准备（Food Preparation）。</li>
+</ul>
+<p><strong>对比方法</strong>：</p>
+<ol>
+<li><strong>OpenVLA-OFT</strong> 与 <strong>π0</strong>：代表主流的基于学习的端到端策略。</li>
+<li><strong>ReKep</strong>：一种基于LLM/VLM、通过优化关系关键点约束进行操控的无学习方法。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.06990v1/2607.06990v1/x3.png" alt="任务执行过程"></p>
+<blockquote>
+<p><strong>图3</strong>：六个真实世界实验任务的执行流程示例。上图(1-3)为双臂操作任务，下图(4-6)为多机器人协作场景，直观展示了本框架处理从简单到复杂、从单工作空间到跨工作空间任务的能力。</p>
+</blockquote>
+<p><strong>关键定量结果</strong>：<br>在桌面任务上（共20轮次），本方法在成功率（Succ.）和平均任务完成度（Comp.%）上均显著优于基线。</p>
+<p>表 II：桌面任务性能对比</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>积木堆叠 (Succ./Comp.%)</th>
+<th>桌面整理 (Succ./Comp.%)</th>
+<th>物体收纳 (Succ./Comp.%)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>OpenVLA-OFT</td>
+<td>1/20, 35%</td>
+<td>5/20, 55%</td>
+<td>4/20, 31%</td>
+</tr>
+<tr>
+<td>π0</td>
+<td>9/20, 46%</td>
+<td>9/20, 75%</td>
+<td>们的框架在三个任务上都取得了最高的成功率和完成度。工具增强的感知确保了堆叠所需的精度，多样化的动作原语组合提供了必需的灵活性，而验证代理提供的闭环鲁棒性则能检测并尝试从执行错误中恢复。</td>
+</tr>
+<tr>
+<td>为了评估框架对外部干扰的鲁棒性，研究者设计了动作级、子任务级和全局级三种干扰。如表III所示，在干扰下，基于学习的基线方法平均成功率很低（7%，20%），而本方法保持了63%的平均成功率，仅比无干扰情况略有下降，凸显了验证闭环的必要性。</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<p>表 III：外部干扰下的性能对比（平均成功率）</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>堆叠</th>
+<th>桌面整理</th>
+<th>物体收纳</th>
+<th>平均</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>OpenVLA-OFT</td>
+<td>0%</td>
+<td>0%</td>
+<td>20%</td>
+<td>7%</td>
+</tr>
+<tr>
+<td>π0</td>
+<td>20%</td>
+<td>10%</td>
+<td>30%</td>
+<td>20%</td>
+</tr>
+<tr>
+<td><strong>Ours</strong></td>
+<td>50%</td>
+<td>60%</td>
+<td>80%</td>
+<td><strong>63%</strong></td>
+</tr>
+</tbody></table>
+<p><strong>验证代理分析（消融实验）</strong>：<br>通过追踪失败识别率（ID）、重新规划成功率（Re-Plan）、物理恢复成功率（Phy-Rec）和最终任务成功率（Task SR）四个指标来评估验证代理的有效性，结果如表IV所示。</p>
+<p>表 IV：外部干扰下的系统鲁棒性分析</p>
+<table>
+<thead>
+<tr>
+<th>任务场景</th>
+<th>失败识别率(ID)</th>
+<th>重新规划成功率(Re-Plan)</th>
+<th>物理恢复成功率(Phy-Rec)</th>
+<th>最终任务成功率(SR)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>双臂-积木堆叠</td>
+<td>90%</td>
+<td>100%</td>
+<td>78%</td>
+<td>50%</td>
+</tr>
+<tr>
+<td>双臂-桌面整理</td>
+<td>100%</td>
+<td>100%</td>
+<td>80%</td>
+<td>60%</td>
+</tr>
+<tr>
+<td>双臂-物体收纳</td>
+<td>90%</td>
+<td>100%</td>
+<td>100%</td>
+<td>80%</td>
+</tr>
+<tr>
+<td>多机器人-篮子搬运</td>
+<td>90%</td>
+<td>100%</td>
+<td>89%</td>
+<td>40%</td>
+</tr>
+</tbody></table>
+<ul>
+<li><strong>失败识别</strong>：验证代理在各类任务中展现出90%-100%的高识别率，证明其能有效区分成功与各类错误。</li>
+<li><strong>恢复机制</strong>：在单机器人任务中，重新规划成功率高达100%，但物理恢复成功率（78%-100%）和最终任务成功率（50%-80%）之间存在差距，这是因为某些执行错误可能导致不可逆状态（如积木倒塌），需要更精细的操作。</li>
+<li><strong>组件贡献</strong>：高失败识别率是整个闭环恢复的前提；本地物理恢复机制能高效处理多数执行错误；全局重新规划机制则成功解决了单机器人能力受限的问题，实现了跨机器人的协同恢复。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了一个用于鲁棒多机器人操作的闭环多代理框架</strong>：通过规划、操控、验证三个专门化代理的协作，实现了从高层语义指令到低层物理动作的闭环映射，并能应对执行不确定性。</li>
+<li><strong>实现了工具增强的物理接地与自适应恢复</strong>：操控代理的动态工具调用机制结合了LLM语义推理与专用感知/动作模型的优势；验证代理的分层恢复策略（本地/全局）为处理现实世界扰动提供了系统化方案。</li>
+<li><strong>在复杂真实任务中验证了卓越性能</strong>：在涵盖单机器人到多机器人、简单操作到长程协作的多样任务中，本框架在成功率、鲁棒性和适应性方面均显著优于现有主流方法。</li>
+</ol>
+<p><strong>局限性</strong>：论文在实验中提及，某些执行失败可能导致环境进入“不可逆状态”（如堆叠的积木倒塌），此时即使识别出失败并触发恢复，任务也可能无法完全成功。这暗示了当前恢复策略在处理极端状态变化时的能力边界。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li><strong>代理范式适用于复杂具身任务</strong>：本研究表明，将任务分解、执行、验证职责分配给具有特定能力的协作代理，是构建鲁棒、可适应系统的有效范式，可推广至更广泛的机器人应用。</li>
+<li><strong>闭环与分层恢复是关键</strong>：在动态开放环境中，仅关注规划而忽略执行监控与反馈的系统是脆弱的。嵌入类似的分层恢复机制对提升自主学习策略或传统规划方法的鲁棒性具有借鉴意义。</li>
+<li><strong>工具调用增强泛化能力</strong>：LLM（VLM）作为“大脑”协调调用一系列“小而专”的物理模型（如抓取生成、分割），平衡了通用语义理解与专业物理精度，为构建通用机器人系统提供了一条可行路径。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对LLM在多机器人系统中高层规划与物理执行脱节、缺乏协调及应对不确定性能力不足的核心问题，提出一种分层闭环多代理框架。框架包含三个专业代理：计划代理分解指令为子任务；操作代理通过自适应工具执行动作；验证代理监控物理结果并反馈语义纠正，实现闭环控制。真实世界实验表明，该框架达成了更高的任务成功率，展现了从单机器人到跨工作空间操作的稳健自适应性，并能有效应对外部干扰与执行不确定性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.06990" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>GeoProp: Grounding Robot State in Vision for Generalist Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>GeoProp: Grounding Robot State in Vision for Generalist Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.07101" target="_blank" rel="noreferrer">2607.07101</a></span>
+        <span>作者: Ran Xu Team</span>
+        <span>日期: 2026-07-08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，机器人操作的主流策略通常将高维视觉观察与低维本体感知反馈进行结构解耦。标准融合方法，例如 Diffusion Policy 采用的简单拼接或 VLA（视觉-语言-动作）模型（如 π0）使用的深度交叉注意力，都将本体感知编码为一个全局、无“接地”（ungrounded）的状态向量。这些设计缺乏状态与视觉特征之间明确的对应关系，迫使模型从数据中隐式地学习 3D 运动学到 2D 特征的映射，忽略了机器人固有的几何关系，这可能导致模型学到虚假关联，其性能有时甚至不如纯视觉基线。本文针对这一具体痛点，提出了一种新视角：不是将本体感知视为一个孤立的辅助输入，而是通过显式的几何投影，将机器人状态嵌入到 2D 视觉特征空间中。本文的核心思路是，通过一个轻量级的即插即用适配器 GeoProp，将 3D 本体感知（末端执行器位姿）投影到图像平面，采样对应的局部视觉特征，并注入几何先验，从而构建一个“接地”的、几何感知的机器人状态表征。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>GeoProp 的整体框架通过在视觉编码器中注入几何投影和调制来实现状态对齐。输入包括机器人末端执行器的 3D 状态（位置、朝向、夹爪状态）、相机内参和外参，以及视觉主干网络生成的中间空间特征图。输出是基于几何对齐的“接地状态标记”和“预测标记”，它们与全局视觉标记拼接后，作为下游策略的输入，而无需修改骨干网络。</p>
+<p><img src="https://arxiv.org/html/2607.07101v1/2607.07101v1/resource_figure/framework.png" alt="GeoProp方法框架图"></p>
+<blockquote>
+<p><strong>图2（或图4）</strong>：GeoProp 方法概览。框架将末端执行器和前瞻路径点投影到图像特征上，生成空间对齐的状态标记供下游策略使用（对应原文图2）。流程从左至右展示了从原始观察和机器人状态输入，经过几何投影、特征采样与调制（Spatially-Aligned Modulation），以及预测性运动采样（Predictive Kinematic Sampling），最终形成策略输入的过程。</p>
+</blockquote>
+<p>核心模块包含三个部分：</p>
+<ol>
+<li><strong>几何投影与特征接地</strong>：给定末端执行器 3D 位置 𝐫_t、相机参数 (𝐊, 𝐑, 𝐭)，通过透视投影 Π_𝐊 计算其在图像平面上的 2D 坐标 𝐪_t。随后，将此坐标映射到视觉特征图的连续坐标 𝐪̄_t 上。通过双线性采样 S(·)，可以从特征图 𝐅 中提取该位置的视觉特征。GeoProp 将此采样得到的、携带局部场景证据的特征称为“接地状态标记” 𝝉_t。</li>
+<li><strong>空间对齐的特征调制</strong>：为了使视觉特征本身也融入几何先验，GeoProp 在特征聚合前对投影位置的特征进行局部调制。对于每一个中间特征层 ℓ，它以机器人状态 𝐩_t 为条件，通过一个小型 MLP 预测通道级的 FiLM 参数 𝜸_t^ℓ 和 𝜷_t^ℓ。调制操作（公式4）仅在由 𝐪̄_t 诱导出的对齐网格单元 𝐜_t^ℓ 处进行，即 <code>F_mod[𝐜] = (1+𝜸) ⊙ F_enc[𝐜] + 𝜷</code>，其他位置的特征保持不变。经过调制的多尺度特征再使用 FPN 进行聚合，得到 𝐅_mod，最终的接地状态标记 𝝉_t 即通过对 𝐅_mod 在 𝐪̄_t 处采样获得。</li>
+<li><strong>预测性运动学采样</strong>：为了捕获运动意图，GeoProp 基于最近几帧的机器人 3D 位置，通过多项式外推预测一个短视距的未来路径点 𝐫̂_{t+1}。将该点投影到图像并计算特征坐标 𝐪̄_{t+1}^pre。随后，从<strong>未调制</strong>的 FPN 聚合特征图 𝐅<em>raw 中，在 𝐪̄</em>{t+1}^pre 处采样得到“预测标记” 𝝉_pre。这为一个预期的运动提供了空间视觉上下文。</li>
+</ol>
+<p>与现有方法相比，GeoProp 的创新点在于：它<strong>显式地</strong>建立了 3D 状态到 2D 视觉特征的几何对应，并将状态信息<strong>局部化地、有选择地</strong>注入到与之相关的视觉特征区域中，而不像先前方法（如 RC-PE）将坐标嵌入信号平铺到整个特征网格。这种“共定位”设计确保了状态信息与视觉证据的直接结合。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了多个 benchmark 和数据集：<strong>模拟环境</strong>包括 50 个任务的 MetaWorld（Sawyer 机器人）、6 个任务的 RLBench（Franka Panda 机器人）和 7 个任务的 RoboTwin（双臂 ALOHA 机器人）；<strong>真实世界</strong>则在 Mobile ALOHA 双臂平台上评估了 4 个家庭操作任务。实验平台主要基于 MuJoCo 和 CoppeliaSim 仿真器。</p>
+<p>对比的基线方法属于两大策略家族：<strong>Diffusion Policy</strong> 和 <strong>π0</strong>。对于每种策略，都对比了三种变体：不使用本体感知的<code>No-Proprio</code>、原始融合方法的<code>Vanilla</code>，以及集成了 GeoProp 的<code>GeoProp</code>。</p>
+<p>关键实验结果如下：<br>在 Diffusion Policy 的模拟实验中，GeoProp 在两个视觉主干（ResNet-18 和 ViT-Base）上都取得了最高平均成功率。与 <code>Vanilla</code> 相比，GeoProp 分别带来了 <strong>+8.5%</strong> 和 <strong>+9.0%</strong> 的绝对提升（整体平均成功率从66.0%提升至75.3%，从62.0%提升至71.0%），而参数量仅增加 2.3-3.0%。</p>
+<p><img src="https://arxiv.org/static/base/1.0.1/images/arxiv-logo-primary-light.svg" alt="Diffusion Policy仿真结果"></p>
+<blockquote>
+<p><strong>表1（原文）</strong>：Diffusion Policy 在仿真基准上的成功率对比。表格显示，GeoProp 在所有难度等级的任务集和不同骨干网络下，平均成功率均显著高于 Vanilla 和 No-Proprio 基线（对应原文表1）。</p>
+</blockquote>
+<p>在 π0 模型上，GeoProp 在 RoboTwin 的 7 个任务上将平均成功率从 64.0% 提升至 **68.0%**，并在大部分任务上优于原版 π0。</p>
+<p><img src="https://arxiv.org/static/base/1.0.1/images/icons/smileybones-small.svg" alt="π0在RoboTwin上的结果"></p>
+<blockquote>
+<p><strong>表2（原文）</strong>：π0 在 RoboTwin 任务上的成功率。GeoProp 在 7 个任务中的 5 个上超过了 Vanilla π0，平均提升 4.0%（对应原文表2）。</p>
+</blockquote>
+<p>在真实世界的 Mobile ALOHA 实验中，GeoProp 同样显著提升了两种策略的性能。对于 Diffusion Policy，平均成功率从 Vanilla 的 38.8% 提升至 **50.0%**（+11.2%）；对于 π0，从 43.8% 提升至 **53.8%**（+10.0%）。</p>
+<p>消融实验总结了每个组件的贡献（在15个MetaWorld任务上测试）。基准 <code>Vanilla</code> 成功率为 61.2%。仅引入几何接地（<code>Base</code>，即仅采样未调制特征）提升至 **64.8%**。单独添加预测采样（<code>+Mot.</code>）或 FiLM 调制（<code>+FiLM</code>）分别提升至 66.4% 和 66.0%。三者结合（<code>Full</code>）达到最高的 **68.5%**。这表明几何接地是性能提升的主要驱动力，而预测采样和局部调制提供了互补的增益。</p>
+<p><img src="https://arxiv.org/html/2607.07101v1/2607.07101v1/appendix_figure/heatmap_fig.png" alt="GeoProp的消融实验"></p>
+<blockquote>
+<p><strong>表3（原文）</strong>：组件消融研究。结果表明，几何接地（Spa.）是核心改进来源，预测运动采样（Mot.）和FiLM调制（FiLM）提供额外的、互补的收益（对应原文表3）。</p>
+</blockquote>
+<p>此外，论文还评估了 GeoProp 对相机 - 机器人标定误差的鲁棒性。在测试时人为引入外参扰动（平移和旋转误差），GeoProp 的性能随着误差增大而逐渐下降，但在适度误差范围内（例如平移误差小于 2.5 cm，旋转误差小于 1.5°）仍能保持优于 Vanilla 和 No-Proprio 基线的性能。</p>
+<p><img src="https://arxiv.org/html/2607.07101v1/2607.07101v1/resource_figure/translational_robustness_final.png" alt="平移标定误差鲁棒性"></p>
+<blockquote>
+<p><strong>图8</strong>：平移标定误差下的性能变化。GeoProp（绿色）在误差达到约 2.5 cm 前，性能依然优于其他基线。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.07101v1/2607.07101v1/resource_figure/angular_robustness_final.png" alt="旋转标定误差鲁棒性"></p>
+<blockquote>
+<p><strong>图9</strong>：旋转标定误差下的性能变化。GeoProp（绿色）在误差达到约 1.5° 前，保持性能优势。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1）通过实证揭示了将本体感知作为无接地全局向量会导致模态错位，甚至损害操作性能，从而强调了显式的、基于几何的状态-视觉对应的必要性；2）提出了 GeoProp，一个能将 3D 本体感知转化为图像接地视觉标记的即插即用适配器，通过几何投影、局部特征调制和运动意图的预测采样来弥合机器人运动学与场景语义之间的表征鸿沟；3）广泛验证了 GeoProp 能持续提升不同策略架构在仿真和现实世界中的性能，证明显式几何接地是一种高效且强大的具身 AI 归纳偏置。</p>
+<p>论文自身提到的局限性包括：方法依赖于已知且准确的相机内外参标定；当前仅对末端执行器位置进行接地，未考虑更丰富的运动学结构（如关节、指尖）；预测采样假设局部运动平滑，对突然的方向变化或接触过渡不鲁棒；当被操作物体遮挡了投影像素时，性能增益会减小甚至逆转；实验主要基于单视图固定相机和模仿学习策略。</p>
+<p>这些局限性为后续研究指明了方向：探索在标定不可靠或无标定情况下的自对齐方法；将几何接地的概念扩展到更复杂的机器人形态（如灵巧手、人形机器人）和更多运动学关键点；研究如何将方法适配到强化学习等其他范式；以及探索多视角和动态相机场景下的应用。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中，本体感知（proprioception）作为孤立向量，缺乏与视觉特征（visual tokens）明确空间对齐的核心问题，提出GeoProp——一种轻量级的即插即用适配器。其关键技术在于通过几何投影，将机器人末端执行器姿态映射至图像平面，采样对应的局部视觉特征，并利用FiLM调制注入状态先验；同时预测近期坐标以采样前瞻视觉上下文。实验结果表明，GeoProp显著提升了策略性能：在63个仿真任务上使Diffusion Policy性能提升8.7%，在RoboTwin子集上使π0策略提升4.0%，并在真实世界实验中为两个策略族带来10.6%的平均增益，而参数量仅增加2–3%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.07101" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

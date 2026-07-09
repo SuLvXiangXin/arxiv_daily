@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>NativeMEM: Native Memory Compression for Long-Horizon Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>NativeMEM: Native Memory Compression for Long-Horizon Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.06678" target="_blank" rel="noreferrer">2607.06678</a></span>
+        <span>作者: Hongyang Li Team</span>
+        <span>日期: 2026-07-07</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型已在具身决策中展现出潜力，但大多仍是反应式的，仅基于当前观测和指令做出决策。这无法满足记忆依赖性操作任务的需求，因为正确的动作可能依赖于历史交互、任务进度或被遮挡的状态。现有方法主要分为两类范式：一是构建于策略外部的记忆，例如使用高层 VLM 检索关键帧并生成文本子任务描述；二是构建于策略内部的记忆，通过新增的循环状态、压缩历史或检索增强记忆库等模块实现。这两种范式存在关键局限性：外部记忆方法将视觉历史转化为文本可能丢失关键细节，且需要昂贵的标注；内部记忆方法引入的新模块不仅增加了架构复杂性，还可能因与预训练模型不兼容而导致性能下降。它们都面临一个“压缩困境”：压缩不足则历史信息成本高昂；压缩过度或结构不佳则会丢弃对动作至关重要的细节。</p>
+<p>本文针对“如何让 VLA 模型以最小内存代价保留长时程、细粒度的历史，同时保持与预训练策略的兼容性”这一核心问题，提出了“原生记忆压缩”的新视角。其核心思路是：重用 VLA 自身的视觉编码器，将每个历史帧的每个视角观测压缩成一个单独的“原生记忆令牌”，并将其附加到 VLA 原有的输入令牌序列中，从而使预训练策略能够通过其原始的注意力机制访问长时程历史。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>NativeMEM 的整体框架是一个两阶段的训练流程，旨在将预训练的单帧 VLA 策略转换为记忆增强策略。</p>
+<p><img src="https://arxiv.org/html/2607.06678v1/2607.06678v1/x1.png" alt="训练流程"></p>
+<blockquote>
+<p><strong>图1</strong>：NativeMEM 的训练流程。<strong>阶段1</strong>：冻结预训练 VLA，利用混合数据（标准操作数据+记忆依赖任务数据）和 VLA 原始动作预测损失，训练一个源自其视觉编码器的原生记忆令牌生成器，该生成器将每个帧-视图观测压缩为一个动作对齐的记忆令牌。<strong>阶段2</strong>：缓存记忆令牌，并通过将压缩后的记忆令牌附加到标准当前观测和提示令牌之后，使用原始动作损失对 VLA 进行微调。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>原生记忆压缩</strong>：这是方法的核心。给定一个帧-视图观测 ( o_{\tau}^{v} )，方法从其视觉编码器派生出记忆编码器 ( E_{\mathrm{mem}} )，并引入一个可学习的记忆查询令牌 ( q_{\mathrm{mem}} )。该查询令牌对视觉块令牌序列 ( \mathbf{P}<em>{\tau}^{v} ) 进行注意力聚合，将其汇总为单个输出令牌 ( \hat{q}</em>{\tau}^{v} )，再通过线性投影 ( W_{\mathrm{mem}} ) 映射到 VLA 的令牌维度，形成最终的记忆令牌 ( m_{\tau}^{v} )。该方法实现了 M=1 的极限压缩，即每个帧-视图对仅由一个令牌表示。</li>
+<li><strong>两阶段训练</strong>：<ul>
+<li><strong>阶段1：记忆令牌生成器对齐</strong>。此阶段冻结预训练 VLA 的所有参数，仅训练记忆分支（记忆编码器、查询令牌、投影矩阵等）。记忆令牌被附加到输入序列 ( \mathbf{x}<em>t ) 中（如公式8所示），整个模型通过 VLA 原始的动作预测损失 ( \mathcal{L}</em>{\mathrm{act}} ) 进行优化（公式9）。这使得学习到的记忆令牌编码的信息既是动作相关的，又与冻结 VLA 的预训练令牌空间对齐。训练数据混合了标准操作任务和记忆依赖任务。</li>
+<li><strong>阶段2：任务特定微调</strong>。在目标任务演示数据上，首先使用训练好的记忆令牌生成器离线预处理所有帧，生成并缓存记忆摘要令牌。在训练时，检索并构建记忆序列 ( \mathcal{M}<em>t )（公式7），附加到输入中。此阶段冻结记忆令牌生成器，微调 VLA 主干、动作头以及记忆投影矩阵 ( W</em>{\mathrm{mem}} ) 和起始令牌 ( b_{\mathrm{mem}} )（公式10）。</li>
+</ul>
+</li>
+<li><strong>实时记忆推理</strong>：部署时，令牌生成器独立于 VLA 策略运行，以指定频率将新观测转换为记忆令牌并维护一个紧凑的记忆队列。VLA 在需要预测动作时，只需将当前记忆队列与常规输入令牌拼接即可。</li>
+</ol>
+<p><strong>与现有方法相比的创新点</strong>：</p>
+<ol>
+<li><strong>原生兼容</strong>：不引入任何外部或全新初始化的记忆模块，而是重用 VLA 自身的视觉通路，确保记忆令牌与预训练模型的令牌空间和知识完全兼容。</li>
+<li><strong>极致压缩</strong>：实现了每帧每视图一个令牌的超高压缩率，使得保留长达数百帧的细粒度历史成为可能，且计算开销极小。</li>
+<li><strong>动作监督的压缩</strong>：记忆的压缩直接由下游动作预测损失驱动，而非重构或通用表征损失，确保压缩保留的信息对决策至关重要。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>基准与数据集</strong>：在模拟和真实世界环境中评估 NativeMEM。模拟任务包括三个 RMBench 任务（Swap Blocks, Put Back Block, Observe and Pickup）和两个自建的按钮按压任务（Click Buttons 及其困难变体）。真实世界任务包括 Click Buttons、Put Back Block 和未经记忆令牌生成器训练的 <strong>Grocery Checkout Scanning</strong>（见图3）。</p>
+<p><img src="https://arxiv.org/html/2607.06678v1/2607.06678v1/x2.png" alt="任务示例"></p>
+<blockquote>
+<p><strong>图2</strong>：记忆依赖性操作任务示例。在 <code>Click Buttons</code> 中，机器人必须按指定顺序按压按钮且不重复；在 <code>Put Back Block</code> 中，必须记住方块移动前的原始位置；在 <code>Grocery Checkout Scanning</code> 中，必须跟踪已扫描的物品。</p>
+</blockquote>
+<p><strong>对比基线</strong>：</p>
+<ul>
+<li><strong>VLA 驱动的记忆</strong>：MemER、Mem-0。</li>
+<li><strong>外部记忆模块</strong>：在相同骨干网络（( \pi_{0.5} )）上复现的 HAMLET* 和 MEM-short*。</li>
+<li><strong>基础 VLA 策略</strong>：( \pi_{0.5} )、X-VLA。</li>
+<li><strong>其他</strong>：( \pi_{0.5} ) + RTC（利用时序动作连续性）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>模拟实验</strong>（表1）：NativeMEM 在所有任务上均取得最佳性能，平均成功率达到 **84.0%**，远超其他方法（最佳基线 Mem-0 为 32.4%）。这表明其原生记忆压缩能有效处理需要长期回忆（如 Put Back Block）和连续进度跟踪（如 Click Buttons）的互补性记忆需求。</li>
+<li><strong>真实世界实验</strong>（表2）：NativeMEM 在真实机器人任务中同样表现最佳，平均整体成功率高达 **98.7%**。即使在未参与记忆令牌生成器训练的 Grocery Checkout Scanning 任务上，也实现了100%的成功率，证明了其良好的泛化能力。</li>
+<li><strong>推理效率</strong>（图4a）：NativeMEM 在维持100ms实时延迟约束下，可处理约200帧历史；在32GB GPU内存预算内，可支持高达5000帧的历史，远优于其他方法，实现了长时程与实时响应性的平衡。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.06678v1/2607.06678v1/x5.png" alt="效率与数据效能"></p>
+<blockquote>
+<p><strong>图3</strong>：（a）不同历史长度下的推理延迟和GPU内存消耗对比。（b）在三个RMBench任务上的平均数据效率（使用不同数量演示进行微调时的成功率）。</p>
+</blockquote>
+<ol start="4">
+<li><strong>数据效率</strong>（图4b）：在有限演示数据下，NativeMEM 表现出卓越的数据效率。仅使用10条演示，平均成功率即达到60%，是 Mem-0 的3.5倍；使用仅20%的训练数据（50条演示）即可达到与先进方法竞争的性能。</li>
+<li><strong>定性分析</strong>：<ul>
+<li><strong>空间注意力</strong>（图5）：可视化显示，记忆令牌生成器在压缩单帧时，注意力集中在与操作相关的区域（如物体、抓取点），而非背景像素，即使在未见过的任务上也是如此。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.06678v1/2607.06678v1/x3.png" alt="空间注意力"></p>
+<blockquote>
+<p><strong>图4</strong>：记忆令牌生成器在压缩每帧视图观测时的空间注意力可视化（上排为注意力热图，下排为原始观测）。注意力聚焦于操作相关物体。</p>
+</blockquote>
+<pre><code>*   **动作对记忆的注意力**（图6）：可视化显示，策略在生成动作时，会关注任务相关的关键历史时刻（如按压按钮的瞬间、拾取方块的时刻），而非简单地关注最近观测。
+</code></pre>
+<p><img src="https://arxiv.org/html/2607.06678v1/2607.06678v1/x4.png" alt="动作注意力"></p>
+<blockquote>
+<p><strong>图5</strong>：动作令牌对历史记忆快照的注意力可视化。在 <code>Click Buttons</code> 中，注意力跟随三个按压阶段；在 <code>Put Back Block</code> 中，注意力集中在拾取时刻以推断目标位置。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>（表3）：</p>
+<ul>
+<li><strong>原生记忆压缩的重要性</strong>：若在阶段1不冻结VLA（“Unfrozen VLA”），性能骤降至23.2%；若跳过阶段1直接用均值池化特征作为记忆令牌（“w/o Stage1”），平均成功率仅为58.0%，尤其在 Put Back Block 等任务上失败严重。这表明动作监督下的原生压缩对于提取关键历史线索至关重要。</li>
+<li><strong>时序覆盖的重要性</strong>：稀疏更新（0.5Hz）或短时程（2s/4s/6s）均导致性能显著下降，表明策略需要细粒度的时序证据和足够长的历史窗口来捕捉关键信息。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了“原生记忆压缩”方法</strong>：通过重用VLA自身的视觉编码器，将每个历史帧-视图对压缩为单个原生令牌，以极低成本实现了长时程、细粒度视觉历史的保留。</li>
+<li><strong>设计了两阶段训练流程</strong>：先学习与预训练VLA对齐的动作监督记忆令牌生成器，再进行任务特定微调，高效地将单帧VLA转换为记忆增强策略。</li>
+<li><strong>展示了卓越的性能与效率</strong>：在模拟和真实任务中显著提升成功率（模拟84.0% vs. 基线32.4%；真实98.7% vs. 基线34.7%），同时具备高推理效率和数据效率。</li>
+</ol>
+<p><strong>局限性</strong>：</p>
+<ol>
+<li>本文方法并非为维持数小时或数天的持久记忆而设计，支持这种超长期连续性可能需要额外的系统级内存基础设施。</li>
+<li>记忆令牌生成器仅通过动作监督学习，在更复杂的任务中可能暴露出语义差距，即记忆令牌可能无法完全保留后续决策所需的所有语义信息。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>原生兼容性设计</strong>：为预训练模型添加新功能时，应优先考虑复用其原有组件和表示空间，以最小化架构变更和性能损失风险。</li>
+<li><strong>监督信号的选择</strong>：对于旨在服务于下游决策的记忆表征，直接使用任务损失进行监督（而非中间重构损失）可能更有效。</li>
+<li><strong>系统级内存架构</strong>：对于更长期的持续性记忆需求，本文方法与高层规划或外部记忆库相结合可能是一个有前景的研究方向。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对预训练的视觉-语言-动作模型在长视距机器人操作中难以高效保留长视觉历史并实时更新的问题，提出了NativeMEM方法。其核心技术是Native Memory Compression，利用模型自身的视觉编码器将每个历史帧压缩为单个内存令牌，作为输入序列的一部分，使模型能高效关注长期历史且无需外部内存模块。实验表明，该方法在模拟任务中将成功率从32.4%提升至84.0%，真实机器人上达到98.7%，同时保持低延迟和GPU内存占用，且仅需20%的训练数据即可达到先进性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.06678" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

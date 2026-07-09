@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Compositional Motion Generation from Demonstration with Object-Centric Neural Fields - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Compositional Motion Generation from Demonstration with Object-Centric Neural Fields</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.07129" target="_blank" rel="noreferrer">2607.07129</a></span>
+        <span>作者: Yasemin Bekiroglu Team</span>
+        <span>日期: 2026-07-08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前的主流方法主要是运动基元（Movement Pritives, MPs），它为轨迹提供了紧凑、平滑的表示。然而，其组合性通常需要手动施加（例如通过串联基元或指定经由点），并且通常依赖于手工设计的低维特征（例如物体位置、目标点）。从图像中直接学习特征的方法则需要大量数据，牺牲了MPs的数据高效优势。本文针对运动基元难以自动组合且感知与动作割裂的痛点，提出了通过共享的物体级表示来连接感知与运动的新视角，旨在构建一个能够从少量演示中学习、并支持系统性泛化的组合式模仿学习框架。本文的核心思路是：利用物体中心且平滑的神经场来参数化场景变化，并基于此，通过一个时间门控的混合专家模型来组合以物体为条件的运动基元，从而生成完整的轨迹。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架分为两步：首先从演示图像中学习一个物体中心的生成模型（空间 MoE），获得能捕捉每个物体状态的潜在表示；然后，通过一个时序 MoE 模型，以这些潜在表示为条件，组合生成运动轨迹。</p>
+<p><img src="https://arxiv.org/html/2607.07129v1/2607.07129v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：空间混合专家（MoE）模型结构。橙色圆圈表示可学习的物体潜在嵌入 ( z_i )。紫色菱形（FiLM）表示根据 ( z_i ) 生成调制参数的 MLP。绿色块（F， Δ， l）表示标准的坐标 MLP，分别负责外观预测、形变预测和 logit 计算。</p>
+</blockquote>
+<p>核心模块一：组合式图像建模（空间 MoE）。该模块用于学习场景的物体中心表示。模型将一个图像 ( \hat{I} ) 表示为背景与多个物体的组合：( \hat{I}(x|{z_{i}}<em>{i=1}^{N}) = \sum</em>{i=1}^{N} M_i(x_i) F_i(x_i) + M_{\text{bg}} F_{\text{bg}}(x) )。其中，( x_i = x - \Delta_i(x|z_i) ) 是形变后的坐标，( z_i ) 是物体 i 的潜在向量，( F_i ) 和 ( \Delta_i ) 分别是基于坐标 MLP 的外观网络和形变网络，( M_i ) 是通过 spatial softmax 计算的自适应物体掩膜。训练过程分阶段进行：（1）背景建模；（2）基于物体中心采样（利用提供的粗掩膜）的单独物体训练；（3）所有组件的联合优化。损失函数为像素级 ( \ell_2 ) 重建损失，并对形变网络施加利普希茨正则化以保证潜在空间变化的平滑性。</p>
+<p>核心模块二：潜在重标记与角点集构建。该模块旨在为每个物体构建一组最小的“角点”潜在向量 ( C^i )，使得所有演示中的物体潜码都能表示为这些角点的凸组合。方法通过迭代扩展角点集实现：初始化两个距离最远的潜码为角点，然后使用算法 1（潜在搜索）测试其他潜码能否被当前角点集重建。若不能，则将距离当前凸组合区域最远的潜码加入角点集。在推理时，对于一个新场景，算法 1 用于搜索能最佳重建该场景中每个物体的潜在向量（表示为角点的凸组合）。</p>
+<p>核心模块三：基于时间门控的运动生成（时序 MoE）。该模块以重标记后的物体潜在向量 ( {\hat{z}_i} ) 为条件，生成完整的机器人轨迹。其核心思想是时序组合性：轨迹的不同阶段由不同的物体潜码主导。具体通过一个时间依赖的软门控权重 ( w_i(t) )（softmax 函数）来实现，该权重聚合了各个物体潜码对应的 FiLM 调制参数 ( c_i(\hat{z}_i) = {\gamma_i^{(\ell)}, \beta_i^{(\ell)}} )。聚合后的 FiLM 参数在每个时间步调制一个共享的基础轨迹生成网络 ( f )，该网络输出轨迹点 ( q(t) ) 的高斯分布参数 ( \mu(t) ) 和 ( \sigma(t) )。模型通过最大化演示轨迹的负对数似然进行训练。在训练早期采用潜在丢弃（latent dropout）正则化以防止学习虚假依赖。</p>
+<p>与现有方法相比，其主要创新点在于：1）提出了一个与运动生成紧密耦合的、可解释且平滑的物体中心场景表示方法；2）通过时间门控机制实现了运动基元的自动、柔性时序组合，能够处理依赖多个物体的关系性动作（如搬运动作同时依赖抓取和放置位姿）。</p>
+<p><img src="https://arxiv.org/html/2607.07129v1/2607.07129v1/x2.png" alt="运动生成框架"></p>
+<blockquote>
+<p><strong>图4</strong>：运动生成框架。给定 N 个物体潜码，通过各自的 MLP（绿色）预测对应的 FiLM 参数和物体相关性分数 ( s_i(t) )。相关性分数经 softmax 得到时间门控权重 ( w_i(t) )，用于池化 FiLM 参数。池化后的参数被用于条件化轨迹生成网络。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验平台包括模拟环境和真实机器人。使用的模拟基准测试（Benchmark）包括四个复杂度递增的操纵任务：墙体避让（简单）、斜面抓放（中等）、杯子堆叠（中等）、立方体堆叠（困难）。其实验涉及物体位置和几何形状的变化。</p>
+<p><img src="https://arxiv.org/html/2607.07129v1/2607.07129v1/x3.png" alt="模拟任务场景"></p>
+<blockquote>
+<p><strong>图5</strong>：仿真任务的场景变化。下图显示了方法使用的相机图像。图像中箭头突出几何变化，矩形标记可能的物体位置。</p>
+</blockquote>
+<p>对比的基线方法包括：条件神经运动基元（CNMP）的CNN版本、扩散策略（DP）、以及本文方法的多种变体（CNN-FiLM, DINO-FiLM, 无门控版本）。此外，还在墙体避让任务上比较了神经场运动基元（NFMP）。</p>
+<p><img src="https://arxiv.org/html/2607.07129v1/2607.07129v1/x4.png" alt="仿真结果"></p>
+<blockquote>
+<p><strong>图6</strong>：仿真任务上的性能对比。纵轴为平均成功率，横轴为演示数据量。所提方法（Ours）在低数据和高数据区域均取得最佳或接近最佳性能。</p>
+</blockquote>
+<p>关键实验结果以轨迹中位数误差（MED，越低越好）和任务成功率（Accuracy）衡量。在低数据（few demonstrations）和高数据两种训练数据量下，本文提出的方法在大多数任务上表现最佳或接近最佳。例如，在困难的立方体堆叠任务中，低数据下本文方法成功率（61±12%），显著优于最佳基线CNN-CNMP（0%）。在中等数据量下，本文方法在所有任务上成功率均超过70%，在斜面抓放和杯子堆叠任务上达到100%和90%。方法在数据效率上优势明显，仅需少量演示即可达到较高性能。</p>
+<p><img src="https://arxiv.org/html/2607.07129v1/2607.07129v1/x5.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>图7</strong>：消融实验：与不使用时间门控（Ours w/o gating）以及使用全局图像特征（CNN-FiLM, DINO-FiLM）的变体对比。本文完整方法性能最优，验证了物体中心表示和时序组合的有效性。</p>
+</blockquote>
+<p>消融实验表明：1）移除时间门控机制（Ours w/o gating）会导致性能下降，证明了时序组合性的重要性；2）使用全局图像特征（CNN-FiLM, DINO-FiLM）而不是物体中心潜码的方法性能显著较差，验证了物体中心表示对于泛化的关键作用；3）潜在搜索过程对处理测试时的变体至关重要。</p>
+<p><img src="https://arxiv.org/html/2607.07129v1/2607.07129v1/x6.png" alt="真实世界实验"></p>
+<blockquote>
+<p><strong>图8</strong>：真实世界3D场景重建与运动生成。左：3D场景组成。中：重建的3D占用场和物体中心分解。右：生成的避障和抓取轨迹。</p>
+</blockquote>
+<p>真实世界实验进一步验证了方法的鲁棒性：（1）能够处理感知噪声；（2）可以扩展到3D占用场表示进行运动规划；（3）结合基于语言的零样本分割模型（如SEEM）可实现类别级泛化，例如学会“抓取苹果”后，可将技能泛化到未见过的香蕉上。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了一种基于物体中心神经场的、平滑且可解释的场景建模方法；2）提出了一种时间门控的混合专家运动生成框架，实现了运动基元基于感知的自动时序组合；3）整合以上两点，构建了一个数据高效的模仿学习框架，能够从少量视觉演示中学习，并实现对新场景配置的系统性泛化。</p>
+<p>论文自身提到的局限性包括：训练时假设了固定的背景和相机视角，并要求轨迹在时间上大致对齐。此外，视觉上相似的干扰物体可能导致潜在表示搜索时出现歧义。</p>
+<p>对后续研究的启示：该方法展示了将物体为中心的感知与组合运动生成相结合的巨大潜力。未来工作可探索与视觉语言模型（VLMs）的更深层次结合，以支持更高级别的任务理解和规划，以及将框架扩展到动态变化场景和更长期的序列任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>该论文研究如何从有限演示中学习生成组合式机器人运动，以提高数据效率和泛化能力。方法核心是利用对象为中心的神经场表示场景，结合时间混合专家模型组合运动基元来生成轨迹。实验表明，该方法在仿真中完成长时程操纵任务所需数据显著少于基线，真实世界测试展现了其对噪声的鲁棒性、基于语言的类别级泛化能力及直接处理3D场景的能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.07129" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

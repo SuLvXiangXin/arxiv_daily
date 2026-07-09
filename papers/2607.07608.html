@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Dual Latent Memory in Vision-Language-Action Models for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Dual Latent Memory in Vision-Language-Action Models for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.07608" target="_blank" rel="noreferrer">2607.07608</a></span>
+        <span>作者: Shuicheng Yan Team</span>
+        <span>日期: 2026-07-08</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前主流的视觉-语言-动作模型主要根据当前的观测和指令直接预测动作，本质上遵循马尔可夫假设。这种简化导致了“时间短视偏差”：模型能对当前可见状态做出反应，但难以推理先前状态转移、已完成的操作步骤以及多步任务的当前阶段，因此在处理长视野、有时序依赖的操纵任务时表现不佳。为了缓解这一问题，目前主要有两类记忆增强方法：一是扩展观测窗口，将历史帧或视频序列作为输入，但这会导致计算和内存成本随上下文长度增长，且固定的时间窗口限制了记忆上限；二是从外部记忆库检索过往轨迹或令牌，作为下游动作策略的辅助条件。然而，这些方法存在一个根本性局限：历史记忆被存储在模型的原生令牌空间之外，并在VLA模型推理后作为附属于策略侧的额外上下文被消耗。这种僵硬的分离阻碍了记忆与VLA模型内部推理（在形成动作前联合感知场景、解析指令和解决动作查询的过程）流畅地交织。</p>
+<p>本文针对上述痛点，提出了一个新颖的视角：能否将历史经验表示为与上下文原生的机器人记忆，在其存储、检索和消耗过程中，与VLA模型感知、推理和行动的“连续空间”保持一致？潜在嵌入空间为此提供了自然答案。本文的核心思路是：设计一个原生潜在记忆框架，将机器人历史组织为互补的短期与长期记忆库，并将双尺度记忆编织到模型推理中，以生成记忆增强的动作。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LaMem-VLA是一个端到端的原生潜在记忆框架，其核心是通过四个协调的模块，将双尺度历史经验直接编织进VLA推理以优化动作生成。</p>
+<p><img src="https://arxiv.org/html/2607.07608v1/2607.07608v1/figs/overview.png" alt="整体框架"></p>
+<blockquote>
+<p><strong>图2</strong>：LaMem-VLA整体框架。给定指令和当前观测，视觉-语言编码器首先将其编码为多模态表示。记忆策展人将历史经验组织为双记忆金库，记忆搜寻者基于当前多模态表示从金库中检索任务相关证据。记忆浓缩器将这些证据压缩为固定长度的潜在记忆令牌。最后，记忆编织器将这些潜在记忆令牌注入推理序列，产生基于记忆的动作令牌，从而指导动作专家生成未来动作块。</p>
+</blockquote>
+<p><strong>整体流程</strong>：在每个时间步t，给定当前视觉观测𝒐𝑡和指令𝑰，视觉-语言骨干网络将其嵌入为视觉令牌𝑿𝑡和指令令牌𝑰。可学习的动作查询𝑸^{action}被附加到令牌序列后，以获得操作相关的潜在动作表示。LaMem-VLA通过四个模块（Curator, Seeker, Condenser, Weaver）在上述表示基础上运作，最终编织成记忆增强的VLA输入序列𝑺𝑡 = [𝑴^{short}; 𝑴^{long}; 𝑿𝑡; 𝑰; 𝑸^{action}]，然后送入基于扩散的动作专家生成动作序列。</p>
+<p><strong>核心模块详解</strong>：</p>
+<ol>
+<li><p><strong>潜在记忆策展人</strong>：负责组织历史证据。它维护两个互补的记忆金库：</p>
+<ul>
+<li><strong>短期记忆金库</strong> ℳ^{short}：存储来自当前episode的视觉感知证据。每个短期记忆单元表示为键值对𝒎_s = (𝒌_s, 𝒗_s)。通过一个可学习的压缩模块𝒞_s（一个SE-bottleneck网络）将当前视觉令牌𝑿𝑡蒸馏为紧凑的短期记忆令牌𝒗_s ∈ ℝ^{N_s×C}，其平均池化表示作为检索键𝒌_s ∈ ℝ^C。</li>
+<li><strong>长期记忆金库</strong> ℳ^{long}：存储动作隐藏状态𝑯^{action}，以跟踪长视野上的任务进度和动作连续性。每个时间步的动作隐藏状态直接作为一个长期记忆单元𝒎_l写入。</li>
+<li><strong>金库更新策略</strong>：当金库单元数量超过容量L时，应用压缩策略。计算时间上相邻单元（短期看键𝒌_s，长期看单元本身）之间的余弦相似度，合并最相似的一对相邻单元（取键/值的平均值），以减少冗余。</li>
+</ul>
+</li>
+<li><p><strong>潜在记忆搜寻器</strong>：根据当前多模态认知上下文（而非单独的视觉或语言输入）从记忆金库中检索证据。它从VLA骨干网络产生的上下文感知查询𝑸_t^{con}出发，附加可学习的查询槽𝑸^{init}，通过一个轻量级基于Transformer的查询构建器ℬ进行更新，得到最终的共享记忆钩子𝑸_t，其平均池化向量𝒒_t作为全局检索向量。</p>
+<ul>
+<li><strong>检索过程</strong>：利用𝒒_t，通过余弦相似度从短期金库ℳ^{short}中检索Top-K个最相关的单元，拼接其值𝒗_s得到短期视觉证据𝒁^{short} ∈ ℝ^{K N_s × C}。类似地，从长期金库ℳ^{long}中检索Top-K个单元，得到长期语义证据𝒁^{long} ∈ ℝ^{K N_l × C}。</li>
+</ul>
+</li>
+<li><p><strong>潜在记忆浓缩器</strong>：将检索到的可能冗余的证据序列重构为固定长度的潜在记忆令牌，并映射到VLA推理嵌入空间。它引入了可学习的短期视觉记忆槽𝑻_s和长期语义记忆槽𝑻_l，并利用轻量级记忆前馈网络ℱ_v和ℱ_c（与ℬ类似的Transformer结构），在上下文查询𝑸_t和检索证据𝒁^{short/long}的条件下更新这些槽，最终产出固定长度的潜在短期记忆令牌𝑴^{short} ∈ ℝ^{L_s×C}和潜在长期记忆令牌𝑴^{long} ∈ ℝ^{L_l×C}。</p>
+</li>
+<li><p><strong>潜在记忆编织器</strong>：将浓缩后的两类潜在记忆令牌𝑴^{short}和𝑴^{long}，在动作查询被解析之前，前置到当前的图像令牌、语言令牌和动作查询之前，形成记忆增强的VLA输入序列𝑺_t，如整体流程所述。这使得历史记忆能以原生令牌的形式，与当前感知和指令在同一潜在推理过程中共同参与动作意图的形成。</p>
+</li>
+</ol>
+<p><strong>创新点</strong>：与现有方法相比，LaMem-VLA的核心创新在于：1) <strong>范式革新</strong>：将历史经验视为上下文原生的潜在记忆，在其存储、检索和消耗全过程中保持与VLA模型推理相同的连续潜在空间。2) <strong>双尺度记忆设计</strong>：显式地组织互补的短期（视觉主导）和长期（语义主导）记忆金库，共同支撑决策。3) <strong>记忆浓缩机制</strong>：通过可学习的槽和前馈网络，将可变长度的检索证据动态重构为固定长度的潜在记忆令牌，实现了记忆存储与消耗的解耦，避免上下文无限扩张。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在LIBERO和SimplerEnv-Bridge两个模拟器上进行综合评估。使用Prismatic视觉语言模型作为骨干，并在大规模跨具身机器人数据集Open-X Embodiment上进行预训练。</p>
+<p><strong>对比方法</strong>：对比了多个基线方法，包括主流的VLA模型（如π₀、CogACT）以及记忆增强方法（如MemoryVLA）。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li>在<strong>LIBERO</strong>上，LaMem-VLA达到了平均97.6%的成功率，优于MemoryVLA 1.1个百分点，优于基线CogACT 4.4个百分点，并在前四个任务套件上比π₀高出3.5个百分点。</li>
+<li>在<strong>SimplerEnv-Bridge</strong>上，LaMem-VLA取得了73.9%的平均成功率，远超基线CogACT 16.6个百分点，也比π₀高出4.7个百分点。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.07608v1/2607.07608v1/figs/table6.png" alt="实验结果表"></p>
+<blockquote>
+<p><strong>图6</strong>：主要实验结果对比表。该表格详细列出了LaMem-VLA在LIBERO和SimplerEnv-Bridge数据集上，与多个基线模型在不同任务或任务套件上的成功率对比，以具体数值展示了其优越性能。</p>
+</blockquote>
+<p><strong>消融实验</strong>：论文通过消融实验验证了各核心组件的贡献。结果显示，移除短期记忆或长期记忆均会导致性能显著下降（具体数值在LIBERO和SimplerEnv上分别下降约2-4%和5-10%），证明双记忆库的互补性至关重要。此外，将记忆浓缩器替换为直接拼接检索证据会损害性能并增加计算开销，验证了浓缩机制的有效性。对检索策略（如最近邻检索 vs. 基于查询的检索）的消融也证明了本文检索设计的优势。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了VLA模型中机器人记忆的新范式：将历史经验视为上下文原生的潜在记忆，在其存储、检索和消耗全过程中与模型嵌入空间保持一致。</li>
+<li>提出了LaMem-VLA框架，显式地组织机器人历史为互补的短期与长期记忆金库，并将双尺度记忆编织进模型推理以生成记忆增强的动作。</li>
+<li>设计了潜在记忆浓缩机制，将检索到的历史证据重构为与VLA模型嵌入空间兼容的固定长度潜在记忆令牌。</li>
+</ol>
+<p><strong>局限性</strong>：当前版本仅在模拟环境中进行了实证验证。作者提及正在将LaMem-VLA扩展到真实机器人平台，相应的现实世界实验将在未来版本中呈现。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li><strong>记忆的原生集成</strong>：本研究展示了将记忆深度、原生地集成到模型潜在推理空间的有效路径，为未来设计更紧密耦合的认知架构提供了思路。</li>
+<li><strong>记忆的层次化与组合性</strong>：短期与长期记忆的区分和协同工作机制，启发我们可以进一步探索更细粒度或更多样化的记忆形式，以应对复杂任务。</li>
+<li><strong>从仿真到现实的桥梁</strong>：该方法在仿真中显著提升了长视野任务性能，其成功为在现实世界中处理需要历史推理和状态跟踪的复杂操纵任务带来了希望。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对主流视觉-语言-动作模型因马尔可夫假设难以处理长期、时序依赖任务的问题，提出LaMem-VLA框架。其核心技术包括：curator组织历史经验为短/长期记忆库，seeker基于多模态认知查询证据，condenser将证据重构为紧凑潜在记忆令牌，weaver整合令牌与当前观察为连续嵌入序列，使记忆在相同潜在空间内直接参与推理与动作生成。在SimplerEnv和LIBERO上的实验证明了该方法的优越性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.07608" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
