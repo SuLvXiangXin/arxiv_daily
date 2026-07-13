@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>B-spline Policy: Accelerating Manipulation Policies via B-spline Action Representations - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>B-spline Policy: Accelerating Manipulation Policies via B-spline Action Representations</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.09648" target="_blank" rel="noreferrer">2607.09648</a></span>
+        <span>作者: Yilun Du Team</span>
+        <span>日期: 2026-07-10</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前的机器人视觉运动策略学习主要采用“动作分块”范式，即策略预测固定时间长度的离散动作序列（动作块）。这种方法虽然有利于稳定长视野预测，但存在关键局限性：一是强制整个任务过程使用统一的时间分辨率，无法适配不同任务阶段（如快速到达与精细操作）对动作精细度的不同需求；二是推理时，独立预测的动作块在边界处拼接可能导致不连续性，在低速或准静态场景下尚可容忍，但在高速执行时，这些不连续点极易导致轨迹跟踪失败。</p>
+<p>本文针对动作分块范式在提升执行速度方面的根本瓶颈，提出将动作表示为连续曲线而非离散点序列的新视角。核心思路是利用B样条曲线对动作进行连续参数化，通过时间缩放实现策略加速，并结合推理时段对齐机制确保平滑执行。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>B样条策略的整体框架将离散动作块预测转变为连续B样条轨迹生成。策略π(a|o)接收观测o，但输出的不再是离散动作序列，而是用于定义一段连续B样条曲线的参数（节点向量U和控制点C）。这些参数定义了未来一段时间内的连续动作轨迹a(u)。在底层控制阶段，该连续轨迹可以被任意高频采样并发送给机器人控制器执行，并可通过缩放时间参数u来实现执行加速。</p>
+<p><img src="https://arxiv.org/html/2607.09648v1/2607.09648v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：B样条策略推理概览。在每个推理步，策略接收图像和本体感知输入，输出未来的B样条段参数。在底层控制阶段，我们对每个新预测的B样条段与上一个段进行对齐。预测的B样条段可通过时间缩放调整执行速度，随后以更高频率采样动作并发送给机器人控制器。</p>
+</blockquote>
+<p>核心模块与技术细节包括：</p>
+<ol>
+<li><strong>自适应B样条拟合</strong>：为从离散示教数据生成训练目标，采用基于FITPACK的自适应拟合算法（算法1）。该算法在重构误差大的区域迭代插入节点，从而在保证误差界限的前提下，为高曲率区域分配更多节点（表示能力），为平滑区域分配较少节点，得到紧凑的连续轨迹表示。</li>
+<li><strong>固定策略输出尺寸</strong>：策略在每一步预测下一个“B样条段”。由于B样条的局部支撑性质，一个轨迹段可以由固定数量的邻近控制点和节点表示。因此，策略输出一个固定尺寸的向量[U; C]，包含局部节点和控制点，从而能够最小化修改即可集成到标准的模仿学习架构中。</li>
+<li><strong>高频执行与时间缩放</strong>：策略推理频率与底层控制频率解耦。策略以较低频率运行并预测B样条段，控制器则以更高频率对该连续段进行采样。通过改变真实时间t与样条参数u的映射关系（a_exec(t) = a(n*t)，其中n为加速因子），可以在不改变轨迹几何形状的前提下实现执行加速。</li>
+<li><strong>流水线执行与段对齐</strong>：对于长视野任务，策略会在机器人执行上一段时预测新段。为解决策略预测噪声、推理延迟和控制器跟踪误差导致的段间不连续问题，引入了推理时段对齐机制。当新段S_new(t)被预测时，并非从固定时间点开始执行，而是搜索该段上与当前已执行动作a_last最匹配的点t<em>（公式2），然后从t</em>开始执行新段，从而平滑连接前后段，该机制对高速稳定执行至关重要。</li>
+</ol>
+<p>与现有方法相比，B样条策略的创新点在于：1) <strong>范式转变</strong>：从预测离散动作块转变为预测连续动作曲线的参数；2) <strong>实时对齐</strong>：引入了在推理时动态对齐连续B样条段的机制，这是保证加速后长期执行平滑性的关键。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在真实世界和模拟环境中进行。真实世界任务包括：需要精确操作的<strong>立方体抓取</strong>、长视野桌面整理的<strong>桌面清理</strong>，以及强调双手接触式交互的<strong>快速堆叠</strong>。模拟基准测试使用了Push-T、RoboMimic和RoboCasa数据集。</p>
+<p>对比的基线方法包括：1) 原始速度执行的Diffusion Policy和Regression Policy (ACT)；2) 将执行频率简单提升n倍的Naive nX加速基线；3) DemoSpeedup方法。</p>
+<p>关键实验结果如下：</p>
+<ul>
+<li><strong>BSP持续缩短任务完成时间</strong>：如表1所示，在两种策略骨架上集成BSP均能减少平均完成时间。在桌面清理任务4倍速下，Reg.+BSP将时间从23.57秒降至11.80秒（减少50%），同时成功率从13/20提升至14/20。<br>Footnote：表1内容为真实世界量化结果，展示了不同方法在三个任务上不同加速倍率下的成功率和平均完成时间。</li>
+<li><strong>BSP在保持成功率的前提下存在加速极限</strong>：在大多数设置中，BSP在加速的同时匹配或提高了成功率（18个设置中占14个）。但过于激进的加速（如4倍速）可能超出底层控制器的跟踪能力，导致失败（如Speed Stacking任务中Reg.+BSP 4X成功率为0）。</li>
+<li><strong>BSP产生更平滑的轨迹</strong>：如图5所示，定性对比显示B样条策略的执行轨迹比基于动作块的Diffusion Policy更平滑、更快速，后者因块间不连续性常导致抖动。<br><img src="https://arxiv.org/html/2607.09648v1/2607.09648v1/x3.png" alt="定性对比"><blockquote>
+<p><strong>图5</strong>：快速堆叠任务的真实世界定性结果。叠加了机器人夹爪尖端轨迹的关键帧对比表明，B样条策略实现了更快、更平滑的任务执行。</p>
+</blockquote>
+</li>
+<li><strong>段对齐对BSP至关重要</strong>：消融实验（图6）表明，在高速执行下，启用段对齐机制能显著提高成功率并保证加速效果的一致性。未对齐时，段间不连续性会导致策略需要额外步数进行重新规划，甚至直接导致任务失败。<br><img src="https://arxiv.org/html/2607.09648v1/2607.09648v1/x4.png" alt="消融实验"><blockquote>
+<p><strong>图6</strong>：推理时段对齐的消融研究。对齐相邻段能改善轨迹连续性，这在高速下变得至关重要，从而带来更高的成功率和更一致的加速实现。</p>
+</blockquote>
+</li>
+<li><strong>模拟基准性能相当或更优</strong>：如表2(a)所示，在模拟任务中，BSP的性能与基线相当或更优，特别是在复杂的RoboCasa任务上显示出更强的鲁棒性。在专门测试加速的PushT-speedup环境中（表2(b)），BSP在4倍速下不仅将平均完成时间从7.19秒大幅缩短至2.87秒，同时平均得分也从0.59提升至0.73。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了一种用于视觉运动模仿学习的、基于B样条的连续动作表示，支持自适应时间分辨率和时间缩放；2) 设计了推理时段对齐机制，以实现加速策略执行时的平滑过渡；3) 在多样化的真实世界和模拟任务中验证了该方法能显著减少任务完成时间，同时保持任务成功率。</p>
+<p>论文自身提到的局限性主要是硬件约束导致的策略加速上限。过于激进的加速（如4倍速）可能超出低成本机械臂底层控制器的跟踪能力，导致任务失败。</p>
+<p>本工作对后续研究的启示在于：将动作表示为连续曲线而非离散序列是一个有前景的方向，能自然实现加速和平滑性。未来工作可以探索更强大的底层控制器以突破加速极限，或将时间缩放因子作为可学习的策略输出，实现自适应速度调节。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作策略执行速度慢的问题，提出B-spline Policy (BSP)方法，通过B样条曲线参数化动作，将离散动作块转换为由节点和控制点定义的连续平滑轨迹，支持时间缩放和高频执行。实验表明，该方法在模拟和真实任务中显著缩短任务完成时间，性能大幅优于基线方法，同时保持高成功率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.09648" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
