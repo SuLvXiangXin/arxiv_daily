@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Mixture of Frames Policy: Multi-Frame Action Denoising for Bimanual Mobile Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Mixture of Frames Policy: Multi-Frame Action Denoising for Bimanual Mobile Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.11884" target="_blank" rel="noreferrer">2607.11884</a></span>
+        <span>作者: Jeannette Bohg Team</span>
+        <span>日期: 2026-07-13</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人操作任务中，动作的自然表示高度依赖于所选择的坐标系：例如，在末端执行器坐标系下，接近抓取的动作分布可能更紧凑、不变；而在基座坐标系下，保持物体直立运输的动作则更容易建模。然而，当前基于扩散模型的视觉运动策略通常预先固定一个单一的参考坐标系来参数化动作，迫使去噪器在该单一坐标系下对整个动作分布进行建模，而该分布可能因坐标系选择不当而变得异常复杂。本文针对“单坐标系扩散策略无法自适应多任务需求”这一具体痛点，提出让策略在多个任务相关坐标系中并行进行动作去噪的新视角。本文的核心思路是：训练一组坐标系专家，在扩散过程的每一步，将带噪动作同步转换到各个专家坐标系中分别去噪，再将预测的噪声融合回一个规范坐标系中进行更新。</p>
+<h2 id="方法详解">方法详解</h2>
+<p><img src="https://arxiv.org/html/2607.11884v1/2607.11884v1/img_arxiv/architecture_arxiv.jpg" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图2</strong>：MoF架构总览。在每一个扩散步，MoF在规范坐标系中维护一个带噪动作。该动作被重新表达（Re-express）到每个专家坐标系中，所有专家在其本地坐标系中预测噪声。预测的噪声向量随后被转换回规范坐标系，并通过路由器预测的权重或固定的均匀权重进行融合。融合后的噪声预测被用于标准去噪步骤，从而保持所有坐标系专家沿着同一扩散轨迹同步。（左）为了实现对带噪动作的坐标系变换，论文采用了列向量动作表示法，无需正交化即可完成坐标系变换，从而保留了带噪的动作状态。</p>
+</blockquote>
+<p>Mixture of Frames Policy (MoF) 的整体框架是一个同步的多坐标系去噪流程。其输入是观察 <code>o</code>（图像和本体感觉）以及扩散步数 <code>k</code>，输出是在规范坐标系 <code>F_c</code> 下预测的噪声 <code>ϵ̂_c</code>，用于后续的标准扩散采样器（如DDIM）更新状态。</p>
+<p>核心模块包括：1）多个坐标系专家（每个专家 <code>ε^θ_m</code> 对应一个特定坐标系 <code>F_m</code>）；2）坐标系变换模块 <code>T_c^m</code> 和 <code>T_m^c</code>；3）融合模块（路由器或平均权重）。具体流程为：在每一步，将规范坐标系中的带噪动作 <code>x_c^k</code> 通过变换 <code>T_c^m</code> 转换到每个专家坐标系 <code>F_m</code>；每个专家在其坐标系内接收转换后的带噪状态和观测，预测噪声 <code>ε_m</code>；将所有专家预测的噪声通过逆变换 <code>T_m^c</code> 对齐回规范坐标系；最后根据权重 <code>w_m</code> 融合得到 <code>ϵ̂_c</code>（公式1）。训练时，损失函数 <code>L_mix</code> 直接让融合后的预测噪声匹配规范坐标系中采样的真实噪声（公式2）。</p>
+<p>本方法的关键创新点有三。第一，提出了“同步多坐标系去噪”流程，所有专家共享同一扩散轨迹，避免了独立去噪导致的模式不匹配问题。第二，引入了<strong>列向量6D旋转表示法</strong>以支持精确、可微的带噪动作坐标系变换。标准扩散策略使用的行向量6D表示法需要对带噪向量进行正交化以重建旋转矩阵，这会改变扩散状态本身。而列向量表示法将旋转存储为两个（或三个）3D列向量 <code>c^1, c^2</code>，坐标系变换仅需将每个列向量左乘坐标系变换的旋转矩阵 <code>R_c^m</code>，该操作对任意向量都成立，无需投影到SO(3)流形，从而保证了变换的精确性。这是实现多帧去噪的基础。第三，将混合专家（MoE）机制应用于坐标系维度，而非任务或技能维度，实现了对动作表示空间的自适应选择。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在模拟和真实世界两个环境中进行。模拟实验使用了九个双手机器人操作任务，其中五个来自BiGym数据集（FlipCup, Move2Plates, Kitchenware, FlipSandwich, Dishwasher），四个来自DexMimicGen数据集（Threading, 3PieceAssembly, BoxCleanup, DrawerCleanup）。实验平台基于标准的扩散策略框架，所有策略使用100条演示训练500个周期。</p>
+<p>对比的基线方法包括：</p>
+<ol>
+<li><strong>Oracle Frame</strong>：为每个任务手动选择表现最佳的单坐标系基线。</li>
+<li><strong>DP</strong>：在单一世界坐标系中运行的标准扩散策略。</li>
+<li><strong>MoE-DP</strong>：在DP的条件通路中使用混合专家模块，但仍在单一动作表示中去噪。</li>
+<li><strong>Single-Frame Ensemble</strong>：在相同坐标系中取多个去噪器的平均预测。</li>
+<li>各单坐标系基线（Left, Right, Base, Rel Traj）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.11884v1/2607.11884v1/img_arxiv/teaser_arxiv.jpg" alt="模拟任务图示"></p>
+<blockquote>
+<p><strong>图3</strong>：模拟环境中评估的九个双手机器人操作任务。上图来自BiGym，下图来自DexMimicGen数据集。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.11884v1/2607.11884v1/x1.png" alt="单帧基线结果表"></p>
+<blockquote>
+<p><strong>图4</strong>：单帧扩散策略基线的成功率（%）。表格展示了坐标系选择对性能的巨大且任务依赖性的影响。Oracle（每行最佳值）和Worst（每行最差值）之间的差距平均达到15个百分点，表明没有单一坐标系是普遍最优的。</p>
+</blockquote>
+<p>关键实验结果总结如下：在模拟实验中，MoF的两种变体（MoF-MoE， MoF-Ensemble）平均成功率分别为66.8%和65.9%，显著优于所有基线。MoF-MoE比MoE-DP高出11.7个百分点，比标准DP高出16.5个百分点。更重要的是，MoF的性能在大多数任务上匹配或超越了为每个任务精心挑选的最佳单坐标系（Oracle Frame），例如在Threading任务上超出7.7个百分点。</p>
+<p><img src="https://arxiv.org/html/2607.11884v1/2607.11884v1/x2.png" alt="MoF与基线对比表"></p>
+<blockquote>
+<p><strong>图5</strong>：MoF与各类基线方法的最终成功率对比。结果表明，多坐标系去噪（MoF）带来的提升主要源自于其核心思想，而非简单的集成或多专家架构。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.11884v1/2607.11884v1/x3.png" alt="路由器权重轨迹"></p>
+<blockquote>
+<p><strong>图6</strong>：在Threading任务上，MoF-MoE路由器的权重随任务进程的变化。该图表明MoF能够根据任务阶段自适应地切换主导的坐标系专家，例如在抓取阶段使用相对轨迹（Rel Traj）专家，在双手协调插入阶段使用基座（Base）专家。</p>
+</blockquote>
+<p>消融实验（表3）验证了各个组件的贡献：1）改变规范坐标系对性能影响较小（最大下降2.5分），表明MoF对此选择是鲁棒的。2）从专家集合中移除最佳单帧专家会导致性能显著下降6.2分，说明专家集合不是冗余的。3）<strong>最关键的是</strong>，如果使用需要正交化的行向量6D表示法（w/ Ortho Proj），MoF-MoE性能下降7.0分，而MoF-Ensemble则会完全失效（0%成功率），这强有力地证明了列向量表示法对于多帧去噪是必不可少的。</p>
+<p><img src="https://arxiv.org/html/2607.11884v1/2607.11884v1/img_arxiv/real_pouring_arxiv.jpg" alt="真实世界倒水任务"></p>
+<blockquote>
+<p><strong>图7</strong>：真实世界倒水任务。MoF策略成功执行，路由器权重分析显示其在拾取放置和倾倒等不同阶段动态切换主导的坐标系专家。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.11884v1/2607.11884v1/img_arxiv/real_serving_arxiv.jpg" alt="真实世界服务任务"></p>
+<blockquote>
+<p><strong>图8</strong>：真实世界服务任务。MoF策略在导航、抓握和放置阶段需在不同坐标系间切换。路由器权重显示，相对于稳定托举的盘子（左手）进行推理在整个任务中占据主导。</p>
+</blockquote>
+<p>在真实世界的两个双手机器人移动操作任务（倒水和服务）中，MoF-MoE分别取得了85%和70%的成功率，均超越了所有对应的单帧基线（倒水任务：Left 15%， Right 70%， Rel Traj 5%； 服务任务：Left 55%， Right 0%， Rel Traj 60%）。路由器分析进一步揭示了MoF在任务进程中动态切换主导坐标系（如倒水时左手和相对轨迹专家交替）的能力，这是任何单帧基线都无法实现的。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）系统性地分析了坐标系选择对扩散策略性能的重大且任务依赖性的影响。2）提出了MoF，第一个在多个动作坐标系上进行同步去噪的扩散策略框架，并引入了关键的列向量6D旋转表示法以实现精确的带噪状态转换。3）在模拟和真实世界实验中验证了MoF能够超越最佳单帧选择，并展现了其依据任务阶段自适应融合多坐标系预测的能力。</p>
+<p>论文自身也指出了几点局限性：1）目前实验聚焦于较小的扩散策略，将其适配到更大的视觉-语言-动作模型是一个未来方向。2）路由器的训练仅通过去噪损失监督，可能与最终策略性能不完全对应，未来可探索行为感知的优化目标。3）MoF依赖设计者预先指定候选坐标系集合以及从本体感觉获得的准确坐标系变换。</p>
+<p>这项研究对后续工作的主要启示在于：在基于扩散模型的机器人策略学习中，动作的表示空间（即坐标系）本身可以成为一个可学习和自适应组合的维度。这不仅限于双手移动操作，也为其他需要多视角协调的复杂任务（如具身导航、多物体操作）提供了新思路。未来的研究可以探索如何从数据中自动发现或学习任务相关的坐标系，以及处理坐标系变换存在不确定性的情况。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中动作分布复杂度与坐标帧密切相关、单一帧难以最优表示多任务的问题，提出**帧混合策略（MoF）**。该方法通过维护规范扩散状态，在多个任务相关帧中同步去噪，并应用帧专家融合预测。关键技术是引入基于列的**6D旋转表示**，在SE(3)参数化下实现精确可微的跨帧变换，避免噪声旋转受限于SO(3)流形。实验表明，在九个模拟双边操作任务中，最佳动作帧具有任务依赖性，MoF**优于最佳帧选择及标准混合专家基线**；在两个真实任务中，**超越所有单一帧基线**。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.11884" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

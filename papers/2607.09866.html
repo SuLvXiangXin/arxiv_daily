@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Robo-ValueRL: Reliable Value Estimation for Offline-to-Online Reinforcement Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Robo-ValueRL: Reliable Value Estimation for Offline-to-Online Reinforcement Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.09866" target="_blank" rel="noreferrer">2607.09866</a></span>
+        <span>作者: Di Hu Team</span>
+        <span>日期: 2026-07-10</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>离线到在线强化学习是通过离线预训练结合在线交互来获得通用化机器人操作策略的有效范式。然而，现有的系统通常是一个由数据筛选、价值估计、离线预训练和在线探索等多个耦合组件构成的全栈系统，其复杂性使得性能难以复现，失败也难以诊断。其中，价值估计作为评估从次优演示到在线探索等异构数据质量的核心组件，对于优先选择信息量丰富的经验、抑制低质量数据至关重要，但其可靠性如何影响下游策略优化这一问题尚未被系统研究。具体而言，现有研究往往孤立地分析价值优化，或仅报告下游性能而不深入检查所学价值函数是否真正捕获了任务进展或动作质量。</p>
+<p>本文聚焦于价值估计的可靠性这一具体痛点，旨在系统性地研究其如何塑造策略在离线预训练和在线改进中的表现。本文的核心思路是提出一个名为Robo-ValueRL的统一框架，通过可靠价值函数学习、价值引导的离线策略预训练以及在线改进的协同流程，分析并提升价值估计的可靠性，并阐明其对下游策略性能的影响。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Robo-ValueRL框架围绕可靠价值估计构建了一个统一的离线到在线学习流程。其整体pipeline首先从异构的离线机器人数据中训练一个历史条件的价值估计器，并利用其生成的动作质量指示来训练一个质量条件的视觉-语言-动作一致性策略模型进行离线预训练。随后，冻结预训练的策略，通过在在线交互数据上学习一个轻量级残差适配器，实现针对性的在线适应。</p>
+<p><img src="https://arxiv.org/html/2607.09866v1/2607.09866v1/x2.png" alt="Robo-ValueRL框架图"></p>
+<blockquote>
+<p><strong>图2</strong>：Robo-ValueRL离线到在线强化学习框架概述。价值估计器整合历史信息以产生可靠的价值估计，并据此生成动作质量标签来训练质量条件的策略。在在线交互阶段，使用在线适应模块实现稳定的在线改进。</p>
+</blockquote>
+<p><strong>1. 历史条件价值估计器</strong>：为了解决单帧观测在长视野任务中的歧义性（如遮挡、重复视觉模式），该模块利用历史信息来预测归一化的任务进度值。它以当前多视角观测、语言指令以及编码压缩后的视觉历史为输入。其网络结构基于PaliGemma视觉-语言主干，并附加一个轻量级Transformer价值头。输出是定义在K个离散值箱上的分类分布，通过交叉熵损失进行优化。关键技术细节包括：</p>
+<ul>
+<li><strong>目标表示</strong>：采用HL-Gaussian分布将归一化进度真值<code>v_t*</code>投射为软分布进行监督。</li>
+<li><strong>动作质量指示器</strong>：通过计算前后帧的价值差<code>Δv_t</code>，并与预设的正负阈值<code>δ+</code>、<code>δ-</code>比较，为每个动作分配一个离散质量标签<code>q_t^act ∈ {0，1，2}</code>，分别代表低质量、中性、高质量。</li>
+</ul>
+<p><strong>2. 质量条件视觉-语言-动作模型</strong>：这一模块利用价值估计器生成的动作质量标签来训练一个能够区分动作质量策略。其主要创新在于将质量标签转换为文本提示<code>ℓ_t^act</code>，并与原始任务指令拼接，形成质量条件的语言输入<code>ℓ_t^qc = [ℓ; ℓ_t^act]</code>。该模型同样以PaliGemma为骨干，并采用<strong>一致性策略</strong>作为动作专家网络，能够通过单步去噪实现高效动作生成。其训练结合了动作重建损失和相邻噪声级别的自一致性损失，后者旨在对齐去噪轨迹上的预测，使得推理时单步采样即可近似多步去噪过程。</p>
+<p><strong>3. 在线残差策略适应</strong>：为了避免直接微调可能导致的灾难性遗忘，该方法冻结了离线预训练的基础策略<code>π_θ^base</code>，并引入一个轻量级的残差适配器<code>h_ϕ</code>。该适配器接收基础VLA模型生成的动作上下文的压缩表示、机器入状态以及基础策略预测的动作，输出一个有界的残差修正<code>r_t</code>和一个逐维度门控信号<code>g_t</code>。最终动作由<code>x_t^adapt = x_t^base + g_t ⊙ r_t</code>计算得到。训练时适配器仅在由价值估计筛选出的高质量在线数据和离线数据上更新，损失函数包含：</p>
+<ul>
+<li><strong>修正损失</strong>：鼓励适配动作接近高质量在线数据中的真实动作。</li>
+<li><strong>行为保持损失</strong>：鼓励适配动作在离线数据上接近基础策略的动作，以保护先验知识。</li>
+<li><strong>门控损失</strong>：通过交叉熵损失约束门控信号，控制何时进行修正。</li>
+</ul>
+<p><strong>4. 价值可靠性度量</strong>：为了系统性诊断价值函数的质量，本文提出了一套评估协议，包含全局和局部两个层面：</p>
+<ul>
+<li><strong>全局任务级进展</strong>：通过<strong>中点排序率</strong>衡量价值函数是否能保持任务子目标阶段之间的正确顺序。</li>
+<li><strong>局部动作级偏好</strong>：包含两个互补指标：1）<strong>流畅性</strong>，通过<strong>颠簸比率</strong>和<strong>颠簸幅度</strong>量化成功执行轨迹上价值序列的稳定性（应平滑上升）；2）<strong>时序误差判别</strong>，通过<strong>误差敏感度</strong>和<strong>误差斜率</strong>评估价值函数对执行错误的惩罚能力。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在两个具有挑战性的真实世界机器人操作任务上进行：<strong>毫米级芯片插入</strong>（长视野、精细化操作）和<strong>通用块拆卸</strong>（双手协调、泛化性布局）。实验共使用了<strong>240小时的异构离线演示数据</strong>和<strong>超过3000条的在线交互轨迹</strong>。</p>
+<p><img src="https://arxiv.org/html/2607.09866v1/2607.09866v1/x3.png" alt="任务概述"></p>
+<blockquote>
+<p><strong>图3</strong>：两个真实世界操作任务图示。(a) 芯片插入：一个长视野精细化任务，需要将芯片插入一个隐藏在PCB基板下方的毫米级凹槽插槽中。(b) 块拆卸：一个需要双手协调并处理随机布局的通用化任务。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>价值可靠性度量有效</strong>：实验表明，提出的价值可靠性度量（如MOR、颠簸比率）与下游策略成功率强相关，能够有效诊断价值函数的质量。</li>
+<li><strong>价值引导离线预训练优势</strong>：与质量无关的行为克隆相比，Robo-ValueRL的价值引导策略学习能更有效地利用混合质量的演示数据。在芯片插入任务上，离线成功率提升了26%，在块拆卸任务上提升了34%。</li>
+<li><strong>可靠价值稳定在线改进</strong>：利用可靠价值筛选高质量在线数据训练残差适配器的策略，比直接微调或随机采样数据的方法，实现了更稳定和更高效的在线适应。</li>
+<li><strong>最终性能</strong>：集成离线预训练和在线改进的完整Robo-ValueRL系统，在芯片插入任务上达到了<strong>86%</strong> 的成功率，在块拆卸任务上达到了<strong>84%</strong> 的成功率。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.09866v1/2607.09866v1/x4.png" alt="离线预训练结果"></p>
+<blockquote>
+<p><strong>图4</strong>：价值引导的离线预训练（VG-Offline）与行为克隆（BC）在不同数据规模下的成功率对比。VG-Offline随数据量增加性能持续提升，显示出更好的扩展性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.09866v1/2607.09866v1/x5.png" alt="在线适应结果"></p>
+<blockquote>
+<p><strong>图5</strong>：在线适应阶段不同方法的成功率曲线。Robo-ValueRL（价值筛选）比直接微调（Finetune）和随机采样（Random-sampling）更快、更稳定地达到更高的性能。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：</p>
+<ul>
+<li><strong>价值估计模块</strong>：移除历史条件或使用简单的时序差分学习会显著降低价值可靠性和下游性能。</li>
+<li><strong>质量条件</strong>：在策略预训练中移除动作质量提示，性能会下降，表明区分动作质量的重要性。</li>
+<li><strong>残差适应模块</strong>：移除门控机制或行为保持损失会导致性能下降和不稳定，验证了各组件在平衡适应与保持先验中的作用。</li>
+<li><strong>价值筛选</strong>：在在线适应阶段不使用价值进行数据筛选，性能提升变慢且不稳定，证明了价值引导数据利用的有效性。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.09866v1/2607.09866v1/x6.png" alt="消融实验：价值可靠性度量"></p>
+<blockquote>
+<p><strong>图6</strong>：不同价值估计变体的可靠性度量对比。历史条件价值估计器（Ours）在中点排序率（MOR）和颠簸比率（Bump Ratio）等指标上均优于基线。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：第一，<strong>系统地建立了价值估计可靠性与下游策略性能之间的关联</strong>，并提出了一套可量化的价值可靠性诊断指标；第二，提出了一个<strong>统一的离线到在线学习框架Robo-ValueRL</strong>，它集成了历史条件价值估计、质量条件策略学习以及轻量级残差适应，为分析价值引导的学习提供了系统性测试平台；第三，通过大规模真实机器人实验<strong>验证了可靠价值引导的数据利用对于从异构经验中进行有效策略改进的关键作用</strong>。</p>
+<p>论文自身提到的局限性包括：基于视觉语言模型（VLM）的价值估计器计算成本较高；实验主要在两个特定任务上进行，其框架和度量的泛化能力有待在更广泛的任务集中进一步验证。</p>
+<p>本研究对后续工作的启示是：在构建复杂的离线到在线机器人学习系统时，<strong>应当更加重视价值估计组件的可靠性，并将其作为一个独立的、可诊断的模块进行设计和优化</strong>。同时，<strong>基于价值的数据筛选和优先级排序</strong>是高效利用异构机器人数据的关键，未来的策略学习范式可更多地融入此类价值引导的机制。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>这篇论文研究离线到在线强化学习中价值函数可靠性对策略优化影响的核心问题。提出了Robo-ValueRL框架，其关键技术包括：利用历史条件价值估计器进行价值评估，并通过全局进度和局部偏好度量其可靠性；继而将可靠的价值估计用于质量条件一致性策略预训练和在线rollout的残差适应模块。实验基于240小时离线数据和3000+在线轨迹，结果表明可靠的估值能显著提升下游性能。最终系统在毫米级芯片插入任务上达到86%成功率，在可泛化块拆卸任务上达到84%成功率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.09866" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

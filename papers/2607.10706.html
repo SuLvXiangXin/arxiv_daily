@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Action Map Policy: Learning 3D Closed-loop Manipulation via Pixel Classification - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Action Map Policy: Learning 3D Closed-loop Manipulation via Pixel Classification</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.10706" target="_blank" rel="noreferrer">2607.10706</a></span>
+        <span>作者: Robin Walters Team</span>
+        <span>日期: 2026-07-12</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前的3D闭环操作策略学习方法主要分为三类。基于回归的方法直接预测连续的低维动作（如末端执行器位姿），但最小化MSE损失容易使多模态的动作分布坍缩到均值。基于迭代生成的方法（如扩散策略）通过迭代去噪过程建模动作分布，虽然能捕获多模态分布，但推理速度慢且分布隐式表示，难以直接监督或约束具体动作。基于分类的方法借鉴大语言模型范式，将连续动作离散化为动作令牌，使用交叉熵损失进行训练；然而，为达到毫米级精度需要极高的离散化分辨率，导致动作词汇量组合爆炸（例如，一个6自由度动作在每维度10个桶时就需要10^6个类别），难以应用于精细操作任务。</p>
+<p>本文针对分类方法中，为高维连续动作设计离散词汇时在表达精度和词汇量大小之间的根本矛盾，提出了一个新颖的视角：将3D动作投影到2D相机图像平面，把<strong>每个像素位置视为一个离散类别</strong>。核心思路是将3D闭环操作策略学习重新表述为图像空间的像素分类问题，利用图像网格的自然离散性来控制词汇量大小，同时保留像素级的精细视觉信号以支持高精度操作。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>AMP的整体框架将策略学习分解为两个映射：热图预测器 ψ: 𝒪 → ℋ 和动作提取器 f: ℋ → 𝒜，即 π = f ∘ ψ。给定多视角图像观测 𝒪_t，策略预测一个动作块 𝒜_t，包含未来 l 个时间步的动作，每个动作为末端执行器位姿 (T, R, w)。<br>首先，将每个3D位姿（动作）表示为基于夹爪几何定义的 m=5 个3D关键点。然后，将这些3D关键点投影到各个已知内外参的相机视图的2D图像平面上，并进行像素坐标离散化。最后，使用以投影位置为中心的高斯分布（σ=2）生成软热图标签，即每个关键点在每个相机视图、每个时间步的标签是图像网格上的一个归一化分布。整个动作块因此被转化为一系列热图体积 ℋ。</p>
+<p><img src="https://arxiv.org/html/2607.10706v1/2607.10706v1/x1.png" alt="方法整体架构"></p>
+<blockquote>
+<p><strong>图2</strong>：Action Map Policy整体架构。左侧分支输入手内图像和两个侧视图图像；中心是一个多视角Transformer，实现手内特征与侧视图上下文特征间的通信；右侧分支包含两个解码器，用于生成跨时间视野的关键点热图。</p>
+</blockquote>
+<p>AMP的核心是热图预测器 ψ，它采用名为X-Net的新颖骨干网络。该网络输入多视角图像，并直接输出密集的动作特征图，保留空间结构而非坍缩为单一全局嵌入。具体而言，每个视图的图像先经过一个U-Net编码器提取密集特征，这些特征图被展平为带有位置编码的token，然后馈入一个多视角Transformer（MVT）。MVT包含图像内注意力和跨图像注意力层，以实现不同视图间的信息交互。处理后的token序列被重塑回空间维度，再通过U-Net解码器（包含与编码器的跳跃连接）生成最终的热图预测。网络为每个时间步 i、每个关键点 j、每个相机视图 k 输出一个热图 𝐡̂_ijk。<br>训练时，网络完全在热图空间中进行监督，损失函数是预测热图与高斯软标签之间的交叉熵损失，对所有时间步、关键点和相机视图取平均：ℒ_CE = -∑_i∑_j∑_k∑_u,v 𝐡_ijk(u,v) log 𝐡̂_ijk(u,v)。</p>
+<p>在推理时，动作提取器 f 将预测的热图转换为可执行动作。对于每个关键点、时间步和相机视图，通过 argmax 操作找到概率最高的像素位置。然后，利用多个视图下对应关键点的2D坐标，通过三角测量重建其3D坐标。获得每个时间步的5个3D关键点后，通过几何关系恢复末端位姿：平移 T 为四个夹持点（p1-p4）的质心；旋转 R 由两个几何轴（对趾轴和接近轴）经Gram-Schmidt正交化构建；夹爪宽度 w 由第五个点（p5）到两个指尖中点的距离比例计算得出。<br>与现有方法相比，AMP的核心创新在于其动作表示方式：它将高维连续动作的预测转化为对图像平面上像素位置的分类。这既避免了回归方法的模态坍缩，又规避了传统离散化方法的词汇爆炸问题，同时还能在单次前向传播中预测整个动作块，无需迭代采样。</p>
+<p><img src="https://arxiv.org/html/2607.10706v1/2607.10706v1/figures/keypoints.png" alt="关键点动作表示"></p>
+<blockquote>
+<p><strong>图3</strong>：基于关键点的动作表示。定义在夹爪上的5个3D关键点，用于表示末端执行器位姿。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>基准与数据集</strong>：使用了MimicGen仿真基准中的六个代表性任务（stack-three-d1, hammer-cleanup-d1, mug-cleanup-d1, coffee-d2, square-d2, threading-d2），覆盖了从堆垛到高精度插入的不同难度操作。在真实世界中，设计了五个任务进行评估，包括三个长周期操作任务（制作咖啡、烤面包、蒸蛋）和两个测试空间推理能力的任务（抓取目标杯、堆叠目标块）。<br><strong>对比方法</strong>：与四个强基线对比：扩散策略DiffPo、回归方法ACT、令牌化方法OAT以及关键点扩散方法Motion Track。<br><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>精度分析</strong>：热图表征的理论精度随图像分辨率线性提升。在224×224分辨率下，能达到约1毫米的平移精度和1.3°的旋转精度。相比之下，传统按维度离散化要达到类似精度需要约10^10个令牌，词汇量不可行。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.10706v1/2607.10706v1/x2.png" alt="精度与词汇量分析"></p>
+<blockquote>
+<p><strong>图4</strong>：左图：重建误差随图像分辨率增加而降低。右图：传统编码本大小随分辨率呈多项式增长。</p>
+</blockquote>
+<ol start="2">
+<li><strong>仿真性能</strong>：在MimicGen的六个任务上，AMP在五个任务上优于所有基线，平均成功率比第二名DiffPo高20.7%。具体地，在stack-three-d1任务上成功率达90%，比DiffPo的38%高出52个百分点；在coffee-d2任务上成功率为78%，比DiffPo的62%高出16个百分点。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.10706v1/2607.10706v1/figures/mimig_gen_task_figure/stack_three_d1/agentview.png" alt="仿真任务示意图"></p>
+<blockquote>
+<p><strong>图5</strong>：MimicGen基准中的代表任务示例（此处为stack-three-d1任务示意图）。</p>
+</blockquote>
+<ol start="3">
+<li><strong>真实世界长周期操作</strong>：在制作咖啡、烤面包、蒸蛋三个任务上，AMP的成功率远超DiffPo和ACT，优势达50%–70%。同时，AMP的单次前向推理时间为13.80毫秒，显著快于DiffPo（16个DDIM步，93.53毫秒）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.10706v1/2607.10706v1/x3.png" alt="真实世界长周期任务结果"></p>
+<blockquote>
+<p><strong>图7</strong>：真实世界长周期任务（制作咖啡、烤面包、蒸蛋）的成功率对比。AMP大幅领先于DiffPo和ACT。</p>
+</blockquote>
+<ol start="4">
+<li><strong>空间推理能力</strong>：在存在多个完全相同物体、仅通过激光笔小光点指定目标的任务中，AMP取得了100%的成功率，而DiffPo平均仅为20%。这表明AMP能有效利用细粒度的像素级视觉线索。</li>
+</ol>
+<p><strong>消融实验</strong>：</p>
+<ul>
+<li><strong>移除手内相机</strong>：在遮挡较重的任务（如hammer-cleanup-d1, coffee-d2）上性能下降明显（最多下降14%），说明手内视角提供了重要互补信息。</li>
+<li><strong>使用独热标签（σ=0）</strong>：相比使用高斯软标签（σ=2），性能下降8%-10%，表明软标签提供了更丰富的监督信号。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了将3D闭环操作策略学习重构为图像空间像素分类的新框架，通过将动作投影到2D像素网格，优雅地解决了动作离散化中精度与词汇量的矛盾；2) 设计了X-Net骨干网络，能够处理多视角输入并输出密集的空间动作分布热图，保留了精细的视觉 grounding；3) 实验验证了该方法在仿真和真实任务中相较于主流基线在成功率、推理速度和空间推理能力上的综合优势。<br>论文自身提到的局限性包括：方法依赖于已知的相机标定进行投影和三角测量；在训练数据有限时，其密集预测可能对计算和内存有更高需求。<br>这项工作启示后续研究，可以探索更灵活的动作关键点定义以适应不同的末端执行器，或将这种密集的、显式的动作分布表示与强化学习微调、动作重加权等高级策略结合，以进一步优化策略性能。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>这篇论文针对机器人模仿学习中高维连续动作空间难以有效表示的问题，提出了动作映射策略。核心方法是将3D末端执行器位姿映射到相机图像平面，将动作预测转化为像素点分类问题。该方法避免了逐维度离散化带来的组合爆炸，在单次前向传播中即可预测完整动作序列。实验表明，该策略在多项操作任务中取得了优于基线方法的成功率、更快的推理速度，并展现出更强的空间推理能力。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.10706" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
