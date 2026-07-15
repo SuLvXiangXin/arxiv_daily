@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Reducing Temporal Redundancy for Efficient Vision-Language-Action Inference - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Reducing Temporal Redundancy for Efficient Vision-Language-Action Inference</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.12287" target="_blank" rel="noreferrer">2607.12287</a></span>
+        <span>作者: Chuan Wen Team</span>
+        <span>日期: 2026-07-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，基于大规模互联网数据预训练的视觉-语言-动作模型在机器人操作任务中展现出强大的泛化能力。然而，这些模型主要关注任务通用性和语义对齐，而非实时效率，导致其高推理延迟与动态环境中高频、闭环控制的需求相冲突。现有针对VLA模型的加速研究大多聚焦于优化孤立组件，例如设计轻量级架构或利用缓存减少视觉编码开销，但未能从系统层面解决端到端延迟问题。特别是，基于扩散或流匹配的策略需要进行多步迭代采样，这通常是推理过程中的主要计算瓶颈。</p>
+<p>本文的核心痛点是现代VLA推理管线中存在显著的“时间冗余”：一是在感知端，连续帧的视觉表示具有高度相似性；二是在策略端，扩散采样的多步迭代更新存在强相关性。本文提出采用系统级加速策略，在感知端通过选择性令牌更新复用静态场景表示，在策略端通过利用速度场的低秩结构将多步采样压缩至两步。核心思路是：通过识别并利用感知与决策中的时间结构冗余，在不改动骨干网络架构的前提下，实现端到端推理的显著加速。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的加速框架旨在同时减少感知和动作生成中的冗余计算，主要包括“时间令牌重用”和“高效流匹配策略（步压缩）”两个核心模块。</p>
+<p>首先，VLA模型的典型流程是：给定包含图像、语言令牌和机器人状态的观测，通过视觉编码器（如ViT）生成空间令牌，与语言令牌在大语言模型骨干中融合，最终由基于流匹配的策略头输出动作序列。在流匹配策略中，动作生成通过求解一个常微分方程实现，通常需要8-10步的数值积分（如欧拉法），每步都需要一次前向传播，这成为延迟的主要来源。</p>
+<p><img src="https://arxiv.org/html/2607.12287v1/2607.12287v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：感知与策略动态中的结构冗余分析。(a) 连续帧视觉令牌在不同ViT层间的余弦相似度分布。大多数令牌相似度接近1 (&gt;0.98)，揭示了流式机器人感知中存在强时间冗余。(b) 令牌差异度随层数的演变。仅稀疏的空间令牌子集显示出显著变化，支持选择性令牌刷新。(c) 流匹配速度场的本征维度分析。奇异值谱显示大部分能量集中于前两个成分，表明速度演化位于低维子空间。</p>
+</blockquote>
+<p><strong>时间令牌重用模块</strong>：动机源自图1(a)(b)的观察，即连续帧的视觉令牌在多个ViT层中保持极高相似性，且变化具有空间稀疏性。该方法采用奇偶块策略：在奇数块执行完整前向传播并缓存关键投影作为参考表示；在偶数块，计算当前帧与缓存参考关键令牌的余弦相似度，选择相似度最低的Top-ρN个令牌进行更新（ρ控制更新比例）。关键设计是，令牌选择仅在第一个Transformer层进行，并将选中的索引复用于后续所有层，因为令牌相似性模式在各层间高度一致。对于选中的更新令牌，重新计算其Query、Key、Value；对于未选中的重用令牌，则直接复用缓存的Key-Value对。最后通过“分散”操作组装完整的表示。注意力计算仅针对更新令牌进行，而重用令牌直接继承缓存输出，所有令牌仍会经过MLP层以确保训练的稳定性。</p>
+<p><img src="https://arxiv.org/html/2607.12287v1/2607.12287v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：基于余弦相似度选择的时间令牌复用。仅更新一个令牌子集，其余令牌复用缓存表示。索引选择在第一层执行并跨后续层复用。</p>
+</blockquote>
+<p><strong>高效流匹配策略（步压缩）模块</strong>：动机源自图1(c)的观察，即流匹配速度序列的奇异值谱快速衰减，表明其演化遵循低维结构。本文假设速度场可近似为由少数基向量的线性组合。具体地，选取初始速度<code>v0</code>（代表全局方向）和一个中间速度<code>v7</code>（代表轨迹细化）作为锚点，将任意时刻的速度近似为 <code>vt ≈ at * v0 + bt * v7 + εt</code>。基于欧拉积分，最终动作状态可近似为 <code>xT ≈ x0 + α * v0 + β * v7 + b</code>，其中α, β聚合了时间贡献，b吸收残差误差。这样，多步求解器被压缩为一个紧凑的2步公式。为了在实际中估计系数(α, β, b)，论文引入一个轻量级适配器 <code>gφ</code>，该适配器以初始速度<code>v0</code>为输入并直接预测这些参数。适配器的训练目标是最小化压缩2步重构的轨迹与原始10步轨迹之间的L2误差。</p>
+<p><img src="https://arxiv.org/html/2607.12287v1/2607.12287v1/x3.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：通过低秩速度结构进行流步骤压缩。</p>
+</blockquote>
+<p>与现有方法相比，本文的创新点在于：1) 首次系统性地识别并利用了VLA推理中感知与策略两端的时间冗余；2) 提出了跨层的选择性令牌更新机制，显著降低了感知计算成本；3) 基于速度场的低秩假设，将多步迭代采样压缩为两步，直接攻击了策略生成这一主要延迟瓶颈，实现了系统级的端到端加速。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：论文在仿真和真实机器人平台上进行评估。仿真基准使用LIBERO和RobotWin，输入为224x224 RGB图像和自然语言指令，输出7自由度关节空间动作。真实平台使用Marvin Pro双臂机器人，配备多个RGB-D相机，输出笛卡尔空间控制动作。主要评估指标为任务成功率。</p>
+<p><strong>对比方法与关键结果</strong>：<br>论文将所提方法应用于<code>π0</code>和<code>π0.5</code>模型，并与多个基线在LIBERO基准上对比（表I）。应用本文方法后，<code>π0.5</code>的平均成功率从94.4%降至93.8%，性能下降可忽略，但推理步骤从10步降至2步，延迟从286.9 ms大幅减少至121.2 ms，控制频率从3.5 FPS提升至8.2 FPS。在<code>π0</code>上也观察到类似趋势，证明了方法的泛化性。相比其他专注于优化感知或语言模块的方法，本文方法由于直接减少了动作生成这一主要成本，获得了更显著的端到端加速。</p>
+<p><img src="https://arxiv.org/html/2607.12287v1/2607.12287v1/x5.png" alt="实验结果"></p>
+<blockquote>
+<p><strong>图5</strong>：真实世界机器人操作性能。左侧为六个操作任务的代表性快照，右侧展示了<code>π0.5</code>标准10步策略与本文方法的任务级成功率对比。结果显示，在大多数任务上，本文方法保持了与原始策略相当的成功率。</p>
+</blockquote>
+<p><strong>推理效率分析</strong>：<br>表II对推理管线进行了分解分析。结果显示，在基线模型中，动作专家是主要的计算瓶颈，占总延迟的大部分（例如<code>π0.5</code>中为212.6 ms / 293.2 ms）。本文方法几乎未改变ViT和LLM的延迟，但将动作专家的延迟大幅降低至约41 ms，从而实现了端到端的显著加速。这突出了对策略进行压缩在系统级优化中的重要性。</p>
+<p><strong>消融实验</strong>：<br>表III展示了系统级消融结果。单独启用“令牌重用”可将ViT延迟从40.1 ms降至28.5 ms，成功率几乎不变（93.9% vs 94.4%）。单独启用“高效策略”则能将动作专家延迟从212.6 ms骤降至41.5 ms，总延迟降至123.9 ms，成功率保持在94.1%。两者结合获得最佳加速效果（总延迟111.6 ms，9.0 FPS），性能轻微下降至93.8%。这表明两个组件针对不同瓶颈，贡献互补。</p>
+<p><strong>真实世界评估</strong>：<br>在Marvin Pro机器人上的六个任务评估结果（表IV）显示，应用2步压缩策略后，平均任务成功率与原始<code>π0.5</code>相当（95.4% vs 97.2%），但在30秒时间限制内的成功率从77.1%提升至82.3%，证明了加速策略在时间约束下的优势。</p>
+<p><img src="https://arxiv.org/html/2607.12287v1/2607.12287v1/x6.png" alt="实验结果"></p>
+<blockquote>
+<p><strong>图6</strong>：固定时间预算下的任务执行轨迹对比。上方三行为采用本文2步压缩策略的<code>π0.5</code>，下方三行为原始<code>π0.5</code>策略。压缩策略能在时间预算内稳定完成任务。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 识别了VLA推理中先前被忽视的时间冗余，包括视觉令牌的强时间一致性和基于流的动作生成中速度的低秩动力学；2) 基于此，提出了一个统一的系统级加速框架，通过选择性令牌更新减少感知冗余，并通过紧凑的两步流推断方案减少策略计算；3) 在仿真基准和真实机器人平台上进行了广泛验证，实现了超过2倍的端到端推理加速，同时保持了可比的任务性能。</p>
+<p>论文自身提到的局限性包括：所提的令牌重用机制在处理高速运动或快速场景切换时可能面临挑战；步压缩策略的效果依赖于训练数据中动作轨迹的内在平滑性和低秩特性。</p>
+<p>对后续研究的启示：本文证明了从系统层面协同优化感知和决策模块的有效性，为未来实现实时、高性能的VLA部署提供了一条可行路径。研究结果表明，直接针对计算瓶颈（如多步策略采样）进行优化，比孤立优化上游模块能带来更显著的端到端收益。这启发研究者需要更全面地分析整个推理管线的延迟分布，并进行端到端的协同设计。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对Vision-Language-Action模型在机器人操作中推理延迟高、难以实时部署的核心问题，提出一种系统级加速策略。该方法通过减少时间冗余来提升效率：在感知侧，仅增量更新动态场景区域的视觉令牌，避免重复编码整帧；在策略侧，将扩散采样压缩为紧凑的2步计划，保持动作精度。实验在Libero、RobotWin和真实机器人平台进行，实现了超过2倍的加速，同时在通用操作基准上达到高达98%的成功率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.12287" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
