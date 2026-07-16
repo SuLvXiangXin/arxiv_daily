@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DenseReward: Dense Reward Learning via Failure Synthesis for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>DenseReward: Dense Reward Learning via Failure Synthesis for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.13033" target="_blank" rel="noreferrer">2607.13033</a></span>
+        <span>作者: Mingyu Ding Team</span>
+        <span>日期: 2026-07-14</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作领域已通过在大规模演示数据集上的模仿学习取得了显著进展。强化学习提供了超越模仿学习的潜力，使机器人策略能够通过与环境的试错交互进行改进。然而，其实用化的一大瓶颈是缺乏可靠且能提供密集、信息丰富反馈的视觉-语言奖励模型。主要存在两大挑战：一是在规模上获取多样化的失败数据；二是超越稀疏的轨迹级成功标签，获得细粒度的奖励信号。收集失败轨迹通常需要耗费大量人力，而通过对成功演示进行重标定来构建的“伪失败”，无法捕捉到机器人执行过程中出现的多样化物理失败模式。同时，现有的奖励模型通常预测稀疏的二元或轨迹级奖励，为高效的策略优化提供的指导信息有限。</p>
+<p>本文针对这两个具体痛点，提出了新的视角：通过自动化失败轨迹合成来规模化生成物理真实的失败数据，并在此基础上训练一个能够预测密集、逐帧（frame-level）奖励信号的模型。其核心思路是将操作任务分解为多个阶段，通过有针对性的扰动合成多样化的失败模式，并基于此训练一个视觉-语言模型，使其能够从当前和历史观察中推理执行状态，输出反映任务进度的密集分数。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>DenseReward方法包含三个核心组成部分：1) 生成带有阶段感知（phase-aware）密集奖励标签的自动化数据生成管道；2) 通过针对性扰动创建多样化失败轨迹的失败合成；3) 在混合了成功与失败轨迹的数据集上训练的 DenseReward 模型。</p>
+<p><strong>整体框架与数据生成</strong>：首先，将机器人操作任务分解为五个典型阶段（Phases）：1) 接近（Reach）：机械臂末端执行器移向目标物体；2) 抓取（Grasp）：闭合夹爪以抓牢物体；3) 提起（Lift）：将物体从桌面提起；4) 移动（Move）：将物体运输到目标位置附近；5) 放置（Place）：在目标位姿释放物体。基于此分解，设计了一个全自动的轨迹生成管道。场景被随机初始化，使用 GraspNet 从多视角RGB-D观察中预测抓取姿态候选，再通过 CuRobo 进行碰撞感知的运动规划以选择可行候选。机器人执行一个由六个固定动作段组成的序列，对应上述五个阶段（其中某个阶段可能由多个动作段实现）。阶段边界通过模拟状态自动检测，无需人工标注。</p>
+<p><img src="https://arxiv.org/html/2607.13033v1/2607.13033v1/x1.png" alt="Pipeline Overview"></p>
+<blockquote>
+<p><strong>图1（对应论文Fig 3）</strong>：方法整体框架。展示了DenseReward模型接收语言指令与视觉观察（当前帧与历史帧），预测逐时间步的密集奖励分数，并用于下游策略优化。</p>
+</blockquote>
+<p><strong>失败轨迹合成</strong>：基于上述自动化管道，通过在不同阶段施加针对性扰动来合成六种类型的失败轨迹：</p>
+<ol>
+<li><strong>成功（Success）</strong>：无扰动。</li>
+<li><strong>碰撞（Collision）</strong>：禁用运动规划的碰撞避免，迫使机械臂沿不可行路径撞击物体或桌面。</li>
+<li><strong>未抓住（Miss）</strong>：偏移抓取目标位姿，导致夹爪在空中闭合，无法稳定抓取。</li>
+<li><strong>掉落（Fall）</strong>：在移动阶段施加随机旋转扰动，导致被抓物体在运输中失去稳定性并掉落。</li>
+<li><strong>抖动（Smooth）</strong>：在每一时间步注入小的高斯关节噪声，产生抖动轨迹，惩罚次优运动。</li>
+<li><strong>恢复（Recover）</strong>：机器人先发生碰撞，然后运动规划器重新规划清晰路径以完成任务。</li>
+</ol>
+<p>通过自动化有效性检查过滤物理上无效的片段。每个轨迹都被分配了反映任务进度的逐时间步密集奖励标签（值域[0,1]），例如奖励值会随着任务成功推进而单调上升，在失败事件（如碰撞）处达到峰值后衰减，或在恢复行为中先下降后重新上升。</p>
+<p><img src="https://arxiv.org/html/2607.13033v1/2607.13033v1/x2.png" alt="Automated Data Generation and Failure Synthesis"></p>
+<blockquote>
+<p><strong>图2（对应论文Fig 2）</strong>：自动化数据生成与失败合成详解。(a) 五阶段操作与密集奖励曲线示例。(b) 针对不同阶段的扰动如何合成多样化失败模式。</p>
+</blockquote>
+<p><strong>DenseReward 模型训练</strong>：基于Qwen3-VL-4B-Instruct进行微调，构建DenseReward模型。输入包括任务指令、当前帧图像观测以及历史图像帧（默认使用过去2帧）。模型输出一个标量奖励分数，用于衡量当前时间步的任务进度。与预测轨迹级二元成功标签的先前奖励模型不同，DenseReward 使用密集的逐帧奖励监督进行训练，奖励值保留三位小数，以学习任务进度中的细微差别（例如更靠近目标物体，或从失败状态恢复）。</p>
+<p><strong>核心创新点</strong>：与现有方法相比，DenseReward 的创新主要体现在：1) 数据层面：提出了一个能够自动生成覆盖多种物理真实失败模式（碰撞、未抓住、掉落等）及其对应密集奖励标签的仿真管道，解决了失败数据稀缺且伪失败失真的问题；2) 模型层面：直接预测细粒度的逐帧奖励信号，而非稀疏的轨迹级信号，为下游策略优化提供了更丰富的指导信息。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在多个仿真和真实世界数据集上进行了评估，包括 DROID（真实世界）、Isaac Sim、RoboSuite 和 LIBERO。对比的基线包括通用视觉语言模型（VLMs）如 Qwen3-VL-4B/8B-Instruct、Molmo2-4B/8B，以及现有的机器人奖励模型如 RoboReward-4B/8B、Robometer、VLAC-2B/8B。</p>
+<p><strong>密集奖励预测</strong>：主要评估指标为平均绝对误差（MAE）。如表所示，DenseReward 在所有数据源上均取得了最低的 MAE（整体 0.081），显著优于所有基线。</p>
+<p><img src="https://arxiv.org/html/2607.13033v1/2607.13033v1/x3.png" alt="Qualitative comparison"></p>
+<blockquote>
+<p><strong>图4（对应论文Fig 3）</strong>：密集奖励预测的定性比较。DenseReward（红色曲线）在成功和失败轨迹上比基线模型（VLM Molmo2-4B 和机器人奖励模型 RoboReward-8B）更准确地跟踪任务进度。</p>
+</blockquote>
+<p><strong>下游应用评估</strong>：</p>
+<ol>
+<li><strong>模型预测控制（MPC）</strong>：在三个物体操作任务上测试奖励模型对闭环控制的指导效果。通过采样候选动作并用不同奖励模型评分来选择最优动作。评估指标为物体与夹爪间的最小距离（越低越好）。结果显示，DenseReward 实现了最佳的平均性能（0.229）。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.13033v1/2607.13033v1/x5.png" alt="MPC Experiment"></p>
+<blockquote>
+<p><strong>图5（对应论文Fig 4）</strong>：密集奖励引导的MPC设置示意图。在每个决策步，基于奖励模型对候选动作的预测分数选择动作。</p>
+</blockquote>
+<ol start="2">
+<li><strong>仿真强化学习策略微调</strong>：在LIBERO基准测试上，使用PPO算法对预训练的π0策略进行微调，将DenseReward预测的密集奖励与模拟器提供的稀疏成功信号结合。结果表明，DenseReward为在线PPO微调提供了有益的指导，在LIBERO-Spatial和LIBERO-10套件上取得了比仅使用稀疏奖励的基线更高的最终成功率，在LIBERO-Object上也达到了匹配的强性能。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.13033v1/2607.13033v1/x6.png" alt="PPO Fine-tuning"></p>
+<blockquote>
+<p><strong>图6（对应论文Fig 5）</strong>：在LIBERO上的PPO微调结果。DenseReward（蓝色）在多数套件上提供了优于仅使用稀疏奖励（橙色）的学习曲线或最终性能。</p>
+</blockquote>
+<ol start="3">
+<li><strong>真实世界强化学习策略学习</strong>：在DROID平台上使用DSRL算法进行实时的策略学习。在“stack the cups”和“put ball in basket”两个任务上评估。集成DenseReward密集奖励后，成功率分别从40%提升至80%和从30%提升至70%。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.13033v1/2607.13033v1/x7.png" alt="Real-world DSRL"></p>
+<blockquote>
+<p><strong>图7（对应论文Fig 6）</strong>：真实世界DSRL实验。柱状图显示，结合DenseReward显著提升了两个任务在有限真实世界轨迹预算下的成功率。</p>
+</blockquote>
+<p><strong>消融实验</strong>：</p>
+<ul>
+<li><strong>失败数据有效性</strong>：从训练集中移除所有失败轨迹后，模型的MAE从0.0809上升至0.1312（+63%），证明了失败数据对于学习区分不完整/错误任务进度与成功行为至关重要。</li>
+<li><strong>历史帧数影响</strong>：使用不同数量的历史帧进行测试。结果显示，使用2个历史帧时MAE最优（0.081），不使用历史帧时最差（0.096）。使用3个历史帧时性能略有下降（0.086），表明过多的历史信息可能引入冗余噪声。<br><img src="https://arxiv.org/html/2607.13033v1/2607.13033v1/x8.png" alt="Ablation Table 1"><blockquote>
+<p><strong>图8</strong>：对失败数据有效性的消融实验（对应论文Tab 3）。移除失败数据导致预测误差显著增加。<br><img src="https://arxiv.org/html/2607.13033v1/2607.13033v1/x9.png" alt="Ablation Table 2"><br><strong>图9</strong>：对历史帧数量的消融实验（对应论文Tab 4）。两个历史帧在性能、上下文信息和计算成本之间达到最佳平衡。</p>
+</blockquote>
+</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：</p>
+<ol>
+<li><strong>数据生成</strong>：创新性地将操作任务分解为五阶段，并通过在仿真中对抓取检测和运动规划进行针对性扰动，自动化合成了六种物理真实的失败轨迹，生成了稠密的逐时间步奖励标签和失败模式标注，无需人工标注。</li>
+<li><strong>模型与数据集</strong>：基于上述流程，构建了一个包含约2.7万条轨迹的数据集，并训练了 DenseReward 模型。该模型能够根据视觉观察和语言指令识别当前执行状态，并估计细粒度的任务进度。</li>
+<li><strong>下游应用验证</strong>：DenseReward 在密集奖励预测上超越了通用VLM及现有机器人奖励模型，并在模型预测控制、仿真与真实世界强化学习等下游任务中，有效提升了策略性能，证明了失败感知的密集奖励建模是通向可扩展机器人强化学习的实用路径。</li>
+</ol>
+<p><strong>局限性</strong>：论文明确指出，未来工作将扩展到更复杂的操作任务（例如工具使用和长期任务）。此外，将人类偏好反馈纳入奖励学习过程，也是未来使密集奖励模型更通用、更具可扩展性并与真实世界机器人学习的人类期望更好对齐的方向。</p>
+<p><strong>启示</strong>：本工作表明，通过自动化的仿真流程合成高质量的失败数据，是克服机器人学习数据瓶颈的有效方法。同时，提供密集、细粒度的奖励信号而非稀疏的终点信号，能显著提升下游策略优化（如MPC、RL）的效率和性能。这为未来构建更通用、更具引导性的机器人奖励函数指明了方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人大规模获取真实失败数据和密集奖励信号的两大难题，提出DenseReward模型。核心方法是构建自动化失败合成流程，在仿真中生成碰撞、掉落等多种物理失败模式的数据集；模型基于视觉观察与语言指令预测密集的帧级奖励。实验表明，该模型在密集奖励预测上优于现有方法，并能有效指导下游策略优化与强化学习。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.13033" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
