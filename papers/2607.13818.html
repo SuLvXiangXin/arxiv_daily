@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning Robust Execution in Robotic Manipulation with Agentic Reinforcement Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Learning Robust Execution in Robotic Manipulation with Agentic Reinforcement Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.13818" target="_blank" rel="noreferrer">2607.13818</a></span>
+        <span>作者: Yanjie Li Team</span>
+        <span>日期: 2026-07-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作面临不确定性、接触丰富交互和长时程执行等挑战。当前，基于学习的操作策略，尤其是视觉-语言-动作模型，通过大规模预训练展示了强大的泛化能力，但通常以整体执行器的形式部署，缺乏在执行过程中评估执行质量和在行为偏离时进行适应的显式机制。在长时程任务中，微小的扰动和误差会逐渐积累，导致执行漂移、行为不稳定乃至任务失败，这种由执行偏离引发的失败被称为执行级失败。现有缓解方法如扩展训练数据因成本高昂且难以覆盖长尾故障而受限；引入额外推理组件进行故障检测和重规划则增加了系统复杂性和延迟。本文从执行层视角出发，旨在提升机器人操作的鲁棒性。核心思路是：设计互补的执行质量评估指标，并学习一个高层的智能体策略来监控和调节底层策略的执行过程，而非修改或重新训练底层策略本身。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架是一个分层决策系统：一个冻结的底层策略根据视觉观察和语言指令持续生成低层动作；一个高层智能体策略则以固定时间间隔运行，观测最近的执行历史，并从一组预定义的执行模式中选择一种来调节执行过程。</p>
+<p><img src="https://arxiv.org/html/2607.13818v1/2607.13818v1/x3.png" alt="方法框架图"></p>
+<blockquote>
+<p><strong>图2</strong>：智能体强化学习框架。冻结的底层策略生成低层动作（由“Hand”图示），而高层智能体策略观测执行历史并选择执行模式来调节执行过程。产生的交互数据被存储用于策略学习，从而在不修改底层策略的情况下实现从执行退化中的恢复。</p>
+</blockquote>
+<p>核心模块包括：执行质量评估指标、基于指标设计的恢复机制，以及用于学习模式选择策略的智能体强化学习框架。</p>
+<ol>
+<li><strong>执行质量评估</strong>：为量化执行健康度，论文设计了两项互补指标。<ul>
+<li><strong>局部执行质量</strong>：评估短期物理稳定性。它综合了<strong>运动有效性</strong>和<strong>运动平滑度</strong>。运动有效性衡量末端执行器实际位移与指令动作幅度的比值（公式1，2），有效值接近1；运动平滑度基于速度的变异系数（公式3），惩罚剧烈波动。二者加权求和后通过Sigmoid函数转换并经过指数移动平均平滑，输出范围在[0,1]之间的分数（公式4）。</li>
+<li><strong>全局执行质量</strong>：评估长期行为是否偏离成功轨迹。在执行前，需为每个任务收集N=50条成功轨迹，并按归一化进度分箱建立阶段性参考库。在线执行时，将当前执行窗口的特征向量与参考库中对应进度箱的k近邻（k=5）计算平均欧氏距离，再通过指数衰减映射为质量分数。该分数同样经过指数移动平均平滑，初始值为1.0。</li>
+</ul>
+</li>
+<li><strong>恢复机制</strong>：根据执行退化程度，设计了三层递进的恢复机制，均由操作空间控制器驱动机器人回到过往状态。<ul>
+<li><strong>重试</strong>：将机器人恢复到最近M（M=15）步内聚合执行质量分数最高的状态，然后继续执行。适用于轻微偏差。</li>
+<li><strong>修复</strong>：将机器人恢复到最近N（N=30，N&gt;M）步内、无接触状态下聚合执行质量分数最高的状态。利用接触力阈值（τ=5N）判断接触，适用于接触错位等需要暂时脱离接触的严重情况。</li>
+<li><strong>重置</strong>：终止当前回合，从初始配置重启任务。处理不可恢复的严重错误。<br>聚合执行质量分数由局部和全局分数加权计算（公式5），权重λ为超参数。</li>
+</ul>
+</li>
+<li><strong>智能体策略学习</strong>：将高层决策形式化为部分可观测马尔可夫决策过程。<ul>
+<li><strong>观测</strong>：策略的输入是固定长度L=20的执行历史，包括最近的机器人本体感觉、底层动作和两项执行质量分数。这是一种紧凑的表示，排除了原始视觉输入和特权状态。</li>
+<li><strong>动作空间</strong>：离散的四个执行模式 <code>{执行， 重试， 修复， 重置}</code>，对应整数<code>{0,1,2,3}</code>。决策间隔为K=5个底层步。</li>
+<li><strong>奖励与优化</strong>：奖励函数鼓励完成任务并高效执行，同时惩罚不必要的恢复。具体包括：成功+1.0，失败-1.0，每步时间惩罚-0.02，以及不同恢复模式对应的固定成本（“重试” -0.1，“修复” -0.3，“重置” -0.5）。使用近端策略优化算法最大化折扣回报，智能体策略和评论家均由轻量级多层感知器实现。</li>
+</ul>
+</li>
+</ol>
+<p>本文的核心创新点在于将<strong>执行管理</strong>与<strong>动作生成</strong>显式分离，提出一个轻量级的“智能体”作为高层决策者。它不直接生成控制指令，而是通过评估执行历史、选择执行模式（包括恢复）来“管理”底层策略的执行，从而赋予系统探索和恢复能力。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与基准</strong>：在LIBERO基准上进行评估，涵盖四个子集：LIBERO-Spatial, LIBERO-Object, LIBERO-Goal, LIBERO-Long。<br><strong>对比方法</strong>：与多种代表性的端到端操作策略对比，包括OpenVLA、π0、π0.5和扩散策略，所有对比方法均在LIBERO上进行了微调。<br><strong>关键实验结果</strong>：如表II所示，方法在标准条件和存在扰动的鲁棒性测试中均显著提升了成功率。在标准条件下，平均改进幅度随任务复杂性增加，在LIBERO-Long上最高提升了13.7%。在加入随机运动学扰动的压力测试下，性能提升尤为显著，平均提升幅度在四个子集上分别达到25.7%、27.4%、28.3%和39.2%，表明该方法能有效从意外状态偏离中恢复。</p>
+<p><img src="https://arxiv.org/html/2607.13818v1/2607.13818v1/x6.png" alt="训练曲线"></p>
+<blockquote>
+<p><strong>图5</strong>：在LIBERO-Spatial上使用冻结OpenVLA策略训练智能体策略的PPO训练曲线。平均奖励和成功率均随训练稳步提升，方差较小，表明学习过程稳定。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.13818v1/2607.13818v1/x7.png" alt="决策分布"></p>
+<blockquote>
+<p><strong>图6</strong>：智能体策略在不同执行退化类型下的条件决策分布。分析显示，策略倾向于对轻微退化使用“重试”，对碰撞引发的失败使用“修复”，对不可恢复状态使用“重置”，证明其能根据退化严重程度自适应决策。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.13818v1/2607.13818v1/x4.png" alt="执行质量对比"></p>
+<blockquote>
+<p><strong>图3</strong>：成功与失败执行的局部和全局执行质量随归一化轨迹时间的变化。成功轨迹维持更高更稳定的质量，而失败轨迹表现出更快的退化，验证了两项指标的有效性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.13818v1/2607.13818v1/x5.png" alt="恢复机制示意图"></p>
+<blockquote>
+<p><strong>图4</strong>：三种恢复机制在不同执行退化情况下的示意图。“重试”恢复到最近的高质量状态，“修复”恢复到更早的无接触高质量状态，“重置”则完全重启任务。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.13818v1/2607.13818v1/x8.png" alt="消融实验：执行质量指标"></p>
+<blockquote>
+<p><strong>图7</strong>：消融研究：移除全局或局部执行质量指标对性能的影响（使用OpenVLA在LIBERO-Spatial上）。两者缺一都会导致性能下降，联合使用效果最佳，证明了设计互补指标的必要性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.13818v1/2607.13818v1/x9.png" alt="消融实验：恢复机制"></p>
+<blockquote>
+<p><strong>图8</strong>：消融研究：减少可用的恢复机制选项（使用OpenVLA在LIBERO-Spatial上）。完整的四模式动作空间（ABCD，即“执行、重试、修复、重置”）能取得最佳性能，缺少任何一个都会损害策略处理不同程度退化的能力。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：</p>
+<ul>
+<li><strong>执行质量指标</strong>：移除全局或局部质量指标均会导致性能下降（图7），二者联合使用效果最佳。</li>
+<li><strong>恢复机制</strong>：完整的四模式动作空间（“执行、重试、修复、重置”）对于处理不同程度的退化至关重要，缺少任何模式都会限制策略的灵活性并降低成功率（图8）。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了两个互补的运行时执行质量评估指标，用于量化短期物理稳定性和长期行为偏离。</li>
+<li>提出了一个智能体强化学习框架，通过训练一个高层策略来管理底层策略的执行，实现执行级别的监控与自主恢复，而无需修改或重新训练底层策略。</li>
+<li>该方法在多个底层策略和任务集上验证了有效性，特别是在存在扰动和长时程复杂任务中，显著提升了系统的执行鲁棒性。</li>
+</ol>
+<p><strong>局限性</strong>：论文指出，智能体策略需要为每个新任务进行训练，且训练过程耗时（每个任务最多一百万个高层决策步）。此外，恢复机制依赖于历史状态，对于需要创新性动作才能脱离的、从未访问过的“死区”状态可能无效。</p>
+<p><strong>对后续研究的启示</strong>：该工作开辟了从“执行管理”角度提升学习策略鲁棒性的新路径。其分离决策与执行的思想可扩展到其他层级，例如管理技能序列。如何降低策略的训练成本（如利用元学习、跨任务迁移），以及如何将更灵活的动作生成（如基于模型的规划）整合到恢复机制中，是未来有潜力的研究方向。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操作中因不确定性、长期执行和错误累积导致的执行退化与任务失败问题，提出了一种代理强化学习框架。方法包括两个运行时执行质量评估指标，以及一个基于高层决策的代理策略，通过学习选择执行模式并触发恢复机制来纠正偏差。在LIBERO基准测试中，该方法在标准设置下成功率最高提升13.7%，在干扰设置下最高提升39.2%，显著增强了执行鲁棒性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.13818" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
