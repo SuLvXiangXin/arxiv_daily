@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RoboTTT: Context Scaling for Robot Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>RoboTTT: Context Scaling for Robot Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.15275" target="_blank" rel="noreferrer">2607.15275</a></span>
+        <span>作者: Linxi “Jim” Fan Team</span>
+        <span>日期: 2026-07-16</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前最先进的机器人基础模型大多基于单步或短历史的视觉运动上下文进行操作。然而，在大型语言模型中，上下文长度已成为一个重要的扩展维度。虽然机器人学中的长期推理可以委托给外部记忆库，但长的视觉运动上下文对于一次性模仿人类视频演示、根据机器人自身部署历史进行在线改进以及在多阶段、长时程任务上获得更强的闭环性能等能力至关重要。这引出了一个关键问题：如何构建能够学习和利用任意长上下文的视觉运动策略？</p>
+<p>本文针对机器人策略无法有效利用长历史信息的痛点，提出了将测试时训练（Test-Time Training, TTT）机制集成到机器人基础模型（如视觉-语言-动作策略）中的新视角。核心思路是构建一个序列模型，其循环状态由“快速权重”构成，这些权重在训练和推理时都通过梯度下降更新，从而将历史压缩到权重空间，并为长上下文条件反射检索信息。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RoboTTT的核心是将TTT层集成到机器人基础模型中，例如在GR00T N1.7这样的VLA模型之上实例化。模型整体架构包括一个视觉语言模型主干和一个带有TTT层的扩散Transformer（DiT）动作头部。</p>
+<p><img src="https://arxiv.org/html/2607.15275v1/2607.15275v1/x1.png" alt="模型架构图"></p>
+<blockquote>
+<p><strong>图2</strong>：RoboTTT 模型架构、训练和推理。TTT层被添加到DiT动作头部的注意力层之后：注意力在单个时间步内操作，而TTT层跨时间步操作。训练使用带序列动作强制的序列流匹配损失，为每个动作块独立采样噪声水平。推理从学习到的初始化 W0 开始，在每个观测上更新快速权重并向前传播。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>TTT for Robot Actions</strong>：输入是跨越T个时间步的机器人轨迹 <code>[R1, Φ1, q1, Ã1, …, RT, ΦT, qT, ÃT]</code>，其中Φt是VLM输出的视觉语言令牌，qt是编码的本体感知令牌，Ãt是加噪的动作令牌，Rt是每个时间步前置的N个学习寄存器令牌。注意力层在单步token（Rt, qt, Ãt）上操作，并交叉关注该时间步的VL令牌Φt。每个时间步的注意力输出沿时间维度拼接后，送入TTT层进行快速权重的更新（公式1）和输出计算（公式2）。</li>
+<li><strong>门控机制</strong>：为了保留预训练VLA模型的知识，RoboTTT采用学习的tanh门控机制。对于每个DiT层，学习一个参数α，将TTT层的输出进行加权后再与注意力输出相加：<code>O = tanh(α) ⊙ O_TTT + O_attn</code>。α初始化为接近0的值（0.001），使得训练初期TTT的贡献很小。</li>
+<li><strong>序列训练与损失函数</strong>：训练时，快速权重在单个训练序列内更新，学习合适的快速权重初始化W0及其更新动态。外层的TTT投影矩阵θQ, θK, θV和W0作为模型参数一同学习。损失函数是基于流匹配的序列损失。给定轨迹ξ和快速权重初始化W0，序列损失定义为各时间步损失的平均。</li>
+<li><strong>序列动作强制</strong>：这是训练的关键技术。在序列训练中，需要对序列中的每个动作块独立采样噪声水平τ_t，而不是在整个序列共享同一个噪声水平。具体做法是τ_t = s(1-u)，其中u ~ Beta(1.5, 1)，s=0.999。这能防止整个序列变得 uniformly easy 或 uniformly hard，从而稳定训练。</li>
+<li><strong>截断随时间反向传播</strong>：为了在GPU内存有限的情况下训练长序列，采用TBPTT。输入序列被分段，梯度只在每个段内流动。关键的是，快速权重会跨段边界传递，因此TTT在整个序列上持续进行，而其梯度在边界处被分离。这使得GPU内存由段长度决定，而非总序列长度。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.15275v1/2607.15275v1/x2.png" alt="TBPTT示意图"></p>
+<blockquote>
+<p><strong>图4</strong>：TBPTT。梯度在段边界处被截断；快速权重被传递，因此TTT在整个序列上持续进行。</p>
+</blockquote>
+<p><strong>创新点</strong>：</p>
+<ul>
+<li><strong>快速权重作为循环状态</strong>：与标准RNN的向量值状态或Transformer KV缓存不同，RoboTTT使用可在线梯度更新的小型神经网络（快速模型）参数作为记忆，具有更强的表达能力和固定的推理成本。</li>
+<li><strong>异构上下文学习</strong>：通过掩码流匹配损失，模型可以区分“纯上下文”（如人类演示视频）和“预测目标”（机器人动作），从而支持一次性模仿等能力。</li>
+<li><strong>DAgger蒸馏</strong>：在收集了人机交互（机器人错误动作和人类纠正动作）的轨迹上，RoboTTT以非对称方式学习：所有执行的动作（包括错误的机器人动作）都用于更新快速权重（作为上下文），但流匹配损失仅针对人类纠正动作计算。这实质上是将“失败-纠正”映射蒸馏到快速权重中，使模型学会在线产生纠正。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.15275v1/2607.15275v1/x4.png" alt="DAgger蒸馏示意图"></p>
+<blockquote>
+<p><strong>Fig 6</strong>: DAgger Distillation。在序列训练期间，所有执行的动作都会更新快速权重，但流匹配损失仅在人类纠正上计算。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>基准测试/数据集</strong>：在三个需要双手机器人操作的长时程、多阶段装配任务上进行评估：Pup Go Car（平均2分钟）、Circuit（平均1分钟）、Gear Bot（平均5分钟，十个阶段）。使用YAM双手机器人平台和四个RGB相机。</li>
+<li><strong>基线方法</strong>：<ul>
+<li>GR00T N1.7：单步上下文基线。</li>
+<li>GR00T N1.7 Hist.：带一帧历史上下文的GR00T N1.7。</li>
+<li>GDN：将RoboTTT中的TTT层替换为Gated DeltaNet层，这是一种无需测试时梯度下降的线性复杂度循环记忆。</li>
+</ul>
+</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<p><img src="https://arxiv.org/html/2607.15275v1/2607.15275v1/x5.png" alt="任务完成分数图"></p>
+<blockquote>
+<p><strong>Fig 7</strong>：三个装配任务的主要评估结果：任务完成分数。分数基于评分标准，以百分比报告；分数越高越好。RoboTTT在所有任务上均优于基线。</p>
+</blockquote>
+<ul>
+<li><strong>主要性能对比</strong>：RoboTTT的平均任务完成分数为79%，比单步上下文基线GR00T N1.7（42%）高出87%，比最佳基线GDN（56%）高出41%。在Gear Bot任务中，RoboTTT实现了完全成功（2/10），而所有基线均未做到。</li>
+<li><strong>定量成功次数</strong>：如下表所示，RoboTTT在每个任务上获得完全成功试验的次数最多。</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th align="left">Method</th>
+<th align="center">Pup Go Car</th>
+<th align="center">Circuit</th>
+<th align="center">Gear Bot</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">RoboTTT</td>
+<td align="center">9 / 20</td>
+<td align="center">13 / 20</td>
+<td align="center">2 / 10</td>
+</tr>
+<tr>
+<td align="left">GR00T N1.7</td>
+<td align="center">3 / 20</td>
+<td align="center">3 / 20</td>
+<td align="center">0 / 10</td>
+</tr>
+<tr>
+<td align="left">GR00T N1.7 Hist.</td>
+<td align="center">0 / 20</td>
+<td align="center">8 / 20</td>
+<td align="center">0 / 10</td>
+</tr>
+<tr>
+<td align="left">GDN</td>
+<td align="center">3 / 20</td>
+<td align="center">8 / 20</td>
+<td align="center">0 / 10</td>
+</tr>
+</tbody></table>
+<p><strong>定性优势</strong>：RoboTTT在任务进度跟踪、策略性恢复（如失败后重新尝试）以及在精细操作阶段（如插入电路元件）的精度方面表现更优。</p>
+<p><img src="https://arxiv.org/html/2607.15275v1/2607.15275v1/x6.png" alt="上下文长度扩展性能图"></p>
+<blockquote>
+<p><strong>Fig 8</strong>：随着预训练上下文长度从128时间步扩展到8K时间步，三种任务的平均任务完成分数。RoboTTT性能稳步提升，从1K开始超过最佳短上下文基线，且未见饱和迹象；GDN未能从更长的上下文中受益。</p>
+</blockquote>
+<ul>
+<li><strong>上下文长度扩展</strong>：RoboTTT的闭环性能随预训练上下文长度（从128到8K时间步）增加而稳步提升。RoboTTT-8K的得分（71.5%）比同一模型在1K上下文预训练时的得分（43.9%）高63%，比最佳短上下文基线GR00T N1.7 Hist.（45.6%）高57%。相比之下，GDN未显示出类似的扩展趋势。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.15275v1/2607.15275v1/x7.png" alt="一次性模仿示意图"></p>
+<blockquote>
+<p><strong>Fig 9</strong>：根据上下文人类视频进行一次性模仿。连续画面：人类演示一个未见过的配置（帧1-3），场景重置（帧4），随后RoboTTT复现了该装配（第2行）。指令在所有配置中相同，因此目标仅能从视频中识别。</p>
+</blockquote>
+<ul>
+<li><strong>一次性模仿</strong>：在Circuit任务上，仅根据一个未见配置的人类演示视频，RoboTTT实现了6/10的成功率，任务完成分数65%；而GDN成功率为0，分数33%。</li>
+<li><strong>扰动鲁棒性</strong>：在Pup Go Car任务中，当人类移除已安装的部件后，RoboTTT在（屋顶）扰动恢复中成功率为15/20，优于GDN的13/20和短上下文基线的≤10/20。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出了RoboTTT</strong>：一种将测试时训练（TTT）整合到机器人基础模型中的新框架，通过“快速权重”机制实现了高达8K时间步的超长视觉运动上下文处理，且推理延迟不变。</li>
+<li><strong>解锁了新能力</strong>：得益于长上下文条件反射，RoboTTT实现了一次性从人类视频模仿、通过DAgger蒸馏进行在线策略改进、对扰动的鲁棒性以及在长时程任务上更强的性能。</li>
+<li><strong>确立了上下文长度作为新的扩展维度</strong>：实验首次表明，机器人策略的闭环性能随预训练上下文长度的增加而持续提升，为机器人基础模型的扩展提供了新方向。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，尽管RoboTTT-8K相比1K模型有显著提升（+63%），但整体任务完成分数（71.5%）的绝对值仍有提升空间，暗示着除了上下文长度外，模型容量、数据质量等也是重要因素。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li><strong>上下文扩展的可行性</strong>：这项工作证明了为机器人策略扩展上下文长度不仅是必要的，而且是可行的，可能开启类似于大语言模型的“上下文扩展”竞赛。</li>
+<li><strong>在线适应与元学习</strong>：快速权重的在线更新机制为机器人策略的实时适应和学习提供了新范式，DAgger蒸馏展示了一种将外部监督信号（如人类纠正）高效内化的方法。</li>
+<li><strong>记忆与计算的权衡</strong>：RoboTTT用固定的计算开销（快速模型的前向和梯度更新）换取了对长历史的压缩记忆，这种设计为处理机器人任务中密集、重复的感知流提供了新思路。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人基础模型视觉运动上下文过短、限制长时序任务能力的问题，提出了RoboTTT模型。通过整合测试时间训练（TTT）到视觉-语言-动作策略中，利用快速权重压缩历史信息，并结合序列动作强制与截断反向传播，将上下文长度扩展至8K时间步。实验显示，该模型在真实机器人操作任务中性能比单步上下文基线提升87%，能完全完成十阶段组装任务，且8K上下文相比1K上下文性能提升62%，验证了上下文长度作为机器人模型新扩展轴的有效性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.15275" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
