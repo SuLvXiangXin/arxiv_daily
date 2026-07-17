@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>ConFlow: Constraints-Guided Learning with Flow Matching for Motion Generation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>ConFlow: Constraints-Guided Learning with Flow Matching for Motion Generation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.14424" target="_blank" rel="noreferrer">2607.14424</a></span>
+        <span>作者: Botond Cseke Team</span>
+        <span>日期: 2026-07-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>近年来，流匹配已成为机器人运动生成中一种重要的生成建模方法。主流方法在训练时使用运动样本数据来拟合经验流场，但在部署时，机器人运动往往存在数据中未包含的额外约束（如避障）。当前大多数方法在训练时仅使用可用数据学习流，然后在推理时通过引导来强制满足特定任务约束。这种“训练-推理不匹配”导致了底层学习分布与最终期望行为之间的差异，可能产生不可行或物理上不合理的行为。此外，现有方法严重依赖大量专家演示数据，收集成本高，忽略了丰富的非专家交互数据所能提供的监督信息。</p>
+<p>本文针对上述痛点，提出了一种新的约束引导学习范式，旨在将推理时的约束满足直接整合到训练目标中。具体而言，本文提出了ConFlow框架，其核心思路是通过可微分的障碍或成本函数将约束信息直接纳入训练目标，并使用条件高斯过程作为源分布来编码平滑性和边界条件等设计规范，从而缓解训练-推理不匹配。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>ConFlow的整体框架基于条件流匹配，但引入了两个关键修改以在训练阶段整合约束：1) 一个约束引导的训练目标；2) 一个约束注入的源分布。训练流程遵循算法1：从数据分布和目标源分布中采样轨迹，计算插值状态，根据约束函数和目标轨迹的可行性计算引导后的目标速度场，并通过均方误差损失训练神经网络来匹配该速度场。</p>
+<p><img src="https://arxiv.org/static/base/1.0.1/images/icons/smileybones-small.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>算法1</strong>：引导流匹配训练流程。该算法描述了ConFlow的核心训练过程：采样数据点和源点，计算插值状态及其时间导数，根据约束函数计算梯度引导项，结合可行性掩码构造引导后的目标速度，并以此训练模型。</p>
+</blockquote>
+<p><strong>核心模块一：约束引导目标</strong>。标准流匹配损失是让神经网络预测的速度$u_\theta(x_t, t)$匹配目标速度$u_t = x_1 - x_0$。ConFlow引入了一个修正项，将约束信息融入目标速度。其约束引导损失定义为：<br>$$\mathcal{L}<em>{\mathrm{CG}} = \mathrm{MSE}\left(u</em>{t}^{\theta} - u_{t} - \lambda_c M(x_1) u_{t}^{c}\right)$$<br>其中，$u_t^c = \nabla_{x_t} C(x_t)$是由可微约束函数$C(\cdot)$导出的修正梯度，$\lambda_c$为引导强度系数。关键在于二元可行性掩码$M(x_1)$：仅当目标轨迹$x_1$违反约束时（来自负样本数据集$\mathcal{D}^-$），$M(x_1)=1$，激活修正项；对于可行轨迹（来自正样本数据集$\mathcal{D}^+$），$M(x_1)=0$，保留原始目标。这种设计利用负演示提供关于不可行行为的对比监督，而不会对可行轨迹造成过度正则化。论文以避障约束为例，使用SoftPlus公式化约束函数以获得更平滑的梯度：$C_{\gamma}(x_t) = -\frac{1}{\gamma}\log\left(1 + \exp\left(-\gamma(d(x_t)-r)\right)\right)$，其中$d(x_t)$为最小距离，$r$为安全半径。</p>
+<p><strong>核心模块二：约束注入源分布</strong>。标准的流匹配使用各点独立的高斯分布作为源分布$p_0$，可能导致轨迹点之间出现任意变化。ConFlow提出用高斯过程（GP）源分布$p_{\mathrm{GP}}$替代标准高斯，将轨迹平滑性等结构先验直接编码到初始分布中。每个轨迹维度$d$独立建模为$f_d(s) \sim \mathcal{GP}(0, k(s, s&#39;))$，使用径向基函数（RBF）核。进一步地，可以条件化GP以强制边界条件：给定目标轨迹$x_1$的起点$y_{\mathrm{start}}$和终点$y_{\mathrm{goal}}$，从条件GP后验分布$p_{\mathrm{CGP}}(x \mid x(s_0)=y_{\mathrm{start}}, x(s_{T-1})=y_{\mathrm{goal}})$中采样源轨迹$x_0$。这使得生成的轨迹从一开始就满足起点和终点约束，让学习到的流专注于优化中间路径。</p>
+<p><strong>与现有方法的创新点</strong>：1) <strong>训练时整合约束</strong>：将通常仅在推理时应用的约束引导转移到训练目标中，从根本上旨在缩小训练与推理的差距。2) <strong>结构化源分布</strong>：用条件高斯过程替代简单的高斯噪声，为生成过程注入了平滑性和边界条件等强先验。3) <strong>利用非专家数据</strong>：通过可行性掩码机制，有效利用了包含违反约束轨迹的负演示数据集，提高了数据利用效率和模型对约束的理解。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<ul>
+<li><p><strong>数据集与任务</strong>：实验在一个两机器人导航任务上进行，两个机器人在二维工作空间中交换位置。轨迹表示为32个路径点，共4个状态维度（两个机器人的平面坐标）。数据集包含大约30%存在机器人间碰撞的轨迹，即混合了可行与不可行演示。<br> Lack of valid images from provided links that illustrate experimental setup. The description of Figure 1 is used to represent the task.</p>
+</li>
+<li><p><strong>对比基线</strong>：1) <strong>ConFlow</strong>：完整方法，使用约束引导目标和GP源分布，在正负数据集($\mathcal{D}^+ \cup \mathcal{D}^-$)上训练。2) <strong>ConFlow w/o Neg. Data</strong>：消融实验，仅在正数据集($\mathcal{D}^+$)上训练，用于评估负监督的贡献。3) <strong>FM</strong>：标准条件流匹配基线，使用高斯源分布，无约束引导训练，分别在正数据集和正负混合数据集上训练。</p>
+</li>
+<li><p><strong>关键实验结果</strong>：如表I所示，在不同推理设置下（无引导、机器人避障引导、障碍物避障引导），完整的ConFlow方法始终取得最低的碰撞率。例如，在“无引导”设置下，ConFlow的机器人碰撞率仅为0.016，显著低于仅使用正数据的FM基线（0.031）。这表明ConFlow在训练阶段已将避障行为内化到速度场中。相比之下，将负数据简单加入标准FM训练（FM ($\mathcal{D}^+ \cup \mathcal{D}^-$)）会导致性能严重下降（机器人避障引导下碰撞率高达0.270），凸显了本文提出的掩码机制的重要性。</p>
+<blockquote>
+<p><strong>表I</strong>：两机器人任务碰撞率消融实验。“Robot”列报告机器人间碰撞率，“Object”列报告与障碍物的碰撞率。ConFlow在各项指标上均表现最佳。</p>
+</blockquote>
+</li>
+<li><p><strong>消融实验</strong>：表II展示了源分布的消融结果。将标准高斯源替换为条件GP源后，机器人碰撞率从0.0288降至0.0156（降低约46%），轨迹平滑性指标（中位数和第95百分位数）显著提升，端点误差降低了一个数量级以上。</p>
+<blockquote>
+<p><strong>表II</strong>：源分布消融实验。比较了高斯、无条件GP和条件GP源分布对碰撞率、平滑性和端点误差的影响。条件GP源在所有指标上表现最优。</p>
+</blockquote>
+</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了一种将推理时约束引导转移至训练目标的约束引导学习范式，旨在缓解生成运动模型中的训练-推理不匹配问题。2) 实例化了该范式，创新性地结合了约束感知的训练目标与基于高斯过程的条件源分布。3) 扩展了框架以利用非专家演示（包括负样本），在不增加专家数据收集的情况下提高了约束满足能力和数据效率。<br>论文自身提到，其约束引导目标需要在训练时评估约束函数$C(x_t)$的梯度，这可能会增加计算成本。此外，当前方法主要针对可微的约束进行了演示。<br>本文对后续研究的启示在于：在训练生成模型（如流匹配）时，主动整合任务和环境约束，并巧妙利用容易获得的非专家或次优数据，是提高模型部署时鲁棒性、安全性和数据效率的有效途径。这种做法可以降低对复杂推理时引导或大量精细专家数据的依赖。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人运动生成中训练与推理目标不匹配、以及依赖专家数据的问题，提出约束引导的流匹配框架ConFlow。该方法通过可微分障碍函数将任务约束直接整合到训练目标中，并以条件高斯过程替代高斯源分布来满足平滑性等要求，同时利用不可行演示作为负监督提升约束满足。实验表明，在双机器人导航任务中，ConFlow比标准流匹配基线实现了更低的碰撞率和更高的轨迹质量。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.14424" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
