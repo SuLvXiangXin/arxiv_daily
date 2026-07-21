@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Asynchronous Multimodal Diffusion Policy Composition via Latency-Aware Guidance Fusion - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Asynchronous Multimodal Diffusion Policy Composition via Latency-Aware Guidance Fusion</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.17257" target="_blank" rel="noreferrer">2607.17257</a></span>
+        <span>作者: Haoshu Fang Team</span>
+        <span>日期: 2026-07-19</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人模仿学习领域，扩散策略已展现出强大潜力，并常通过整合额外模态（如点云、语言、力/触觉信号）来提升操作性能。然而，这些模态不仅在信息内容上不同，在感知速率和推理延迟上也存在差异。现有主流多模态扩散策略主要依赖同步融合（要求所有模态输入时间对齐）或手动设计的双系统/多频率架构，这些方法要么会使快速的高频反馈无法被充分利用，要么架构设计僵化，难以扩展到新的模态组合。</p>
+<p>本文针对现有方法在利用异构模态（尤其指视觉等低频模态与力/触觉等高频模态混合使用时）时，受限于<strong>同步推理假设</strong>和<strong>僵化多速率设计</strong>两大痛点，提出了一个新视角：将模态特异性推理与最终动作生成过程解耦。其核心思路是允许每个模态特定的策略以其固有的频率运行并提供去噪指导，然后通过一个创新的异步融合框架（LAG-Fusion）来组合这些延迟不一致的指导信号，从而实现既保持高性能又兼顾高响应性的多模态控制。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LAG-Fusion是一个通用的异步多模态扩散策略组合框架，旨在解决模态特定策略在不同感知和推理速率下运行时，其去噪指导无需被强制纳入单一推理流即可被组合的问题。本文以“视觉（低频）-力/力矩（高频）”组合的场景为例对该框架进行了实例化与验证。</p>
+<p>其整体框架如下图所示：系统左侧，低频视觉策略提供长时程的场景全局指导，而高频力/力矩策略在需要时提供局部接触指导。系统右侧的“扩散组合头”是核心模块，它负责处理异步合并：首先将时间上重叠的含噪动作片段重定位（Rebase）到当前力策略的参考帧中进行去噪；然后，将对应的视觉指导也重定位到同一帧中进行对齐；接着，在对齐后的帧中使用延迟感知的权重（latency-aware weights）融合视觉与力指导；最后，将融合后的指导映射回原始视觉参考帧，用于更新完整时程的噪声预测。</p>
+<p><img src="https://arxiv.org/html/2607.17257v1/2607.17257v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：LAG-Fusion框架总览。左侧为模态特定策略，右侧为核心异步融合模块。</p>
+</blockquote>
+<p>为了在异步组合时维持一致性，本文的核心创新在于推导了在相对动作表示下，扩散变量的<strong>参考帧重定位规则</strong>。由于LAG-Fusion使用了相对动作块表示，每个动作都相对于策略查询时的机器人状态定义。当一个低频策略在时间 t1 预测的动作在稍后的时间 t2 与高频策略组合时，其预测的扩散变量（如含噪样本 a_k、预测噪声 ε_k）仍处于 t1 时刻的参考帧中，若直接与 t2 时刻的指导融合，会造成参考帧错位。</p>
+<p>为此，本文首先定义了从旧动作帧到新动作帧的变换矩阵 A_{2←1} 和平移量 b_{2←1}（两者都基于机器人位姿 T_1 与 T_2 计算）。关键在于，该变换对不同扩散变量的作用不同。对于一个干净动作 a_0，其变换是完整的仿射变换。而对于受加噪公式 a_k = sqrt(\bar{α}_k)* a_0 + sqrt(1-\bar{α}<em>k) ε 约束的扩散变量，经过推导，其变换规则为：<br>基于对干净动作 a_0 估计的重定位方程，推導得出含噪样本和预测噪声的重定位规则为：<br>{<br>    a&#39;<em>k = A</em>{2←1} * a_k + sqrt(\bar{α}<em>k) * b</em>{2←1},<br>    ε&#39;<em>k = A</em>{2←1} * ε_k<br>}<br>其中，预测噪声 ε_k 仅受正交线性部分 A</em>{2←1} 影响，而含噪样本 a_k 则除了线性变换外，还附加了一个与噪声系数 sqrt(\bar{α}_k) 缩放的平移偏移量。这确保了在坐标变换下，噪声项仍然保持其标准高斯分布的特性，这对于在异步背景下正确对齐和融合不同模态的去噪指导信号至关重要。</p>
+<p>基于此重定位法则，LAG-Fusion的核心异步政策组合流程如图2所示，具体步骤如下：</p>
+<ol>
+<li><strong>异步查询</strong>：低频视觉策略在 t1 时刻提供全程预测噪声 ε_k^V，高频力策略在 t2 (&gt; t1) 时刻被查询。</li>
+<li><strong>重定位与对齐</strong>：将视觉策略全程预测噪声中被力策略时程对应的片段 S(ε_k^V) 通过规则 ε_k‘^V = A_{2←1} S(ε_k^V) 重定位到 t2 帧。同时，从全程含噪动作 a_k 中提取同一片段 S(a_k)，并通过 a_k‘ = A_{2←1} S(a_k) + sqrt(\bar{α}<em>k) b</em>{2←1} 重定位后，提供给力策略以预测其在 t2 帧的噪声指导 ε_k‘^F。</li>
+<li><strong>延迟感知融合与回传</strong>：在对齐后的 t2 帧中，融合两个指导信号：ε_k‘^fuse = (w_V / (w_V + w_F)) ε_k‘^V + (w_F / (w_V + w_F)) ε_k‘^F。其中，融合权重 w_V 和 w_F 的设计体现了延迟感知：视觉权重在力策略时程的开始部分较大（因机器人状态变化不大），但随时间/步数沿时程递减；力权重则递增。这使得较旧或较远期的全局指导被降权，而新近的高频接触反馈获得更强的影响力。最后，将融合噪声 ε_k^fuse = A_{1←2} ε_k‘^fuse 映射回最初的视觉参考帧 t1，并替换掉 ε_k^V 的相应分段，用于后续标准的DDIM更新步。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.17257v1/2607.17257v1/x2.png" alt="异步融合流程"></p>
+<blockquote>
+<p><strong>图2</strong>：延迟感知指导融合流程。展示了视觉和力指导的异步查询、重定位对齐、融合（在T2帧）以及映射回原帧（T1帧）以更新全程扩散轨迹的过程。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在两种需要精细视觉感知和力反馈的接触式操作任务上进行：翻转一个物体（Flip）和沿曲线抛光（Polish Curve）。作者收集了每个任务50个示教数据。具体实例化为融合一个<strong>RISE视觉策略（2Hz）</strong> 与一个<strong>轻量级力/力矩策略（高频率）</strong>。</p>
+<p><strong>Baseline对比方法</strong>：</p>
+<ol>
+<li><strong>Training-Time Noise Fusion</strong>：训练时融合扩散噪声。</li>
+<li><strong>Synchronous Composition</strong>：现有扩散策略组合方法（同步查询）。</li>
+<li><strong>Policy Consensus</strong>：在同步组合基础上，增加一个学习型路由器来决定融合权重。</li>
+<li><strong>TA-VLA</strong> / <strong>RDP</strong>：代表性的多模态策略（专为模态融合设计）。</li>
+</ol>
+<p><strong>关键实验结果</strong>：如表1所示（实际论文表中数据），在 Flip 任务的“Flip”成功率（衡量成功翻面）和 Polish Curve 任务的“Score”上，LAG-Fusion取得了最好的性能。</p>
+<ul>
+<li>同步组合方法由于瓶颈效应（所有模态都以低频视觉策略的频率运行），限制了高频力反馈的利用能力，性能较低。</li>
+<li>Policy Consensus 方法虽然通过路由器学习权重，但仍受限于同步查询，且路由器在训练时易过度依赖单一模态，导致组合不平衡。</li>
+<li>专门的RDP架构取得了较高性能（特别是 Polish Curve 得分 45.0%），但LAG-Fusion（55.0%）利用异步组合和延迟感知融合进一步实现了超越，证明了其在组合异构模态时的优越性。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.17257v1/2607.17257v1/x5.png" alt="实验结果表"></p>
+<blockquote>
+<p><strong>图5（对应论文中的结果表）</strong>：LAG-Fusion在“Flip”和“Polish Curve”任务上的性能与各基线方法对比。结果显示，LAG-Fusion（最后一行的 Ours）在关键指标（Flip 任务的成功率 60.0% 和 Polish Curve 的 Score 55.0%）上超越了所有同步和多模态基线，特别是相比同步组合的 25.0% 和 25.0% 有显著优势。</p>
+</blockquote>
+<p><strong>消融与频率分析</strong>：<br>本文通过独立实验验证了高频推理对轻量级力策略的重要性。如图5(a)所示，独立的力策略在执行频率越高时，其在 Flip 任务上的成功率越高，这验证了力反馈的时效敏感性。</p>
+<p><img src="https://arxiv.org/html/2607.17257v1/2607.17257v1/x3.png" alt="频率影响分析"></p>
+<blockquote>
+<p>**图5(a)**：独立力策略在 Flip 任务上的评估结果。颜色块代表成功率，可以看出，在较高的推理频率下，策略性能（成功率，图中颜色深浅表示）普遍更好，特别是对于训练见过的物体（左侧方块）。</p>
+</blockquote>
+<p>进一步地，在完整的LAG-Fusion框架中，保持高频分支的高运行频率同样有益。图5(b)显示，当允许高频力分支在其“原生频率”下运行时（组合后整体策略频率高，如 25Hz），LAG-Fusion在两项任务上的成功率均高于强制其低频（如5Hz）运行的情况。</p>
+<p><img src="https://arxiv.org/html/2607.17257v1/2607.17257v1/x4.png" alt="频率影响分析_组合"></p>
+<blockquote>
+<p>**图5(b)**：在LAG-Fusion框架中，组合策略在不同力分支推理频率下的表现。横坐标为力分支频率，纵坐标为任务成功率。结果表明，保持高频推理同样能提升组合策略的最终性能。</p>
+</blockquote>
+<p>总结消融实验的贡献：</p>
+<ol>
+<li><strong>参考帧重定位</strong>：是异步融合得以正确执行的基础技术，解决了延迟指导的帧对齐问题。</li>
+<li><strong>延迟感知权重</strong>：通过时变权重调度，有效平衡了长时程“旧”指导与即时“新”反馈的置信度，优化了融合效果。</li>
+<li><strong>异步组合机制</strong>：使得轻量级高频策略能发挥其“原生频率”优势，避免了同步系统中被最慢模态拖慢的性能瓶颈，这被独立和组合实验共同证实。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了 <strong>LAG-Fusion</strong> 框架，首次将<strong>异步推理</strong>和<strong>延迟感知融合</strong>引入到多模态扩散策略组合中，突破了现有方法对模态同步查询的假设。</li>
+<li>推导了在相对动作表示下，扩散变量（含噪样本、预测噪声）的<strong>参考帧重定位规则</strong>，为解决异步组合的时空一致性难题提供了关键技术。</li>
+<li>通过实验证实，允许模态特定策略以其<strong>原生频率</strong>运行（特别是轻量级高频模态），不仅能提升独立策略的性能，还能有效提升最终组合策略的任务成功率。</li>
+</ol>
+<p><strong>局限性（论文自述）</strong>：</p>
+<ol>
+<li>仍有进一步提升任务成功率和控制稳定性的空间。未来可考虑在策略中融入控制先验（如混合力-位控制）以在异步组合中提供更稳定的接触调节。</li>
+<li>目前框架针对扩散策略设计，未来可拓展至流匹配或其他生成式动作建模框架。</li>
+<li>实验集中于平行夹爪操作，未来可应用于灵巧手等更复杂、高维、高动态的场景。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：<br>本文的核心思想——<strong>解耦模态推理与动作生成</strong>并提供一种<strong>通用的异步融合接口</strong>，为解决多模态机器人系统中普遍存在的传感异构性问题，提供了一个范式转变。它提示研究者，在设计和组合多模态系统时，应充分考虑并尊重不同模态内在的时间特性，而非强行统一其速率。这为未来整合更多元、频率差异更大的传感器（如超高速触觉阵列、异步事件相机等）与较慢的语义感知模块（如大模型）协同工作，奠定了基础。同时，其模块化设计原则也有利于复用和组合已有的、针对单一模态优化的预训练策略。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出LAG-Fusion框架，旨在解决异步多模态机器人策略中，由于视觉、力觉等模态感知频率与推理延迟不同，传统同步融合方法无法有效利用高频反馈的问题。其核心技术是延迟感知的引导融合机制：允许各模态策略按其原生速率运行并异步贡献去噪引导，并通过推导扩散变量的参考帧重定规则对齐延迟信号。在接触丰富的操作任务中，LAG-Fusion组合低频视觉与高频力觉策略，实验表明其在异构延迟下优于同步融合与专用基线，显著提升了策略响应速度与任务性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.17257" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

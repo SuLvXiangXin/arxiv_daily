@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Patch Policy: Efficient Embodied Control via Dense Visual Representations - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Patch Policy: Efficient Embodied Control via Dense Visual Representations</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.18236" target="_blank" rel="noreferrer">2607.18236</a></span>
+        <span>作者: Lerrel Pinto Team</span>
+        <span>日期: 2026-07-20</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人学习在视觉策略方面主要存在两种范式。一种是传统方法，将高维视觉观察压缩成一个全局特征向量，例如使用ResNet的池化特征或Vision Transformer (ViT) 的[CLS]令牌。这种方法造成了严重的信息瓶颈，损失了对精密操作至关重要的细粒度空间细节。另一种较新的范式是微调大型视觉-语言-动作模型 (VLA)。这些模型虽然性能强大，但训练和推理通常需要承载数十亿参数，计算成本高昂，难以满足高频、实时控制的需求。本文针对的核心痛点是：如何在不引入高额计算开销的前提下，充分利用大规模视觉预训练所获取的密集、富含空间细节的视觉表征？本文提出的新视角是：机器人策略本质上只需要密集的视觉特征，而无需承担完整VLM的架构负担。本文的核心思路是通过一个轻量化的政策架构，直接消费冻结的、预训练ViT输出的密集patch特征，避免空间压缩，从而在保持高效的同时提升控制性能。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>Patch Policy的整体框架由两部分构成：观察主干（Observation Trunk）和政策头（Policy Head）。观察主干负责将原始的视觉观察（及可能的任务目标）编码成一序列密集的时空patch特征。政策头则是一个基于Transformer的序列模型，处理此特征序列并输出动作。输入是长度为T的图像观察序列（及可选目标），输出是预测的动作块。</p>
+<p><img src="https://arxiv.org/html/2607.18236v1/2607.18236v1/x1.png" alt="方法架构"></p>
+<blockquote>
+<p><strong>图2</strong>：Patch Policy 架构。左侧为观察主干，将多视角观测编码为<code>P x D</code>维的patch特征，并可选择性地将目标嵌入（图像或状态向量）拼接到当前时间步的序列中。右侧为政策头，可与任何基于Transformer的政策架构兼容。应用块状因果注意力掩码以确保对过去观测的条件依赖。</p>
+</blockquote>
+<p><strong>核心模块一：观察主干</strong>。给定一个图像观测<code>o_t</code>，ViT编码器将其划分为多个patch，并提取形状为<code>P x D</code>的密集patch特征（P为patch数量，D为嵌入维度）。对于包含T个时间步的观测上下文窗口，最终的视觉表征是一个形状为<code>T x P x D</code>的张量。该方法不依赖于特定的ViT架构或预训练目标。对于目标条件行为克隆，如果目标是图像，则使用相同的编码器编码，并将其patch特征拼接到观测张量上，形成<code>T x P x 2D</code>的输入张量；如果目标是向量<code>g</code>，则将其拼接到每个观测token上，形成<code>T x P x (D+G)</code>的张量。</p>
+<p><strong>核心模块二：政策学习与块因果注意力</strong>。政策学习被形式化为对提取的patch特征的序列建模问题。首先，将时空patch特征张量展平成长度为<code>T x P</code>的序列。然后，为序列中的每个token添加一个根据其在展平序列中的位置索引学习得到的一维位置嵌入。最关键的一步是应用<strong>块因果注意力掩码</strong>：该掩码允许同一帧（同一时间步）内的所有patch token之间进行完全的双向注意力计算，但在不同帧（不同时间步）之间施加因果掩码（即未来帧的token不能关注过去帧的token）。这种设计让模型能够整合每帧内的空间信息，同时保持标准策略所需的时间因果性。最后，策略模型处理掩码后的序列，并使用一个动作头在每个时间步的最后一个patch token处输出预测的动作块。</p>
+<p>该方法在动作头架构和训练目标上是通用的。在实验中，论文评估了两种先进的架构：使用混合分类-回归损失的向量量化行为转换器 (VQ-BeT) 和使用去噪目标的扩散策略 (Diffusion Policy)。训练时，将patch token序列前向传播通过策略Transformer主干和动作头，并计算每个帧的预测动作与真实动作之间的损失。推理时，将当前观测提取的patch特征添加到长度为T的滚动上下文窗口中，策略根据观测上下文预测一个动作块，并通过后退时域控制执行动作。</p>
+<p>与现有方法相比，Patch Policy的核心创新点在于：1）<strong>直接利用冻结的、预训练ViT的密集patch特征</strong>，避免了对视觉主干进行微调或从头训练，继承了大规模预训练的知识。2）设计了<strong>块因果注意力掩码</strong>，巧妙地解决了在序列模型中同时处理大量空间token（每帧P个）与保持时间因果性之间的矛盾，这是将密集patch特征有效整合到标准策略学习流程中的关键技术创新。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>论文在四个模拟环境（Push-T、LIBERO Goal、BlockPush、Cube）和三个真实世界机器人操作任务（插入电源线、收集笔到笔筒、悬挂工具）上评估了Patch Policy。实验平台使用了7自由度Franka机械臂。</p>
+<p>对比的基线方法包括两组：1）使用全局表征的基线，将相同的政策头（VQ-BeT， 扩散策略）与DynaMo、[CLS]令牌、全局平均池化等全局特征提取方法结合，以隔离patch特征的影响。2）同样消费密集特征的最新方法，包括使用从头训练ResNet-18的ACT和使用微调DINOv2+SigLIP的OpenVLA-OFT。</p>
+<p><strong>关键实验结果总结</strong>：<br>在模拟环境中，Patch Policy使用WebSSL patch特征搭配VQ-BeT/Diffusion政策头，在需要精密操作的多物体或多步骤任务（BlockPush， Cube）上显著优于对应的全局特征基线。例如，在BlockPush任务中，WebSSL Patch VQ-BeT取得了1.68的平均目标放置数，而使用WebSSL CLS的VQ-BeT仅为0.77。Patch Policy也超越了其他使用patch特征的基线，在所有四个模拟环境中均优于微调的OpenVLA-OFT（例如，在Cube任务上，Patch Policy为1.73，OpenVLA-OFT为1.50）。</p>
+<p>在真实世界任务中，使用DINOv2 patch特征的Patch Policy在所有任务和阶段都优于基线。在公差最小的“电缆插入”任务中，最终成功率为0.70，显著高于使用DINOv2 CLS的VQ-BeT（0.60）、ACT（0.35）和OpenVLA-OFT（0.30）。</p>
+<p><img src="https://arxiv.org/html/2607.18236v1/2607.18236v1/x2.png" alt="多环境实验"></p>
+<blockquote>
+<p><strong>图3</strong>：Patch Policy在七个评估环境上的概览，涵盖了四个模拟实验和三个真实机器人操控任务。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.18236v1/2607.18236v1/figures/all_envs.png" alt="不同预训练表征性能比较"></p>
+<blockquote>
+<p><strong>图5</strong>：使用不同预训练视觉表征（DINOv2， DINOv3， WebSSL， V-JEPA 2， SigLIP 2）的Patch Policy性能比较。WebSSL和DINOv2在大多数任务中表现最好，SigLIP 2由于侧重语义对齐而非几何特征，表现不佳。</p>
+</blockquote>
+<p><strong>消融实验</strong>：<br>论文探究了空间压缩的影响。通过在Push-T任务上训练一个轻量级卷积编码器来对冻结的DINOv2 patch特征进行空间下采样，发现压缩patch数量会显著降低任务成功率（例如，从256个patch的0.69降至64个patch的0.52，直至1个patch的0.48），证实了原始token的细粒度空间密度对精密控制至关重要。此外，论文还对注意力掩码、模型大小等进行了消融研究。块因果注意力掩码被证明是有效的设计选择。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了一个轻量级、高效的策略架构Patch Policy，通过块因果注意力掩码，使标准Transformer策略能够直接消费冻结的、预训练的密集ViT patch特征。2）通过系统性实验证实了密集视觉表征相较于全局压缩特征在机器人控制任务上的显著优势，尤其是在需要精细空间推理的任务中。3）全面评估了多种前沿视觉预训练表征（如WebSSL， DINOv2）在机器人学习下游任务上的表现，为社区提供了实用的骨干网络选择参考。</p>
+<p>论文自身提到的局限性包括：1）目前仅使用冻结的视觉主干，未探索端到端微调以适应特殊视觉域的可能。2）密集token增加了序列长度和训练时间，未来可采用如FlashAttention等技术加速。3）当前工作仅评估了行为克隆策略，尚未扩展到强化学习范式。</p>
+<p>对后续研究的启示：首先，这项工作证明了直接利用现成的大规模视觉预训练模型中的密集几何特征，是一条提升策略性能的有效且高效的路径，无需依赖庞大的生成式VLM。其次，块因果注意力等设计为解决序列模型中高维时空特征的融合提供了思路。最后，Patch Policy作为一个“即插即用”的流程，为机器人学界持续利用视觉表征学习的进展提供了一个实用的工具，而不必牺牲训练效率或实时控制所需的推理速度。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人学习中预训练密集视觉特征（如ViT）利用不足的问题，现有方法要么压缩观测为全局特征丢失细节，要么依赖计算昂贵的视觉-语言-动作模型（VLAs）。为此，作者提出Patch Policy，通过引入块因果注意力掩码的轻量架构，使Transformer策略能直接高效处理密集补丁令牌，避免完整VLM的计算开销。实验表明，在四个模拟和三个真实环境套件中，该方法比最佳全局池化方法性能提升40%，并超越微调OpenVLA-OFT模型18%，参数量仅为其约0.7%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.18236" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

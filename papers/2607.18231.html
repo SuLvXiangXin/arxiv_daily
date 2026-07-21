@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FM-VLA: Force-based Memory for Vision-Language-Action Models in Contact-Rich Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>FM-VLA: Force-based Memory for Vision-Language-Action Models in Contact-Rich Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.18231" target="_blank" rel="noreferrer">2607.18231</a></span>
+        <span>作者: Baining Guo Team</span>
+        <span>日期: 2026-07-20</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，视觉-语言-动作模型凭借互联网规模的视觉-语言预训练，在机器人操作任务中展现出强大的泛化能力。然而，大多数VLA架构依赖于当前观察，将决策视为从当前状态到未来动作的无记忆映射。这种马尔可夫假设在处理依赖长时间跨度上下文（例如，计数重复动作、跟踪多步骤交互进度、在部分可观测状态中推理）的非马尔可夫任务时，显得不足。近期工作探索了基于视觉的记忆机制来应对这一挑战，例如通过存储和检索过去的图像帧或语言摘要。然而，视觉记忆在视觉变化细微（如微动多次按压按钮）或观察严重遮挡时效果有限，且存储和关注历史帧会带来额外的计算开销和推理延迟。与此同时，力/力矩传感器可以更直接、无歧义地捕获接触事件、力大小和重复动作次数等交互信号。近期工作虽然已将力感知融入VLA，但其重点在于利用当前或短时力信号改进动作预测，而非将力作为追踪交互进程的长时记忆机制。本文针对接触丰富的非马尔可夫操作任务，提出首个基于力记忆的VLA模型FM-VLA。核心思路是：通过一个预训练的变分自编码器将长时、噪声的力历史压缩为紧凑的记忆令牌，结合短时状态历史，为动作生成提供时间上下文，从而实现依赖记忆的接触式操作。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>FM-VLA的整体框架以π0.5为基础构建，包含VLM和流匹配动作专家。其创新在于增加了一个轻量级的、基于力的时间记忆模块。</p>
+<p><img src="https://arxiv.org/static/base/1.0.1/images/arxiv-logo-primary-light.svg" alt="方法整体框架"></p>
+<blockquote>
+<p><strong>图2</strong>：FM-VLA架构总览。该系统在VLA基础上增加了轻量级的基于力的时间记忆。力/力矩历史通过VAE编码器编码为潜在表示，再经MLP投影为力记忆令牌，用于条件化流匹配动作专家。同时附加一个短时状态记忆令牌以提供运动上下文。</p>
+</blockquote>
+<p>整体Pipeline如下：</p>
+<ol>
+<li><strong>输入处理</strong>：在每个控制步t，系统接收当前图像、语言指令、从起始到t时刻的全时长原始力/力矩序列{fτ}τ=1t，以及最近W帧的关节状态历史{sτ}τ=t-W+1t。</li>
+<li><strong>力信号预处理</strong>：对原始力信号进行因果一阶指数移动平均滤波以抑制噪声。在训练时，为避免模型通过序列长度“走捷径”，在力历史前添加一个随机长度的高斯噪声前缀（模拟填充），推理时禁用此操作。</li>
+<li><strong>力记忆编码</strong>：预处理后的力历史送入一个冻结的、预训练的VAE编码器。该VAE编码器（基于Perceiver-IO）将变长的力序列压缩为一组固定数量K的潜在令牌。编码过程首先对信号进行基于整个数据集的量化归一化，然后通过输入MLP和傅里叶位置编码，利用交叉注意力将力特征提取到潜在查询中，最终输出每个潜在令牌的后验参数（均值μk和方差σk2）。在第二阶段微调中，只使用后验均值μf。</li>
+<li><strong>状态记忆编码</strong>：短窗口的关节状态历史经过一个简单的零初始化线性层投影，得到一个单独的状态历史令牌zs。</li>
+<li><strong>记忆令牌注入</strong>：将力令牌的后验均值μf通过一个零初始化的线性层投影到动作专家的隐藏维度，得到力记忆令牌Zf∈ ℝK×dh。将Zf和状态令牌zs追加到流匹配动作专家的噪声动作令牌之后。具体的动作专家输入序列布局为：[噪声动作令牌] ‖ [力记忆令牌] ‖ [状态窗口令牌]。这种后置方式保持了噪声动作令牌在预训练时的相对位置编码位置。</li>
+<li><strong>动作生成</strong>：VLM处理当前图像和指令，其内部特征与动作专家进行交叉注意力。动作专家额外以注入的力记忆令牌Zf和状态令牌zs为条件，生成未来的动作块。</li>
+</ol>
+<p>与现有方法相比，FM-VLA的创新点具体体现在：第一，<strong>首次将力/力矩流视为VLA的长时、轻量级内存</strong>，而非瞬时条件信号。第二，采用<strong>两阶段范式</strong>：先通过无任务标签的VAE重构预训练，在紧凑的潜在空间中学习力序列的宏观结构（如力大小、接触次数），再将此冻结的通用编码器用于策略微调，这比端到端注入原始力历史更有效。第三，<strong>结合长时力记忆与短时状态记忆</strong>，以在提供接触事件历史上下文的同时，避免因缺乏近期运动感知而导致接触前的重复性行为。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：实验在AgiBot G1双手机器人平台上进行。设计了三个需要整合时间上下文的接触式双手操作任务：1) <strong>杯下寻物</strong>：需记忆已检查过的杯子；2) <strong>按压按钮N次</strong>：视觉位移极小，依赖力脉冲计数；3) <strong>擦拭碗N次</strong>：视觉变化小，依赖力信号追踪进度。每个任务分别收集了200、350、200条遥操作演示数据。</p>
+<p><strong>基线方法</strong>：1) <strong>π0.5</strong>：无记忆的基线。2) <strong>TA-VLA</strong>：动作专家条件于近期力信号滑动窗口的方法。3) <strong>π-MEM</strong>：在π0.5上实现的先进视觉记忆机制（基于MEM）。</p>
+<p><strong>关键实验结果</strong>：<br>FM-VLA在三个任务上平均成功率高达83.3%，显著优于所有基线（π0.5: 27.8%， TA-VLA: 22.2%， π-MEM: 53.7%）。特别是在依赖精确力事件计数的“按钮”和“擦拭”任务上优势明显，成功率分别达到72.2%和77.8%。视觉记忆π-MEM在“按钮”任务上表现不佳（33.3%），证实了其对缺乏视觉状态变化任务的局限性。TA-VLA因无法记忆长时事件计数，表现接近无记忆基线。</p>
+<p><img src="https://arxiv.org/html/2607.18231v1/2607.18231v1/x3.png" alt="主要结果表格"></p>
+<blockquote>
+<p><strong>表1</strong>：主要结果对比。FM-VLA（VAE）在三个任务上均取得最高成功率，尤其在按钮和擦拭任务上远超其他方法。</p>
+</blockquote>
+<p><strong>消融实验分析</strong>：</p>
+<ul>
+<li><strong>模态消融</strong>：“仅力历史”方案因缺乏接触前短期空间感知，平均成功率降至25.9%；“仅状态历史”虽然在依赖空间记忆的“杯下寻物”任务上达到100%，但在接触计数任务上失败。这证明了结合长时力记忆与短时状态历史的必要性。</li>
+<li><strong>架构消融</strong>：将VAE编码器替换为GRU或Q-Former，性能均显著下降（平均成功率分别为33.3%和57.4%）。GRU因长序列梯度消失而丢失早期接触事件，Q-Former则容易过拟合瞬时峰值而非整体时间结构。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.18231v1/2607.18231v1/x4.png" alt="token数量消融"></p>
+<blockquote>
+<p><strong>图3</strong>：VAE潜在令牌数量K的消融实验（在擦拭任务上）。K=8时性能最佳，过少（K=4）形成信息瓶颈，过多（K=16, 32）可能因分布偏移破坏动作生成。</p>
+</blockquote>
+<p><strong>推理效率</strong>：FM-VLA推理延迟仅为64.0 ms，相较基线的60.7 ms仅增加3.3 ms开销。而视觉记忆π-MEM（K=5帧）延迟达99.8 ms，增加39.1 ms，体现了力记忆的轻量级优势。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：</p>
+<ol>
+<li>提出了首个基于力记忆的VLA模型FM-VLA，为接触丰富的非马尔可夫操作引入了时间推理能力。</li>
+<li>设计了一种通过VAE预训练将长时、噪声力信号压缩为紧凑、信息丰富的表示的轻量级方法，其效果显著优于简单的端到端注入基线或其他编码架构。</li>
+<li>在三个接触式任务上进行了系统性实验，证明了力记忆在解决视觉模糊的计数和进度跟踪任务上的有效性，并以极小的推理开销大幅超越了无记忆和视觉记忆基线。</li>
+</ol>
+<p>论文提到的局限性包括：当前VAE使用固定的8令牌瓶颈，对于需要记忆数百次接触事件的超长程任务，可能需要分层或自适应压缩；VAE仅在演示数据集上训练，在大规模多样化机器人力矩数据上预训练可能进一步提升性能。</p>
+<p>本工作对后续研究的启示在于：证明了力/力矩信号作为轻量级、长效记忆介质的巨大潜力，尤其适用于视觉反馈有限但接触信息丰富的场景。这促使研究者跳出视觉和语言的范畴，更深入地探索如何将物理交互信号（力、触觉等）作为构建具身智能体长期记忆和理解能力的关键模态。未来方向可能涉及更高效的多模态记忆融合架构，以及在不同层级（瞬时控制 vs. 长时规划）上利用交互信号的新范式。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>FM-VLA旨在解决现有视觉-语言-动作（VLA）模型在接触丰富的非马尔可夫操作任务中的局限，其视觉记忆难以捕捉细微或视觉模糊的接触事件（如连续按按钮），且计算开销大。提出的核心方法“基于力的记忆”，采用变分自编码器（VAE）将力历史（力矩）编码为紧凑的记忆令牌，并将其与短期状态历史一起作为模型的额外输入条件，以利用接触事件历史信息。在寻找隐藏积木、按按钮和擦拭指定次数等三个依赖记忆的任务上，该轻量级方法以最小推理开销实现了超过80%的成功率，显著优于基线方法。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.18231" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
