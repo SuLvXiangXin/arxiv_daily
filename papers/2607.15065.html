@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DriftWorld: Fast World Modeling through Drifting - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>DriftWorld: Fast World Modeling through Drifting</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.15065" target="_blank" rel="noreferrer">2607.15065</a></span>
+        <span>作者: Yilun Du Team</span>
+        <span>日期: 2026-07-16</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>预测性世界模型使机器人能够通过想象行动结果来规划，但其用于控制的价值取决于快速生成大量轨迹。这成为基于扩散的世界模型的关键瓶颈：多步采样使每次轨迹生成都很昂贵，限制了推理时的大规模动作搜索。当前最先进的世界模型主要是基于扩散的，它们依赖迭代的、多步的去噪来生成未来帧，导致每个决策周期耗时数秒，难以评估数百个候选动作。本文针对扩散模型推理速度慢这一具体痛点，提出了基于漂移生成模型的新视角。核心思路是：在训练时学习一个动作条件化的漂移场，将先验噪声分布映射到数据分布，从而在推理时仅需单次前向传递即可生成高质量未来帧，实现快速的世界建模。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>DriftWorld 是一个基于漂移的动作条件化世界模型，其目标是在给定历史观测和未来动作序列的情况下，在单次前向传递中准确预测未来的视觉观测。</p>
+<p>整体框架基于漂移生成模型。设漂移世界模型为 fθ，它将噪声先验 ε~pε 和条件 c（包括历史帧和未来动作）映射到生成的未来视频帧 x=fθ(ε， c)。生成的分布是前推分布 q=f#pε。与扩散模型在推理时进行迭代多步优化不同，漂移生成模型在训练时优化生成分布 q，使其向真实数据分布 p 演化。这通过一个漂移场 Vp,q(x) 来实现，它控制样本如何移动以使 q 向 p 靠拢。对于模型当前前推分布 qi 中的一个生成视频块 xi，经过漂移后的新视频块为 xi+1 = xi + Vp,qi(xi)。漂移场 Vp,qi(xi) 是一个向量，将 xi 吸引向正样本（真实未来帧）并排斥负样本（模型生成的未来帧）：Vp,qi(x) = Vp+(x) - Vqi-(x)。</p>
+<p><img src="https://arxiv.org/html/2607.15065v1/2607.15065v1/x1.png" alt="方法概述"></p>
+<blockquote>
+<p><strong>图1</strong>：DriftWorld 概述。它是一个基于漂移的动作条件化世界模型，通过单次前向传递生成未来帧，实现30+ fps的生成速度，远快于现有模型。</p>
+</blockquote>
+<p>训练目标遵循固定点迭代：损失函数 L = Eε[ || fθ(ε) - stopgrad(fθ(ε) + Vp,qθ(fθ(ε))) ||^2 ]。该损失函数将模型的预测移向一个被漂移场偏移的冻结目标。在训练批次中，每个视频独立计算其条件漂移场，使用单个正样本（真实未来帧）和 Nneg 个负样本（模型生成的未来帧）。</p>
+<p>为了增强模型对动作条件的遵循，论文可选地修改了训练时的负样本分布。除了模型生成的样本，还混合了来自真实无动作分布（即当前观测 ot）的样本，形成混合负样本分布q̃，以强迫模型学习执行动作带来的变化。</p>
+<p>根据数据集复杂度，漂移损失的计算空间可以调整。对于简单数据集（如Push-T），直接在像素空间计算。对于复杂数据集（如Bridge-V2），则使用DINOv2/v3特征编码器投影到特征空间计算损失，从而获得更语义化的距离度量。此外，对损失进行基于运动的加权：对运动幅度（通过特征距离量化）较大的空间位置赋予更高的损失权重，以防止模型陷入忽略动作、简单复制过去观测的局部最优解。</p>
+<p><img src="https://arxiv.org/html/2607.15065v1/2607.15065v1/x2.png" alt="架构与训练"></p>
+<blockquote>
+<p><strong>图2</strong>：漂移架构与训练概述。（a）使用以历史观测和动作为条件的U-Net架构。（b）DriftWorld使用漂移损失进行训练，这是一种鼓励生成的未来帧（负样本）向真实未来帧（正样本）漂移的对比损失。</p>
+</blockquote>
+<p>核心生成器采用动作条件化的U-Net架构。该U-Net以当前及历史帧、待执行的动作序列以及可选的语言指令为输入，输出预测的未来帧。采用因子化的时空卷积来一次性生成多帧。通过FiLM技术对动作进行逐帧条件化，确保每个动作 at+i 作用于其对应的结果帧 ot+i+1。历史帧通过通道维拼接与初始高斯噪声相结合进行条件化。</p>
+<p>推理时，DriftWorld 使用单次前向传递 fθ(ε | ot-F:t， at:t+T) 生成未来视频帧，其中 ε 是高斯噪声。这使得在模型内可以高效地进行自回归的长时程策略轨迹模拟。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在五个机器人操作基准数据集上进行：真实世界的 Bridge-V2、RT-1、Language Table，以及模拟的 Push-T 和 Robomimic（包含Lift、Can、Square任务）。</p>
+<p>对比的基线方法包括：基于扩散的世界模型（GPC World Model、Ctrl-World、IRASim、VDM、LVDM）以及其他方法（AVDC、MSE Baseline）。评估指标涵盖视觉质量（MSE、SSIM、PSNR、LPIPS、FID、FVD）和生成速度（每秒帧数或每帧耗时）。</p>
+<p><strong>视觉质量评估</strong>：在所有环境中，DriftWorld 在视觉生成质量上达到或超过了基线模型，同时推理时间仅为基线的一小部分。</p>
+<ul>
+<li><strong>Push-T</strong>：如表1所示，无论是64帧还是全 episode 轨迹，DriftWorld 在多数指标上优于基线，同时生成速度快3.2到478倍。与使用相同U-Net骨干但用标准MSE损失训练的基线相比，DriftWorld 表现更好，证实了漂移损失对单步生成的有效性。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.15065v1/2607.15065v1/x3.png" alt="Push-T轨迹对比"></p>
+<blockquote>
+<p><strong>图3</strong>：Push-T不同世界模型生成的轨迹对比。第一行为真实轨迹，其余为自回归生成的140帧轨迹。DriftWorld的轨迹与真实情况匹配，而GPC扩散模型和MSE基线的轨迹中目标物在后继帧中被部分抹除，导致红色T块最终位置错误。</p>
+</blockquote>
+<ul>
+<li><strong>Robomimic</strong>：如表2所示，在单视图和双视图设置下，DriftWorld 取得了有竞争力的性能，且速度显著更快。</li>
+<li><strong>Bridge-V2， RT-1， Language Table</strong>：如表3所示，DriftWorld 在大多数视觉质量指标上优于基线，且推理时间少得多。生成的视频在动态和动作遵循上更接近真实世界。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.15065v1/2607.15065v1/x4.png" alt="Bridge-V2轨迹对比"></p>
+<blockquote>
+<p><strong>图4</strong>：Bridge-V2不同世界模型生成的轨迹对比。DriftWorld准确模拟了机器人夹爪与物体的接触交互，而IRASim视频显示夹爪运动不准确，WorldGym视频在盘子和积木上分别出现伪影。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.15065v1/2607.15065v1/x5.png" alt="RT-1轨迹对比"></p>
+<blockquote>
+<p><strong>图5</strong>：RT-1不同世界模型生成的轨迹对比。DriftWorld生成的视频正确显示了拿起长条和打开抽屉的运动。</p>
+</blockquote>
+<p><strong>推理时策略改进</strong>：采用GPC-RANK方法，利用DriftWorld对基础策略采样的K个候选动作提案进行轨迹模拟，并选择奖励最高的动作执行。如表4所示，使用DriftWorld（K=50）显著提升了两个策略在Push-T任务上的IoU得分（分别从0.635提升至0.781，从0.612提升至0.734），其总耗时与MSE基线相当，但性能提升更大，远快于GPC扩散模型和AVDC。</p>
+<p><strong>离线策略评估</strong>：将DriftWorld作为离线模拟器，仅通过模拟轨迹对真实世界策略进行排名。如图6所示，DriftWorld在Push-T、Robomimic Lift和Can任务上预测的策略得分与真实性能的皮尔逊相关系数分别达到0.9515、0.9916和0.9250，显示出极高的相关性。</p>
+<p><img src="https://arxiv.org/html/2607.15065v1/2607.15065v1/x7.png" alt="离线策略评估"></p>
+<blockquote>
+<p><strong>图6</strong>：DriftWorld作为离线模拟器的策略评估结果。散点图显示了模拟得分与实际性能之间的高相关性。</p>
+</blockquote>
+<p><strong>消融实验</strong>：总结了核心组件的贡献。</p>
+<ul>
+<li><strong>动作强调漂移</strong>：通过混合负样本分布来强调动作遵循，显著提升了动作条件化生成的准确性。</li>
+<li><strong>漂移空间（特征空间 vs. 像素空间）</strong>：在复杂数据集上，使用DINO特征空间计算漂移损失比像素空间能产生更锐利、更准确的生成结果。</li>
+<li><strong>基于运动的损失加权</strong>：对运动较大区域进行损失加权，有效防止了模型忽略动作而复制过去帧，提高了动作跟随性能。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：</p>
+<ol>
+<li>提出了<strong>DriftWorld</strong>，首个基于漂移生成模型的动作条件化世界模型，通过单次前向传递生成轨迹，平均比基于扩散的世界模型快<strong>17倍</strong>。</li>
+<li>首次将漂移生成模型适配到<strong>条件视频预测</strong>任务中，引入了动作强调的漂移场、特征空间漂移损失和逐帧动作条件化等关键技术。</li>
+<li>通过详尽的实验验证，DriftWorld在多个标准机器人操作基准上匹配或超越了基线模型的轨迹质量，同时实现了显著更快的推理速度，使其在<strong>在线动作搜索</strong>和<strong>离线策略评估</strong>两方面都更加高效。</li>
+</ol>
+<p>论文提到的局限性包括：模型在应对分布外动作或场景时可能产生不准确的预测，且当前方法尚未探索与大型语言模型等更高级规划器的集成。</p>
+<p>这项工作启发了后续研究：漂移生成模型为需要<strong>高速、高质量想象</strong>的机器人世界建模任务提供了一个强有力的新基础。其单步生成的特性使得在控制循环中评估大量候选动作成为可能，极大地增强了基于模型的规划能力。同时，高保真且高效的模拟器也为离线策略评估与学习开辟了新途径。未来的工作可以探索将漂移模型与更复杂的规划框架结合，以及将其扩展到更长期的预测和更多样的机器人任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对扩散世界模型因多步采样导致推理速度慢、无法满足实时规划需求的问题，提出DriftWorld模型。其核心技术是采用漂移生成模型，在训练时学习一个由初始观察和动作序列定义的漂移场，从而在推理时仅需单次前向传播即可生成未来帧，实现快速推演。实验表明，该模型生成速度超过30 fps，平均比扩散基线快17倍，在多个机器人操作基准上取得了先进的决策性能，同时其推演结果与真实策略的评分相关性最高可达0.99。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.15065" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

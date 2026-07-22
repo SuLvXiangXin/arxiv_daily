@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Learning Physics-Guided Residual Dynamics for Deformable Object Simulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Learning Physics-Guided Residual Dynamics for Deformable Object Simulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.13451" target="_blank" rel="noreferrer">2607.13451</a></span>
+        <span>作者: Yunzhu Li Team</span>
+        <span>日期: 2026-07-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前可变形物体仿真的主流方法可分为两大类：基于物理的方法（如弹簧质量模型、有限元方法FEM、位置动力学PBD等）和基于学习的方法（如图神经网络GNN、粒子网格神经动力学PGND等）。前者通过方程描述物体变形，具有物理合理性和可解释性，但严重依赖难以精确获取的材料参数，且受限于模型简化和离散化误差。后者直接从数据中学习变形模式，避免了显式参数需求，但通常需要大量数据、泛化能力差，且可能缺乏物理一致性。</p>
+<p>本文针对单纯物理模型精度不足、纯学习模型泛化性弱且需海量数据的痛点，提出了一种混合仿真框架。核心思路是：以一个可优化的弹簧质量物理模拟器作为骨干，利用神经网络仅学习物理模型预测与真实观察之间的残差修正，从而结合物理解释性与数据驱动的灵活性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>PGRD的整体流程（Pipeline）如下：给定RGB-D观测，首先提取物体表面点云来实例化仿真。然后从当前物体状态（粒子位置 X_t 和速度 V_t）与机器人动作 a_t 出发，滚动物理骨干（弹簧质量模拟器）以产生下一时刻的模拟预测 X_{t+1}^{sim}, V_{t+1}^{sim}。随后，残差动力学网络预测每个粒子的残差速度 ΔV_{t+1}^{residual}。将此残差速度加到模拟器预测的速度上，得到最终速度 V_{t+1} ，并通过时间积分（乘以步长 dt）得到修正后的最终位置 X_{t+1}。</p>
+<p><img src="https://arxiv.org/html/2607.13451v1/2607.13451v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：物理引导残差动力学总体框架概述。</p>
+</blockquote>
+<p>核心模块包括物理骨干和残差动力学网络。<strong>物理骨干</strong>采用弹簧质量模型，将物体离散为点质量（节点）和弹簧（边）构成的图。其模拟保真度依赖于五个物理参数（刚度、阻尼、弹簧创建阈值、每节点最大弹簧数、地面摩擦）。为优化这些参数，论文使用黑盒优化算法CMA-ES在轨迹数据上最小化预测位置与真实位置之间的逐点均方误差，无需模拟器可微。对于体积对象，还通过内部采样点来增强模型以保持体积。</p>
+<p><strong>残差动力学网络</strong>旨在预测物理模型与真实数据之间的差距。为避免直接预测位置修正导致模拟不稳定，论文创新性地采用了基于速度的残差公式：网络预测残差速度 ΔV_{t+1}^{residual}，与物理模拟预测速度相加后进行积分，从而间接得到位置修正。对于被夹持的粒子，其残差被强制设为零。网络训练采用监督学习，损失函数为预测粒子位置与真实位置在多步展开（multi-step rollout）上的平均均方误差（公式1），这有助于模型处理测试时的误差累积。</p>
+<p><img src="https://arxiv.org/html/2607.13451v1/2607.13451v1/x2.png" alt="网络架构"></p>
+<blockquote>
+<p><strong>图2</strong>：残差网络的详细架构。包含编码器、解码器和时间聚合器三个部分。</p>
+</blockquote>
+<p>残差网络的具体架构（图2）包含三个部分：1) <strong>编码器</strong>：采用Point Transformer V3 (PTv3) 提取每个粒子的时空特征，输入包含当前状态、历史状态和物理模拟器的即时预测。2) <strong>解码器</strong>：使用类似NeRF的MLP架构，结合傅里叶位置编码和编码器特征，产生初始速度校正估计 ΔV_{t+1}^{initial}。3) <strong>时间聚合器</strong>：一个滑动窗口Transformer，用于利用历史信息（如前W帧的初始校正）来细化当前预测。它输出一个带有门控机制的最终残差速度：ΔV_{t+1}^{residual} = 0.1 * [(1 - g_t) ⊙ ΔV_{t+1}^{initial} + g_t ⊙ δ_t]，其中门控权重 g_t 和偏移 δ_t 由Transformer输出经投影后得到。</p>
+<p>与现有方法相比，PGRD的核心创新点在于：1) <strong>混合建模范式</strong>：首次将残差学习范式扩展到高维、复杂的可变形物体状态建模，结合了物理先验与数据驱动灵活性。2) <strong>两阶段训练策略</strong>：先优化物理参数，再固定物理骨干训练残差网络。3) <strong>速度式残差公式</strong>：确保了仿真稳定性和平滑整合。4) <strong>集成化的网络架构</strong>：创新地将PTv3编码器、NeRF风格解码器和滑动窗口Transformer聚合器结合，用于残差动力学预测。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验平台与数据集</strong>：在一个包含六种真实世界可变形物体的数据集上进行评估，包括绳子（Rope，一维）、纸张（Paper，二维薄片）、旗子（Flag，布料）、树懒玩具（Sloth Toy，三维体积）、鸡毛掸子（Duster，异质刚软混合）和泰迪熊玩具（Teddy Toy，三维体积，非抓取式交互）。数据通过机器人操作和多视角RGB-D相机采集，并处理为时间一致的3D点云轨迹。训练集约3.37分钟互动数据，验证集约0.70分钟。评估在长达37步（训练时为5步）的完整验证片段上进行。</p>
+<p><strong>对比方法</strong>：与多种基线对比：物理方法包括<strong>Spring-Mass</strong>[34]、<strong>MPM</strong>[73]；学习方法包括<strong>GBND</strong>[94]、<strong>PGND</strong>[93]；以及可微物理方法<strong>Diff. Spring-Mass</strong>[34]。</p>
+<p><img src="https://arxiv.org/html/2607.13451v1/2607.13451v1/x3.png" alt="定量结果表"></p>
+<blockquote>
+<p><strong>图3</strong>：主要定量结果表（对应于论文中的表I）。展示了在不同物体上，PGRD与基线方法在平均距离误差（MDE）、倒角距离（CD）和地球移动距离（EMD）三个指标上的对比。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：如定量结果表（图3，论文中的表I）所示，PGRD在几乎所有物体和所有评估指标（MDE， CD， EMD）上都取得了最低的跟踪误差，全面超越了纯物理和纯学习方法。例如，在挑战性最大的异质物体鸡毛掸子（Duster）上，PGRD（MDE: 2.9）显著优于次优的物理基线Spring-Mass（3.8）和学习基线PGND（3.8）。这表明其混合框架有效克服了物理模型简化假设和学习模型数据不足的局限。</p>
+<p><img src="https://arxiv.org/html/2607.13451v1/2607.13451v1/x4.png" alt="定性比较"></p>
+<blockquote>
+<p><strong>图4</strong>：与基线方法的定性轨迹对比示例。展示了在四种物体上，PGRD的预测轨迹（橙色）与真实轨迹（蓝色）最为接近。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.13451v1/2607.13451v1/x5.png" alt="视频预测"></p>
+<blockquote>
+<p><strong>图5</strong>：基于3D高斯溅射的动作条件视频预测结果。PGRD预测的粒子轨迹能驱动渲染出更真实的新视图视频。</p>
+</blockquote>
+<p><strong>消融实验</strong>：论文在附录中进行了消融研究（App. A），总结关键发现如下：1) <strong>编码器选择</strong>：PTv3编码器优于PointNet++和简单MLP，因其注意力机制能捕捉局部几何依赖。2) <strong>解码器必要性</strong>：移除解码器（直接用PTv3特征预测速度）会导致性能下降，证实了NeRF风格解码器的有效性。3) <strong>时间聚合器的重要性</strong>：移除滑动窗口Transformer会显著增加长时程误差，表明捕获时间动态依赖至关重要。4) <strong>训练策略</strong>：采用多步rollout训练（而非单步重置）对于长期仿真的稳定性是必要的，它使模型学会从自身预测的误差中恢复。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1) 提出了物理引导残差动力学（PGRD）混合仿真框架，有效结合了物理模型的合理性与学习模型的表达能力；2) 设计了一套包含两阶段训练、速度式残差公式和集成化网络架构的完整方法；3) 在多样化的真实世界可变形物体数据集上进行了广泛验证，证明了其相对于当前物理与学习基线的优越性能。</p>
+<p>论文提到的局限性包括：方法依赖于高质量、时间一致的3D点云轨迹作为训练数据；在处理高度复杂的接触动力学（如穿透、滑动摩擦）方面仍有改进空间；目前主要用于前向仿真，尚未实现完全物理一致的反向传播。</p>
+<p>对后续研究的启示：PGRD展示了混合建模范式在复杂物理系统仿真中的强大潜力。未来工作可探索：1) 使用更复杂或可微的物理模型作为骨干；2) 设计更高效、鲁棒的残差学习模块，减少对精确3D轨迹的依赖；3) 将该框架扩展到更广泛的交互场景和任务中，如全身人形机器人操作等。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对可变形物体动力学模拟准确性不足的难题，提出物理引导残差动态（PGRD）混合框架。该方法以可优化的弹簧-质量模拟器为骨干，结合神经网络预测对物理模拟结果的残差速度校正，采用速度公式确保稳定性，并利用滑动窗口变压器架构捕获时序依赖。实验表明，PGRD在多种真实可变形物体上比纯物理和纯学习方法产生更准确的模拟结果，并成功应用于模型预测控制及交互式视频预测等机器人任务。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.13451" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
