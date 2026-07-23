@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LENS: LLM-guided Environment Simplification for Planning and Control in Clutter - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>LENS: LLM-guided Environment Simplification for Planning and Control in Clutter</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.19633" target="_blank" rel="noreferrer">2607.19633</a></span>
+        <span>作者: Michael Posa Team</span>
+        <span>日期: 2026-07-22</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人灵巧操作领域，尽管已取得诸多进展，但现实世界中充满多物体的杂亂环境对当前主流方法仍是巨大挑战。场景复杂度的增加（更多物体、碰撞、不可预测的接触物理、干扰物、任务歧义性）使得问题呈指数级复杂化。优化与规划类方法必须对场景中的每个物体进行推理，其计算成本和失败模式随杂乱程度同步增长；而学习类控制器，包括现代视觉-语言-动作模型，在杂乱、非结构化的密集环境中会遭遇严重的分布偏移，导致性能下降。两者的共性问题在于，都缺乏一个先于规划或控制开始的、灵活的机制来抑制任务无关物体，从而全盘继承了杂乱场景带来的组合复杂度和分布偏移负担。本文针对这一痛点，提出利用多模态大语言模型自动生成动态的、任务相关的场景抽象，以作为现有规划与控制栈的即插即用前端。核心思路是利用 VLM 将场景抽象的负担从手写启发式规则转移到自动化的、任务无关的语义推理闭环中，从而构建简化的场景表示，显著降低下游模块面临的组合复杂度。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LENS 的核心框架旨在通过视觉语言模型迭代地确定并更新场景中物体的任务相关性，以构建简化的场景表示 <code>𝒪̃</code>。整个过程是一个闭环系统，具体流程见算法1。</p>
+<p><img src="https://arxiv.org/html/2607.19633v1/2607.19633v1/images/figure2.png" alt="系统框架"></p>
+<blockquote>
+<p><strong>图2</strong>：LENS系统概览。给定通过完整场景和提示信息描述的任务，LENS（蓝色模块）通过剪枝和合并物体来生成抽象场景，并将其传递给规划器或控制器（灰色模块）。当触发反馈时，LENS会修正其场景剪枝。该方法可泛化至TAMP、基于模型的控制器和VLA。</p>
+</blockquote>
+<p>给定自然语言任务描述 <code>τ</code> 和场景描述 <code>𝒪</code> 作为输入，VLM（论文中使用 GPT-4o）被提示输出信息以构建结构化的场景抽象 <code>𝒪̃</code>。<code>𝒪</code> 和 <code>𝒪̃</code> 的具体形式取决于下游的规划或控制框架（例如，在TAMP中是物体特征和谓词，在VLA中是叠加在图像上的物体分割掩码）。VLM需要提供一个列表的列表，其中包含对完成任务至关重要的任务相关物体。子列表则表示可以合并为一组（由于功能或空间耦合）而不会损害任务性能的物体组。</p>
+<p>基于VLM的输出，LENS通过两种基本操作生成 <code>𝒪̃</code>：<strong>剪枝</strong>与<strong>合并</strong>。</p>
+<ul>
+<li><strong>剪枝</strong>：被排除在列表之外的物体将从 <code>𝒪</code> 中移除。其具体定义因下游系统而异，可能是TAMP中的状态空间缩减、基于模型的控制中的几何/接触对减少，或是VLA中的视觉干扰物消除。</li>
+<li><strong>合并</strong>：对于每个物体子列表，LENS将这些刚体合并为一个单一的抽象体。该复合体的碰撞模型通过聚合其成员的几何形状构建，并在运行时根据成员位姿实时更新。这减少了物体数量和接触对，同时保留了物体组物理范围的保守边界。<br>LENS的另一个重要特性是能够根据任务执行情况<strong>自主修正</strong>简化后的场景表示。当下游系统因超时或错误代码（如工作空间限制、运行时错误）而触发失败反馈时，LENS会将一个特定于框架的反馈提示，连同之前的 <code>𝒪̃</code>，附加到现有提示和当前场景中，并重新查询VLM以获取修正后的场景简化。</li>
+</ul>
+<p>LENS被设计为通用框架，并集成到三种不同的下游规划/控制范式中：</p>
+<ol>
+<li><strong>任务与运动规划</strong>：<code>𝒪</code> 是包含位姿、质量和关系的物体图。<code>𝒪̃</code> 定义了在PDDLStream中被视为活动决策变量的物体。被剪枝的物体参与碰撞检测但位姿固定且不可被操作。合并组（如需要一起移动的物体堆栈）采用一个统一的标识符，以最底部的物体为父节点，且在规划过程中不能被分离。反馈在120秒超时触发。</li>
+<li><strong>基于接触隐式的模型预测控制</strong>：场景 <code>𝒪</code> 是一组带有位姿和名称的物体。与TAMP不同，合并的物体组不需要物理上稳定；如果它们的接触交互可以被集体推理（如一堆待推开的物体），它们就会被聚类。合并体的几何形状会随场景演化实时更新。剪枝操作减少了物体数量、接触对以及线性互补问题的维度。反馈在250次控制迭代或错误代码时触发。</li>
+<li><strong>视觉-语言-动作模型</strong>：<code>𝒪</code> 是一个带物体边界框的俯视图像。不进行合并；<code>𝒪̃</code> 是相关物体的扁平列表。被排除的物体会被图像修复技术“抹除”，从而生成一个经过滤的图像输入给VLA策略。这减少了视觉干扰，抑制了无关物体的功能可供性，且无需修改策略本身。由于任务周期短，无需反馈重查询。</li>
+</ol>
+<p>LENS的创新点在于，首次利用VLM作为任务无关的前端，主动<strong>在规划或控制执行前</strong>动态地减少世界模型，而不是在固定世界模型中生成动作或引导搜索。其闭环反馈机制使场景抽象能适应执行中的失败和环境状态变化，这是相较于传统手动设计或一次性抽象方法的关键进步。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在桌面操作任务中评估LENS，分别与三种下游模块未使用LENS的基线进行比较。实验平台包括模拟器和真实机器人硬件。</p>
+<p><strong>任务与运动规划</strong>：在复杂度递增的三种环境中评估：轻度杂乱桌面、重度杂乱桌面、以及包含堆叠物体的杂乱桌面。任务是将蓝色目标物体移动到绿色目标区域。</p>
+<p><img src="https://arxiv.org/html/2607.19633v1/2607.19633v1/images/figure1.png" alt="TAMP实验环境"></p>
+<blockquote>
+<p><strong>图3</strong>：LENS在三种TAMP环境中的评估场景：(a)轻度杂乱桌面，(b)重度杂乱桌面，(c)包含堆叠的杂乱桌面。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.19633v1/2607.19633v1/images/figure2.png" alt="TAMP结果"></p>
+<blockquote>
+<p><strong>图4</strong>：TAMP实验结果。(a)展示了Baseline-TAMP和LENS-TAMP在三种环境中的成功率对比，按复杂度从左到右排列。迭代1和迭代2的成功率堆叠显示。(b)展示了重度杂乱和包含堆叠场景中LENS的剪枝情况示例。</p>
+</blockquote>
+<p>在轻度杂乱场景中，LENS与基线成功率相当（基线约80%，LENS约85%）。在重度杂乱场景中，LENS显著优于基线（基线约40%，LENS约80%）。在包含堆叠的场景中，LENS同样领先（基线约50%，LENS约65%）。实验表明，在场景变得难以处理时，VLLM引导的过滤能抑制无关物体，提高成功率；合并堆叠物体能简化场景，实现更可靠的规划搜索。</p>
+<p><strong>基于模型的控制</strong>：研究一个平面推动任务，目标是将目标物体“G”推到目标位姿。实验在模拟中改变环境中物体的数量。</p>
+<p><img src="https://arxiv.org/html/2607.19633v1/2607.19633v1/images/push_anything_pruning.png" alt="模型控制时间对比"></p>
+<blockquote>
+<p><strong>图5</strong>：物体数量消融实验。随着物体数量增加，基线（Baseline-C3+）的执行时间急剧上升，而LENS（LENS-C3+）保持基本恒定。</p>
+</blockquote>
+<p>对于小规模场景（2-4个物体），基线（Baseline-C3+）和LENS（LENS-C3+）性能相当。随着物体数量增加（≥6个），基线的执行时间急剧上升，例如在6个物体时，基线比LENS慢一个数量级（约1000秒 vs. LENS的约40-135秒）。LENS在多达10个物体的场景中仍能保持稳定的执行时间。LENS-C3+和基线的成功率分别为39/45和17/30。</p>
+<p><img src="https://arxiv.org/html/2607.19633v1/2607.19633v1/images/push_anything_merging.png" alt="硬件迭代结果"></p>
+<blockquote>
+<p><strong>图6</strong>：硬件实验结果。展示了仅剪枝和剪枝+合并两种设置下，任务在各次VLM重查询迭代中的累计成功比例。</p>
+</blockquote>
+<p>在真实机器人硬件实验中，LENS在三次反馈迭代内（包括剪枝和合并任务）实现了80%的累计成功率，且成功分布在所有迭代中，表明初始的激进剪枝可能会遗漏相关接触，但后续VLM反馈能够纠正并最终完成任务。</p>
+<p><strong>视觉-语言-动作模型</strong>：在Spatial LIBERO基准上评估，使用 <code>π_0.5</code> 策略。通过添加额外目标物体实例来增加视觉干扰。</p>
+<p><img src="https://arxiv.org/html/2607.19633v1/2607.19633v1/images/vla.png" alt="VLA硬件实验"></p>
+<blockquote>
+<p><strong>图8</strong>：真实硬件VLA实验。(b) LENS直接作用于手部图像，无需模拟器边界框。(c) 使用基础模型进行分割和图像修复。</p>
+</blockquote>
+<p>在模拟实验中，基线VLA在无干扰场景成功率为0.85，在杂乱场景下骤降至0.50。使用LENS进行任务聚焦的场景抽象后，成功率恢复至0.69。在真实机器人硬件实验中，任务是从六个水果毛绒玩具中拾取一个放入目标碗中。LENS在所有测试任务上均一致优于基线，例如在“Apple”任务中，LENS成功率为0.7，而基线为0.0。</p>
+<p>消融实验表明，LENS的核心操作（剪枝和合并）是有效的。尤其是在基于模型的控制中，LENS在保持高成功率的同时，其执行时间不随场景物体数量线性增长，证明了其降低问题有效规模的能力。反馈迭代机制也被证明对于从初始抽象错误中恢复至关重要。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1) 提出了一种通用、任务无关的闭环方法LENS，利用视觉语言模型估计任务相关性，并构建任务聚焦的场景抽象；2) 成功地将该抽象层集成了三种截然不同的先进范式（任务与运动规划、基于优化的接触隐式控制、大规模视觉-语言-行动模型），展示了其广泛的适用性；3) 通过详实的实验证明，LENS能在高度杂乱的操控场景中提高下游方法的可扩展性、成功率和计算效率。</p>
+<p>论文自身提到的局限性包括：尽管可以在执行前于模拟中验证抽象表示，但对某些控制器而言计算成本过高；反馈机制依赖于高层失败信号，而非明确的具体原因；LENS不具备跨任务或跨运行的经验学习能力。</p>
+<p>LENS的工作启示后续研究，动态构建最小化、任务条件化的世界模型对于机器人应对日益复杂的非结构化环境至关重要。未来工作可以探索更丰富的抽象操作（例如通过强化学习或微调实现）、更紧密的感知集成，以及长周期多阶段任务（其中任务相关性的概念会随时间演变）。这种将高层语义推理与低层物理规划/控制解耦的范式，为弥合实验室算法与现实世界无界复杂度之间的鸿沟提供了一条有希望的路径。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>论文针对机器人操控在真实世界多物体杂乱环境中的复杂性和可扩展性挑战，提出LENS（LLM引导的环境简化）方法。该方法基于大型语言模型自动生成动态、任务相关的场景抽象，通过闭环合并（如堆叠物体）或修剪（如无关物体）简化环境表示。实验表明，LENS能有效改进经典规划、基于模型控制和视觉-语言-动作模型在多种高度杂乱操控场景中的性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.19633" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

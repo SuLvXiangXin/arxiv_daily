@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Where Should RL Post-Training Compute Go? Model Size, Search, Learning, and Feedback - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Where Should RL Post-Training Compute Go? Model Size, Search, Learning, and Feedback</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.13389" target="_blank" rel="noreferrer">2607.13389</a></span>
+        <span>作者: Odej Kao Team</span>
+        <span>日期: 2026-07-15</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，利用强化学习对基础模型进行后训练以适配推理、规划等任务的做法日益普遍，但其计算成本通常仅被总结为一个总FLOP预算。这一做法掩盖了关键的资源分配问题：在相同的后训练总预算下，计算资源应该用于更大的策略模型、更长时间训练较小的模型、生成更多的 rollout 搜索轨迹，还是用于更强的奖励反馈机制？本文提出了一个针对 GRPO 后训练的 FLOP 记账框架，将总计算分解为搜索、策略更新/学习和奖励反馈模型评估三部分，旨在揭示固定的总预算下，计算资源在不同路径上的分配如何系统性影响最终性能。本文的核心思路是：强化学习后训练在固定预算下是一个条件性的资源分配问题，最优的分配前沿取决于模型大小、预算额度、奖励系统和评估目标。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>研究建立了一个用于分析固定预算下 RL 后训练的计算分配框架。整体框架（pipeline）即其提出的 FLOP 记账分解公式： <code>C_total = C_search + C_learning + C_reward</code>。输入是一个固定的总计算预算（C_total），通过在搜索（C_search）、学习/更新（C_learning）和奖励评估（C_reward）三个维度上以不同比例分配该预算，产生不同的训练运行（run），输出则是各运行在多种指标下的性能。</p>
+<p>核心分析变量是更新分数 ρ = C_learning / (C_search + C_learning + C_reward)。ρ 值较小意味着计算分配倾向于搜索或奖励评估，ρ 值较大则倾向于策略更新。研究者通过控制策略模型大小（N）、LoRA 适配器秩（r）、更新步数（S）以及奖励系统（R）来系统地调节 ρ 值，同时保持 C_total 大致恒定（IsoFLOP 设计）。</p>
+<p>核心的创新点体现在对计算资源的精细化拆解与比较上。与现有（仅报告总FLOP数）的方法相比，本文明确量化了不同奖励系统的计算成本差异：基于规则的奖励（稀疏、结构化、密集）的 <code>C_reward</code> 可忽略不计，因此总预算几乎全部分配给 C_search 和 C_learning；而基于学习的过程奖励模型需要运行一个独立的奖励模型进行推理，其 <code>C_reward</code> 占据了可观的部分，导致在相同总预算下，可用于策略搜索和更新的资源必然减少。这种机制上的差异在单纯报告总FLOP数时被完全掩盖。</p>
+<p><img src="https://arxiv.org/html/2607.13389v1/2607.13389v1/x1.png" alt="搜索-学习分配平面"></p>
+<blockquote>
+<p><strong>图1</strong>：搜索-学习分配平面。在固定的 RL 后训练总预算下，不同的运行（点）将计算资源分配给了不同比例的搜索（C_search）、策略更新（C_learning）和奖励评估（C_reward）。最佳的观测分配是条件性资源分配平面上的一个点，而非仅由总计算量决定。</p>
+</blockquote>
+<p>此外，研究者提出了 RACE（Reward-Aware Compute Allocation）诊断协议。RACE 并非一个旨在保证性能提升的优化算法，而是一个用于在昂贵的大规模验证运行之前，通过小型 IsoFLOP 试点网格来识别当前设置下（例如，针对特定模型大小和奖励系统）属于“高更新”还是“低更新”分配区间的流程，其输出是指引验证方向的假设。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：所有实验在数学推理任务Polaris-53K上进行，使用GRPO算法对LoRA适配的Qwen2.5指令微调策略模型进行后训练。研究分为多个阶段：阶段A研究不同模型大小（1.5B, 3B, 7B）下的分配；阶段B固定使用3B模型，比较稀疏、结构化、密集和代理PRM四种奖励系统；阶段D使用真实的7B大小过程奖励模型。</p>
+<p><strong>对比方法</strong>：实验的核心是比较在相同总FLOP预算（分为三个计算带C1p1e16，C1p8e16，C2p4e16）下，不同分配方案（通过改变LoRA秩r和对应更新步数S实现）的性能，而非对比其他独立基线模型。</p>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>分配前沿的结构性</strong>：实验证实了分配前沿的存在，即在固定总预算下，性能（如训练奖励）随更新分数ρ的变化呈现出结构化的响应曲面，存在一个最佳观测区间。搜索过重（ρ过低）未充分利用学习能力，更新过重（ρ过高）则受限于探索不足。</li>
+<li><strong>模型大小与分配的耦合性</strong>：在相同总预算下，选择更大的策略模型意味着更高的单token计算成本，因此该预算能“购买”的rollout轨迹数量和更新步骤更少。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.13389v1/2607.13389v1/x2.png" alt="相同FLOP预算下的模型大小权衡"></p>
+<blockquote>
+<p><strong>图2</strong>：相同FLOP预算下的模型大小权衡。在匹配的试点预算下，改变策略模型大小会改变该预算能买到的训练量。更大模型消耗更多每token计算，因此相同FLOP预算意味着更少的rollout token和更新步数；最佳的观测下游运行因此共同依赖于模型大小和分配。</p>
+</blockquote>
+<ol start="3">
+<li><strong>奖励系统改变分配前沿</strong>：基于规则的奖励（稀疏、结构化、密集）倾向于选择高更新分数区间（ρ ≈ 0.72），而代理和真实PRM奖励在计算了奖励模型推理成本后，其原生训练奖励的最佳观测区间移向较低的更新分数（ρ ≈ 0.44 – 0.45）。这说明奖励设计本身改变了计算资源的分配路径。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.13389v1/2607.13389v1/x3.png" alt="反馈成本改变分配"></p>
+<blockquote>
+<p><strong>图3</strong>：反馈成本改变分配。在匹配的3B设置中，对于最佳观测的原生奖励运行，基于规则的奖励将预算花费在策略rollout和更新上，而PRM风格的反馈则将可见的一部分预算分配给奖励模型评估。这是仅报告总FLOPs所隐藏的机制。</p>
+</blockquote>
+<ol start="4">
+<li><strong>评估目标依赖性</strong>：不同的下游评估指标会选择不同的最佳分配。在3B模型匹配设置中，原生训练奖励的最佳ρ因奖励系统而异；下游GSM8K和MATH-500的pass@1符号准确性普遍倾向于高更新设置；而共用的过程质量评判器（Common Judge）分数则在中等更新（a100）设置达到峰值。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.13389v1/2607.13389v1/x4.png" alt="评估目标改变分配"></p>
+<blockquote>
+<p><strong>图4</strong>：评估目标改变分配。原生训练奖励、下游pass@1符号准确性和共用过程质量评分会选择不同的分配区间。“计算资源应该投向哪里？”的答案因此取决于被优化的目标。</p>
+</blockquote>
+<p><strong>消融实验（RACE诊断能力）</strong>：RACE协议在试点网格内部和留秩交叉验证中能够正确识别高更新与低更新区间（同区间恢复率为1.0）。然而，其在保持测试集上的原生奖励并未超越全局基线。这强化了RACE作为识别分配区间、指导验证流程的诊断工具定位，而非保证性能提升的优化器。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个针对固定预算RL后训练的FLOP记账框架，明确将总计算分解为搜索、学习和奖励评估三部分。</li>
+<li>通过相同FLOP预算下的模型大小对比，揭示了模型选择与训练分配决策是耦合的，而非独立。</li>
+<li>实证证明了最优计算分配强烈依赖于奖励系统和评估目标，没有普适的最优分配方案。</li>
+</ol>
+<p><strong>论文提到的局限性</strong>：</p>
+<ul>
+<li>实验使用数学推理任务作为基础模型后训练的受控代理，而非直接的具身机器人任务。</li>
+<li>使用单一模型家族（Qwen2.5）、单一后训练算法（GRPO）和有限的随机种子。</li>
+<li>RACE是一个区间选择诊断工具，不能保证在保持测试集上带来提升。</li>
+<li>不声称存在一个固定的最佳ρ或适用于所有任务、模型和反馈系统的通用后训练法则。</li>
+</ul>
+<p><strong>对后续研究的启示</strong>：</p>
+<ul>
+<li>本文强调整合计算分配视角对于理解和设计高效的RL后训练流程至关重要。</li>
+<li>对于未来研究，论文建议在报告RL后训练结果时，不仅报告总FLOPs，还应报告其细分的分配情况：Rollout FLOPs， Update FLOPs， Reward-Evaluation FLOPs 以及由此得出的更新分数 ρ。这有助于更公平地比较不同方法，并理解其性能表现的深层机制。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文研究了强化学习（RL）后训练中固定计算预算（FLOP）的优化分配问题，核心在于探讨应将计算资源优先用于增大模型规模、延长训练、增加策略搜索/采样，还是强化奖励反馈。研究提出了一个用于GRPO后训练的FLOP记账框架，将总计算分解为策略搜索、策略更新/学习以及奖励/反馈模型评估三部分。实验基于LoRA适配的Qwen2.5策略模型，关键结论是：最优分配方案取决于模型大小、预算、奖励系统与评估目标；在同等FLOP下，更大的模型因单token计算成本更高，会减少可用的更新或搜索次数；基于规则的奖励系统将绝大部分非更新计算用于策略搜索，而PRM式反馈则会将可观预算分配给奖励模型推理。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.13389" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
