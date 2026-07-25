@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>GuidedAttention: Interpretable and Correctable Visual Attention for OOD-Robust Robot Manipulation via Imitation Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>GuidedAttention: Interpretable and Correctable Visual Attention for OOD-Robust Robot Manipulation via Imitation Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.21049" target="_blank" rel="noreferrer">2607.21049</a></span>
+        <span>作者: Yukiyasu Domae Team</span>
+        <span>日期: 2026-07-23</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<ul>
+<li>当前基于模仿学习的机器人操作方法主流是端到端的视觉运动策略。这类方法虽然减少了手工特征工程，但缺乏让人类理解和校正策略视觉注意力的接口，导致策略可能因为无法关注到人类显而易见的任务相关线索而失败。</li>
+<li>本文针对上述人机交互困难及在分布外条件下性能下降的问题，提出将“可解释且可校正的视觉注意力”作为模仿学习中的一个显式中间表征。</li>
+<li>核心思路是：通过预测和追踪任务相关的视觉注意关键点来构建一个可解释的表征，并以此驱动一个基于扩散模型的动作策略；在部署时，用户可一键式校正预测不准确的关键点，校正后的注意力将通过追踪模块自动传播，从而在保持自主性的同时提升策略在OOD条件下的鲁棒性。</li>
+</ul>
+<h2 id="方法详解">方法详解</h2>
+<p><img src="https://arxiv.org/html/2607.21049v1/2607.21049v1/figs/policy-overall.jpg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：方法整体框架。左侧为整体策略架构，视觉注意力编码器预测关键点并提取注意力特征，与本体感知状态一起条件化一个基于U-Net的扩散去噪过程，生成动作。右侧为关键点覆盖机制，用户可以在rollout初期校正预测关键点（用×表示），校正后的坐标将被逆向映射为特征，替换原有预测。</p>
+</blockquote>
+<ul>
+<li><strong>整体框架/pipeline</strong>：提出的框架称为带有引导注意力的扩散策略（DP-GA）。输入是多视角RGB观测和本体感知关节状态。核心流程分为两阶段：1) <strong>注意预测</strong>：视觉注意力编码器从每个相机图像中预测一组任务相关的2D注意关键点，并提取其对应的注意力特征。2) <strong>动作生成</strong>：这些注意力特征与本体感知特征拼接，作为条件输入到一个基于CNN（U-Net）的扩散模型中，进行去噪以生成机器人动作。</li>
+</ul>
+<p> When user interaction is desired, the human can optionally correct the predicted attention keypoints, which are then fed through the inverse mapping of the keypoint predictor to provide corrected visual features to condition the action generation.</p>
+<ul>
+<li><p><strong>核心模块</strong>：</p>
+<ol>
+<li>**视觉注意力编码器 (AttnEnc)**：采用ResNet-18提取图像块特征，再输入基于Transformer的编码器-解码器（DETR风格）。解码器的每个可学习查询对应一个预定义的关键点，输出为该关键点的注意力特征 <code>f_i</code>。一个额外的坐标头（线性层 <code>h_θ</code>）将每个 <code>f_i</code> 映射为2D坐标 <code>p_i</code>（公式1）。训练时，使用关键点坐标的均方误差损失 <code>L_kp</code>（公式2）进行监督。</li>
+<li><strong>关键点覆盖机制</strong>：这是实现“可校正”功能的核心。在策略rollout时，若用户判断预测的关键点（例如因OOD条件）不可靠，可以选择性地校正部分关键点的坐标 <code>p_i^gt</code>。校正后的坐标通过 <code>h_θ</code> 的解析逆变换 <code>h_θ^{-1}</code>（公式4）映射回特征空间，替换原有的预测特征 <code>f_i</code>，形成最终用于条件化的特征 <code>z_i</code>（公式3）。为确保该机制可靠，引入了三项技术：i) 前向-逆向权重共享（使用同一个线性映射矩阵及其伪逆）；ii) 特征空间对齐损失 <code>L_feat</code>（公式5），强制预测特征与从真实关键点逆向还原的特征保持一致；iii) 随机化特征路由，训练时随机决定每个关键点的条件化特征是来自预测路径还是覆盖路径，以避免扩散模型对单一路径产生依赖。</li>
+<li><strong>标注与追踪模块</strong>：<ul>
+<li><strong>训练阶段</strong>：只需在每条示教轨迹的初始帧人工标注关键点位置。随后的地面真实关键点通过现成的追踪器（如 Co-Tracker）进行传播（公式6）。静态关键点在整个轨迹中保持固定。</li>
+<li><strong>rollout阶段</strong>：策略自主预测关键点。如需校正，用户仅在初始帧点击修正关键点位置，随后由同一个追踪器自动传播已校正的关键点，并作为固定的条件输入给动作生成。</li>
+</ul>
+</li>
+</ol>
+</li>
+<li><p><strong>创新点体现</strong>：与现有方法主要将注意力用作提升性能的内部学习表征不同，本文提出的注意力是<strong>显式、可解释（表现为图像上的2D关键点）、且可一键式校正</strong>的中间表征。这种设计在端到端策略中开辟了一个新的人机交互接口，使用户能以直观、低成本的方式在OOD条件下提供任务相关的视觉引导，从而提升鲁棒性。</p>
+</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<ul>
+<li><strong>Benchmark/数据集</strong>：模拟实验在MuJoCo中进行，包含3个任务（Cable 穿电缆、Ring 套圈、Particle 舀颗粒）。真实世界实验使用UR5e机械臂，包含3个任务（Cup Insertion 套杯、Chain Pick-and-Place 链抓放、Towel Fold 叠毛巾）。每个任务分别收集了30条（模拟）或32条（真实）示教轨迹，并仅在初始帧进行关键点标注。</li>
+<li><strong>Baseline方法</strong>：DP（基于CNN全局视觉特征的扩散策略）、ACT（动作分块Transformer）。同时比较了DP-GA的两种变体：默认<code>f_i</code>特征条件化 和 <code>p_i</code>坐标直接条件化(Coord-as-feat)。</li>
+<li><strong>关键实验结果</strong>：<ul>
+<li><strong>模拟实验（表I）</strong>：在完全自主执行（无人工校正）时，DP-GA在ID和大多数OOD条件下优于DP和ACT。例如在ID条件下，DP-GA（默认）比DP高约15个百分点（pp）。在开启一次关键点校正后，DP-GA的性能在OOD条件下得到大幅提升（15-30 pp），最终在位置和外观OOD设置下的成功率比DP基线高出约20-30 pp。</li>
+<li><strong>消融实验（表II）</strong>：移除随机化特征路由后，在启用校正的情况下性能骤降58.9 pp。移除注意力监督（<code>L_kp</code> 和 <code>L_feat</code>）后，无论是否校正，性能均大幅下降（分别降66.7 pp和31.1 pp）。这证明所提出的训练机制对利用人为校正至关重要。</li>
+</ul>
+</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.21049v1/2607.21049v1/figs/intro.jpg" alt="模拟任务设置"></p>
+<blockquote>
+<p><strong>图2</strong>：模拟的三种操作任务和外观OOD设置（在桌面上添加杂乱的彩色方块作为干扰）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.21049v1/2607.21049v1/x1.png" alt="关键点精度影响"></p>
+<blockquote>
+<p><strong>图3</strong>：追踪和人工标注关键点的精度对成功率的影响分析图。该方法对适度噪声具有鲁棒性，且在噪声下仍优于基线。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.21049v1/2607.21049v1/figs/real/cup.png" alt="真实世界任务设置"></p>
+<blockquote>
+<p><strong>图4</strong>：真实世界的三种操作任务和叠毛巾任务的外观OOD设置（放置大量彩色积木块）。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.21049v1/2607.21049v1/x2.png" alt="真实世界结果"></p>
+<blockquote>
+<p><strong>图5</strong>：真实世界实验的成功率。DP-GA在ID和位置OOD条件下性能最佳。启用一次校正（红色）后，在外观OOD任务（叠毛巾）上取得了最显著的性能提升。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<ul>
+<li><strong>核心贡献</strong>：<ol>
+<li>提出了一个用于视觉运动模仿学习的创新框架，引入了<strong>可解释且可校正的视觉注意力</strong>作为显式中间表征。</li>
+<li>实现了DP-GA策略，通过扩散模型将动作生成与视觉注意力关键点相耦合，并支持<strong>一次性用户校正与自动跟踪</strong>。</li>
+<li>通过大量模拟和真实世界实验验证了该框架能有效提升机器人操作性能，尤其是在<strong>位置和外观分布外</strong>的挑战性条件下。</li>
+</ol>
+</li>
+<li><strong>论文自身局限性</strong>：论文指出，该方法依赖于初始帧标注的准确性，并且关键点追踪模块在严重遮挡或快速运动下可能失效，这可能会影响系统的整体鲁棒性。</li>
+<li><strong>对后续研究的启示</strong>：该方法为在端到端学习范式中融合人类直觉和常识开辟了新途径。未来工作可以探索更鲁棒的注意力表征形式（如3D关键点），或将此交互范式与语言指令等更高层次的引导相结合。同时，研究如何让系统主动判断何时需要请求人类干预（主动学习），也是一个有潜力的方向。</li>
+</ul>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人模仿学习中端到端视觉运动策略的注意力机制难以解释和修正，导致其在分布外条件下性能不佳的问题，提出了GuidedAttention框架。该方法的核心是引入可解释与可纠正的注意力关键点作为中间表示，用以指导一个基于扩散的动作生成策略。用户可以在任务初始时检查和校正关键点，由跟踪模块自动传播。实验表明，该方法显著提升了在位置和外观的分布外条件下的机器人操作性能。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.21049" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
