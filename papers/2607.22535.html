@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Robot-Factored World Models via Robot Rendering - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Robot-Factored World Models via Robot Rendering</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.22535" target="_blank" rel="noreferrer">2607.22535</a></span>
+        <span>作者: Hanbyul Joo Team</span>
+        <span>日期: 2026-07-24</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>动作条件的视频世界模型旨在根据初始观测和动作序列预测未来观测。在机器人领域，动作通过两个不同的过程影响未来观测：首先通过机器人身体和控制器实现为机器人运动，随后场景通过接触和物体运动做出响应。主流的机器人视频世界模型通常将机器人控制信号（如关节目标或任务空间位姿）直接注入模型的调节层。这种方法要求模型学习<strong>动作实现过程本身</strong>。另一种视觉动作提示（VAP）方法则渲染记录的机器人状态轨迹作为条件，但记录的状态是交互后的<strong>已实现结果</strong>，包含了接触、延迟等反馈，泄漏了模型本该预测的信息。本文针对这一核心痛点，提出了一种新的视角：将机器人专属因素从世界模型中“分解”出去。其核心思路是：利用部署时可用的<strong>名义轨迹</strong>（控制器实现但未接触场景前的机器人运动）作为中间信号，并将其渲染成可视化的机器人几何体作为世界模型的通用接口，使模型专注于学习场景响应。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文提出的方法旨在构建一个“机器人分解”的视觉世界模型接口，让模型将动作视为可见的机器人几何体，从而专门学习场景响应。</p>
+<p><img src="https://arxiv.org/static/base/1.0.1/images/icons/smileybones-small.svg" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：视觉世界模型接口。静态上下文携带场景和视角信息；渲染的名义机器人几何体携带动作信息；扩散模型预测场景响应。</p>
+</blockquote>
+<p>整体流程如下：</p>
+<ol>
+<li><strong>动作实现</strong>：给定初始机器人状态 q0 和动作序列 a_{1:F}，通过机器人专属的实现算子 Φ_R（即机器人的控制器和运动学模型）计算名义轨迹 q_{1:F} = Φ_R(a_{1:F}; q0)。该轨迹代表了动作在<strong>场景交互前</strong>被机器人本体实现的运动。</li>
+<li><strong>机器人渲染</strong>：将上述名义轨迹 q_{1:F} 沿着目标相机轨迹 C_{1:F}，通过渲染算子 Π_R（基于机器人URDF）投影到目标相机帧中，得到机器人网格RGB视频 M_{1:F}^{rgb} 和末端执行器深度视频 D_{1:F}^{eef}。</li>
+<li><strong>静态上下文渲染</strong>：在并行路径中，初始场景状态 S0 通过另一个渲染算子 Π_S，沿着同一相机轨迹 C_{1:F} 生成静态场景RGB视频 B_{1:F}^{rgb} 和场景深度视频 D_{1:F}^{scene}。</li>
+<li><strong>世界模型训练</strong>：核心的世界模型（一个视频扩散模型）的输入是上述四组渲染视频（B^{rgb}, D^{scene}, M^{rgb}, D^{eef}）以及描述场景的文本提示 T。模型学习条件分布 p_θ(V_{1:F} | B^{rgb}, D^{scene}, M^{rgb}, D^{eef}, T)，预测未来的真实视频 V_{1:F}。</li>
+</ol>
+<p><img src="https://arxiv.org/static/base/1.0.1/images/arxiv-logo-primary-light.svg" alt="动作到状态的实现间隙"></p>
+<blockquote>
+<p><strong>图2</strong>：动作到状态的实现间隙。 (a) 机器人专用控制器和硬件约束在原始动作和名义轨迹之间造成间隙。(b) 场景交互在名义轨迹和已实现状态之间造成间隙。名义轨迹作为部署可用的调节信号。</p>
+</blockquote>
+<p>方法的创新点具体体现在两个核心思想上：</p>
+<ul>
+<li><strong>使用名义轨迹作为调节信号</strong>：它位于原始动作（部署可用但语义模糊）和已实现状态（交互后结果）之间，避免了动作实现间隙的学习负担和未来状态泄漏。这使模型专注于预测<strong>名义-实现间隙</strong>，即接触、物体运动等交互动力学。</li>
+<li><strong>提出深度感知的渲染接口</strong>：仅凭机器人RGB渲染可以定位动作的2D位置，但难以区分遮挡、接近和实际接触。本文除了机器人RGB和场景深度，特别引入了<strong>末端执行器深度</strong> D_{eef}，为模型提供了接触相关的几何线索，使其能更好地推理交互结果。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>数据集</strong>：使用增强外参子集的DROID数据集，以及在RoboCasa中采集的RoboCasa-GR1数据集。视频剪辑规格为81帧，分辨率480×832，16fps。</li>
+<li><strong>基线方法</strong>：与两种基于向量的基线对比：1) <strong>Ctrl-World</strong>：基于SVD的笛卡尔位姿调节世界模型；2) <strong>AdaLN状态向量</strong>：将名义轨迹作为数值状态向量输入到视频扩散模型。</li>
+<li><strong>评估指标</strong>：PSNR（峰值信噪比）、SSIM（结构相似性）、LPIPS（学习感知图像块相似性）。</li>
+</ul>
+<p><strong>关键实验结果</strong>：<br>定量比较（论文表1）显示，在特定骨干网络（SVD 1.5B和Wan 2.1）内部，本文提出的渲染接口均优于向量调节的基线。例如在DROID数据集上，SVD骨干的PSNR从基线的23.15提升到25.05；Wan骨干在RoboCasa-GR1上，PSNR从基线的17.67大幅提升至24.61。</p>
+<p><img src="https://arxiv.org/html/2607.22535v1/2607.22535v1/x1.png" alt="定性对比"></p>
+<blockquote>
+<p><strong>图3</strong>：定性对比。渲染的机器人几何体能准确定位机器人驱动的场景变化，而深度信息有助于解析与接触相关的邻近度和遮挡关系。</p>
+</blockquote>
+<p><strong>消融实验（论文表2）</strong>：</p>
+<ol>
+<li><strong>名义轨迹调节 vs. 原始动作调节</strong>：仅使用RGB网格渲染时，基于名义轨迹（22.44 PSNR）优于基于原始动作（21.57 PSNR），证明了将动作实现过程分解出去的有效性。</li>
+<li><strong>深度信息的作用</strong>：在名义轨迹渲染基础上增加末端执行器深度和场景深度，PSNR进一步提升至23.08，证实了深度线索对模型判断接触和遮挡的重要性。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.22535v1/2607.22535v1/x2.png" alt="深度消融"></p>
+<blockquote>
+<p><strong>图4</strong>：深度消融。末端执行器深度和场景深度有助于区分具有接触意义的邻近度和仅是图像层面的重叠。</p>
+</blockquote>
+<p><strong>定性分析</strong>：</p>
+<ul>
+<li><strong>提示跟随</strong>：在真实数据上更改渲染的名义轨迹（如使用逆运动学重规划），模型能相应地预测不同的场景响应，证明了接口对机器人几何体的依赖（对应论文图5，未提供）。</li>
+<li><strong>具身泛化</strong>：将在Panda机器人数据上训练的模型，应用于未见过的xArm 6机械臂与Inspire F1手组合（HRDexDB数据集），仅需渲染该新机器人的几何体输入模型，即可生成合理的交互视频，证明了接口的泛化能力（对应论文图6，未提供）。</li>
+<li><strong>下游应用</strong>：将人类演示视频（DexYCB数据集）的手部运动重定向到机器人，再将机器人几何体渲染为接口输入，模型可生成对应的机器人操作视频，验证了接口对多种运动来源的解耦能力（对应论文图7, 8等，未提供）。</li>
+</ul>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个“机器人分解”的视觉世界模型接口，将动作实现和高保真机器人渲染分解为预处理步骤，使模型专注于学习场景响应动力学。</li>
+<li>设计了深度感知的渲染接口，联合使用机器人RGB、末端执行器深度和场景深度，提供了更丰富的几何线索，显著改善了接触和遮挡的预测。</li>
+<li>该接口是跨机器人具身和多源运动（如人类演示重定向）的通用表示，支持对未见机器人具身的零样本泛化。</li>
+</ol>
+<p><strong>局限性</strong>（论文指出）：</p>
+<ol>
+<li>接口需要已知的机器人URDF模型和相机This is a placeholder for the actual caption of Figure 5, which is missing in the provided text.标定。</li>
+<li>对于运动的相机，静态场景流的生成依赖于完美的3D重建或仿真，在真实世界中可能存在“外观间隙”。</li>
+<li>训练数据集（如DROID）多为成功操作序列，模型对失败（如抓取失误、打滑）的预测可能不鲁棒。</li>
+</ol>
+<p><strong>对后续研究的启示</strong>：<br>本文提出的“将动作可视化为几何体”的范式，为解决具身AI中动作表达与泛化的难题提供了新思路。它启示我们在构建通用世界模型时，应尝试寻找与具体实现解耦的、更本质的物理交互表示。未来工作可探索从观测中估计静态场景几何，或结合失败数据以提升对意外交互的预测能力。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人视频世界模型中动作表示的难题：直接使用动作命令需模型学习动作实现过程，而使用记录状态则泄露互动结果。提出机器人因子化世界模型，关键技术包括：1) 动作实现，将命令转换为名义轨迹以避免学习实现和泄露；2) 机器人渲染，通过URDF渲染轨迹，将机器人几何从模型中分离。实验表明，渲染接口优于向量条件基线，能泛化到未见过的机器人体现，并可从人类示范生成机器人操作视频。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.22535" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

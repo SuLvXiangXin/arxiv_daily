@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Addressing the Orchestration Gap in Generalist Robots via Physical Agency - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Addressing the Orchestration Gap in Generalist Robots via Physical Agency</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.21725" target="_blank" rel="noreferrer">2607.21725</a></span>
+        <span>作者: Tri Dao Team</span>
+        <span>日期: 2026-07-23</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，实现通用机器人的主流方法是通过大规模预训练构建视觉-语言-动作模型。这些VLA策略在大量机器人演示数据上进行训练，以学习泛化的视动技能。然而，这种方法存在关键局限性：机器人数据收集成本高昂，且并非教授任务级能力的最直接途径。具体而言，像否定、进度跟踪、故障恢复等逻辑推理能力很难通过纯粹的动作模仿数据有效习得。现有工作或试图将所有能力整合进单一策略中，导致复杂的单次前向推理负担，或依赖符号化API、手工基元、特权仿真状态等方法，难以通用。</p>
+<p>本文针对上述“编排间隙”这一具体痛点，提出了新的视角：将机器人的能力分解为一个通用的、语言条件化的底层策略/控制代理，以及一个高层的代理管理器/编排器，而非将所有能力都通过预训练烘焙到学习到的策略权重中。核心思路是，构建一个闭环的物理代理编排器，在推理时为冻结的底层技能提供高层规划、任务分解、结果验证和失败恢复能力，无需任何额外的数据收集或策略微调。</p>
+<h2 id="方法详解">方法详解</h2>
+<p><img src="https://arxiv.org/html/2607.21725v1/2607.21725v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：Pigey的整体框架。前沿VLM（(\phi)）运行一个“观察-推理-行动-验证”的闭环，它管理两个冻结的底层运动后端：用于刚性物体精确抓放的TAMP规划器，以及用于可变形物体等复杂任务的(\pi_{0.5})-VLA策略。编排器负责将抽象指令分解为可执行的子目标，选择后端，验证结果，并在失败时恢复。</p>
+</blockquote>
+<p>Pigey系统由一个作为编排器（orchestrator）的前沿视觉语言模型（(\phi)）和两个冻结的底层运动后端构成。编排器以固定指令(I)、当前观察(o)和交互历史(h)为输入，执行一个闭环流程：在每一步，它选择一个工具调用，执行后更新历史，并决定下一步动作，直到任务完成或达到工具调用预算上限（(T_{\max})）。关键模块与技术细节如下：</p>
+<ol>
+<li><p><strong>工具集</strong>：编排器通过五个工具与环境交互：</p>
+<ul>
+<li><code>Perceive</code>：返回摄像头图像、机器人状态及开放词汇检测器识别出的物体标签列表。</li>
+<li><code>Pick(ℓ)</code> 和 <code>DropAbove(ℓ)</code>：通过TAMP后端执行对指定标签物体（ℓ）的抓取和放置。</li>
+<li><code>VLARollout(s)</code>：通过(\pi_{0.5})-VLA后端执行给定的子目标(s)（如“将红杯子放到盘子上”）。</li>
+<li><code>Done</code>：终止任务。</li>
+</ul>
+</li>
+<li><p><strong>底层运动后端</strong>：两者均为预训练且冻结的模型。</p>
+<ul>
+<li><strong>TAMP后端</strong>：基于TiPToP，提供开放词汇的物体定位、抓取预测和无碰撞运动规划。关键创新在于，Pigey将“拾取-放置”这一开环操作拆分为两个独立的工具，并在“拾取”后强制进行验证，仅在抓取被确认后才调用“放置”工具，从而形成了闭环。</li>
+<li><strong>VLA后端</strong>：采用冻结的(\pi_{0.5})策略，对给定的短子目标进行闭环的视觉运动控制。擅长处理可变形物体、接触密集或杂乱场景，并作为TAMP规划失败时的备用恢复路径。</li>
+</ul>
+</li>
+<li><p><strong>验证机制</strong>：这是区分闭环编排与开环提示的关键。验证结合了两种信号：</p>
+<ul>
+<li><strong>确定性信号</strong>：通过夹爪宽度传感器读取二进制<code>is_grasped</code>标志来判断抓取是否成功。同时，后端会返回类型化的失败原因（如“未找到抓取点”、“运动规划失败”）。</li>
+<li><strong>视觉信号</strong>：每次工具调用后，返回的手腕图像会再次输入给VLM编排器(\phi)，由其确认目标物体是否在夹爪中或已从桌面上消失。<br>两种信号以保守方式结合，只有通过验证的结果才会推进计划，否则触发恢复。</li>
+</ul>
+</li>
+<li><p><strong>规划与恢复策略</strong>：</p>
+<ul>
+<li><strong>基于物体类型的后端路由</strong>：刚性、平放在桌面上的物体优先使用TAMP；可变形、线缆状或在容器内的物体则直接使用VLA。</li>
+<li><strong>验证-重试-升级</strong>：未经验证的<code>Pick</code>操作会重试一次（重新感知并规划）。若第二次仍失败，则升级（escalate）到VLA后端执行抓取。这种升级是双向的，如果VLA执行无进展，编排器会回退到在新感知的场景上使用TAMP。</li>
+<li><strong>复杂恢复逻辑</strong>：包括归还错抓物体、清除遮挡物以显露目标、在放置前清空目标容器中不应存在的物体等。通过在每次抓取前重新感知，系统能应对物体被意外推移或初始被遮挡的场景。</li>
+</ul>
+</li>
+</ol>
+<p>与现有方法相比，Pigey的核心创新点在于：<strong>1）在推理时构建了一个完整的闭环任务层编排系统，而非训练单一模块或依靠开环规划；2）通过分解并验证标准“拾取-放置”基元，将开环的TAMP规划器转换为闭环组件；3）利用通用VLM的推理能力，在没有额外机器人数据训练的情况下，为冻结的底层技能补充了缺失的任务层推理。</strong></p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在LIBERO-PRO仿真基准和基于DROID的真实世界机器人平台上进行。评估了30个精心设计的真实机器人任务（涵盖简单抓放、世界知识、条件逻辑、多步推理、空间推理、障碍物/安全推理、错误恢复、长时程记忆等能力维度）以及在LIBERO-PRO的六个扰动测试套件上的表现。</p>
+<p>对比的基线方法包括：直接使用底层策略本身（“直接提示”条件），即(\pi_{0.5})-DROID VLA和TiPToP TAMP规划器；在仿真中，还对比了CaP-Agent0等基于代码的策略。</p>
+<p><strong>关键定量结果：</strong><br>在LIBERO-PRO仿真基准上，使用相同的冻结(\pi_{0.5})-LIBERO策略权重，Pigey将平均成功率从基线的12.8%大幅提升至53.3%，性能提升超过4倍。</p>
+<p><img src="https://arxiv.org/html/2607.21725v1/2607.21725v1/x2.png" alt="仿真结果"></p>
+<blockquote>
+<p><strong>表2</strong>：LIBERO-PRO仿真实验结果。展示了在物体交换、任务交换、空间关系交换等扰动套件上的成功率（%）。Pigey显著超越所有基线。</p>
+</blockquote>
+<p>在真实机器人实验中，Pigey的整体成功率达到了97.3%，远超单一底层策略的性能。</p>
+<table>
+<thead>
+<tr>
+<th align="left">类别</th>
+<th align="left">任务数</th>
+<th align="left">π0.5-DROID</th>
+<th align="left">TiPToP</th>
+<th align="left">Pigey</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">简单抓放</td>
+<td align="left">4</td>
+<td align="left">95%</td>
+<td align="left">80%</td>
+<td align="left">100%</td>
+</tr>
+<tr>
+<td align="left">世界知识</td>
+<td align="left">4</td>
+<td align="left">0%</td>
+<td align="left">90%</td>
+<td align="left">100%</td>
+</tr>
+<tr>
+<td align="left">条件逻辑</td>
+<td align="left">4</td>
+<td align="left">0%</td>
+<td align="left">95%</td>
+<td align="left">100%</td>
+</tr>
+<tr>
+<td align="left">多步推理</td>
+<td align="left">4</td>
+<td align="left">0%</td>
+<td align="left">25%</td>
+<td align="left">100%</td>
+</tr>
+<tr>
+<td align="left">空间推理</td>
+<td align="left">4</td>
+<td align="left">20%</td>
+<td align="left">75%</td>
+<td align="left">100%</td>
+</tr>
+<tr>
+<td align="left">障碍物/安全推理</td>
+<td align="left">4</td>
+<td align="left">0%</td>
+<td align="left">0%</td>
+<td align="left">90%</td>
+</tr>
+<tr>
+<td align="left">错误恢复</td>
+<td align="left">4</td>
+<td align="left">10%</td>
+<td align="left">0%</td>
+<td align="left">90%</td>
+</tr>
+<tr>
+<td align="left">长时程记忆</td>
+<td align="left">2</td>
+<td align="left">0%</td>
+<td align="left">0%</td>
+<td align="left">100%</td>
+</tr>
+<tr>
+<td align="left"><strong>总体</strong></td>
+<td align="left"><strong>30</strong></td>
+<td align="left"><strong>16.7%</strong></td>
+<td align="left"><strong>48.7%</strong></td>
+<td align="left"><strong>97.3%</strong></td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>表3</strong>：真实机器人实验结果按能力维度分组。Pigey在几乎所有需要推理的任务类别上都实现了接近或达到100%的成功率，而纯VLA或纯TAMP基线在相应类别上表现很差。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.21725v1/2607.21725v1/figs/doll/turn01_Perceive_wrist.jpg" alt="定性结果"><br><img src="https://arxiv.org/html/2607.21725v1/2607.21725v1/figs/doll/turn02_Pick_after.jpg" alt="定性结果"><br><img src="https://arxiv.org/html/2607.21725v1/2607.21725v1/figs/doll/turn05_Perceive_wrist.jpg" alt="定性结果"><br><img src="https://arxiv.org/html/2607.21725v1/2607.21725v1/figs/doll/turn11_Perceive_wrist.jpg" alt="定性结果"></p>
+<blockquote>
+<p><strong>图3</strong>：Pigey执行复杂推理任务的定性示例（图为合成示意图，实际论文图3为多行多列展示不同任务）。例如在“拿起娃娃放进篮子”任务中，初始观察未见娃娃，Pigey推理其被盒子遮挡，遂先移开盒子，重新感知后找到娃娃再进行抓取。这体现了其处理隐藏目标、安全筛选（识别危险品并移开）、清理目标区域和长时程记忆等能力。</p>
+</blockquote>
+<p><strong>结果分析</strong>：</p>
+<ol>
+<li><strong>编排间隙的存在</strong>：对比Pigey与直接使用(\pi_{0.5}) VLA的结果（从16.7%提升至97.3%）清晰证明了“编排间隙”的存在——即同一套冻结的运动技能在闭环推理编排下能实现远高于直接提示的成功率。</li>
+<li><strong>闭环验证的价值</strong>：对比Pigey与TiPToP（开环TAMP）的结果，即使在简单抓放任务上也存在20个百分点的差距，这直接归因于Pigey的验证和重试机制。在涉及物体被推移或初始被遮挡的扰动场景中，Pigey的闭环重感知和重规划能力使其表现大幅优于开环规划。</li>
+<li><strong>能力解耦</strong>：实验显示，Pigey带来的性能增益主要集中在“推理受限”的任务上，而对本身已很简单的抓放任务几乎没有负面影响。这证实了机器人数据（教授<em>如何</em>行动）与推理编排（决定<em>何时</em>、<em>为何</em>、以<em>何种顺序</em>、使用<em>何种技能</em>行动）解决的是不同层面的问题。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：</p>
+<ol>
+<li>提出了“编排间隙”的概念，明确了在通用机器人系统中，高层任务推理与底层运动控制是可分解且互补的。</li>
+<li>提出了Pigey框架，通过一个在推理时运行的、无需额外机器人数据收集或策略微调的闭环物理代理编排器，成功地为冻结的底层运动技能补充了高层规划、验证和恢复能力。</li>
+<li>在仿真和真实机器人实验中，实证了该框架能显著提升现有先进策略的性能，尤其在需要复杂推理的任务上。</li>
+</ol>
+<p>论文提及的局限性在于，这种推理时编排并非零成本，它增加了推理计算开销和任务执行延迟（需要等待VLM的响应）。然而，与收集新机器人数据和重新训练策略的代价相比，这种开销可能可以接受。</p>
+<p>对后续研究的启示：本文工作为机器人学习提供了一个新的“决策顺序”：在投入稀缺的机器人数据去训练策略学习推理之前，应先评估一个推理时的编排器能在多大程度上复用现有的冻结策略来弥补其不足。此外，Pigey产生的结构化推理轨迹（包含观察、子目标、选择、验证信号和结果）为未来通过行为克隆或离线强化学习等方式，将这种编排能力提炼到更小的策略或适配器中提供了可能路径。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决通用机器人难以自主协调感知→规划→行动闭环的问题。
+
+提出了“物理智能体编排器”（Pigey）。其核心方法是将智能体能力分解为低层技能（VLA策略）和高层编排器，由编排器负责目标分解、子任务规划、执行监控与失败恢复，从而形成一个闭环的智能体系统。
+
+实验表明，该方法显著提升了泛化能力：在LIBERO-PRO基准上，性能从12.8%大幅提升至53.3%；在真实机器人上，对推理受限任务的完成率从接近零提升至超过90%。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.21725" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
