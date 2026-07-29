@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Tri-Manual Visuomotor Imitation Learning of Robot Policies - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Tri-Manual Visuomotor Imitation Learning of Robot Policies</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.25731" target="_blank" rel="noreferrer">2607.25731</a></span>
+        <span>作者: Weiming Zhi Team</span>
+        <span>日期: 2026-07-28</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<ul>
+<li>目前，视觉运动模仿学习的主流方法依赖于直接遥控操作来收集机器人演示，这在双机械臂（Bimanual）系统中很自然，因为操作员的双手可以对应到机器人的两个末端执行器。然而，该方法隐含了一个假设：操作员和机器人具有相同数量的同时控制通道。</li>
+<li>本文针对当机器人的操作能力（例如，三个手臂）超过演示接口（例如，单操作员只能同时控制两个）时的具体痛点。在这种三臂系统中，机器人可以协调三个手臂并发工作，但单操作员通过“成对模式切换”（pairwise mode switching）只能顺序地控制任意两个手臂。这导致原本可以并发执行的动作被依次记录，行为克隆可能学习到接口强加的、任务本身并不需要的延迟。</li>
+<li>本文核心思路是：将演示的动作与其录制的时序分离，保留局部动作片段的完整性，但通过依赖感知的三臂调度算法，根据人工审查的任务顺序和手臂使用约束，离线重新安排这些片段的时序，从而为训练同步的三臂策略生成更高效的监督信号。</li>
+</ul>
+<h2 id="方法详解">方法详解</h2>
+<ul>
+<li>整体流程如下：首先，操作员通过模式切换接口收集原始的三臂演示数据。接着，离线对每段演示进行子任务注解，构建一个经过人工审核的任务依赖图。然后，核心模块DATS利用此图将演示数据重定时，生成新的监督数据序列。最后，使用一个同步的视觉运动策略（Action-chunked Transformer）在所有经过DATS处理（或原始）的演示数据上进行训练。部署时，策略直接接收同步的观测并输出三臂的联合动作，无需依赖任务图或调度器。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.25731v1/2607.25731v1/images/optimized/fig2_pipeline.png" alt="TriManPolicy pipeline"></p>
+<blockquote>
+<p><strong>图2（论文图3）</strong>：TriManPolicy 完整流程。包含模式切换演示收集、离线注解构建被审查的子任务图、DATS调度优化片段放置并生成重定时的三臂监督信号。使用原始数据和使用DATS数据的策略共享相同的策略学习模块。</p>
+</blockquote>
+<ul>
+<li>核心模块一：模式切换演示收集。操作员使用一个接口（图4），持续提供两个控制流，每个时间步将其分配给三臂中的一对 <code>{LR， LO， RO}</code>。这样，操作员可以依次演示所有三个手臂的行为，未被选中的手臂保持在“保持”控制下。<br> Because you have not provided valid image URLs for corresponding figures, image placeholders are omitted.</li>
+<li>核心模块二：子任务注解与图构建。<ul>
+<li>对每个原始片段，使用视觉语言模型辅助，人工审查并最终确定一个子任务图 <code>G_n = (V_n， E_n)</code>。</li>
+<li>每个节点 <code>v_j</code> 代表一个局部子任务，包含：所需手臂集合 <code>A_j</code>、原始起止时间 <code>(s̄_j， ē_j)</code>、前驱节点集合 <code>P_j</code>（表示必须在其完成后才能开始）以及一个可选的语义标签 <code>y_j</code>。</li>
+<li>有向边集 <code>E_n</code> 由前驱关系导出。该图编码了任务所需的前驱关系（如对象状态先决条件），并且手臂资源约束（同一手臂不能同时执行两个任务）也隐含其中。</li>
+</ul>
+</li>
+<li>核心模块三：依赖感知的三臂调度。<ul>
+<li>核心思想：将演示重定时问题建模为一个带约束的固定时长区间调度问题，目标是最大化并发（缩短总时长），同时遵守任务依赖图和手臂资源独占性约束。</li>
+<li>具体而言：每个子任务的持续时间 <code>d_j</code> 从其原始执行中提取并保持不变。DATS为每个任务寻找新的开始时间 <code>s_j</code> 和结束时间 <code>e_j</code>。约束包括：1）对于每个前驱关系 <code>v_p ∈ P_j</code>，满足 <code>e_p ≤ s_j</code>；2）对于每个手臂 <code>α</code>，其分配的所有任务区间集合 <code>Q_α</code> 不能重叠（<code>NoOverlap</code>）。目标函数是最小化整个片段的总完工时间 <code>C_max</code>。</li>
+<li>该优化问题使用Google OR-Tools中的CP-SAT求解器求解，得到每个片段的优化调度方案 <code>S_n*</code>。</li>
+</ul>
+</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.25731v1/2607.25731v1/images/optimized/SF.jpg" alt="DATS temporal reparameterisation on BagTape"></p>
+<blockquote>
+<p><strong>图4（论文图4）</strong>：DATS 对 BagTape 任务的时间重参数化示意图。左侧是模式切换录制的原始监督，右侧是DATS重定时后生成的监督。它改变了训练策略时，在每个时间窗（horizon-H）内看到哪些手臂的联合动作目标。</p>
+</blockquote>
+<ul>
+<li>核心模块四：策略学习与部署。<ul>
+<li>策略使用一个动作分块变换器，观测包含每个手臂的RGB图像和本体感觉。给定当前观测 <code>o_t</code>，策略预测未来H步所有三个手臂的同步动作序列 <code>Â_t：t+H-1</code>。</li>
+<li>使用DATS重定时的数据训练时，损失函数与使用原始数据时完全相同。关键区别在于，DATS通过重新放置跨手臂的、无依赖且使用不同手臂的片段，使得在同一个<code>H</code>步时间窗内，策略能看到更多并发的手臂动作目标，从而学习到更高效的协调。部署时策略完全自主运行，不依赖任何注解或调度器。</li>
+</ul>
+</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<ul>
+<li>实验使用了六个具有挑战性的真实世界三臂任务（TowelHang， BinTowel， ToteCards， BagTape， LidEraser， TrayWipe），共收集和处理了237段演示。评估平台为三个相同的AgileX Piper-X机械臂。每个任务下，对使用原始数据（Baseline）和DATS数据训练的策略各进行了25次真实机器人试验，总计300次试验。</li>
+<li>主要对比的Baseline方法是在相同的原始演示数据（但未经过DATS重定时）上训练的相同网络架构的策略。</li>
+<li>关键实验结果：如表II所示，在所有六个任务上，DATS训练的策略在成功试验中的平均完成时间均显著低于Baseline，减少幅度在31.3%到49.9%之间。宏观平均时间从83.1秒降至47.8秒，降低了42.5%。同时，DATS保持了与Baseline相当甚至略高的成功率（129/150 vs. 126/150）。</li>
+<li>离线分析（表III， IV）进一步揭示了DATS的作用机制。<ul>
+<li>对比Raw（原始）、Gap（仅去除无任务活动的空闲时间）和DATS的时间线长度，发现在TowelHang， BinTowel， LidEraser等任务上，DATS比Gap进一步缩短了时间线（Gap - DATS为正），这表明DATS不仅仅是压缩了空闲时间，还通过允许无依赖的手臂动作片段重叠，创造了新的并发性。</li>
+<li>表IV的“同窗覆盖率”指标衡量了在训练时间窗（H步）内，三个手臂的行为目标来自原始时间线上不同段（即原本可能顺序执行）的比例。数据显示，DATS将此比例从很低的Raw/Gap水平大幅提升，例如，TowelHang任务从Raw的9.0%提升到DATS的98.8%。这证实了DATS从根本上改变了提供给同步策略的监督信号的跨手臂组合方式。</li>
+</ul>
+</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.25731v1/2607.25731v1/images/optimized/Figure5_BinTowel_TowelHang_rollouts_gutters.png" alt="Selected successful DATS rollouts"></p>
+<blockquote>
+<p><strong>图5（论文图6）</strong>：DATS策略在BinTowel（上）和TowelHang（下）任务中成功执行的示例。展示了第三个手臂（O）如何与主操作手臂（L/R）进行协调配合。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<ol>
+<li>本文的三个核心贡献：<ul>
+<li>将遥控操作模仿学习扩展到了机器人同时控制通道多于操作员演示接口的设置，为三个协作手臂的场景提出了问题定义。</li>
+<li>提出了依赖感知的三臂调度方法，将演示重定时构造为一个带约束的调度问题，允许独立的、无依赖约束且使用不同手臂的动作片段在监督时间线上重叠。</li>
+<li>在六个真实世界的挑战性任务上，通过机器人部署实验和离线分析，验证了该方法能训练出执行更快（完成时间降低42.5%）、成功率相当的同步三臂策略。</li>
+</ul>
+</li>
+<li>论文提到的局限性：DATS方法依赖于一个关键假设，即局部动作片段在时间线上移动后，其内部的传感器运动时序以及与其它片段组合后仍然是有效且有意义的。此外，构建任务依赖图需要人工审查。</li>
+<li>对后续研究的启示：该方法的思想可以推广到其他资源（如工具、工作空间区域）受限的场景，将演示重定时为一种更通用的监督信号构造方式。未来工作可以探索更自动化或半自动化的任务图构建方法，或研究如何将时序调度更紧密地与策略学习过程结合。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决三臂机器人模仿学习中，因操作员只能双手控制导致演示动作时序失真、产生不必要延迟的问题。提出TriManPolicy系统，其核心DATS方法通过离线重定时演示数据来解决问题，即保持局部动作片段但根据任务依赖和人工审查调整其执行时序。实验表明，基于重定时数据训练的策略在六个现实任务中实现了更高效的协调能力，同时保持了相近的任务成功率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.25731" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
