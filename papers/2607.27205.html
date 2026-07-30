@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>TurboVLA: Real-Time Vision-Language-Action Model at 32 Hz on an RTX 4090 with <1 GB VRAM - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>TurboVLA: Real-Time Vision-Language-Action Model at 32 Hz on an RTX 4090 with <1 GB VRAM</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.27205" target="_blank" rel="noreferrer">2607.27205</a></span>
+        <span>作者: Han Ding Team</span>
+        <span>日期: 2026-07-29</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前主流的视觉-语言-动作（VLA）模型普遍采用一种“LLM中心化”的设计，即通过一个间接的 V → L → A 通路：将视觉观察结果投影到大型语言模型的表示空间中，与任务指令结合处理，再解码为机器人动作。尽管有效，但每次策略调用时，大型语言模型核心都会带来巨大的计算和内存开销，成为实时机器人执行的瓶颈。本文针对这一痛点，提出一个新的视角：执行级别的控制并不必须以大型语言模型为中心。其核心思路是摒弃LLM中心化的中间表示，设计一个直接的 V + L → A 映射模型，通过轻量级的视觉与语言特征直接交互来构建面向控制的表示，从而实现高效、实时的语言条件操作。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>TurboVLA 的整体框架旨在直接、高效地将视觉观察和语言指令映射为连续动作块。其Pipeline包含三个核心阶段：1）使用独立的轻量编码器分别提取视觉和语言特征；2）通过一个紧凑的双向视觉-语言交互模块直接融合多模态信息；3）结合机器人状态，使用一个非自回归的解码器并行预测未来多步的连续动作。</p>
+<p><img src="https://arxiv.org/html/2607.27205v1/2607.27205v1/figs/logo.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图3</strong>：TurboVLA的整体概述。（a）模型通过紧凑的模态编码器、视觉-语言交互和动作块解码器，简单高效地将视觉观察和语言指令映射到连续动作块。（b）交互模块的设计尽可能简单，它使用堆叠的双向交叉注意力来产生视觉感知的指令特征和指令条件的视觉特征。</p>
+</blockquote>
+<p>核心模块具体如下：</p>
+<ol>
+<li><p><strong>多模态特征编码</strong>：为了降低开销，模型采用紧凑的、面向特定模态的编码器。视觉观察通过视觉编码器（如DINOv3）处理，提取空间视觉特征，并叠加位置编码和视角编码后拼接。语言指令通过一个轻量级文本编码器（如BERT）处理，提取词元级别的指令特征，以保留对象、属性和空间关系等细粒度信息。机器人状态则通过一个轻量投影网络单独编码。所有特征被投影到一个共享的隐藏维度 d（实验中为256）。</p>
+</li>
+<li><p><strong>视觉-语言交互模块</strong>：这是替代LLM中心化交互的关键。该模块由 N 个（实验中为6）双向交叉注意力层堆叠而成。每一层对初始的视觉特征 V^0 和语言特征 L^0 进行更新：视觉到指令的注意力将场景上下文注入指令流，而指令到视觉的注意力则基于任务语义调节视觉特征。经过多层交互后，更新后的视觉和语言特征被拼接，形成用于动作预测的多模态表示 Z_n^{vl}。这种设计允许目标对象、属性等信息直接调制相关视觉特征，而无需经过大型语言模型。</p>
+</li>
+<li><p><strong>连续动作块预测</strong>：模型采用一个ACT风格的轻量Transformer解码器。它将上一步得到的多模态特征 Z_n^{vl} 与机器人状态特征 Z_n^s 拼接，作为上下文，输入给一组可学习的动作查询。解码器并行处理所有查询，在单次前向传递中直接输出一个长度为 H 的连续动作块，避免了动作标记化或序列生成。训练时采用行为克隆，使用 L1 损失，无需辅助的语言建模目标。</p>
+</li>
+</ol>
+<p>与现有方法相比，TurboVLA的创新点主要体现在：1）<strong>架构上</strong>，彻底移除了执行通路中的大型生成式语言主干，代之以直接的跨模态交互；2）<strong>交互方式上</strong>，采用轻量级的双向交叉注意力直接融合视觉和语言信息，而非通过LLM的潜在空间进行中介；3）<strong>动作生成上</strong>，使用非自回归的并行解码预测连续动作块，进一步保证了实时性。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了三个基准：LIBERO（用于单臂操作）、RoboTwin 2.0（用于双臂操作）和真实世界机器人平台。对比的基线方法包括OpenVLA、π0、π0.5、UniVLA等多种先进的LLM中心化VLA模型以及Diffusion Policy等非VLA基线。</p>
+<p>在LIBERO上的关键实验结果如下：TurboVLA（使用DINOv3 ViT-B骨干）取得了97.7%的平均成功率，与参数量大得多的模型（如3.4B参数的π0.5的96.9%）性能相当甚至更优。同时，在消费级RTX 4090上，其端到端策略延迟仅为31.2毫秒（32 Hz），推理VRAM占用低于1 GB（0.9 GB），总参数量仅0.2B。</p>
+<p><img src="https://arxiv.org/html/2607.27205v1/2607.27205v1/x1.png" alt="对比结果"></p>
+<blockquote>
+<p><strong>图2</strong>：（a）从LLM中心化VLA到TurboVLA的转变。（b）TurboVLA在LIBERO上实现了极具竞争力的性能，同时具有显著更低的延迟和模型规模。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.27205v1/2607.27205v1/x2.png" alt="定量结果"></p>
+<blockquote>
+<p><strong>表1</strong>：LIBERO上的对比结果。TurboVLA在部署效率（参数量、VRAM、延迟）方面显著优于其他VLA模型，同时保持了顶尖的任务成功率。</p>
+</blockquote>
+<p>在RoboTwin 2.0双臂操作基准上，TurboVLA（使用DINOv3 ViT-L骨干）也取得了93.2%的平均成功率，与最强的基线方法性能相当。</p>
+<p><img src="https://arxiv.org/html/2607.27205v1/2607.27205v1/x3.png" alt="双臂结果"></p>
+<blockquote>
+<p><strong>表2</strong>：RoboTwin 2.0上的对比结果。TurboVLA在极具挑战的双臂协调任务上同样有效。</p>
+</blockquote>
+<p>消融实验验证了各核心组件的贡献：</p>
+<ul>
+<li><strong>视觉-语言交互</strong>：移除交互模块（仅拼接特征）会导致性能大幅下降（平均成功率从97.7%降至89.4%），证明了直接跨模态交互的必要性。</li>
+<li><strong>交互层数与初始化</strong>：使用6层交互并使用 grounding-pretrained 权重初始化效果最佳。</li>
+<li><strong>指令编码器容量</strong>：轻量级的BERT-base编码器足以提供执行相关的语义，更大的LLaMA编码器并未带来性能提升，反而增加延迟。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.27205v1/2607.27205v1/x5.png" alt="消融实验1"></p>
+<blockquote>
+<p><strong>图5</strong>：视觉-语言交互的消融研究。结果显示双向交互、足够的交互层数以及合适的预训练初始化至关重要。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2607.27205v1/2607.27205v1/x6.png" alt="消融实验2"></p>
+<blockquote>
+<p><strong>图6</strong>：文本编码器与动作预测方式的消融研究。表明轻量级文本编码器已足够，且非自回归的并行动作块预测优于自回归方式。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）<strong>提出了一个新的VLA范式</strong>，挑战了执行级控制必须围绕大型语言模型构建的普遍做法，论证了直接的 V + L → A 映射的可行性；2）<strong>实现了高效的实时控制</strong>，所提TurboVLA模型在保持顶尖性能的同时，将推理延迟降至32 Hz以下，VRAM占用小于1 GB，显著降低了部署门槛；3）<strong>验证了轻量级设计的有效性</strong>，通过紧凑编码、直接跨模态交互和并行解码，证明了面向执行的策略无需依赖重型LLM主干。</p>
+<p>论文自身提到的局限性在于，这种专注于高效执行的设计可能不适合需要复杂任务分解或开放式推理的场景，这些场景可能仍需要大型语言模型的广泛能力。</p>
+<p>这项工作为后续研究提供了重要启示：在构建VLA系统时，应更细致地权衡任务需求与模型复杂度，对于执行级别的控制，可以探索更轻量、更直接的多模态融合方案。这也激励社区在评估VLA模型时，除了任务成功率，也应将推理效率、资源消耗和实时性作为关键指标。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决了当前视觉-语言-动作（VLA）模型中，以大型语言模型（LLM）为中心的架构（V→L→A）带来的高计算与内存开销，难以实现实时部署的问题。为此，提出了TurboVLA模型，其核心革新在于将传统路径改革为直接融合视觉与语言特征的V+L→A映射。关键技术包括：独立编码视觉观察和语言指令，通过轻量级双向交互进行信息交换，并使用紧凑的解码器直接预测连续动作块。实验表明，该模型仅含0.2B参数，在RTX 4090上实现了31.2毫秒（32Hz）的推理延迟和低于0.9GB的VRAM占用，并在LIBERO基准上取得了97.7%的平均成功率，性能媲美或超越参数量大得多的模型。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.27205" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
