@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RL $^2$ -VLA: Adaptive RL Latent Compositional Steering with Test-Time Scaling for Vision-Language-Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>RL $^2$ -VLA: Adaptive RL Latent Compositional Steering with Test-Time Scaling for Vision-Language-Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.26991" target="_blank" rel="noreferrer">2607.26991</a></span>
+        <span>作者: Guillaume Sartoretti Team</span>
+        <span>日期: 2026-07-29</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前提升视觉-语言-动作模型性能的部署时方法主要分为两类：推理时引导和测试时缩放。推理时引导方法中，离散动作选择方法（如V-GPS、RoboMonkey）通过采样多个动作候选并用验证器选择，但受限于从同一VLA策略中采样，多样性不足；可微引导方法（如DynaGuide、VLS）使用外部评分函数引导动作生成，可探索策略分布之外的行为，但依赖于缺乏物理基础的VLM或难以学习准确的世界模型。测试时缩放方法通过增加计算（如重复采样、指令改写）来增强引导，但所有样本仍源自同一VLA策略，可能继承相关的偏置和失败模式。更根本的是，现有方法在所有时间步都应用固定的干预策略，没有区分VLA本身可能成功或可能失败的情况。</p>
+<p>本文针对上述“如何引导”以及“何时引导”两个具体痛点，提出了利用VLA潜在表征进行强化学习的自适应组合引导新视角。其核心思路是：训练一个轻量级离线RL策略，在推理时将其流速度与冻结的VLA流速度组合，以此引入超越示范主导模式的动作多样性；并通过失败检测模块，仅在VLA可能失败时才激活这种组合引导，以避免对已成功的动作造成不必要的干扰。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RL^2-VLA框架的整体流程如下：给定观测和语言指令，首先从冻结的VLA动作专家中提取潜在表征<code>e_t</code>；该表征同时输入到一个轻量级RL引导策略和一个基于SAFE的失败检测模块；若失败检测模块预测当前状态可能失败，则激活组合引导，将RL策略与VLA策略的流速度进行加权平均，生成多样化的动作候选；若预测为成功，则回退至仅从VLA策略采样；最后，所有生成的动作候选由一个外部验证器评分，并选择得分最高的动作执行。</p>
+<p><img src="https://arxiv.org/html/2607.26991v1/2607.26991v1/x2.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图4</strong>：RL^2框架（基于流匹配的VLA）。(i) 提取VLA动作专家的潜在表征<code>e_t</code>。(ii) <code>e_t</code>输入到RL流匹配引导策略，其产生的引导速度<code>V_RL</code>与VLA流速度<code>V_VLA</code>在每一步进行组合。(iii) <code>e_t</code>同时输入失败检测模块，决定是否启用引导。(iv) 验证器对候选动作评分并选择最佳动作执行。</p>
+</blockquote>
+<p>核心模块包含三个部分：</p>
+<ol>
+<li><strong>RL潜在策略训练</strong>：目标是训练一个可微的引导函数<code>g(o,a,ℓ)</code>。具体做法是，在大规模离线数据集（如BridgeV2、DROID）上，利用VLA提取每个数据元组的潜在表征<code>e</code>，构建包含<code>e</code>的增强数据集。随后，使用Q-learning with Adjoint Matching方法，训练一个条件于<code>e</code>的RL流匹配策略<code>π_RL</code>。QAM方法通过引入伴随状态作为时间相关的引导信号，避免了直接通过多步流匹配过程反向传播的不稳定性，使得策略能够在行为克隆先验的基础上，收敛到与高Q值对应的最优分布，从而产生超越原始演示数据的高价值行为。</li>
+<li><strong>组合引导</strong>：为了将冻结的VLA动作分布引导向更优质且多样化的候选动作，论文采用组合策略的形式，将VLA流速度<code>v_VLA</code>与RL引导策略的流速度<code>v_RL</code>进行加权平均：<code>v_comp ← w * v_VLA + (1-w) * v_RL</code>。权重<code>w</code>从一个高斯分布中采样，使得动作样本能以不同程度同时受益于VLA的示范对齐先验和RL引导带来的多样性。</li>
+<li><strong>自适应失败检测</strong>：为了决定“何时”引导，RL^2集成了SAFE——一个针对VLA的状态预测失败检测器。该检测器以从VLA动作专家提取的潜在表征序列<code>e_{0:t}</code>作为输入，通过一个LSTM网络预测失败分数<code>s_t</code>。当<code>s_t</code>超过一个预设的阈值<code>δ_t</code>时，判定为失败状态，激活组合引导；否则，回退到仅使用基础VLA生成动作。</li>
+</ol>
+<p>与现有方法相比，RL^2的创新点具体体现在：(1) <strong>引导来源</strong>：不同于从同一VLA采样或依赖VLM评分，它利用一个在相同数据上训练、但目标不同的离线RL策略来提供引导，本质上是组合了模仿学习的行为先验和强化学习的价值探索优势。(2) <strong>引导方式</strong>：采用流速度场的加权组合，是一种连续、可微的引导机制。(3) <strong>自适应机制</strong>：首次基于对成功/失败状态下不同缩放定律的分析，引入了根据失败预测自适应开关引导的策略，而非固定干预。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了SIMPLER和PolaRiS两个涵盖多样化操作任务的基准测试，评估了在训练域内和域外设置下的性能。实验平台包括模拟环境和实体PiperX机械臂。</p>
+<p>对比的基线方法包括：重复采样、指令改写、RBF排斥法，以及其他离线RL引导方法（如纯RL、拼接采样、残差策略、RLT等）。此外，还对比了非自适应版本的RL^2。</p>
+<p>关键实验结果如下：在OOD设置下，RL^2在SIMPLER和PolaRiS基准上，相比最强的基线方法（如CoVer），成功率最高提升了+17.3%。实体机器人实验表明，在“从工具箱取胶带”这一OOD任务中，RL^2相比最强基线平均成功率提升+17.5%。</p>
+<p><img src="https://arxiv.org/html/2607.26991v1/2607.26991v1/x1.png" alt="测试时缩放定律"></p>
+<blockquote>
+<p><strong>图3</strong>：测试时缩放定律（引导在失败状态下改善性能，在成功状态下降低性能）。该图显示了在不同引导方法下，动作误差随生成样本数量增加的缩放曲线。左图为失败状态，RL^2组合引导的缩放性能最佳；右图为成功状态，多样性诱导方法（如RBF、RL^2）表现反而不如基线。</p>
+</blockquote>
+<p>消融实验总结了每个组件的贡献：(1) <strong>潜在表征</strong>：使用VLA潜在信息作为RL策略的条件，比使用原始观测提升了约12.1%的性能。(2) <strong>RL训练</strong>：在相同潜在条件下，使用QAM的RL训练相比仅使用行为克隆，带来了约8.5%的性能提升，验证了RL在发现高价值替代行为上的作用。(3) <strong>自适应机制</strong>：与非自适应（始终开启组合引导）版本相比，自适应机制在成功率高的任务上避免了性能下降，在成功率低的任务上仍保持优势，整体带来约3-4%的额外提升。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：第一，提出了一个轻量级、模块化的推理时引导框架RL^2，它通过训练一个条件于VLA潜在表征的离线RL策略，并与VLA进行流速度组合，有效结合了大规模模仿学习的行为先验和强化学习诱导的动作多样性。第二，首次建立了针对VLA引导方法在成功与失败状态下截然不同的测试时缩放定律，从原理上解释了为何以及何时需要多样性引导，为自适应引导提供了理论依据。第三，通过在多个基准、不同VLA和验证器上的广泛验证，以及实体机器人实验，证明了该方法的有效性和实用性。</p>
+<p>论文自身提到的局限性包括：首先，框架依赖于外部验证器和失败检测器的质量。其次，对于自回归VLA，组合引导的实现方式（高斯扰动拟合）不如对基于流匹配的VLA那样直接和优雅。</p>
+<p>对后续研究的启示在于：第一，强调了在机器人决策中“何时干预”与“如何干预”同等重要，自适应机制是提升部署时方法效率的关键。第二，将模仿学习与强化学习在“推理时”进行组合，为利用两种范式优势提供了新路径，避免了端到端RL训练大模型的昂贵开销。第三，利用VLA的中间层潜在表征作为条件，是一种高效的知识复用和策略扩展方式，值得进一步探索。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉-语言-动作模型在分布外任务上性能下降，且现有测试时间控制方法动作模式单一、策略固定的问题，提出了RL^2这一自适应推理时间控制框架。其核心技术是训练一个基于VLA潜变量的轻量级离线强化学习策略，通过组合控制将该策略与冻结的VLA策略相结合，并仅在预测可能失败时自适应激活这一组合控制。在SIMPLER和PolaRiS基准测试中，该方法在未见任务上的成功率最高提升了17.3%，并通过了现实世界验证。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.26991" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
