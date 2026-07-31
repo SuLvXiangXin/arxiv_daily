@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>QuantWAMs: Calibrating at the Right Granularity for World Action Models - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>QuantWAMs: Calibrating at the Right Granularity for World Action Models</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.28405" target="_blank" rel="noreferrer">2607.28405</a></span>
+        <span>作者: Lizhe Qi Team</span>
+        <span>日期: 2026-07-30</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前，世界动作模型是机器人操作领域有前景的范式，它结合了视频扩散世界模型和扩散动作专家，联合预测未来观测和动作。然而，其迭代去噪和闭环执行的特性使得高效部署成本高昂。现有后训练量化方法严重依赖于独立前向的开环优化目标、同质的Transformer模型假设以及无法反映真实部署状态的校准数据，因此并不适用于WAMs。本文针对量化决策与模型结构、部署分布和任务目标脱节这一痛点，提出量化决策必须与“校准上下文”保持一致的新视角。其核心思路是提出QuantWAMs量化框架，通过三项策略分别在结构、目标和分布三个维度对齐校准与部署环境。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>QuantWAMs的整体框架面向WAMs的三种新特性，将量化决策视为必须在部署前确定、基于有限样本的估计，并确保这些估计在所有“校准上下文”维度上都是合适的。框架主要包括三大核心模块：共享基础离群值校准模块，确保量化证据只在坐标兼容的模块或模式间共享；协同训练目标显著性模块，基于联合的“视频-动作”梯度分配权重精度；固定干预滚动审计模块，在不改变精度预算的前提下，修正去噪步骤的保护策略。这些模块协同工作，解决了结构、目标和分布上的错配问题。</p>
+<p><img src="https://arxiv.org/html/2607.28405v1/2607.28405v1/x2.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：QuantWAMs方法总览。共享基础校准仅在坐标兼容的模块间池化激活统计量；协同训练引导的显著性使用联合“视频-动作”梯度分配精度；固定干预滚动审计为耦合的视频与动作DiT模块修正去噪步骤调度。</p>
+</blockquote>
+<p><strong>共享基础离群值校准</strong>：该方法沿用Atom方法的混合精度通道卸载原语，核心创新在于决定其静态屏蔽应在何种粒度上共享。其理论分析了在坐标兼容的组内通道能量统计量的异质性，提出了“池化交叉点”公式：当校准样本数量 N 小于临界值 N_c* = σ_c^2 / τ_c^2 时，跨成员池化统计量是有益的；否则应独立处理。实际中，该模块使用固定的32条训练轨迹进行校准，通过估计组的异质性和采样噪声，并结合自举法分析屏蔽稳定性，最终决定是否池化证据。坐标兼容性要求共享字面索引的通道在组内所有成员中指向量化器输入的同一坐标，这由WAM的具体架构（如Fast-WAM的共享值路径或LingBot-VA的共享线性层）决定。</p>
+<p><strong>协同训练目标显著性</strong>：该方法旨在为混合精度权重分配确定合适的决策粒度。关键技术在于计算校准轨迹上联合训练目标 ℓ_co = λ_v ℓ_v + λ_a ℓ_a 的梯度，并据此构建经验费舍尔信息矩阵 G_L^joint。与现有将两个目标梯度平方后融合的方法不同，G_L^joint 保留了关键的坐标对齐项 2λ_vλ_a E[g_v,L ⊙ g_a,L]。在克罗内克分解近似下，计算量化误差 ε_L^(b) 引入的失真 D_L(b)，并通过求解预算约束下的优化问题，将失真减少收益 B_L 最高的前20%线性层升级至高精度（如W8）。注意，精度分配单位是层级的，以避免有限样本下细粒度排序的不稳定性，但列级别的得分仍作为GPTQ补偿的内部排序启发式。</p>
+<p><strong>固定干预滚动审计</strong>：该方法旨在修正去噪步骤的保护调度，以应对WAM闭环部署导致的分布偏移问题。核心思想是，传统的基于合成输入或开环输入的敏感度分析可能评估在无法通过闭环到达的状态上，产生误导性的“幻影敏感度峰值”。固定干预审计通过在完整精度模型生成的32条真实闭环滚动状态快照上，统一施加无保护的量化干预，并测量其与全精度模型输出的差异 S_ref^replay(t)。此差异反映了真实可达状态上的局部误差。最终，使用该重放序数来替换原有调度中被保护的步骤集合，整个过程不改变受保护的步骤总数K和分配的精度预算。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验在两个已发布的WAM实现（Fast-WAM和LingBot-VA）上进行，使用了RoboTwin 2.0和LIBERO评测基准，并进行了真实机器人（AgiBot G2）操作验证。对比的基线方法包括GPTQ、SmoothQuant、SVDQuant和Atom及其针对WAM的调整版本。量化设置主要为W4A4主导的混合精度。</p>
+<p><img src="https://arxiv.org/html/2607.28405v1/2607.28405v1/x1.png" alt="实验结果表"></p>
+<blockquote>
+<p><strong>表1与表2</strong>（综合）：在Fast-WAM上，QuantWAMs (W4A4) 在RoboTwin 2.0的平均成功率（91.7%）和LIBERO的平均成功率（97.4%）最接近全精度模型（91.9%和97.6%），远超其他W4A4方法。在LingBot-VA上，QuantWAMs (W4A4) 同样以91.6%（RoboTwin 2.0平均）和98.0%（LIBERO-Long）的表现，在保持高压缩率的同时性能下降极小。</p>
+</blockquote>
+<p>关键实验结果数值总结：</p>
+<ul>
+<li><strong>压缩与加速</strong>：QuantWAMs将视频和动作块的核心峰值权重与激活内存降至全精度模型（FP16）的约29%，并提供1.4-1.6倍的块级加速。</li>
+<li><strong>模拟性能</strong>：在W4A4下，QuantWAMs报告的平均成功率与FP16仅相差0.2-0.7个百分点。</li>
+<li><strong>相比基线</strong>：对Fast-WAM，QuantWAMs比表现次优的Atom*在RoboTwin 2.0平均成功率上高出14.5个百分点（91.7% vs 77.2%），在LIBERO平均成功率上高出15.3个百分点（97.4% vs 82.1%）。</li>
+<li><strong>真实机器人验证</strong>：论文进行的真实机器人操控试验，在三个操作任务上成功建立了部署可行性。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.28405v1/2607.28405v1/x3.png" alt="消融实验"></p>
+<blockquote>
+<p><strong>表3</strong>（示意）：消融实验展示了QuantWAMs三个组件的贡献。移除任一组件都会导致性能显著下降。其中，“共享基础校准”和“协同训练目标显著性”对性能提升贡献最大，而“固定干预审计”对于某些基准（如RoboTwin 2.0的随机化设置）的鲁棒性至关重要。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：</p>
+<ol>
+<li>为WAMs的PTQ任务建立了一个围绕结构、分布和目标上下文的决策框架，强调了量化决策必须与部署上下文保持一致。</li>
+<li>提出了共享基础离群值校准策略，从理论上分析了何时可以池化激活证据，并指导了跨模块/模式的校准分组。</li>
+<li>提出了协同训练目标显著性算法，利用了联合训练目标的完整梯度信息；以及固定干预滚动审计方法，修正了面向闭环部署的去噪步骤保护策略。</li>
+</ol>
+<p>论文自身提到的局限性是，所使用的局部误差（ℓ_t）仅是一阶近似，下游任务影响还取决于闭环中误差传播的雅可比矩阵乘积，而该方法未直接对此建模。此外，模块分组的坐标兼容性规则需要针对具体WAM架构进行手动推导。</p>
+<p>对后续研究的启示在于：首先，针对特定架构的量化方法需要考虑模型的计算图耦合方式和数据流。其次，面向闭环或强化学习策略的量化，其校准数据必须反映真实部署或策略诱导的分布，简单的开环代理损失存在局限。最后，量化方法的评估应超越静态指标，面向最终闭环任务性能，QuantWAMs的“上下文一致”思想为此提供了一个系统性框架。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对World Action Models（WAMs）迭代去噪和闭环执行导致部署成本高的问题，提出后训练量化框架QuantWAMs。传统方法因开环目标和同质模型假设不适用，QuantWAMs引入三项关键技术：共享基础异常值校准、共训练目标显著性和固定干预推出审计，以校准上下文对齐量化决策。实验显示，在W4A4设置下，模拟性能与FP16相差0.2–0.7个百分点；对目标视频和动作块，峰值内存降至FP16的29%，块级加速达1.4–1.6倍，真实机器人操作任务验证了部署可行性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.28405" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
