@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Temporal Policy: History-Initialized Action Generation for Robotic Learning from Demonstration - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Temporal Policy: History-Initialized Action Generation for Robotic Learning from Demonstration</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.29482" target="_blank" rel="noreferrer">2607.29482</a></span>
+        <span>作者: Martin Jagersand Team</span>
+        <span>日期: 2026-07-31</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前机器人模仿学习领域，扩散模型和流匹配等生成模型因其能捕捉人类示教中的多模态行为分布而成为主流方法。然而，这些方法的标准范式均从一个无信息的高斯噪声分布初始化样本，这迫使网络在初始化和目标动作空间之间学习复杂且高成本的向量场，导致推理延迟高，成为实时、资源受限系统部署的瓶颈。</p>
+<p>本文针对生成模型因从独立高斯噪声起始而带来的高计算成本这一具体痛点，提出了一个名为“时序策略”的新框架。其核心创新在于，不再从噪声初始化，而是将机器人的近期历史状态直接作为生成过程的起点，将动作生成构建为一个从“点到分布”的时序耦合传输问题。本文的核心思路可概括为：利用状态与动作在表示上的同构性，将生成模型的源分布定义为依赖数据的机器人历史状态，而非独立噪声，从而大幅降低传输成本和学习复杂度，实现高效推断。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>整体框架基于随机插值理论，将动作生成建模为从已知源分布到目标数据分布的传输过程。输入是机器人的近期观测历史（状态序列），输出是未来的一段动作序列。</p>
+<p><img src="https://arxiv.org/html/2607.29482v1/2607.29482v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：方法整体框架。与标准生成模型从高斯噪声初始化不同，本方法将生成过程显式地初始化为机器人的近期状态历史。架构包含：(1) 处理感官观测的编码器；(2) 预测漂移向量场的U-Net主干网络；(3) 从λ=0到λ=1积分该向量场以生成目标动作序列的ODE/SDE求解器。</p>
+</blockquote>
+<p>核心模块包括：</p>
+<ol>
+<li><strong>时序耦合构建</strong>：其关键在于强加状态空间与动作空间的结构等价性，例如均用关节位置或笛卡尔位姿表示。给定历史长度H和时间偏移量d（1≤d≤H），源定义为历史状态序列 <code>x0 = s_{t-H+1:t}</code>，目标定义为未来动作块 <code>x1 = s_{t-H+1+d:t+d}</code>。这种数据依赖的耦合利用了连续状态之间的强时间相关性，显著降低了预期的静态传输成本。</li>
+<li><strong>随机插值与损失函数</strong>：定义概率路径 <code>x_λ = (1-λ)x0 + λx1 + ε(1-λ)w_λ</code>，其中λ∈[0,1]为插值时间，ε为噪声尺度，<code>w_λ</code>为维纳过程。对应的随机微分方程为 <code>dx_λ = [(x1 - x0) - ε w_λ] dλ + ε(1-λ) d w_λ</code>。神经网络 <code>b_θ(x_λ, x0, λ, c)</code> 的目标是逼近其中的确定性漂移项 <code>u_λ = (x1 - x0) - ε w_λ</code>。训练采用平方损失回归：<code>L(θ) = E[||b_θ - (x1 - x0 - ε√λ z)||_2^2]</code>，其中 <code>z</code> 为标准高斯噪声。</li>
+<li><strong>网络架构</strong>：漂移向量场 <code>b_θ</code> 由1D U-Net主干参数化。视觉观测由ResNet-18编码，并通过空间Softmax层投影为特征点。这些特征与插值时间λ的正弦嵌入拼接，构成条件向量c，通过FiLM层调制U-Net的特征图。</li>
+<li><strong>推理与采样灵活性</strong>：得益于随机插值框架，可在推理时调整噪声调度而无需重新训练。通过解析恢复得分函数 <code>∇_x log p_λ(x|x0)</code>，可定义具有任意噪声调度 <code>g_λ</code> 的推理SDE。这支持两种执行范式：设置 <code>g_λ=0</code> 进行确定性ODE采样（低延迟），或设置 <code>g_λ&gt;0</code> 进行随机SDE采样（多模态探索）。</li>
+</ol>
+<p>与现有方法相比，创新点具体体现在：1）提出了数据依赖的时序耦合公式，取代了独立的噪声耦合；2）基于此耦合设计了对应的插值路径和损失函数，简化了学习目标；3）利用随机插值的性质，实现了推理时噪声调度的灵活调整。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>实验使用了Robomimic仿真基准中的五个任务（Lift, Can, Square, Transport, Tool Hang），并在一台物理Barrett WAM 2x 7DoF双边遥操作平台上进行了验证。对比了Diffusion Policy和Conditional Flow Matching (CFM)两个基线方法。</p>
+<p>关键实验结果如下：</p>
+<ul>
+<li><strong>任务成功率</strong>：在大多数任务上，Temporal Policy与基线方法取得了可比的成功率，并在部分任务上表现更优。例如，在Square (ph)任务上，其最大/平均成功率为0.99/0.96，优于Diffusion Policy的0.98/0.91和CFM的0.97/0.91。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.29482v1/2607.29482v1/x2.png" alt="实验对比1"></p>
+<blockquote>
+<p><strong>图2</strong>：在Tool Hang (ph)任务上，不同模型的成功率随函数评估次数(NFE)的变化对比。Temporal Policy(TP)能在极低NFE（如1步）下达到较高成功率，而标准扩散模型(Diffusion)需要至少64步才能达到峰值性能。同时进行的消融实验(右)显示，增加噪声尺度(ε)会降低低步数下的性能，确定性ODE(ε=0.0)效率最高。</p>
+</blockquote>
+<ul>
+<li><strong>推理效率</strong>：Temporal Policy仅需10次函数评估，在NVIDIA RTX 4080上实现了19.1毫秒的推理延迟，远低于Diffusion Policy的615.6毫秒和CFM的63.5毫秒。低NFE的实现得益于数据依赖耦合所简化的向量场几何。</li>
+<li><strong>传输成本</strong>：在Square (ph)任务上，Temporal Policy的动态传输成本为1.21，远低于Diffusion Policy的189.99和CFM的10.00。其路径平直比（衡量路径接近直线的程度）为1.02，表明其学习到的流场几乎是直线。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2607.29482v1/2607.29482v1/x3.png" alt="实验对比2"></p>
+<blockquote>
+<p><strong>图3</strong>：数据效率对比。在不同规模的数据集上训练模型，Temporal Policy在各个数据量级下的成功率均优于Diffusion Policy，表明其学习问题更简单，具有更好的数据效率。</p>
+</blockquote>
+<p><strong>消融实验总结</strong>：论文研究了不同噪声调度下的推理性能。实验表明，确定性ODE采样（ε=0.0）在极少积分步数（2-4步）下即可达到高性能；而引入随机性会严重损害低步数性能，且并未带来成功率提升。因此，确定性ODE是实现高效推理的最佳选择。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献在于：1）提出了<strong>时序耦合公式</strong>，将动作生成的源分布定义为机器人历史状态，显著降低了传输距离和向量场曲率；2）实现了<strong>计算高效性</strong>，通过简化学习到的向量场，实现了仅19.1毫秒的推理延迟；3）在仿真和真实机器人平台上进行了<strong>实证验证</strong>，证明了方法在保持竞争力的成功率的同时，具备卓越的数据效率和实时控制潜力。</p>
+<p>论文自身提及的局限性主要在于其严格的<strong>状态-动作同构假设</strong>，要求状态空间和动作空间具有相同的表示（如关节位置）。这限制了方法在状态表示（如原始图像）与动作表示（如关节扭矩）不同的场景下的直接应用。</p>
+<p>该工作对后续研究的启示在于：强调了在机器人控制等具有强序列相关性和已知初始状态的应用中，利用<strong>领域先验信息（如历史状态）来设计生成模型</strong>的重要性，这可以极大地简化学习问题、提升效率。未来的工作可以探索放宽同构约束的方案，或将此“历史初始化”的思想扩展到更广泛的行为生成任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本论文针对机器人模仿学习（LfD）中生成模型因独立高斯先验导致推理延迟高的问题，提出Temporal Policy框架。该方法基于随机插值，将动作生成建模为时间耦合传输问题，直接以机器人近期历史状态初始化生成流，减少传输距离。实验表明，相比噪声初始化基线，传输成本降低近一个数量级，在NVIDIA RTX 4080上实现19.1 ms推理延迟，同时保持与最先进基线相当的成功率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.29482" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

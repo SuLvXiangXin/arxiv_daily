@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RayViT: Ray-Conditioned Visual Representations for Viewpoint-Robust Imitation Learning - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>RayViT: Ray-Conditioned Visual Representations for Viewpoint-Robust Imitation Learning</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2607.29622" target="_blank" rel="noreferrer">2607.29622</a></span>
+        <span>作者: Gerhard Neumann Team</span>
+        <span>日期: 2026-07-31</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>当前基于视觉的模仿学习主流方法是利用预训练的视觉基础模型（如DINOv3）作为编码器，从RGB图像中提取语义丰富的特征来学习策略。然而，RGB观测缺乏明确的几何线索，使得学习到的策略对相机位姿扰动十分脆弱。现有方法主要依赖从大量不同相机视角收集演示数据的数据增强，这代价高昂且难以扩展；或引入点云等显式3D表示，但这些方法通常需要额外传感器（如深度相机），且难以与预训练的纯图像基础模型兼容。<br>本文针对预训练视觉表示对相机几何关系不可知的痛点，提出了一个新颖的视角：将相机几何作为一种轻量级、密集的线索——射线图（Ray Map）——直接注入到预训练的ViT骨干网络中，从而在不依赖多视图数据增强或额外传感器的情况下，构建对相机感知且跨视角一致的视觉表示。<br>本文核心思路是：将相机内外参编码为与图像像素对齐的Plücker射线图，然后通过门控交叉注意力机制生成一个射线条件类别标记，并将射线特征作为密集的位置嵌入添加到ViT的patch token中，从而将几何信息注入预训练表征，并结合跨视角一致性损失进一步提升鲁棒性。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RayViT的整体目标是在模仿学习框架中学习一个以射线图为条件的视觉编码器 <code>v_t = E(I_t | r_t)</code>。整个pipeline如图1所示，输入为RGB图像 <code>I_t</code> 和对应的射线图 <code>r_t</code>，输出为几何感知的视觉表征 <code>v_t</code>，随后与语言token、动作token一同输入到一个解码器xLSTM策略网络中。</p>
+<p><img src="https://arxiv.org/html/2607.29622v1/2607.29622v1/figure_and_table/ray_vit_no_blank.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图1</strong>：RayViT 方法整体框架。相机几何通过射线图条件类别标记和patch对齐的射线嵌入添加到ViT编码器中。中间的跨视角一致性损失用于正则化视觉表示。视觉token、冻结的CLIP语言token和带噪声的动作token由一个仅解码器的xLSTM策略网络处理。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>射线图建模</strong>：射线图是方法的核心几何输入。对于像素 <code>p=(u,v,1)^T</code>，通过相机内参矩阵 <code>K</code> 和外参 <code>(R, t)</code> 计算其在世界坐标系下的观察光线。该光线由其方向 <code>d_w</code> 和矩 <code>m_w = o_w × d_w</code> 表示，其中 <code>o_w</code> 为相机中心。最终每个像素对应一个6维 Plücker 坐标 <code>r(u,v)=[d_w, m_w]</code>，所有像素堆叠形成与输入图像空间对齐的射线图 <code>r_t</code>。</li>
+<li><strong>射线图条件类别标记</strong>：<ul>
+<li><strong>Patch对齐的射线特征</strong>：将射线图下采样（平均池化）至与ViT patch相同的分辨率，得到一个与图像patch token一一对齐的射线特征网格。为避免破坏Plücker坐标的几何语义，这里使用非参数化的平均池化而非可学习的卷积。随后，这些6维特征通过一个两层MLP（使用GELU激活）投影到ViT的隐层维度。</li>
+<li><strong>门控交叉注意力模块</strong>：设计了一个由两个轻量级门控交叉注意力块组成的模块。一个可学习的查询token<code>对patch对齐的射线特征进行交叉注意力操作，逐步将相机几何信息汇总到单个token中。借鉴Qwen，在注意力后应用一个可学习的逐元素sigmoid门控，以调节几何条件注入的强度，避免几何信息淹没了预训练模型所依赖的表征信号。最终生成的查询token将作为射线条件类别标记，替换原始ViT前向传播中的</code>[CLS]` token。</li>
+</ul>
+</li>
+<li><strong>射线图位置嵌入</strong>：为了构建相机感知的视觉表示，还将patch对齐的射线特征（经MLP投影后）作为额外的位置嵌入，在第一个Transformer块之前直接加到图像patch token上。原文保留了ViT骨干中原始的旋转位置编码（RoPE），因为它支持图像平面内的局部空间推理，与提供每个patch在3D空间中绝对几何接地的射线信号是互补的。这种加法式的注入在保留了预训练注意力动态（RoPE未变）的同时，填补了RoPE在相机姿态变化时无法捕捉视角依赖的3D结构的缺陷。</li>
+<li><strong>跨视角对齐目标</strong>：为了鼓励视角鲁棒的表征，对来自不同相机视角的类别标记施加一致性约束。以手爪相机视角（最接近操作目标）的类别标记 <code>c^g</code> 作为锚点，其他非参考视角 <code>v ∈ V</code> 的类别标记 <code>c^v</code> 与之计算余弦相似度损失 <code>ℒ_cos = 1 - (1/(N-1)) * Σ cos(c^v, c^g)</code>。总的训练损失为模仿学习主损失与该辅助损失的加权和：<code>ℒ = ℒ_IL + λℒ_cos</code>。</li>
+</ol>
+<p><strong>与现有方法的创新点</strong>：</p>
+<ul>
+<li><strong>几何表示轻量化</strong>：利用仅需相机内外参即可计算的射线图作为几何线索，无需深度传感器或点云重建，比依赖密集3D点的方法更轻便。</li>
+<li><strong>几何注入方式</strong>：不同于先前工作简单地将射线图与图像或特征拼接（迫使编码器从头学习图像块与射线的对齐），RayViT通过门控交叉注意力生成几何感知类别标记，并将射线特征作为对齐好的位置嵌入加入，以一种更优雅且扰动更小的方式将几何注入预训练表征流。</li>
+<li><strong>协同优化策略</strong>：结合了显式的几何条件注入与隐式的跨视角一致性损失，后者仅在表示已包含几何信息时才有效，两者协同提升了在默认设置下的性能和对相机扰动的鲁棒性。</li>
+</ul>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验配置</strong>：</p>
+<ul>
+<li><strong>Benchmark/数据集</strong>：在模拟环境中使用<strong>RoboCasa</strong>大规模厨房操作基准测试，涵盖了16个多样化的多任务操作任务。在真实世界也进行了4个任务的评估。</li>
+<li><strong>实验平台</strong>：所有方法使用相同的基于分数的扩散策略和仅解码器的xLSTM动作头。视觉编码器与策略端到端联合微调。</li>
+<li><strong>相机扰动设置</strong>：评估默认（训练）相机设置和扰动变体。扰动变体中，两个静态相机在有限的方位角、仰角范围内随机旋转，并相对于参考位置随机平移。</li>
+<li><strong>Baseline对比方法</strong>：包括 Adapt3R（3D相对定位）、PMP-xyz（密集点云图）、CamPose（射线图条件但依赖多视图增强）以及纯RGB（无射线图）变体。</li>
+</ul>
+<p><strong>关键实验结果</strong>：</p>
+<ol>
+<li><strong>仿真结果（RoboCasa 16任务）</strong>：结果数据见表1。在默认相机设置下，RayViT-cls（仅使用射线条件类别标记）和RayViT都取得了与最强基线（包括纯RGB变体）相当的性能，RayViT-cls的平均成功率（43.2%）甚至略微超过所有基线。<strong>在随机相机扰动下（表1的Variant列），所有基线方法的性能均大幅下降，而RayViT方法展现出显著的鲁棒性优势</strong>。具体而言，RayViT的平均性能下降仅<strong>2.5个百分点</strong>，而纯RGB基线下降了<strong>18.5个百分点</strong>，RayViT比RGB基线在扰动下的平均成功率高出约<strong>13个百分点</strong>。这表明显式注入相机几何对于视角鲁棒性至关重要，且RayViT的方法优于依赖密集3D点云或后期融合射线图的基线。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.29622v1/2607.29622v1/x1.png" alt="仿真结果表"></p>
+<blockquote>
+<p><strong>图4</strong>：RoboCasa基准测试中各任务成功率（%）对比表。评估了默认（Default）和扰动（Variant）两种相机设置。RayViT方法在Variant设置下（绿色高亮）性能下降最小，且平均成功率最高。</p>
+</blockquote>
+<ol start="2">
+<li><strong>消融实验</strong>：<ul>
+<li><strong>射线图条件与一致性损失的作用</strong>：如表2所示，仅进行几何注入（w/o. 表示不使用余弦相似度损失）已能改善对相机扰动的鲁棒性（性能下降减小）。但结合辅助的余弦相似度损失后，<strong>RayViT-cls和RayViT在默认和扰动设置下的性能均得到一致提升</strong>，且鲁棒性进一步提升（性能下降分别从7.8/3.9个百分点降至6.2/2.5个百分点）。</li>
+<li><strong>一致性损失的有效性条件</strong>：图2表明，将同样的余弦相似度损失应用于纯RGB变体（左图）并不能带来稳定的性能增益，甚至可能有害。而将其应用于已注入几何信息的RayViT-cls的中间层（右图）则能有效提升性能。这表明<strong>跨视角对齐目标的有效性依赖于表征本身已包含几何信息</strong>。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2607.29622v1/2607.29622v1/x2.png" alt="消融分析图"></p>
+<blockquote>
+<p><strong>图5</strong>：在RGB变体（左）和RayViT-cls（右）的不同中间层应用辅助余弦相似度损失对成功率的影响图。该损失仅对已包含几何信息的表征（RayViT-cls）产生稳定的正向增益。</p>
+</blockquote>
+<p><strong>真实世界实验</strong>：<br>论文指出，在4个真实世界多任务操作中，与基线相比，RayViT在评价指标（平均完成阶段数）上提升了<strong>1.78</strong>。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li><strong>提出并验证了几何注入的有效性</strong>：证明了将相机几何（以射线图形式）注入预训练ViT骨干能显著提升模仿学习策略对相机扰动的鲁棒性，且无需多视图数据增强或额外传感器。</li>
+<li><strong>设计了轻量级架构RayViT</strong>：提出了一种通过门控交叉注意力模块生成射线条件类别标记，并结合射线特征作为位置嵌入的轻量级架构，能够将几何信息有效注入预训练表征，同时最小化对预训练特征分布的扰动。</li>
+<li><strong>揭示了跨视角一致性目标的协同作用</strong>：发现并验证了跨视角余弦相似度损失能够进一步提升几何感知表征的性能和鲁棒性，但其有效性依赖于表征本身已包含几何信息。</li>
+</ol>
+<p><strong>局限性</strong>：论文提到，射线图的生成依赖于相机外参（位姿）的标定。虽然现有工具有助于此过程，且许多竞品方法也需要标定，但这仍然是实际部署中的一个额外步骤。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>几何感知预训练</strong>：RayViT的成功表明，将几何线索整合到视觉基础模型的预训练阶段可能产生更加鲁棒且通用的表征。</li>
+<li><strong>更灵活的几何建模</strong>：可探索在部分或未知标定参数情况下的几何表示学习方法，以降低系统部署门槛。</li>
+<li><strong>多模态融合机制</strong>：门控交叉注意力等调节机制为在预训练模型中融合其他模态（如触觉、语言）信息提供了借鉴，有助于实现更精细、更自适应的多模态表征学习。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对视觉模仿学习中RGB图像缺乏几何信息导致策略对相机扰动敏感的核心问题，提出RayViT方法。该方法将相机几何编码为Plücker射线图，通过门控交叉注意力生成射线条件类别令牌，并添加密集位置嵌入和辅助余弦相似度损失以增强几何感知。实验表明，RayViT在RoboCasa多任务基准测试中相机扰动下性能提升约13个百分点，真实世界多任务成功率平均完成阶段增加1.78。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2607.29622" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
