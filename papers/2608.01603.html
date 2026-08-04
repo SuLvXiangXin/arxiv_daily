@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AffordTrajDP: Dynamic Affordance-Guided Visuomotor Policy Learning for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>AffordTrajDP: Dynamic Affordance-Guided Visuomotor Policy Learning for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2608.01603" target="_blank" rel="noreferrer">2608.01603</a></span>
+        <span>作者: Ziwei Wang Team</span>
+        <span>日期: 2026-08-03</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作领域的视觉运动策略研究，现有主流方法包括：基于原始图像的扩散策略，其对视角、光照和背景敏感，泛化性弱；基于3D点云的方法（如3D Diffusion Policy， DP3）提高了对物体位置扰动的鲁棒性，但缺乏任务特定的接触语义；基于物体姿态的方法（如PRISM-DP、SPOT）将SE(3)姿态作为紧凑表示，提高了泛化性，但未指明具体的接触位置；以及静态可供性引导的方法（如AffordDP），其从演示中检索并转移一个静态接触点作为先验，但该先验在整个执行过程中固定不变。</p>
+<p>本文针对的关键痛点是：在需要高精度的操作任务中，一旦机器人与物体发生接触，物体的姿态可能因相互作用而发生变化。此时，静态的可供性先验（接触点）无法随之更新，导致后续的引导轨迹与物体的实际姿态逐渐错位，产生轨迹漂移，最终导致任务失败。论文诊断其根本原因在于缺乏一个能同时编码“在物体何处接触”（语义信息）和“该接触点如何随物体运动而演化”（动态信息）的单一引导信号。</p>
+<p>本文核心思路是：提出AffordTrajDP框架，通过检索一个锚定接触点，并利用预测的物体未来SE(3)姿态轨迹对该接触点进行传播，从而构造一个动态的、随时间变化且与物体状态一致的可供性轨迹，以此作为策略的条件信号，以提供持续的、精确的引导。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>AffordTrajDP的整体框架是一个三阶段的pipeline：给定RGB-D观测，首先从可供性记忆库中检索并转移一个锚定静态可供性（接触点）；同时，预测目标物体在未来一段时间内的SE(3)姿态轨迹；最后，将该锚定接触点通过预测的每一帧姿态进行刚性变换传播，生成一个动态的可供性轨迹，该轨迹将与点云等其他观测一同输入到扩散策略中，生成闭环控制所需的动作序列。</p>
+<p><img src="https://arxiv.org/html/2608.01603v1/2608.01603v1/x1.png" alt="方法框架"></p>
+<blockquote>
+<p><strong>图2</strong>：AffordTrajDP的整体流程。给定RGB-D观测，首先从记忆库中检索最相似的目标实例，并通过密集视觉对应将其实例的静态可供性（接触点）转移到当前目标物体上。同时，姿态轨迹生成模块以当前估计的6D姿态为输入，预测未来的SE(3)姿态轨迹。最后，通过对转移后的静态接触点沿预测姿态轨迹进行6D刚性变换，生成动态可供性轨迹，用于条件化下游的扩散策略以生成动作。</p>
+</blockquote>
+<p>核心模块具体如下：</p>
+<ol>
+<li><strong>锚定可供性生成</strong>：构建一个对象记忆库 <code>ℳ</code>，存储每个演示实例的任务标签 <code>ℓ</code>、静态接触点 <code>c</code>、CLIP视觉特征 <code>z</code> 和估计的姿态 <code>𝐓</code>。在测试时，对当前目标物体裁剪区域提取CLIP特征，在相同任务类别下通过余弦相似度检索最相似的源实例。然后，通过源与目标裁剪图像间的密集视觉对应关系，找到源接触点在目标图像上的对应像素，并利用深度信息反投影到3D空间，得到目标物体的锚定接触点 <code>c_tgt</code>。此模块避免了从几何中直接回归稀疏接触点的困难。</li>
+<li><strong>未来姿态估计与可供性传播</strong>：使用一个条件扩散模型来预测目标物体在未来H步内的姿态轨迹。关键设计是，预测的轨迹以目标物体自身在第一帧的坐标系为参考（即 <code>𝐓_tgt^src(t)</code>），这消除了绝对场景布局的影响，提升了跨实例泛化能力。训练数据通过GroundedSAM、Any6D和FoundationPose从演示中提取物体姿态，并按公式(4)转换为目标物体坐标系下的轨迹。该扩散模型采用DDIM（Denoising Diffusion Implicit Models） formulation，因其确定性采样特性可避免随机噪声传播到后续的可供性轨迹中，且能减少采样步数以降低推理延迟。</li>
+</ol>
+<p><img src="https://arxiv.org/html/2608.01603v1/2608.01603v1/x2.png" alt="动态可供性轨迹生成"></p>
+<blockquote>
+<p><strong>图3</strong>：动态可供性轨迹生成示意图。扩散模型根据跟踪到的姿态历史（蓝色）预测未来的SE(3)姿态（绿色）。通过将锚定接触点 <code>c_tgt</code> 经由每个预测姿态 <code>𝐓_t+k</code> 进行刚性变换（<code>p_t+k = 𝐓_t+k * c_tgt</code>），得到随时间变化的接触点轨迹 <code>τ</code>，即动态可供性轨迹。</p>
+</blockquote>
+<ol start="3">
+<li><strong>动作生成</strong>：静态接触点 <code>c</code> 由一个轻量级MLP编码，动态可供性轨迹 <code>τ</code> 由一个Transformer编码器（带[CLS]令牌）处理，其输出作为轨迹特征。这些特征与点云观测、本体感知等信息融合，形成条件特征 <code>𝐟_t</code>。动作生成器是一个基于DDIM的噪声预测网络 <code>ϵ_θ</code>，它从高斯噪声开始，经过K步去噪， conditioned on <code>𝐟_t</code>，生成当前步的动作。</li>
+</ol>
+<p>本文的创新点具体体现在：与仅使用静态接触点的AffordDP和仅使用未来姿态轨迹的SPOT不同，AffordTrajDP创造性地将两者结合。它不直接使用预测的姿态轨迹作为策略条件，而是将其作为“传播介质”，把从演示中学习到的语义接触点先验，动态地转化为一个与物体运动状态同步的轨迹。这是首次构建状态一致的、时变可供性轨迹作为策略条件信号的框架。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>论文在仿真环境ManiSkill3和两个真实机器人平台（Galaxea A1和UR7e）上进行了评估。</p>
+<ul>
+<li><strong>仿真基准</strong>：使用了ManiSkill3中的六个桌面操作任务：PickCube、StackCube、PokeCube、PushCube、PegInsertion和PlugCharger，使用Franka Panda机器人。</li>
+<li><strong>对比方法</strong>：DP3（点云扩散策略）、AffordDP（DP3+静态可供性）、SPOT（基于预测姿态轨迹的策略）。</li>
+<li><strong>关键实验结果</strong>：在仿真中，AffordTrajDP取得了70.0%的平均成功率，显著优于DP3（52.2%）、AffordDP（57.8%）和SPOT（62.1%）。在精度要求高的PegInsertion和PlugCharger任务上提升尤为明显。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2608.01603v1/2608.01603v1/x3.png" alt="仿真任务"></p>
+<blockquote>
+<p><strong>图4</strong>：ManiSkill3仿真环境中的六个评估任务，涵盖了从抓取、堆叠到精密插入等多种操作技能。</p>
+</blockquote>
+<ul>
+<li><strong>消融实验</strong>：在Galaxea A1机器人上进行了真实世界消融研究，任务包括AdapterInsertion、PickCup和StackCube，并评估了对已见和未见物体实例的泛化能力。表2显示，在DP3基础上仅添加物体中心（+Center）、仅添加语义接触点（+Contact）或仅添加姿态轨迹（+Traj）作为条件，性能提升有限，甚至在某些情况下（如仅用轨迹在未见实例上的StackCube任务）差于基线。只有完整的方法（结合接触点检索和轨迹传播）在所有设置下取得了最佳性能（平均成功率66.1%），证明了两个组件的必要性和充分性。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2608.01603v1/2608.01603v1/x4.png" alt="真实世界平台"></p>
+<blockquote>
+<p><strong>图5</strong>：两个真实世界机器人实验平台。(a) Galaxea A1机械臂，用于StackCube、PickCup和AdapterInsertion任务。(b) UR7e机械臂，用于PickCup、Ring-on-Peg、Put-in-Bowl和USB Insertion任务。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为三点：1）<strong>问题创新</strong>：明确指出了现有静态可供性引导策略在接触后因无法跟踪物体运动而导致引导失效的关键局限，并首次提出了构建动态可供性轨迹的解决方案。2）<strong>理论验证</strong>：通过严谨的消融实验证明，将“语义接触检索”与“姿态轨迹预测”相结合对于解决上述问题是必要且充分的，缺一不可。3）<strong>广泛验证</strong>：在模拟和真实世界的多种任务、多个机器人平台以及已见/未见物体实例上，系统验证了方法的有效性与鲁棒性，特别是在精密操作任务上优势显著。</p>
+<p>论文自身提到的局限性包括：动态可供性的质量依赖于锚定接触点的检索准确性（受限于记忆库的覆盖范围）以及姿态轨迹预测的精度。如果目标物体与记忆库中实例的视觉外观差异极大，或姿态跟踪/预测在复杂交互下失效，则性能会下降。</p>
+<p>对后续研究的启示：动态可供性轨迹为解决精密操作中的状态一致引导提供了一个有前景的方向。未来工作可以探索如何从更少的演示中学习可供性，减少对大规模记忆库的依赖；或研究如何将该框架扩展到涉及多个交互对象、非刚性物体或更复杂动态场景的任务中。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文解决静态可供性在机器人精细操作中易导致轨迹漂移的问题，提出AffordTrajDP动态框架。核心方法为“基于物体SE(3)位姿的可供性轨迹传播”：从RGB-D观测中检索锚点可供性，沿物体运动位姿时序前向传播，生成动态、状态感知的引导轨迹。实验表明，该方法在ManiSkill3基准上平均成功率高达70.0%，超越基线达17.8%，并在多项真实机器人任务中验证了其对物体位姿与外观变化的强鲁棒性。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2608.01603" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
