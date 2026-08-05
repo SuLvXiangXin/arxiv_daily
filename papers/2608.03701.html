@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>LiLa-WAM: Lightweight Latent Reasoning World-Action Model for Robotic Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>LiLa-WAM: Lightweight Latent Reasoning World-Action Model for Robotic Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2608.03701" target="_blank" rel="noreferrer">2608.03701</a></span>
+        <span>作者: Peiguang Jing Team</span>
+        <span>日期: 2026-08-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>机器人操作领域的世界-动作模型通过在机器人干预下预测场景的未来演变来增强策略的预见性。当前主流方法可分为两类：像素空间方法直接合成未来的图像或视频，但将大量计算能力分配给了与控制无关的视觉细节，导致训练和推理成本高昂；潜在空间方法在潜在表征中预测未来，避免了像素冗余，但许多方法（如WoG、LaWAM）需要通过多阶段流水线构建其推理空间，增加了整体训练负担。现有方法大多建立在需要语言建模或视频生成的大型预训练模型上，其大量参数并未直接服务于精细控制。</p>
+<p>本文针对世界-动作模型训练计算成本高、难以在有限计算资源下实现的问题，提出了一种轻量级模型设计新视角：构建一个专为控制对齐的紧凑潜在推理空间，并实现单阶段端到端训练。核心思路是设计一个“前瞻感知动作专家”，将未来状态预测和动作生成统一在单一数据流中，让两者共同塑造一个紧凑的潜在空间，并引入无需语言或目标图像的视觉过渡令牌进行任务指定。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>LiLa-WAM的整体目标是在给定当前观测、本体状态和视觉任务提示下，联合预测未来动作块和在紧凑潜在空间中的未来状态。其整体框架基于一个冻结的DINOv3视觉编码器构建。</p>
+<p><img src="https://arxiv.org/html/2608.03701v1/2608.03701v1/x2.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：LiLa-WAM整体框架。前瞻感知动作专家在一个流中统一处理推理令牌、VTT、本体感觉令牌和噪声动作令牌，联合输出动作速度和前瞻令牌。前瞻令牌仅在训练时于特征空间中接受监督，推理时被丢弃。</p>
+</blockquote>
+<p><strong>核心模块1：前瞻感知动作专家</strong><br>该专家由编码层、适配器和专家网络构成。首先，使用冻结的DINOv3编码器提取多层级（如第17和21层）的密集图像块特征，并通过一个基于查询的适配器将其压缩为一小组（<code>N_q=64</code>个）视觉潜在令牌，从而构建一个与输入分辨率解耦的紧凑潜在空间，控制下游注意力成本。本体系状态、噪声化的动作块被编码为令牌序列。视觉过渡令牌被投影为任务令牌。这些令牌被拼接为 <code>[动作令牌； 本体令牌； 任务令牌； 视觉令牌]</code>，并送入一个由L层扩散Transformer块构成的专家网络。网络输出时，在动作令牌位置读出预测的速度<code>\hat{\mathbf{v}}_s</code>，而在观测侧的令牌位置则读出预测的未来潜在状态<code>\hat{\mathbf{z}}_{t+\Delta}</code>。训练时，未来潜在状态通过一个轻量级Q-Former式解码器映射回冻结编码器的特征空间，并与真实未来图像的编码特征计算损失。这使得未来预测成为塑造共享潜在空间的辅助目标，而无需像素解码器。推理时，解码器被丢弃。</p>
+<p><strong>核心模块2：视觉过渡令牌</strong><br>VTT为每个任务τ定义为一个在视觉特征空间中的过渡方向。计算方式为：收集该任务的所有演示轨迹，对每条轨迹计算其首帧和末帧的全局图像嵌入的差值 <code>\mathbf{g}^{e}_{T} - \mathbf{g}^{e}_{0}</code>，然后对所有轨迹求平均。<code>\mathbf{u}_{\tau} = \frac{1}{|\mathcal{E}_{\tau}|} \sum_{e \in \mathcal{E}_{\tau}} (\mathbf{g}^{e}_{T} - \mathbf{g}^{e}_{0})</code>。该令牌编码了“任务改变了场景的什么”，是一个离线计算的、无需文本且测试时无需目标图像的固定每任务向量。</p>
+<p><strong>创新点</strong><br>与现有方法相比，其创新点体现在：1) <strong>紧凑潜在空间的联合训练</strong>：不同于多阶段训练或在像素空间中预测，LiLa-WAM将未来预测（在特征空间监督）和动作生成（流匹配）统一在一个端到端的单流架构中，让两个目标共同塑造一个轻量化且与控<strong>制对齐的潜在空间。</strong> 2) <strong>语言无关的任务表示</strong>：VTT仅利用视觉特征差异定义任务方向，比语言指令或目标图像更轻量，且实验表明其注意力集中于任务相关物体。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p>本文在RoboTwin 2.0（50个任务）、LIBERO（4个套件共40个任务）以及真实机器人任务上进行了评估。对比的基线方法包括ABot-M0、StarVLA、π₀/π₀.₅、X-VLA、Motus、GigaWorld-Policy、Being-H0.7、OpenVLA、GR00T-N1.6、JEPA-VLA、SmolVLA、EVO-1等。</p>
+<p><strong>关键实验结果</strong><br>在RoboTwin 2.0上，仅0.5B参数的LiLa-WAM在干净和随机化设置下的平均成功率分别达到90.48%和89.04%，超越了多个参数量为其10倍以上的基线，并与3B的Being-H0.7性能相当（仅0.5B模型）。在LIBERO上，其平均成功率为97.1%，与参数量约14倍的OpenVLA-OFT持平，并显著优于其他轻量模型如EVO-1（0.8B）和SmolVLA（2B）。</p>
+<p><img src="https://arxiv.org/html/2608.03701v1/2608.03701v1/x1.png" alt="结果对比图1"></p>
+<blockquote>
+<p><strong>图1</strong>：在RoboTwin 2.0和LIBERO上，模型平均成功率与模型大小的关系对比。LiLa-WAM（星形标记）在使用远少于大多数对比方法的参数量的同时，获得了有竞争力的平均性能。</p>
+</blockquote>
+<p><strong>消融实验分析</strong></p>
+<ol>
+<li><strong>组件贡献</strong>：移除前瞻损失 <code>\mathcal{L}_{\mathrm{ff}}</code>，使模型退化为反应式VLA，在10个任务子集上的成功率从70.0%降至54.4%，证明了前瞻监督的重要性。将VTT替换为CLIP编码的语言指令，成功率下降8.6个百分点至61.4%。使用更大的Qwen3VL-2B骨干网络（2.2B参数），性能（61.0%）仍低于使用DINOv3的完整模型，表明更大预训练骨干不保证更好的控制性能。</li>
+<li><strong>适配器查询数</strong>：当查询数<code>N_q</code>为64时性能最佳（70.0%），过少（8或32）可能丢失空间细节，过多（96）则收益递减且增加内存消耗。</li>
+<li><strong>特征层级选择</strong>：DINOv3较深层（如24层，48.0%）的特征语义化程度高但空间细节丢失，中层特征（如17层，67.2%）对精细操作更佳。结合中层（17层）和深层（21层）特征能获得互补信息，达到最佳性能（70.0%）。</li>
+</ol>
+<p><strong>定性分析与可视化</strong><br><img src="https://arxiv.org/html/2608.03701v1/2608.03701v1/x3.png" alt="VTT嵌入"></p>
+<blockquote>
+<p><strong>图3</strong>：(a) VTT计算图示：对每个任务的演示轨迹，计算其首尾帧全局嵌入的差值并平均。(b) 10个RoboTwin任务（干净与随机化）的每轨迹视觉过渡嵌入的t-SNE可视化，显示了其按任务聚集的特性。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2608.03701v1/2608.03701v1/x4.png" alt="注意力分析"></p>
+<blockquote>
+<p><strong>图4</strong>：VTT与动作令牌在输入图像上的注意力分布对比。VTT更多地关注任务操作的对象（如风扇、目标垫子、方块），而动作令牌则更多地关注机械臂和夹爪。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2608.03701v1/2608.03701v1/x5.png" alt="分层注意力"></p>
+<blockquote>
+<p><strong>图5</strong>：在专家网络的12个DiT块中，VTT和动作令牌对各层视觉令牌的注意力分布。VTT持续激活任务的目标区域（如放置垫），动作令牌则更聚焦于当前被操作的对象（如风扇），显示了任务级与动作级指导的分工。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2608.03701v1/2608.03701v1/x6.png" alt="动作扰动"></p>
+<blockquote>
+<p><strong>图6</strong>：未来特征预测的动作扰动测试。在去噪后期替换动作块会导致预测的未来特征明显变化（相似度降至约0.85），表明未来潜在表示编码了动作条件化的动态信息，而非仅依赖视觉上下文。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文核心贡献在于：1）提出了一个端到端训练、单GPU可托管的轻量级世界-动作模型LiLa-WAM，通过联合未来状态预测和动作生成在紧凑潜在空间中实现控制对齐的“前瞻”能力；2）引入了语言无关的视觉过渡令牌，提供了一种比文本或目标图像更轻量且有效的任务指定方式。<br>论文提及的局限性包括：模型在真实世界部署时依赖离线计算的VTT，可能限制其对未见任务或需要在线适应场景的泛化能力；模型处理复杂动态场景的长期预测能力仍有待探索。<br>此项工作启示后续研究，紧凑且精心设计的潜在空间可以高效地统一感知、推理与控制，降低机器人学习对大规模通用预训练模型的依赖。VTT的成功也表明，利用视觉演示数据的内在结构（如状态转变）进行任务表征，是通向更简洁、任务聚焦的机器人学习的一条可行路径。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文针对机器人操控中世界-动作模型计算开销大、训练成本高的问题，提出轻量级模型LiLa-WAM。其核心方法是通过联合未来状态预测与动作生成构建紧凑潜在推理空间，实现端到端训练，并引入视觉过渡令牌进行无语言任务表示。实验表明，在RoboTwin 2.0的50项任务中取得90.48%成功率，仅需单个24GB GPU训练，模型参数量少且性能竞争。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2608.03701" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>

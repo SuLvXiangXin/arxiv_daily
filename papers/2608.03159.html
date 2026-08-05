@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Accelerating Human-Aware Robot Trajectory Generation via Diffusion and Consistency Distillation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>Accelerating Human-Aware Robot Trajectory Generation via Diffusion and Consistency Distillation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2608.03159" target="_blank" rel="noreferrer">2608.03159</a></span>
+        <span>作者: Kyung-Soo Kim Team</span>
+        <span>日期: 2026-08-04</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>目前，机器人在人机交互（HRI）环境中的运动规划主流方法主要分为采样法（如RRT/RRT*）、图搜索法和优化法。这些方法通常能够处理避障等多种约束，但在非冗余机械臂（即末端姿态完全指定时）的场景下，处理碰撞避免等次级任务变得困难。此外，这些方法在复杂环境中可能面临计算开销大、生成轨迹不平滑或难以纳入所有约束等挑战。近年来，扩散模型因其能建模轨迹分布并生成多样化轨迹而受到关注，但其迭代去噪过程通常需要较多采样步数，导致推理时间长，难以满足实时交互需求。<br>本文针对扩散模型在轨迹生成中推理速度慢这一具体痛点，并致力于提升生成轨迹的安全性（避障）和平滑性，提出了一个结合条件扩散模型、约束引导采样和一致性蒸馏的框架。其核心思路是：首先利用基于采样的规划器生成满足约束的轨迹数据集来训练一个条件扩散模型作为强先验，然后通过一致性蒸馏技术将需要多步迭代的扩散模型“压缩”成能一步或几步生成轨迹的一致性模型，从而在保持高质量的前提下实现加速。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>本文方法整体分为三个阶段：1. 使用RRT/RRT*生成满足避障、自碰撞等约束的轨迹数据集；2. 训练一个条件扩散模型来学习该数据集中的轨迹分布；3. 通过一致性蒸馏训练一个高效率的一致性模型用于快速推理。整个Pipeline旨在接收初始关节状态、期望末端目标位姿及障碍物信息作为条件，输出一系列光滑且满足安全约束的关节空间轨迹候选。</p>
+<p>核心模块包括：</p>
+<ol>
+<li><p><strong>轨迹数据集准备</strong>：对于给定的6自由度机械臂初始配置和末端目标位姿，通过数值逆运动学（IK）求解多个关节空间目标候选，并选择其中操作度最高的作为最终目标配置 $q_g^*$。接着，使用RRT/RRT*在初始和目标配置之间规划避障路径，插值并重采样为固定长度 $T$ 的轨迹，构成训练样本 $(\mathbf{q}_{0:T-1}, \mathbf{c})$，其中条件 $\mathbf{c}$ 包含初始关节配置、目标位姿（位置和旋转矩阵的前两列向量）以及障碍物的胶囊体表征。</p>
+</li>
+<li><p><strong>条件扩散模型训练</strong>：模型采用时序U-Net骨架。条件信息（初始状态、目标位姿、通过PointNet式编码器处理的障碍物胶囊集合）被编码并嵌入，与扩散时间步嵌入一起注入所有残差时序块。训练时，对干净轨迹 $\mathbf{q}_{0:T-1}$ 按噪声计划添加高斯噪声得到 $\mathbf{q}<em>d^k$（前向过程）。模型学习去噪，即预测注入的噪声 $\epsilon$。损失函数为预测噪声与真实噪声的均方误差 $\mathcal{L}</em>{\mathrm{MSE}}$。</p>
+</li>
+</ol>
+<p> <img src="https://arxiv.org/html/2608.03159v1/2608.03159v1/NoiseInjection.png" alt="方法"></p>
+<blockquote>
+<p><strong>图1</strong>（对应论文图1）：前向噪声注入过程可视化。随着扩散时间步 $k$ 增大（从左至右），通过前向运动学计算出的末端轨迹（蓝色）逐渐被噪声破坏，最终接近随机噪声。灰色为躯干，橙色为人臂，绿色为目标位姿。</p>
+</blockquote>
+<ol start="3">
+<li><strong>一致性蒸馏与快速生成</strong>：为了加速推理，作者对预训练好的扩散模型（教师）进行一致性蒸馏，训练一个一致性模型（学生）。一致性模型 $f_\theta$ 的目标是，对于任意扩散时间步 $k$ 的含噪轨迹 $\mathbf{q}<em>d^k$，都能直接映射到一致的干净轨迹估计 $\hat{\mathbf{q}}^{0,\theta}$。蒸馏时，从一个更“嘈杂”的时间步 $k+n$ 的轨迹出发，用教师模型预测其噪声并构造一个中间状态 $\mathbf{q}^{k,\Phi}$，然后让教师模型的指数移动平均（EMA）目标网络从这个状态估计一个参考的干净轨迹。学生网络则被训练，使其从 $k+n$ 状态直接预测的干净轨迹与该参考轨迹保持一致，损失为 $\mathcal{L}</em>{\mathrm{CD}}$。</li>
+</ol>
+<p> <img src="https://arxiv.org/html/2608.03159v1/2608.03159v1/DiffusionInference.png" alt="约束引导采样"></p>
+<blockquote>
+<p><strong>图2</strong>（对应论文图2）：约束引导的扩散模型推理过程。在反向去噪的每个时间步，模型预测的干净轨迹估计（通过末端轨迹显示）被用于计算碰撞代价梯度，以指导采样，使生成的轨迹（从左至右，时间步递减）有效避开人体和障碍物。</p>
+</blockquote>
+<p><strong>创新点</strong>具体体现在：</p>
+<ul>
+<li><ol>
+<li><strong>多条件约束下的轨迹生成</strong>：将初始状态、精确末端目标、障碍物几何统一作为条件输入扩散模型，直接生成关节空间轨迹，解决了非冗余机械臂下同时满足末端位姿与多种安全约束的难题。</li>
+</ol>
+</li>
+<li><ol start="2">
+<li><strong>约束引导采样</strong>：在扩散模型推理阶段，利用可微的碰撞代价 $\mathcal{C}$ 的梯度对反向去噪的均值进行矫正，引导生成过程主动降低碰撞风险，增强了在训练数据未充分覆盖场景下的约束满足能力。</li>
+</ol>
+</li>
+<li><ol start="3">
+<li><strong>一致性蒸馏加速与关节加权抖动正则化</strong>：应用一致性蒸馏将多步（如200步）采样压缩到少数几步（如2-4步），大幅降低推理时间。同时，在一致性训练损失中加入新颖的关节加权抖动正则项 $\mathcal{L}_{\mathrm{jerk}}$，该项结合了操作度权重、关节对末端运动敏感性权重和时序权重，惩罚关节加速度的突变，从而鼓励生成物理上更平滑、更易执行的轨迹。</li>
+</ol>
+</li>
+</ul>
+<p> <img src="https://arxiv.org/html/2608.03159v1/2608.03159v1/ConsistencyInference.png" alt="一致性采样"></p>
+<blockquote>
+<p><strong>图3</strong>（对应论文图3）：一致性模型的少步采样过程。仅需在选定的几个时间步（如k=199, 132, 66, 0）进行预测和重加噪，即可快速生成最终轨迹（最右图）。每个面板显示了当前时间步经约束引导后的干净轨迹估计对应的末端轨迹。</p>
+</blockquote>
+<h2 id="实验与结果">实验与结果</h2>
+<ul>
+<li><strong>实验平台与数据集</strong>：实验在仿真环境中进行，使用一个6自由度机械臂模型。训练数据通过RRT和RRT*算法在包含人体手臂、躯干和圆柱体障碍物的场景中规划生成，共包含10万个轨迹样本。</li>
+<li><strong>对比方法</strong>：主要与传统的基于采样的规划器（RRT, RRT*）以及未加速的原始扩散模型（Diffusion）进行对比。也进行了消融实验，评估抖动正则化（w/ Jerk Reg.）和约束引导采样（w/ Guidance）各自的作用。</li>
+<li><strong>关键实验结果</strong>：<ol>
+<li><strong>生成速度与成功率</strong>：经过一致性蒸馏的模型（Consistency w/ Jerk Reg.）能够在 <strong>小于100毫秒</strong> 的时间内生成150条轨迹候选，满足了快速生成的需求。在测试场景中，其任务成功率（达到目标且无碰撞）达到 **95.83%*<em>，与需要数秒生成的原始扩散模型（成功率96.67%）相当，远高于RRT（81.67%）和RRT</em>（85.83%）。</li>
+<li><strong>轨迹平滑性</strong>：引入关节加权抖动正则化后，生成的轨迹平滑性显著提升。与无正则化的基线相比，**关节抖动平均降低了59.1%<strong>，</strong>末端执行器抖动平均降低了40.1%**。</li>
+<li><strong>消融实验</strong>：消融研究表明，移除抖动正则化会导致关节和末端抖动大幅上升；移除约束引导采样则会使碰撞次数增加，成功率下降约5%。这证明了每个组件的有效性。</li>
+</ol>
+</li>
+</ul>
+<p> <img src="https://arxiv.org/html/2608.03159v1/2608.03159v1/SimSetup.png" alt="仿真场景"></p>
+<blockquote>
+<p><strong>图4</strong>（对应论文图6）：仿真实验设置。展示了机器人、人体（手臂和躯干）以及障碍物（圆柱体）的布局，用于生成训练数据和评估算法性能。</p>
+</blockquote>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献可概括为：1）提出了一种针对非冗余机械臂在HRI环境下的条件扩散轨迹生成框架，有效整合了末端位姿、初始状态和避障约束；2）通过一致性蒸馏技术，在基本不损失成功率的前提下，将扩散模型的推理速度提升了数个数量级，实现了毫秒级的轨迹候选生成；3）设计了综合考虑操作度、关节敏感性和时序的加权抖动正则项，显著提高了生成轨迹的运动平滑性。<br>论文自身提到的局限性包括：方法的性能依赖于离线生成的训练数据集的质量和覆盖范围；一致性蒸馏过程需要额外的训练步骤。<br>本文工作对后续研究的启示在于：它展示了生成式模型（扩散模型）与模型蒸馏技术结合，在解决机器人运动规划中速度-质量权衡问题的潜力。未来工作可以探索将该框架扩展到动态环境、更高自由度的机器人系统，或者结合在线学习以适应未见过的新障碍物。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本论文针对非冗余机械臂在末端全姿态约束下，难以及时生成同时满足避障、平滑性等多重要求的关节轨迹问题，提出一种基于扩散模型与一致性蒸馏的规划方法。该方法首先利用RRT*生成避障轨迹数据集并训练条件扩散模型，再通过一致性蒸馏大幅加速采样过程，同时在损失函数中加入关节加加速度正则化以提升轨迹平滑性。实验表明，经蒸馏的一致性模型能在100毫秒内生成150条轨迹候选，保持高成功率，并有效降低了关节与末端加加速度。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2608.03159" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
