@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RORA: Realistic Object Reconstruction with Articulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>RORA: Realistic Object Reconstruction with Articulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2608.04842" target="_blank" rel="noreferrer">2608.04842</a></span>
+        <span>作者: Yongseok Lee Team</span>
+        <span>日期: 2026-08-05</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>在机器人学习领域，将现实世界环境高保真地复现到仿真中是降低仿真到现实差距的有效策略。近年来，基于3D高斯溅射的渲染方法因能提供逼真的视觉表现而受到关注。然而，在此过程中复现物体的可动关节结构仍然是一项挑战。现有方法主要分为两类：基于运动跟踪的方法需要捕捉物体在不同关节状态下的动态运动，这在操作上复杂且对多关节或链式结构物体的成功率低；基于视觉语言模型或学习的方法则受限于训练数据分布和底层模型库，在处理真实世界物体时泛化能力不足。</p>
+<p>本文针对从单个静态物体视频中重建具有准确关节结构的、仿真就绪资产这一具体痛点，提出了一个采用基于建议的人机交互流程的新视角。其核心思路是，利用静态几何特征自动推测关节候选轴，并通过轻量级用户反馈进行精细调整，从而实现从单次静态扫描到可交互仿真资产的端到端流程。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>RORA的整体框架是一个包含六个阶段的半自动化人机交互流程，其输入是一个物体静态视频，输出是结合了3D高斯溅射与网格的混合表示仿真资产。</p>
+<p><img src="https://arxiv.org/html/2608.04842v1/2608.04842v1/mtdfig/pipeline.jpeg" alt="整体框架图"></p>
+<blockquote>
+<p><strong>图2</strong>：重建框架的整体流程。该方法包含6个阶段。该流程是半自动化的人机交互过程，在分割和关节化阶段接收用户反馈。</p>
+</blockquote>
+<ol>
+<li><p><strong>初始重建与精炼阶段</strong>：使用GS2Mesh流程从单视频生成初始的3D高斯和网格表示。利用Segment Anything Model 2 (SAM2)分割前景物体，并通过可见性计数过滤出属于物体的高斯点。初始网格存在因遮挡导致的底部孔洞和浮游碎片等缺陷，需要经过一系列精炼步骤（如空间对齐、筛选泊松重建、顶点下采样、底部填平等）转化为水密网格，为后续图分析做准备。</p>
+</li>
+<li><p><strong>分解与分割阶段</strong>：基于可动子部件在几何上呈突出状的假设，对水密网格应用近似凸分解算法，将其自动划分为多个不重叠的凸碎片。由于自动分割模型在颜色纹理相似的部件上容易失败，此处引入轻量级人机交互：用户为这些凸碎片分配组号以形成语义子部件。随后，通过K最近邻投票策略，将每个3D高斯点绑定到其最近的网格顶点所属的子部件，实现网格与高斯表示统一的部件分割。</p>
+</li>
+<li><p><strong>关节建议与导出阶段</strong>：这是RORA的核心创新模块。在部件分割完成后，框架通过<strong>自动关节建议算法</strong>自动估算关节轴，为用户提供候选以减少手动操作。该算法包含四个关键步骤：</p>
+<ul>
+<li><strong>边界检测</strong>：对于每个子部件<code>i</code>，从网格图<code>G=(V,E)</code>中提取其边界环集合<code>𝒞_i</code>。算法首先识别与其它部件相邻的边界顶点<code>V_B,i</code>，构建其诱导子图<code>G_B,i</code>，然后通过修剪度小于2的顶点和深度优先搜索来枚举候选环，最后采用贪婪策略基于边长的唯一性阈值筛选保留代表性边界环。</li>
+<li><strong>轴估计</strong>：对于子部件<code>i</code>的每个边界环<code>c</code>，建立一个单向连接<code>u_a = (𝒐_a, 𝒏_a, 𝒙_a)</code>。其中，原点<code>𝒐_a</code>是环<code>c</code>的顶点质心。通过分析边界环局部几何，采用两种方式估计向量：对于简单平面边界，使用线性支持向量机拟合分离超平面，其归一化法向量作为<code>𝒏</code>；对于非平面拐角几何，采用期望最大化框架协调两个超平面，其交线作为<code>𝒙</code>。</li>
+<li><strong>双向融合</strong>：由于边界是独立检测的，部件<code>i</code>和<code>j</code>之间的同一物理接口可能产生不一致的单向连接。此步骤对来自两边、相互匹配的单向连接进行配对，并将其融合为一个双向连接<code>𝑩 = (𝒐, 𝒏, 𝒙, 𝒑)</code>。连接中的原点、法向量和交线向量取两侧平均值，并计算叉积向量<code>𝒑 = 𝐧 × 𝒙</code>。<code>𝒏</code>, <code>𝒙</code>, <code>𝒑</code>这三个向量构成主要的关节候选轴。</li>
+</ul>
+</li>
+</ol>
+<p><img src="https://arxiv.org/html/2608.04842v1/2608.04842v1/mtdfig/articulation_stage.jpeg" alt="关节建议算法图示"></p>
+<blockquote>
+<p><strong>图3</strong>：关节化阶段自动关节建议算法概述。从分割后的网格中提取边界环。考虑每个边界周围的局部几何，估计单向连接（法向量和交线向量）。最佳匹配的单向对融合为双向连接，并添加一个叉积向量。所得双向连接的向量被建议为候选关节轴。</p>
+</blockquote>
+<ul>
+<li><strong>关节建议</strong>：对于复杂的拓扑结构，一对部件之间可能存在多个边界连接（例如工具箱手柄有两个连接点）。算法根据双向连接的数量应用启发式规则生成额外候选：若存在两个连接，则在两个连接原点的中点处增加一个轴线为两点连线的向量；若存在三个及以上连接，则将所有连接原点的算术平均值作为关节原点，将其法向量的平均值作为轴线。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2608.04842v1/2608.04842v1/mtdfig/articulation_additional.jpeg" alt="多边界连接示例"></p>
+<blockquote>
+<p><strong>图4</strong>：关节建议阶段额外候选生成的示例，在部件1和部件5之间突出显示。这两个部件间存在两个双向连接，意味着两个物理接口。根据规则，连接两个质心的附加向量被建议为关节候选。</p>
+</blockquote>
+<ol start="4">
+<li><strong>导出阶段</strong>：通过交互式图形用户界面向用户展示估算的关节候选。用户可选择活动关节轴、分配关节类型（固定、旋转或棱柱形）并微调空间偏差。确认后，系统自动生成编码关节运动学的统一URDF文件，并将3D高斯溅射点绑定到对应的网格子部件，注册到各自的运动学连杆上，最终输出仿真就绪的混合表示资产。</li>
+</ol>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：在PartNet-Mobility数据集上，RORA与两个先进的关节化基线方法进行比较：基于视觉语言模型的Articulate-Anything和基于多状态优化的ScrewSplat。根据运动学复杂度将物体分为三类：单关节、多关节和链式连杆结构。输入数据根据各方法要求配置：Articulate-Anything使用15秒连续运动视频，ScrewSplat使用5个离散关节状态下的240张多视角图像，而RORA仅使用单个静态状态下的48张多视角图像。</p>
+<p><strong>评估指标与结果</strong>：</p>
+<ul>
+<li><strong>几何指标</strong>：评估关节类型误差、关节轴角度误差（°）和关节原点位置误差（米）。如表I所示，RORA在三类物体上均优于基线，尤其在复杂的多关节和链式连杆类别上优势显著，角度和位置误差远低于基线。基线方法在处理具有层次依赖关系的链式关节时失败。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2608.04842v1/2608.04842v1/evalfig/overall_comparison.jpeg" alt="渲染对比图"></p>
+<blockquote>
+<p><strong>图5</strong>：PartNet-Mobility基准测试上的渲染对比。每个类别展示两个代表性示例。对于每个基线方法和我们的框架，左图显示零配置下的物体，右图显示为评估视觉质量而调整后的关节状态，并与真实情况进行比较。</p>
+</blockquote>
+<ul>
+<li><p><strong>视觉指标</strong>：评估峰值信噪比、结构相似性指数和感知图像块相似性。如表II所示，RORA在所有视觉指标上均取得最佳性能。基线方法因关节估计失败导致渲染质量下降，而RORA由于基于几何的准确分割和关节建议，即使在未见过的关节配置下也能产生与参考近乎一致的渲染结果。</p>
+</li>
+<li><p><strong>运行时间</strong>：如表III所示，RORA平均总运行时间为7分23秒，与全自动基线方法效率相近。其中用户交互时间仅42秒，得益于建议式交互极大减少了人工工作量。</p>
+</li>
+</ul>
+<p><strong>真实物体重建与仿真机器人操作</strong>：<br>RORA能够成功重建真实世界物体的光真实感模型，保留精细视觉细节。如图6所示，其重建的关节运动准确复制了真实世界的运动学约束。</p>
+<p><img src="https://arxiv.org/html/2608.04842v1/2608.04842v1/evalfig/real_object_comp.jpeg" alt="真实物体对比"></p>
+<blockquote>
+<p><strong>图6</strong>：真实世界物体的定性比较。各列展示了遵循关节约束的物体运动，其中黄色箭头指示旋转关节轴。最左两列展示了Articulate-Anyths的结果及其真实情况图像。</p>
+</blockquote>
+<p><img src="https://arxiv.org/html/2608.04842v1/2608.04842v1/evalfig/simulation.jpeg" alt="仿真应用"></p>
+<blockquote>
+<p><strong>图7</strong>：仿真环境下的灵巧操作演示。上两图显示在Unreal Engine中的操作，下两图显示在Isaac Sim环境中的操作。在此实验中，机器人手正在触发喷雾，并旋转咖啡研磨机的手柄。</p>
+</blockquote>
+<p>将重建资产部署到Unreal Engine和NVIDIA Isaac Sim仿真平台中（图7），可实现灵巧的手部遥操作和双手实时操控，验证了该资产在高级机器人应用中的实用性。</p>
+<h2 id="总结与启发">总结与启发</h2>
+<p>本文的核心贡献包括：1）提出了首个仅需单次静态物体扫描即可重建关节化仿真资产的端到端流程；2）基于局部几何和用户交互，能够准确恢复包括分支结构和链式连杆在内的复杂运动学；3）输出了可直接导入主流仿真引擎的、结合3D高斯溅射与网格的仿真就绪资产，并开源了代码与资产库。</p>
+<p>论文提到的局限性在于：部件分割和关节建议流程依赖于几何特征，对于非突出部件或相对于物体整体尺度极小的子部件可能失效；并且由于继承了3D高斯溅射的局限，无法很好地处理反射或透明表面。</p>
+<p>这项工作为机器人学习提供了高效的真实到仿真转化工具，其基于几何建议的人机交互范式、以及面向物理交互与真实渲染的混合表示，为后续构建高保真且功能完备的仿真环境提供了重要启示。</p>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本文提出RORA框架，旨在解决从单一静态视频（而非动态扫描）高效重建高保真、可交互关节化物体资产的难题。其核心技术是构建一个结合了3D高斯溅射（3DGS）用于逼真渲染与网格用于物理交互的**混合表示**，并通过**凸分解**、用户分组和**自动关节建议算法**，在少量人工参与的流程中确定关节轴。实验证明，该方法在PartNet-Mobility-v0数据集和真实物体上实现了精确的关节化重建，并能将重建资产成功部署于Unreal Engine与Isaac Sim中以完成灵巧手实时操控任务。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2608.04842" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
