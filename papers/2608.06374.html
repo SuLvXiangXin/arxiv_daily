@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DyPES-VLA: Learning Shared Dynamics Priors and Embodiment-Specific Control for Cross-Embodiment Manipulation - Robotics arXiv Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../assets/styles.css"/>
+  <link rel="stylesheet" href="../assets/detail.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"/>
+</head>
+<body>
+  <div class="bg-orbit"></div>
+  <header class="site-header">
+    <div class="brand">
+      <a href="../index.html" class="back-link">← 返回列表</a>
+    </div>
+  </header>
+  <main class="detail-main">
+    <article class="detail-card">
+      <span class="detail-category">Manipulation</span>
+      <h1>DyPES-VLA: Learning Shared Dynamics Priors and Embodiment-Specific Control for Cross-Embodiment Manipulation</h1>
+      <div class="detail-meta">
+        <span>arXiv: <a href="http://arxiv.org/abs/2608.06374" target="_blank" rel="noreferrer">2608.06374</a></span>
+        <span>作者: Haoang Li Team</span>
+        <span>日期: 2026-08-06</span>
+      </div>
+      <section class="detail-body">
+        <h2>📝 详细解读</h2>
+        <h2 id="研究背景与动机">研究背景与动机</h2>
+<p>视觉-语言-动作模型已成为机器人操纵的强大范式，但为异构机器人“具身”训练单一通用策略仍是一个开放问题。现有方法主要有两大局限：第一，它们未能充分利用多样视觉与交互数据中共享的动态先验，限制了跨具身迁移能力；第二，它们需要大量手动预处理，将具身特定的动作转换为通用格式。本文针对这两个具体痛点，提出了分离学习“共享动态先验”与“具身特定控制”的新视角。其核心思路是通过未来预测目标从跨具身数据中学习共享的动态先验，并设计一个具身特定的混合专家动作头，将这些先验直接解码到每个机器人的原生动作空间中，而无需手动对齐动作格式。</p>
+<h2 id="方法详解">方法详解</h2>
+<p>DyPES-VLA的整体框架分为三个组件，通过两阶段训练，共同学习共享动态先验和具身特定控制。</p>
+<p><strong>整体框架与流程</strong>：如图2所示，首先，一个预训练的视觉-语言模型编码视觉观察、语言指令、具身元数据和一组可学习的查询token，输出<strong>查询状态</strong>，这构成了共享动态先验与具身控制之间的共享接口。其次，一个<strong>未来生成头</strong>以这些查询状态为条件，被训练来合成未来帧，从而驱动查询状态捕获关于物体运动、接触和交互引起的场景变化的动态先验。第三，一个<strong>具身特定的MoE动作头</strong>以相同的查询状态为条件，直接在每个机器人的原生动作空间中生成动作块。推理时，仅使用VLM和动作头，未来生成头被移除。</p>
+<p><img src="https://arxiv.org/html/2608.06374v1/2608.06374v1/x2.png" alt="方法总览"></p>
+<blockquote>
+<p><strong>图2</strong>：DyPES-VLA方法总览与两阶段训练流程。(a) 架构总览：预训练VLM编码观测、指令、元数据和查询令牌，输出查询状态。查询状态一方面用于未来帧预测（学习动态先验），另一方面用于MoE动作头生成原生动作。(b) 两阶段训练：第一阶段在无动作标注的视频上进行动态先验预训练；第二阶段在带动作标注的多个具身演示数据上进行跨具身协同训练。</p>
+</blockquote>
+<p><strong>核心模块与技术细节</strong>：</p>
+<ol>
+<li><strong>共享查询接口</strong>：使用一组可学习的查询token <code>Q</code>，与视觉、语言、具身元数据（如<code>data_source</code>, <code>robot_type</code>）一起输入预训练VLM，VLM输出的这些token的最后隐层状态即为查询状态<code>Z</code>。该接口作为共享的动态表示，不接收本体感知输入。</li>
+<li><strong>学习动态先验</strong>：未来生成头具体化为SANA图像生成器。给定当前时刻<code>t</code>，目标是在主视角下预测未来<code>t+Δe</code>时刻的帧（<code>Δe</code>与各具身的动作时长相匹配）。首先使用冻结的自编码器将未来帧编码为潜在表示<code>z</code>。查询状态<code>Z</code>经轻量级投影器<code>pω</code>映射后，作为SANA生成器的条件tokens。生成器仅以查询状态为条件，迫使动态信息必须通过<code>N</code>个查询状态传递。训练采用修正流目标<code>L_future</code>，用于回归从噪声潜在表示<code>zτ</code>到干净数据<code>z</code>的直线速度。</li>
+<li><strong>学习具身特定控制</strong>：动作头是一个流匹配的扩散Transformer。其设计要点包括：<ul>
+<li><strong>具身特定接口</strong>：每个具身拥有一个轻量级的编码器-解码器对，负责将其原生动作块（维度<code>He × de</code>）适配到共享DiT的宽度。</li>
+<li><strong>共享注意力与路由专家</strong>：DiT的<code>L</code>层Transformer块中，<strong>跨注意力</strong>（对查询状态<code>Z</code>）和<strong>自注意力</strong>（对动作序列）操作在所有具身间共享。而每块中的<strong>前馈网络</strong>是一个包含<code>K</code>个专家的库，根据由具身元数据<code>me</code>决定的静态路由索引<code>r(e)</code>进行选择。</li>
+<li><strong>训练目标</strong>：同样采用修正流目标<code>L_action</code>，在每个具身的原生动作空间中进行回归。</li>
+</ul>
+</li>
+</ol>
+<p><strong>创新点</strong>：与现有方法相比，DyPES-VLA的主要创新在于：1) <strong>解耦动态先验学习与动作生成</strong>：将未来预测仅用作监督信号来学习共享表示，而非像世界-动作模型那样耦合未来与动作生成。2) <strong>原生动作空间生成</strong>：通过MoE动作头直接在异构的原生动作空间中生成动作，避免了繁琐且可能引入混淆的手动统一动作格式预处理。3) <strong>架构级具身特化</strong>：在共享注意力层捕捉通用时序结构的同时，通过路由前馈网络专家处理各具身独特的运动学约束和控制语义。</p>
+<h2 id="实验与结果">实验与结果</h2>
+<p><strong>实验设置</strong>：</p>
+<ul>
+<li><strong>评估基准</strong>：三个仿真基准（RoboTwin 2.0-14自由度双臂机器人、RoboCasa-GR1-29自由度人形机器人、LIBERO-7自由度单臂机器人）和三个真实机器人平台（Franka Research 3单臂、AgileX COBOT Magic双臂、Unitree G1人形）。</li>
+<li><strong>训练数据</strong>：第一阶段使用EgoDex和三个仿真基准的无动作视频进行动态先验预训练。第二阶段使用三个仿真基准的动作标注演示进行协同训练。</li>
+<li><strong>对比方法</strong>：分为“单基准专家”（为每个基准单独训练/微调的模型）和“单检查点通才”（单一模型跨所有基准评估）。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2608.06374v1/2608.06374v1/x3.png" alt="仿真结果汇总图示"></p>
+<blockquote>
+<p><strong>图3/4/5</strong>：论文中Table 1, 2, 3的图表化展示（此链接为示意，请参考论文表格）。汇总了DyPES-VLA在三个仿真基准上的性能。关键要点：在单检查点设置下，DyPES-VLA在RoboTwin 2.0上达到平均89.02%成功率，优于通才基线Qwen-VLA (86.65%)；在RoboCasa-GR1上达到59.25%，优于最佳单基准专家ABot-M0 (58.3%)；在LIBERO上达到98.0%，与顶尖方法相当。</p>
+</blockquote>
+<p><strong>关键实验结果</strong>：</p>
+<ul>
+<li>**仿真性能 (Q1)**：使用单一检查点，DyPES-VLA在三个仿真基准上均达到或超越最强对比方法。具体如下：<ul>
+<li>RoboTwin 2.0: 干净与随机设置下分别取得88.78%和89.26%，平均89.02%，优于Qwen-VLA的86.65%。</li>
+<li>RoboCasa-GR1: 成功率达59.25%，优于ABot-M0 (58.3%)、LDA-1B (55.4%)和Qwen-VLA (56.7%)。</li>
+<li>LIBERO: 成功率达98.0%，与当前最优的X-VLA (98.1%)接近，优于Fast-WAM (97.6%)。</li>
+</ul>
+</li>
+<li>**真实世界部署 (Q1)**：将仿真训练的检查点联合微调于三个真实机器人的演示数据后，在“猕猴桃入篮”、“倒水”、“书本上架”三个任务上平均成功率75.6%，显著优于同样联合微调的GR00T-N1.6 (59.6%)和独立训练的ACT (32.4%)。</li>
+</ul>
+<p><img src="https://arxiv.org/html/2608.06374v1/2608.06374v1/x4.png" alt="真实世界部署"></p>
+<blockquote>
+<p><strong>图4</strong>：DyPES-VLA在三个真实机器人平台上的部署示例。每一行从左到右展示了一个任务的关键帧序列。展示了单一联合微调策略跨不同形态机器人的执行能力。</p>
+</blockquote>
+<p>**消融实验 (Q2&amp;Q3)**：<br>论文在三个基准上对核心设计进行了消融研究，结果总结如下：</p>
+<ol>
+<li><strong>移除未来预测目标</strong>：性能全面下降（RoboTwin: 86.67%, RoboCasa: 56.75%, LIBERO: 96.1%），证明了未来预测监督对学习共享动态先验的有效性。</li>
+<li><strong>移除第一阶段预训练</strong>：性能也出现下降（RoboTwin: 87.76%, RoboCasa: 58.33%, LIBERO: 96.7%），表明在无动作视频上的动态先验预训练能提供有益基础。</li>
+<li><strong>移除MoE动作头（改用统一动作空间）</strong>：性能在所有基准上出现更大幅度的下降（RoboTwin: 48.99%, RoboCasa: 41.92%, LIBERO: 83.3%），这强烈支持了使用具身特定专家在原生动作空间生成动作的设计，能有效缓解异构控制空间带来的干扰。</li>
+</ol>
+<h2 id="总结与启发">总结与启发</h2>
+<p><strong>核心贡献</strong>：</p>
+<ol>
+<li>提出了一个用于通才机器人操作的跨具身学习新范式，明确区分并分别学习<strong>共享的动态先验</strong>和<strong>具身特定的控制</strong>。</li>
+<li>具体实现了<strong>DyPES-VLA模型</strong>，通过未来监督的查询状态学习共享先验，并通过具身特定的MoE动作头实现原生动作空间的控制，无需统一动作格式。</li>
+<li>广泛的实验证明，该方法在单检查点设置下在多个仿真基准上达到领先性能，并且所学的动态先验能够有效迁移到不同形态的真实机器人控制中。</li>
+</ol>
+<p><strong>局限性</strong>：论文指出，目前的方法将动态先验编码在可学习的查询token中，虽然有效，但这些表示的精确语义（例如具体编码了哪种物体属性或交互）尚不完全明确，未来可研究如何提高其可解释性。</p>
+<p><strong>对后续研究的启示</strong>：</p>
+<ol>
+<li><strong>范式有效性</strong>：证明了解耦“学什么（动态）”和“如何执行（控制）”是构建跨具身通才策略的有效路径。</li>
+<li><strong>数据利用</strong>：展示了利用大规模无动作视频（如人类视频）通过预测目标学习通用物理规律的可能性，可降低对昂贵机器人演示数据的依赖。</li>
+<li><strong>架构设计</strong>：静态路由的MoE动作头为解决异构动作空间提供了一种可扩展的方案，可探索更动态或细粒度的路由机制以支持更广泛的具身类型。该方法为在更庞大、更多样化的异构机器人数据集上训练更通用的策略奠定了基础。</li>
+</ol>
+
+      </section>
+      <section class="detail-tldr">
+        <h2>💡 一句话总结</h2>
+        <p>本论文针对 Vision-Language-Action (VLA) 模型在异构机器人操作中通用性不足的问题，提出 DyPES-VLA 方法，以克服现有方法未充分利用共享动态先验、且需手动预处理动作格式的限制。其关键技术包括：通过未来预测目标在跨机器人数据上训练视觉语言模型，学习捕获对象运动与交互变化的共享动态先验；并采用混合专家 (MoE) 动作头，将先验直接转换为各机器人本地动作空间的可执行控制，无需对齐动作格式。实验表明，该通用策略在 LIBERO、RoboCasa-GR1 和 RoboTwin 2.0 上分别达到 98.0%、59.25% 和 89.02% 的成功率。</p>
+      </section>
+      <div class="detail-actions">
+        <a href="http://arxiv.org/abs/2608.06374" target="_blank" rel="noreferrer" class="btn">查看 arXiv 原文</a>
+        <a href="../index.html" class="btn btn-outline">返回列表</a>
+      </div>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <span>数据抓取来源于 Robotics arXiv Daily</span>
+    <span>本页由 GitHub Actions 定时更新</span>
+  </footer>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
+</body>
+</html>
